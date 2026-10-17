@@ -1,0 +1,49 @@
+CLIENT-TIMEOUT {
+ "ctor": "McpError",
+ "name": "McpError",
+ "code": -32001,
+ "data": {
+  "timeout": 1500
+ },
+ "message": "MCP error -32001: Request timed out",
+ "own": [
+  "stack",
+  "message",
+  "code",
+  "data",
+  "name"
+ ],
+ "isSseError": false
+}
+SERVER-SENT-32001 {
+ "ctor": "McpError",
+ "name": "McpError",
+ "code": -32001,
+ "message": "MCP error -32001: Unauthorized: environment variable MCP_TOKEN is not set",
+ "own": [
+  "stack",
+  "message",
+  "code",
+  "data",
+  "name"
+ ],
+ "isSseError": false
+}
+SSE-ECONNREFUSED {
+ "ctor": "SseError",
+ "name": "Error",
+ "message": "SSE error: TypeError: fetch failed: connect ECONNREFUSED 127.0.0.1:8999",
+ "own": [
+  "stack",
+  "message",
+  "code",
+  "event"
+ ],
+ "eventType": "ErrorEvent",
+ "eventMessage": "TypeError: fetch failed: connect ECONNREFUSED 127.0.0.1:8999",
+ "isSseError": true
+}
+DEFAULT_INHERITED_ENV_VARS ["APPDATA","HOMEDRIVE","HOMEPATH","LOCALAPPDATA","PATH","PROCESSOR_ARCHITECTURE","SYSTEMDRIVE","SYSTEMROOT","TEMP","USERNAME","USERPROFILE","PROGRAMFILES"]
+getDefaultEnvironment keys ["APPDATA","HOMEDRIVE","HOMEPATH","LOCALAPPDATA","PATH","PROCESSOR_ARCHITECTURE","SYSTEMDRIVE","SYSTEMROOT","TEMP","USERNAME","USERPROFILE","PROGRAMFILES"]
+STDIO-ENV [no env given] child saw: PATH=present API_KEY=(absent) keys=15
+STDIO-ENV [env: {API_KEY} only] child saw: PATH=present API_KEY=k keys=16

@@ -1,0 +1,189 @@
+node=v24.19.0  platform=linux
+DEST(http)=127.0.0.1:35713  DEST(https)=127.0.0.1:-
+NOTE: `openssl` is NOT on PATH here (`command -v openssl` found nothing), so no
+      self-signed cert could be generated and every HTTPS section below is SKIPPED.
+      This is what happens inside node:24.19.0-bookworm-slim, which ships no openssl.
+PROXY(open)=http://127.0.0.1:43081  PROXY(auth, r14user:r14pass)=http://127.0.0.1:34627
+
+### L1. fetch + NODE_USE_ENV_PROXY=1 env var, plain-http target ###
+node=v24.19.0 execArgv=[] mode=fetch url=http://127.0.0.1:35713/L1
+NODE_USE_ENV_PROXY="1" HTTP_PROXY="http://127.0.0.1:43081" HTTPS_PROXY=null NO_PROXY=null
+RESULT: fetch resolved status=200 body="hello from DEST"
+--- proxy log lines added by this section (from proxy.log) ---
+    PROXY saw CONNECT: 127.0.0.1:35713
+    PROXY auth: not required (open proxy); header present=false
+
+### L2. http.get + NODE_USE_ENV_PROXY=1 env var, plain-http target ###
+node=v24.19.0 execArgv=[] mode=http url=http://127.0.0.1:35713/L2
+NODE_USE_ENV_PROXY="1" HTTP_PROXY="http://127.0.0.1:43081" HTTPS_PROXY=null NO_PROXY=null
+RESULT: http.get resolved status=200 body="hello from DEST"
+--- proxy log lines added by this section (from proxy.log) ---
+    PROXY saw request: GET http://127.0.0.1:35713/L2
+    PROXY auth: not required (open proxy); header present=false
+
+### L3. fetch + --use-env-proxy CLI flag (no env var) ###
+node=v24.19.0 execArgv=["--use-env-proxy"] mode=fetch url=http://127.0.0.1:35713/L3
+NODE_USE_ENV_PROXY=null HTTP_PROXY="http://127.0.0.1:43081" HTTPS_PROXY=null NO_PROXY=null
+RESULT: fetch resolved status=200 body="hello from DEST"
+--- proxy log lines added by this section (from proxy.log) ---
+    PROXY saw CONNECT: 127.0.0.1:35713
+    PROXY auth: not required (open proxy); header present=false
+
+### L4. http.get + --use-env-proxy CLI flag ###
+node=v24.19.0 execArgv=["--use-env-proxy"] mode=http url=http://127.0.0.1:35713/L4
+NODE_USE_ENV_PROXY=null HTTP_PROXY="http://127.0.0.1:43081" HTTPS_PROXY=null NO_PROXY=null
+RESULT: http.get resolved status=200 body="hello from DEST"
+--- proxy log lines added by this section (from proxy.log) ---
+    PROXY saw request: GET http://127.0.0.1:35713/L4
+    PROXY auth: not required (open proxy); header present=false
+
+### L5. fetch + NODE_OPTIONS=--use-env-proxy (no env var, no CLI flag on the command line) ###
+node=v24.19.0 execArgv=[] mode=fetch url=http://127.0.0.1:35713/L5
+NODE_USE_ENV_PROXY=null HTTP_PROXY="http://127.0.0.1:43081" HTTPS_PROXY=null NO_PROXY=null
+RESULT: fetch resolved status=200 body="hello from DEST"
+--- proxy log lines added by this section (from proxy.log) ---
+    PROXY saw CONNECT: 127.0.0.1:35713
+    PROXY auth: not required (open proxy); header present=false
+
+### L6. http.get + NODE_OPTIONS=--use-env-proxy ###
+node=v24.19.0 execArgv=[] mode=http url=http://127.0.0.1:35713/L6
+NODE_USE_ENV_PROXY=null HTTP_PROXY="http://127.0.0.1:43081" HTTPS_PROXY=null NO_PROXY=null
+RESULT: http.get resolved status=200 body="hello from DEST"
+--- proxy log lines added by this section (from proxy.log) ---
+    PROXY saw request: GET http://127.0.0.1:35713/L6
+    PROXY auth: not required (open proxy); header present=false
+
+### L7. CONTROL — fetch, HTTP_PROXY set, no flag / no env var at all ###
+node=v24.19.0 execArgv=[] mode=fetch url=http://127.0.0.1:35713/L7
+NODE_USE_ENV_PROXY=null HTTP_PROXY="http://127.0.0.1:43081" HTTPS_PROXY=null NO_PROXY=null
+RESULT: fetch resolved status=200 body="hello from DEST"
+--- proxy log lines added by this section (from proxy.log) ---
+    (none — the proxy was never contacted for this section)
+
+### L8. CONTROL — http.get, HTTP_PROXY set, no flag / no env var at all ###
+node=v24.19.0 execArgv=[] mode=http url=http://127.0.0.1:35713/L8
+NODE_USE_ENV_PROXY=null HTTP_PROXY="http://127.0.0.1:43081" HTTPS_PROXY=null NO_PROXY=null
+RESULT: http.get resolved status=200 body="hello from DEST"
+--- proxy log lines added by this section (from proxy.log) ---
+    (none — the proxy was never contacted for this section)
+
+### L9 — SKIPPED: no openssl on PATH, so there is no HTTPS destination here ###
+
+### L10 — SKIPPED: no openssl on PATH, so there is no HTTPS destination here ###
+
+### L11 — SKIPPED: no openssl on PATH, so there is no HTTPS destination here ###
+
+### L12. NO_PROXY exact match on 127.0.0.1 -> bypasses the proxy ###
+node=v24.19.0 execArgv=[] mode=fetch url=http://127.0.0.1:35713/L12
+NODE_USE_ENV_PROXY="1" HTTP_PROXY="http://127.0.0.1:43081" HTTPS_PROXY=null NO_PROXY="127.0.0.1"
+RESULT: fetch resolved status=200 body="hello from DEST"
+--- proxy log lines added by this section (from proxy.log) ---
+    (none — the proxy was never contacted for this section)
+
+### L13. NO_PROXY set to a non-matching host -> still proxies ###
+node=v24.19.0 execArgv=[] mode=fetch url=http://127.0.0.1:35713/L13
+NODE_USE_ENV_PROXY="1" HTTP_PROXY="http://127.0.0.1:43081" HTTPS_PROXY=null NO_PROXY="example.com"
+RESULT: fetch resolved status=200 body="hello from DEST"
+--- proxy log lines added by this section (from proxy.log) ---
+    PROXY saw CONNECT: 127.0.0.1:35713
+    PROXY auth: not required (open proxy); header present=false
+
+### L14. child_process.spawn with NO env override inherits HTTP_PROXY/NODE_USE_ENV_PROXY ###
+PARENT node=v24.19.0 NODE_USE_ENV_PROXY="1" HTTP_PROXY="http://127.0.0.1:43081"
+node=v24.19.0 execArgv=[] mode=fetch url=http://127.0.0.1:35713/childpath
+NODE_USE_ENV_PROXY="1" HTTP_PROXY="http://127.0.0.1:43081" HTTPS_PROXY=null NO_PROXY=null
+RESULT: fetch resolved status=200 body="hello from DEST"
+--- proxy log lines added by this section (from proxy.log) ---
+    PROXY saw CONNECT: 127.0.0.1:35713
+    PROXY auth: not required (open proxy); header present=false
+
+### L15. SECURITY-BOUNDARY CHECK — raw node:net socket, HTTP_PROXY + NODE_USE_ENV_PROXY=1 both set ###
+NODE_USE_ENV_PROXY="1" HTTP_PROXY="http://127.0.0.1:43081"
+RESULT: raw net.connect got response: "HTTP/1.1 200 OK" (this proves it went DIRECT — a proxied connection could not have produced a plain HTTP response line from DEST over a bare socket)
+--- proxy log lines added by this section (from proxy.log) ---
+    (none — the proxy was never contacted for this section)
+
+### A1. fetch through an AUTHENTICATING proxy, NO credentials in the proxy URL ###
+node=v24.19.0 execArgv=[] mode=fetch url=http://127.0.0.1:35713/A1
+NODE_USE_ENV_PROXY="1" HTTP_PROXY="http://127.0.0.1:34627" HTTPS_PROXY=null NO_PROXY=null
+RESULT: fetch threw TypeError: fetch failed
+--- proxy log lines added by this section (from proxy-auth.log) ---
+    PROXY saw CONNECT: 127.0.0.1:35713
+    PROXY auth: NO Proxy-Authorization header -> answering 407
+
+### A2. fetch through an AUTHENTICATING proxy, credentials as userinfo in HTTP_PROXY ###
+node=v24.19.0 execArgv=[] mode=fetch url=http://127.0.0.1:35713/A2
+NODE_USE_ENV_PROXY="1" HTTP_PROXY="http://r14user:r14pass@127.0.0.1:34627" HTTPS_PROXY=null NO_PROXY=null
+RESULT: fetch resolved status=200 body="hello from DEST"
+--- proxy log lines added by this section (from proxy-auth.log) ---
+    PROXY saw CONNECT: 127.0.0.1:35713
+    PROXY auth: header matched -> allowed ("Basic cjE0dXNlcjpyMTRwYXNz")
+
+### A3. http.get through an AUTHENTICATING proxy, NO credentials ###
+node=v24.19.0 execArgv=[] mode=http url=http://127.0.0.1:35713/A3
+NODE_USE_ENV_PROXY="1" HTTP_PROXY="http://127.0.0.1:34627" HTTPS_PROXY=null NO_PROXY=null
+RESULT: http.get resolved status=407 body="proxy auth required"
+--- proxy log lines added by this section (from proxy-auth.log) ---
+    PROXY saw request: GET http://127.0.0.1:35713/A3
+    PROXY auth: NO Proxy-Authorization header -> answering 407
+
+### A4. http.get through an AUTHENTICATING proxy, credentials as userinfo in HTTP_PROXY ###
+node=v24.19.0 execArgv=[] mode=http url=http://127.0.0.1:35713/A4
+NODE_USE_ENV_PROXY="1" HTTP_PROXY="http://r14user:r14pass@127.0.0.1:34627" HTTPS_PROXY=null NO_PROXY=null
+RESULT: http.get resolved status=200 body="hello from DEST"
+--- proxy log lines added by this section (from proxy-auth.log) ---
+    PROXY saw request: GET http://127.0.0.1:35713/A4
+    PROXY auth: header matched -> allowed ("Basic cjE0dXNlcjpyMTRwYXNz")
+
+### A5 — SKIPPED: no openssl on PATH, so there is no HTTPS destination here ###
+
+### A6 — SKIPPED: no openssl on PATH, so there is no HTTPS destination here ###
+
+### A7 — SKIPPED: no openssl on PATH, so there is no HTTPS destination here ###
+
+=== FULL PROXY log (open proxy) ===
+PROXY listening on 127.0.0.1:43081, pid=11, auth=none
+PROXY saw CONNECT: 127.0.0.1:35713
+PROXY auth: not required (open proxy); header present=false
+PROXY saw request: GET http://127.0.0.1:35713/L2
+PROXY auth: not required (open proxy); header present=false
+PROXY saw CONNECT: 127.0.0.1:35713
+PROXY auth: not required (open proxy); header present=false
+PROXY saw request: GET http://127.0.0.1:35713/L4
+PROXY auth: not required (open proxy); header present=false
+PROXY saw CONNECT: 127.0.0.1:35713
+PROXY auth: not required (open proxy); header present=false
+PROXY saw request: GET http://127.0.0.1:35713/L6
+PROXY auth: not required (open proxy); header present=false
+PROXY saw CONNECT: 127.0.0.1:35713
+PROXY auth: not required (open proxy); header present=false
+PROXY saw CONNECT: 127.0.0.1:35713
+PROXY auth: not required (open proxy); header present=false
+
+=== FULL PROXY-AUTH log ===
+PROXY listening on 127.0.0.1:34627, pid=12, auth=REQUIRED
+PROXY saw CONNECT: 127.0.0.1:35713
+PROXY auth: NO Proxy-Authorization header -> answering 407
+PROXY saw CONNECT: 127.0.0.1:35713
+PROXY auth: header matched -> allowed ("Basic cjE0dXNlcjpyMTRwYXNz")
+PROXY saw request: GET http://127.0.0.1:35713/A3
+PROXY auth: NO Proxy-Authorization header -> answering 407
+PROXY saw request: GET http://127.0.0.1:35713/A4
+PROXY auth: header matched -> allowed ("Basic cjE0dXNlcjpyMTRwYXNz")
+
+=== DEST http log ===
+DEST listening on 127.0.0.1:35713, pid=10
+DEST saw request: GET /L1
+DEST saw request: GET /L2
+DEST saw request: GET /L3
+DEST saw request: GET /L4
+DEST saw request: GET /L5
+DEST saw request: GET /L6
+DEST saw request: GET /L7
+DEST saw request: GET /L8
+DEST saw request: GET /L12
+DEST saw request: GET /L13
+DEST saw request: GET /childpath
+DEST saw request: GET /raw-socket-path
+DEST saw request: GET /A2
+DEST saw request: GET /A4

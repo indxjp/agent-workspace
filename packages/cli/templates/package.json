@@ -1,0 +1,12 @@
+{
+  "name": "my-agent-platform",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "start": "agent-workspace start",
+    "stop": "agent-workspace stop"
+  },
+  "dependencies": {
+    "@indx-workspace/cli": "0.1.0"
+  }
+}

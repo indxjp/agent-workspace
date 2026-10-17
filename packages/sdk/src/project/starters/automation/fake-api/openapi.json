@@ -1,0 +1,33 @@
+{
+  "openapi": "3.1.0",
+  "info": { "title": "Orders", "version": "1.0.0" },
+  "servers": [{ "url": "http://127.0.0.1:4010" }],
+  "paths": {
+    "/orders/{orderNumber}": {
+      "get": {
+        "operationId": "getOrderByOrderNumber",
+        "summary": "Look up one order by its number",
+        "parameters": [
+          { "name": "orderNumber", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "The order",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "orderNumber": { "type": "string" },
+                    "status": { "type": "string" },
+                    "expectedDelivery": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

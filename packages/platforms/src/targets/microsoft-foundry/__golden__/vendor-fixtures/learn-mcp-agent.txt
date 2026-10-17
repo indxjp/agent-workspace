@@ -1,0 +1,18 @@
+{
+    "name": "<AGENT_NAME>-mcp",
+    "description": "MCP agent",
+    "definition": {
+      "kind": "prompt",
+      "model": "'$FOUNDRY_MODEL_DEPLOYMENT_NAME'",
+      "instructions": "You are a helpful agent that can use MCP tools to assist users. Use the available MCP tools to answer questions and perform tasks.",
+      "tools": [
+        {
+          "type": "mcp",
+          "server_label": "toolbox",
+          "server_url": "'$FOUNDRY_PROJECT_ENDPOINT'/toolboxes/mcp-server-toolbox/versions/<version>/mcp?api-version=v1",
+          "require_approval": "always",
+          "project_connection_id": "mcp-server-toolbox-conn"
+        }
+      ]
+    }
+  }

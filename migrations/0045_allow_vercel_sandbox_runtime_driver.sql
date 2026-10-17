@@ -1,0 +1,2 @@
+ALTER TABLE "runtime_profiles" DROP CONSTRAINT "runtime_profiles_driver_valid";--> statement-breakpoint
+ALTER TABLE "runtime_profiles" ADD CONSTRAINT "runtime_profiles_driver_valid" CHECK ("runtime_profiles"."driver" in ('local', 'sandbox-runtime', 'docker', 'kubernetes', 'gke-agent-sandbox', 'aca-sessions', 'aws-agentcore', 'aws-ecs', 'cloud-run-sandbox', 'cloud-run-service', 'external', 'vercel-sandbox'));

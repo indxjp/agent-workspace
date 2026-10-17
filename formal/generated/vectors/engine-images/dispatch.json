@@ -1,0 +1,37 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.EngineImages.driver_starts_only_in_the_runs_engine_image",
+    "AgentWorkspace.Theorems.Invariants.EngineImages.every_sandbox_carries_its_runs_engine"],
+   "input":
+   {"images":
+    [["claude-agent-sdk", "registry.example/secret-project-7/runtime-claude-agent-sdk:v1"],
+     ["pi", "registry.example/secret-project-7/runtime-pi:v1"]],
+    "engine": "pi",
+    "driver": "docker"},
+   "id": "pi-run-gets-pi-image",
+   "expected": {"sandboxes": 1, "outcome": "created", "image": "registry.example/secret-project-7/runtime-pi:v1"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.EngineImages.driver_starts_only_in_the_runs_engine_image",
+    "AgentWorkspace.Theorems.Invariants.EngineImages.every_sandbox_carries_its_runs_engine"],
+   "input":
+   {"images":
+    [["claude-agent-sdk", "registry.example/secret-project-7/runtime-claude-agent-sdk:v1"],
+     ["pi", "registry.example/secret-project-7/runtime-pi:v1"]],
+    "engine": "claude-agent-sdk",
+    "driver": "docker"},
+   "id": "claude-run-gets-claude-image",
+   "expected":
+   {"sandboxes": 1, "outcome": "created", "image": "registry.example/secret-project-7/runtime-claude-agent-sdk:v1"}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.EngineImages.engine_without_image_creates_no_sandbox"],
+   "input":
+   {"images": [["claude-agent-sdk", "registry.example/secret-project-7/runtime-claude-agent-sdk:v1"]],
+    "engine": "pi",
+    "driver": "docker"},
+   "id": "pi-run-without-pi-image",
+   "expected": {"sandboxes": 0, "outcome": "refused", "code": "engine_not_installed"}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.EngineImages.engine_without_image_creates_no_sandbox"],
+   "input": {"images": [], "engine": "claude-agent-sdk", "driver": "docker"},
+   "id": "no-image-at-all",
+   "expected": {"sandboxes": 0, "outcome": "refused", "code": "engine_not_installed"}}],
+ "family": "engine-images",
+ "description": "a driver starts a run in its engine's image, or refuses before creating anything"}

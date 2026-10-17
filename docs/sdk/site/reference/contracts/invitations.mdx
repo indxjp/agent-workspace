@@ -1,0 +1,146 @@
+---
+title: "invitations"
+description: "The @indx-workspace/contracts/invitations exports, sorted alphabetically."
+---
+
+<Note>This page is generated from `packages/contracts/src/invitations.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## AcceptedInvitationResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `workspaceId` | `string` | Yes |  |
+| `membership` | `{ id: string; principalId: string; userId: string; email: string; name: string; role: "owner" \| "admin" \| "builder" \| "viewer"; createdAt: string; }` | Yes |  |
+
+## AcceptedInvitationResponseSchema
+
+The `200` of `POST /api/invitations/:id/accept`: the workspace the invitee just joined and the
+membership that was created for them. This is the one response that renders the membership's
+`principalId`. The route also sets the session cookie for that workspace, which only a
+same-origin browser client receives.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `workspaceId` | `string` | Yes |  |
+| `membership` | `{ id: string; principalId: string; userId: string; email: string; name: string; role: "owner" \| "admin" \| "builder" \| "viewer"; createdAt: string; }` | Yes |  |
+
+## AcceptInvitationInput
+
+The body of `POST /api/invitations/:id/accept`: the plaintext token from the invitation link,
+and nothing else. At most `INVITATION_TOKEN_MAX_LENGTH` code units.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `token` | `string` | Yes |  |
+
+## CreateInvitationInput
+
+The body of `POST /api/invitations`: exactly these two fields — the route refuses any other
+key as `400 invalid_field`. `role` must be one the caller may confer
+(`403 forbidden_role_conferral`); a pending invitation to the same address is
+`409 already_invited`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `email` | `string` | Yes |  |
+| `role` | `"owner" \| "admin" \| "builder" \| "viewer"` | Yes |  |
+
+## INVITATION_TOKEN_MAX_LENGTH
+
+The longest token `POST /api/invitations/:id/accept` reads, in string code units.
+
+Value: `4096`
+
+## InvitationListResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `invitations` | `InvitationResource[]` | Yes |  |
+
+## InvitationListResponseSchema
+
+The body of `GET /api/invitations`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `invitations` | `InvitationResource[]` | Yes |  |
+
+## InvitationResource
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `email` | `string` | Yes |  |
+| `role` | `"owner" \| "admin" \| "builder" \| "viewer"` | Yes |  |
+| `invitedBy` | `null \| string` | Yes |  |
+| `expiresAt` | `string` | Yes |  |
+| `acceptedAt` | `null \| string` | Yes |  |
+| `revokedAt` | `null \| string` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+
+## InvitationResourceSchema
+
+One row of `GET /api/invitations`, as a client is allowed to trust it.
+
+**There is no `token` field and no `tokenHash` field, and adding one would be the defect.** §22's
+rule that the raw secret is shown once and only its hash is stored is enforced on the server by a
+type with nowhere to put either; this schema is the same guarantee on the way back in. A list
+response that carried a token would fail `.strict()` here rather than reaching a consumer.
+
+The four states a client shows — pending, expired, accepted, revoked — are **not** a field. The
+wire row carries timestamps, and a consumer derives the state from them with a fixed precedence.
+
+`invitedBy` is a `users.id`, nullable because the directory types it so.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `email` | `string` | Yes |  |
+| `role` | `"owner" \| "admin" \| "builder" \| "viewer"` | Yes |  |
+| `invitedBy` | `null \| string` | Yes |  |
+| `expiresAt` | `string` | Yes |  |
+| `acceptedAt` | `null \| string` | Yes |  |
+| `revokedAt` | `null \| string` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+
+## InvitationResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `invitation` | `InvitationResource` | Yes |  |
+
+## InvitationResponseSchema
+
+The `200` of `DELETE /api/invitations/:id`: the row with `revokedAt` set. Revocation is a
+timestamp rather than a delete, so the route answers with the row (and answers the same way
+for a second revoke) instead of a `204`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `invitation` | `InvitationResource` | Yes |  |
+
+## IssuedInvitationResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `invitation` | `InvitationResource` | Yes |  |
+| `token` | `string` | Yes |  |
+| `link` | `string` | Yes |  |
+| `warning` | `string` | Yes |  |
+
+## IssuedInvitationResponseSchema
+
+The `201` from `POST /api/invitations` and the `200` from `POST /api/invitations/:id/resend` —
+the only two response bodies in the platform that carry an invitation's plaintext token.
+
+`warning` is the server's own sentence saying this is the only time the token is shown; it is
+parsed rather than reworded so a reveal element states the guarantee the server actually made.
+`link` is the relative `/accept-invitation?id=…&token=…` the server builds, so it carries the
+token too: every consumer of this type must treat both fields as the secret.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `invitation` | `InvitationResource` | Yes |  |
+| `token` | `string` | Yes |  |
+| `link` | `string` | Yes |  |
+| `warning` | `string` | Yes |  |

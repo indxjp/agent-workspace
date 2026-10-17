@@ -1,0 +1,237 @@
+---
+title: "files"
+description: "The @indx-workspace/contracts/files exports, sorted alphabetically."
+---
+
+<Note>This page is generated from `packages/contracts/src/files.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## DecodedResourcePathHeader
+
+- `{ ok: true; value: string | null; }`
+- `{ ok: false; code: "unsupported_path_encoding" | "invalid_path_encoding"; }`
+
+## decodeResourcePathHeader
+
+Decode only requests that explicitly opt in; unmarked callers retain the legacy raw value.
+
+```ts
+decodeResourcePathHeader(value: string | null, encoding: string | null): DecodedResourcePathHeader
+```
+
+## FILE_KINDS
+
+- `'file'`
+- `'folder'`
+
+## FileKind
+
+- `"file"`
+- `"folder"`
+
+## FileListResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `files` | `readonly FileResource[]` | Yes |  |
+
+## FileListResponseSchema
+
+The body of `GET /api/files?path=`: every entry one level under `path`, unpaginated.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `files` | `readonly FileResource[]` | Yes |  |
+
+## FileResource
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `path` | `string` | Yes |  |
+| `kind` | `"file" \| "folder"` | Yes |  |
+| `sizeBytes` | `null \| number` | Yes |  |
+| `contentType` | `null \| string` | Yes | The uploader's declared type, or `null` when the upload carried none. |
+| `lastModified` | `null \| string` | Yes |  |
+
+## FileResourceSchema
+
+One file or folder as every files route renders it. `path` is workspace-relative with forward
+slashes and is the value a client addresses the resource by (see `fileRouteId`); `id` is
+opaque. A folder has `null` size, content type and modification time.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `path` | `string` | Yes |  |
+| `kind` | `"file" \| "folder"` | Yes |  |
+| `sizeBytes` | `null \| number` | Yes |  |
+| `contentType` | `null \| string` | Yes | The uploader's declared type, or `null` when the upload carried none. |
+| `lastModified` | `null \| string` | Yes |  |
+
+## FileResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `file` | `FileResource` | Yes |  |
+
+## FileResponseSchema
+
+The `201` of `POST /api/files`, the `200` of `PATCH /api/files/:id` for a single file, and the
+`200` of `GET /api/files/:id` when the path names a folder rather than bytes.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `file` | `FileResource` | Yes |  |
+
+## fileRouteId
+
+The `:id` segment `/api/files/:id` accepts for a workspace-relative path: its UTF-8 bytes,
+base64url-encoded without padding. The server mints ids this way (not by percent-encoding) so
+that a path's `/` can never be mistaken for a URL segment boundary by any router in front of
+it. The `id` field of a `FileResource` is *not* this value once a catalog is configured —
+it is the catalog row's id — so a client addresses `/api/files/:id` by path, through this
+function, and treats `id` as opaque.
+
+```ts
+fileRouteId(path: string): string
+```
+
+## FILES_PROBLEM_CODES
+
+Problem codes the files routes own, with the status each one travels under. The common
+vocabulary (`malformed_body`, `request_body_too_large`, `unsupported_media_type`, …) is
+`COMMON_PROBLEM_CODES` at the package root.
+
+| Key | Value |
+| --- | --- |
+| `invalid_path` | `400` |
+| `reserved_path` | `400` |
+| `missing_file_path` | `400` |
+| `unsupported_path_encoding` | `400` |
+| `invalid_path_encoding` | `400` |
+| `file_not_found` | `404` |
+| `name_conflict` | `409` |
+| `self_descendant` | `409` |
+| `folder_not_empty` | `409` |
+| `subtree_too_large` | `413` |
+| `store_inconsistent` | `500` |
+| `rename_inconsistent` | `500` |
+| `files_runtime_not_configured` | `503` |
+
+## FilesProblemCode
+
+- `"invalid_path"`
+- `"reserved_path"`
+- `"missing_file_path"`
+- `"unsupported_path_encoding"`
+- `"invalid_path_encoding"`
+- `"file_not_found"`
+- `"name_conflict"`
+- `"self_descendant"`
+- `"folder_not_empty"`
+- `"subtree_too_large"`
+- `"store_inconsistent"`
+- `"rename_inconsistent"`
+- `"files_runtime_not_configured"`
+
+## MAX_SUBTREE_OBJECTS
+
+The largest folder subtree one `PATCH`/`DELETE /api/files/:id` acts on; a bigger one is a
+`413` `subtree_too_large`, never a partial walk.
+
+Value: `500`
+
+## MAX_UPLOAD_BYTES
+
+The most bytes one `POST /api/files` upload may carry; a larger body is a `413`
+`request_body_too_large`, refused while it streams.
+
+Value: `64 * 1024 * 1024`
+
+## MoveFileInput
+
+The body of `PATCH /api/files/:id`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `newPath` | `string` | Yes |  |
+
+## MoveFileResponse
+
+- `FileResponse`
+- `Readonly<Readonly<{ status: "ok"; moved: number; }>>`
+- `Readonly<Readonly<{ status: "partial"; moved: number; total: number; remaining?: readonly string[] | undefined; }>>`
+
+## MoveFileResponseSchema
+
+The `200` of `PATCH /api/files/:id`: `{ file }` for a file, a subtree outcome for a folder.
+
+- `FileResponse`
+- `Readonly<Readonly<{ status: "ok"; moved: number; }>>`
+- `Readonly<Readonly<{ status: "partial"; moved: number; total: number; remaining?: readonly string[] | undefined; }>>`
+
+## RemoveFileResponse
+
+- `null`
+- `Readonly<Readonly<{ status: "ok"; deleted: readonly string[]; }>>`
+- `Readonly<Readonly<{ status: "partial"; deleted: readonly string[]; remaining: readonly string[]; }>>`
+
+## RemoveFileResponseSchema
+
+The body of `DELETE /api/files/:id`: `null` for the `204`, an outcome for the `200`.
+
+- `null`
+- `Readonly<Readonly<{ status: "ok"; deleted: readonly string[]; }>>`
+- `Readonly<Readonly<{ status: "partial"; deleted: readonly string[]; remaining: readonly string[]; }>>`
+
+## RESOURCE_PATH_ENCODING_HEADER
+
+Value: `'x-resource-path-encoding'`
+
+## RESOURCE_PATH_ENCODING_PERCENT_UTF8
+
+Value: `'percent-utf8'`
+
+## ResourcePathHeaderName
+
+- `"x-file-path"`
+- `"x-folder-path"`
+
+## resourcePathHeaders
+
+Browser `Headers` values are limited to byte strings. Percent-encoding keeps every UTF-8 file
+name ASCII-only without changing the raw upload body or making legacy ASCII clients invalid.
+
+```ts
+resourcePathHeaders(name: ResourcePathHeaderName, path: string): Record<string, string>
+```
+
+## SubtreeDeleteOutcome
+
+- `Readonly<Readonly<{ status: "ok"; deleted: readonly string[]; }>>`
+- `Readonly<Readonly<{ status: "partial"; deleted: readonly string[]; remaining: readonly string[]; }>>`
+
+## SubtreeDeleteOutcomeSchema
+
+The `200` of `DELETE /api/files/:id` when the path names a folder — with contents, or one
+created empty (its `deleted` list then names the store's folder marker). A `partial` outcome
+lists what is still there. A plain file and a path with nothing at or under it answer `204`
+with no body instead.
+
+- `Readonly<Readonly<{ status: "ok"; deleted: readonly string[]; }>>`
+- `Readonly<Readonly<{ status: "partial"; deleted: readonly string[]; remaining: readonly string[]; }>>`
+
+## SubtreeMoveOutcome
+
+- `Readonly<Readonly<{ status: "ok"; moved: number; }>>`
+- `Readonly<Readonly<{ status: "partial"; moved: number; total: number; remaining?: readonly string[] | undefined; }>>`
+
+## SubtreeMoveOutcomeSchema
+
+The `200` of `PATCH /api/files/:id` when the path names a folder. A `partial` outcome is a
+declared state, not an error: every object was copied but `moved` of `total` originals could
+be removed (`remaining` lists the leftovers), or the copy itself stopped at `moved`. Retrying
+the same move converges — an already-copied object is not a collision.
+
+- `Readonly<Readonly<{ status: "ok"; moved: number; }>>`
+- `Readonly<Readonly<{ status: "partial"; moved: number; total: number; remaining?: readonly string[] | undefined; }>>`

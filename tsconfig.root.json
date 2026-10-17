@@ -1,0 +1,51 @@
+{
+  // `pnpm -r typecheck` skips the workspace root, so without this config the two
+  // root-level source files would be linted but never type-checked. Package and
+  // app sources are not listed here: each member's own tsconfig.json covers its
+  // whole `src`, tests included, so there is no second list to keep in sync.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowJs": true,
+    "checkJs": true,
+    "paths": {
+      "@agent-workspace/core": ["./packages/core/src/index.ts"],
+      "@agent-workspace/gateway": ["./packages/gateway/src/index.ts"],
+      "@agent-workspace/gateway/providers/registry": [
+        "./packages/gateway/src/providers/registry.ts"
+      ],
+      "@agent-workspace/runtime": ["./packages/runtime/src/index.ts"],
+      "@indx-workspace/platforms": ["./packages/platforms/src/index.ts"],
+      "@indx-workspace/platforms/testing": ["./packages/platforms/src/testing/index.ts"]
+    },
+    "types": ["node"],
+    // Tests that load `aw` reach `aw deploy`'s `@indx-workspace/cli/deploy`, whose sources
+    // import with `.ts` (as `packages/create` and `packages/aw` declare too).
+    "rewriteRelativeImportExtensions": true
+  },
+  // `tests/**/*.ts` is here for the same reason the two files above are: it is not inside any
+  // workspace member, so `pnpm -r typecheck` never sees it, and type-aware ESLint's
+  // `projectService` needs it to belong to a real project. Added by W1-CORE-01 with
+  // `tests/sdk-surface.test.ts` (plan §9.1's sdk-surface gate).
+  "include": [
+    "vitest.config.ts",
+    "vitest.coverage.config.ts",
+    "vitest.apps.coverage.config.ts",
+    "vitest.ui-cli.coverage.config.ts",
+    "playwright.config.ts",
+    "eslint.config.mjs",
+    "scripts/**/*.mjs",
+    "tests/**/*.ts",
+    "tests/**/*.mts",
+    "scripts/**/*.mts"
+  ],
+  // Every script is checked, so their JSDoc is a contract rather than decoration. A hand-written
+  // `foo.d.mts` beside `foo.mjs` makes tsc check the declaration instead of the script, so scripts
+  // carry their types in JSDoc. Three CI gates predate this and still need their JSDoc written
+  // (about 250 errors between them); they are the only scripts left out.
+  "exclude": [
+    "scripts/check-file-ownership.mjs",
+    "scripts/check-licenses.mjs",
+    "scripts/check-wave-ownership.mjs"
+  ]
+}

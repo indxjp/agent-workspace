@@ -1,0 +1,144 @@
+---
+title: "Installation"
+description: "Install the Agent Workspace SDK, its testing subpath, the React chat component and the aw command line from npm."
+---
+
+<Info>
+
+**Chapter 1 · Run your first agent — step 1 of 3** · [the chapter map](/path/first-agent)
+
+- **You will:** check your environment and install the SDK or the `aw` command line.
+- **You will learn:** which `@indx-workspace/*` package does what, why Node 24, and how to verify a request round-trips.
+- **You need:** nothing.
+
+</Info>
+
+Add Agent Workspace to an existing app, or put the `aw` command line on your machine. Everything is
+published to npm under the `@indx-workspace` scope.
+
+**What you can do**
+
+- [Add the SDK to your app](#install-from-npm) with one `npm install`.
+- [Get the `aw` command line](#get-the-aw-command-line).
+- [Check your environment is supported](#requirements).
+- [Verify a request round-trips](#verify-it-worked).
+
+To start a new project rather than add the SDK to one, use the [Quickstart](/getting-started/quickstart):
+`npm create @indx-workspace@latest my-agent` installs `aw` and the local runtime
+(`@indx-workspace/embedded`) for you.
+
+<Note>
+  The npm scope `@agent-workspace` belongs to an unrelated publisher. Nothing of this platform is
+  published there; install only `@indx-workspace/*`.
+</Note>
+
+## Install from npm
+
+Add the typed client to your app. `@indx-workspace/contracts` comes with it, and so does the test
+double at `@indx-workspace/sdk/testing` ([Testing](/guides/testing)), so there is nothing else to
+install.
+
+```sh claim="run"
+npm install @indx-workspace/sdk
+```
+
+Import `createClient` from `@indx-workspace/sdk`, and a schema such as `RunResourceSchema` from
+`@indx-workspace/contracts/runs` when your code validates a body or names a contract type.
+
+## Get the aw command line
+
+Run it once with `npx`, or put `aw` on your `PATH`. See [aw overview](/cli/overview) for what it
+adds on top of the SDK.
+
+```sh claim="run"
+npx @indx-workspace/aw --version        # run it once
+npm install --global @indx-workspace/aw # or put `aw` on PATH
+```
+
+<AccordionGroup>
+  <Accordion title="Every package and what it is">
+
+| Package                     | What it is                                                                                                                                                               |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `@indx-workspace/sdk`       | The client. `./events` parses a run's event stream; `./testing` is the test double and fixtures; `./define` declares agents, surfaces and tools as code.                 |
+| `@indx-workspace/contracts` | The Zod schemas every request and response is validated against. The SDK depends on it.                                                                                  |
+| `@indx-workspace/aw`        | The `aw` command line: `aw dev`, `aw check`, `aw push`, `aw eval`, `aw chat` and the control-plane commands.                                                             |
+| `@indx-workspace/react`     | The surface chat as React: `<Chat/>` with replaceable parts, and the headless `useConversation()` hook. See [Build a frontend](/building/frontend#chat-component-react). |
+| `@indx-workspace/embedded`  | The local runtime `aw dev` starts: one Node process with an embedded PostgreSQL. A dependency of a new project; you do not import it.                                    |
+| `@indx-workspace/create`    | The project generator behind `npm create @indx-workspace@latest`.                                                                                                        |
+| `@indx-workspace/cli`       | The deployment generator (`create-agent-workspace`, and `agent-workspace validate`, `render` and `deploy`) for self-hosting the full platform. See [Self-host Agent Workspace](/building/self-hosting). |
+
+The packages are released together, at the same version as the contracts version the SDK sends on
+every request, so `@indx-workspace/sdk@0.6.x` and `@indx-workspace/aw@0.6.x` both speak
+contracts 0.6 ([Public surface and stability](/concepts/public-surface#versions-and-deprecation)).
+
+  </Accordion>
+</AccordionGroup>
+
+## Requirements
+
+You need **Node 24 or newer**: the packages declare `"engines": { "node": ">=24" }`. In a browser
+nothing else is needed.
+
+On Windows under WSL, keep a project on the Linux filesystem (under `~/`), not on a Windows drive
+under `/mnt/c`: the install and the local runtime are several times slower there, and
+`npm create` says so when it writes a project on one.
+
+<AccordionGroup>
+  <Accordion title="Why Node 24, and a custom fetch">
+
+The SDK relies on Node 24 shipping the Web platform's `fetch`, `Headers`, `URL`, `AbortSignal`
+and `ReadableStream` as globals — it imports nothing from `node:*`. In an older Node or a custom
+runtime, pass your own `fetch` through [`ClientOptions.fetch`](/getting-started/configuration) —
+anything that implements the standard `fetch` signature and returns a `ReadableStream` body for a
+streamed response works, including `runs.follow` (see [Streaming](/guides/streaming)).
+
+  </Accordion>
+  <Accordion title="TypeScript settings">
+
+The SDK's own `tsconfig.json` sets `"exactOptionalPropertyTypes": true` (and the rest of a strict
+TypeScript config: `strict`, `noUncheckedIndexedAccess`, `verbatimModuleSyntax`). Its types
+distinguish an omitted optional field from one explicitly set to `undefined`; a consumer project
+does not have to enable the same flag, but one that does will not fight the SDK's types.
+
+The SDK's build compiles against `"lib": ["ES2023", "DOM", "DOM.Iterable"]` because it is
+isomorphic — the same import works in a browser and in Node 24. If your project's `tsconfig`
+lacks a `"dom"` lib entry and also excludes `@types/node`'s global `fetch` typings, add `"dom"`
+to your own `lib` so `Response`, `ReadableStream` and `AbortSignal` resolve.
+
+  </Accordion>
+</AccordionGroup>
+
+## Verify it worked
+
+Set `AGENT_WORKSPACE_URL` and `AGENT_WORKSPACE_API_KEY`, then list the agents the key can see. If
+it prints a count instead of throwing, the package resolved and a request round-tripped. Against
+the workspace `aw dev` runs, the URL is the `console` row of its ready screen, and
+[Getting a key](/getting-started/authentication#getting-a-key) says where the key comes from. Run it
+with `node verify.ts` in a project whose `package.json` has `"type": "module"`
+(`npm pkg set type=module`); without it, Node warns `MODULE_TYPELESS_PACKAGE_JSON` before it runs
+the file.
+
+<Accordion title="verify.ts">
+
+```ts title="verify.ts" claim="compile"
+import { createClient } from '@indx-workspace/sdk';
+
+const baseUrl = process.env.AGENT_WORKSPACE_URL;
+const apiKey = process.env.AGENT_WORKSPACE_API_KEY;
+if (baseUrl === undefined || apiKey === undefined) {
+  throw new Error('Set AGENT_WORKSPACE_URL and AGENT_WORKSPACE_API_KEY');
+}
+const aw = createClient({
+  baseUrl,
+  auth: { kind: 'api-key', apiKey },
+});
+
+const agents = await aw.agents.list();
+console.log(`connected: ${String(agents.length)} agent(s) visible`);
+```
+
+</Accordion>
+
+Continue with [Authentication](/getting-started/authentication) to set up a real credential, or
+[Quickstart](/getting-started/quickstart) for the full first agent.

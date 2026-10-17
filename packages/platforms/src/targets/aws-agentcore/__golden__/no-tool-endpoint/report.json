@@ -1,0 +1,155 @@
+[
+  {
+    "path": "support-triage.description",
+    "verdict": "dropped",
+    "code": "field_unsupported",
+    "note": "the harness has no description"
+  },
+  {
+    "path": "support-triage.instructions",
+    "verdict": "native",
+    "note": "written to system-prompt.md"
+  },
+  {
+    "path": "support-triage.model",
+    "verdict": "mapped",
+    "note": "claude-sonnet-4-6 is served on Bedrock as global.anthropic.claude-sonnet-4-6"
+  },
+  {
+    "path": "support-triage.permissions.readFiles",
+    "verdict": "dropped",
+    "code": "permissions_unsupported",
+    "note": "the harness has no read-only file tool, and write access is never granted to give read access"
+  },
+  {
+    "path": "support-triage.permissions.writeFiles",
+    "verdict": "native",
+    "note": "no file edits"
+  },
+  {
+    "path": "support-triage.permissions.runCommands",
+    "verdict": "native",
+    "note": "no shell"
+  },
+  {
+    "path": "support-triage.permissions.unrestrictedNetwork",
+    "verdict": "mapped",
+    "note": "without a shell the agent has no arbitrary egress"
+  },
+  {
+    "path": "support-triage.tools.0",
+    "verdict": "native",
+    "note": "a remote_mcp tool"
+  },
+  {
+    "path": "support-triage.tools.1",
+    "verdict": "dropped",
+    "code": "stdio_mcp_unsupported",
+    "note": "the harness reaches remote MCP servers only"
+  },
+  {
+    "path": "support-triage.tools.2",
+    "verdict": "dropped",
+    "code": "code_tool_needs_public_mcp",
+    "note": "there is no public tool endpoint to run it on"
+  },
+  {
+    "path": "support-triage.tools.3",
+    "verdict": "dropped",
+    "code": "field_unsupported",
+    "note": "no gateway fronts this API; set options.openapiGateways"
+  },
+  {
+    "path": "support-triage.tools.4",
+    "verdict": "dropped",
+    "code": "builtin_unsupported",
+    "note": "web search needs a gateway; set options.webSearchGatewayArn"
+  },
+  {
+    "path": "support-triage.tools.5",
+    "verdict": "mapped",
+    "note": "the AgentCore code interpreter"
+  },
+  {
+    "path": "support-triage.skills.0",
+    "verdict": "mapped",
+    "note": "uploaded to options.skillsS3Uri by the publish executor"
+  },
+  {
+    "path": "support-triage.knowledge.0",
+    "verdict": "dropped",
+    "code": "knowledge_unsupported",
+    "note": "the harness has no file-search tool"
+  },
+  {
+    "path": "support-triage.knowledge.1",
+    "verdict": "dropped",
+    "code": "knowledge_unsupported",
+    "note": "the harness has no file-search tool"
+  },
+  {
+    "path": "support-triage.subagents.0",
+    "verdict": "dropped",
+    "code": "subagents_unsupported",
+    "note": "one harness holds one agent"
+  },
+  {
+    "path": "support-triage.limits.maxTurns",
+    "verdict": "mapped",
+    "note": "one iteration is one reason/act cycle"
+  },
+  {
+    "path": "support-triage.limits.maxBudgetUsd",
+    "verdict": "dropped",
+    "code": "limits_unsupported",
+    "note": "the harness has token limits, not a USD budget"
+  },
+  {
+    "path": "billing-specialist.description",
+    "verdict": "dropped",
+    "code": "subagents_unsupported",
+    "note": "only the root agent becomes a harness"
+  },
+  {
+    "path": "billing-specialist.instructions",
+    "verdict": "dropped",
+    "code": "subagents_unsupported",
+    "note": "only the root agent becomes a harness"
+  },
+  {
+    "path": "billing-specialist.model",
+    "verdict": "dropped",
+    "code": "subagents_unsupported",
+    "note": "only the root agent becomes a harness"
+  },
+  {
+    "path": "billing-specialist.permissions.readFiles",
+    "verdict": "dropped",
+    "code": "subagents_unsupported",
+    "note": "only the root agent becomes a harness"
+  },
+  {
+    "path": "billing-specialist.permissions.writeFiles",
+    "verdict": "dropped",
+    "code": "subagents_unsupported",
+    "note": "only the root agent becomes a harness"
+  },
+  {
+    "path": "billing-specialist.permissions.runCommands",
+    "verdict": "dropped",
+    "code": "subagents_unsupported",
+    "note": "only the root agent becomes a harness"
+  },
+  {
+    "path": "billing-specialist.permissions.unrestrictedNetwork",
+    "verdict": "dropped",
+    "code": "subagents_unsupported",
+    "note": "only the root agent becomes a harness"
+  },
+  {
+    "path": "billing-specialist.skills.0",
+    "verdict": "dropped",
+    "code": "subagents_unsupported",
+    "note": "only the root agent becomes a harness"
+  }
+]

@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "origin": {
+    "base_url": "https://api.anthropic.com",
+    "organization_id": "1b0c2a4d-6c1f-4f0e-9a57-2e8d1c3b4a5f",
+    "workspace_id": "wrkspc_01JwQvzr7rXLA5AGx3HKfFUJ"
+  },
+  "resources": {
+    "./agents/summarizer.md": {
+      "kind": "agent",
+      "id": "agent_011CYm1BLqPXpQRk5khsSXrs",
+      "version": "1",
+      "hash": "d23251c8d99b3613a64f3f8d87f5fad4",
+      "remote_hash": "1b771bee5bdbf600a5ad972fdac32d94"
+    }
+  }
+}

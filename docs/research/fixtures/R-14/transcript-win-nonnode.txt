@@ -1,0 +1,62 @@
+node=v24.19.0  platform=win32
+DEST(http)=127.0.0.1:53861  PROXY(open)=http://127.0.0.1:53862
+curl=curl 8.18.0 (x86_64-w64-mingw32) libcurl/8.18.0 Schannel zlib/1.3.1 brotli/1.2.0 zstd/1.5.7 libidn2/2.3.8 libpsl/0.21.5 libssh2/1.11.1 WinLDAP
+python=Python 3.13.14 (python3)
+
+### N1. CONTROL — curl, NO proxy variable set at all ###
+client env: http_proxy=null HTTP_PROXY=null no_proxy=null
+RESULT: curl http_code=200 proxy_used=0
+--- proxy log lines added by this section (from proxy.log) ---
+    (none — the proxy was never contacted for this section)
+
+### N2. curl with lowercase http_proxy set (the name curl documents) ###
+client env: http_proxy=http://127.0.0.1:53862 HTTP_PROXY=null no_proxy=null
+RESULT: curl http_code=200 proxy_used=1
+--- proxy log lines added by this section (from proxy.log) ---
+    PROXY saw request: GET http://127.0.0.1:53861/N2-lower
+    PROXY auth: not required (open proxy); header present=false
+
+### N3. curl with UPPERCASE HTTP_PROXY only (case-folding platforms make this the same as N2) ###
+client env: http_proxy=null HTTP_PROXY=http://127.0.0.1:53862 no_proxy=null
+RESULT: curl http_code=200 proxy_used=1
+--- proxy log lines added by this section (from proxy.log) ---
+    PROXY saw request: GET http://127.0.0.1:53861/N3-upper
+    PROXY auth: not required (open proxy); header present=false
+
+### N4. curl with http_proxy set AND no_proxy=127.0.0.1 ###
+client env: http_proxy=http://127.0.0.1:53862 HTTP_PROXY=null no_proxy=127.0.0.1
+RESULT: curl http_code=200 proxy_used=0
+--- proxy log lines added by this section (from proxy.log) ---
+    (none — the proxy was never contacted for this section)
+
+### N5. CONTROL — python urllib.request, NO proxy variable set at all ###
+client env: http_proxy=null HTTP_PROXY=null no_proxy=null
+urllib.request.getproxies() -> {}
+RESULT: urllib got 'hello from DEST'
+--- proxy log lines added by this section (from proxy.log) ---
+    (none — the proxy was never contacted for this section)
+
+### N6. python urllib.request with lowercase http_proxy set ###
+client env: http_proxy=http://127.0.0.1:53862 HTTP_PROXY=http://127.0.0.1:53862 no_proxy=null
+urllib.request.getproxies() -> {'http': 'http://127.0.0.1:53862'}
+RESULT: urllib got 'hello from DEST'
+--- proxy log lines added by this section (from proxy.log) ---
+    PROXY saw request: GET http://127.0.0.1:53861/N6-lower
+    PROXY auth: not required (open proxy); header present=false
+
+### N7. python urllib.request with http_proxy set AND no_proxy=127.0.0.1 ###
+client env: http_proxy=http://127.0.0.1:53862 HTTP_PROXY=http://127.0.0.1:53862 no_proxy=127.0.0.1
+urllib.request.getproxies() -> {'http': 'http://127.0.0.1:53862', 'no': '127.0.0.1'}
+RESULT: urllib got 'hello from DEST'
+--- proxy log lines added by this section (from proxy.log) ---
+    (none — the proxy was never contacted for this section)
+
+### DEST server log (every request that reached the destination directly or via the proxy) ###
+DEST listening on 127.0.0.1:53861, pid=51828
+DEST saw request: GET /N1-control
+DEST saw request: GET /N2-lower
+DEST saw request: GET /N3-upper
+DEST saw request: GET /N4-noproxy
+DEST saw request: GET /N5-control
+DEST saw request: GET /N6-lower
+DEST saw request: GET /N7-noproxy

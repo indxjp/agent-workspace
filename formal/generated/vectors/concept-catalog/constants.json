@@ -1,0 +1,33 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptCatalog.catalog_name_bounds",
+    "AgentWorkspace.Theorems.Normative.ConceptCatalog.connector_name_is_one_to_200_code_points"],
+   "input": {"module": "agents", "constant": "AGENT_NAME_MAX_LENGTH"},
+   "id": "constant/AGENT_NAME_MAX_LENGTH",
+   "expected": {"value": 200}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptCatalog.catalog_name_bounds",
+    "AgentWorkspace.Theorems.Normative.ConceptCatalog.connector_name_is_one_to_200_code_points"],
+   "input": {"module": "agents", "constant": "AGENT_INSTRUCTIONS_MAX_LENGTH"},
+   "id": "constant/AGENT_INSTRUCTIONS_MAX_LENGTH",
+   "expected": {"value": 100000}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptCatalog.catalog_name_bounds",
+    "AgentWorkspace.Theorems.Normative.ConceptCatalog.connector_name_is_one_to_200_code_points"],
+   "input": {"module": "agents", "constant": "AGENT_MODEL_MAX_LENGTH"},
+   "id": "constant/AGENT_MODEL_MAX_LENGTH",
+   "expected": {"value": 200}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptCatalog.catalog_name_bounds",
+    "AgentWorkspace.Theorems.Normative.ConceptCatalog.connector_name_is_one_to_200_code_points"],
+   "input": {"module": "connectors", "constant": "CONNECTOR_NAME_MAX_LENGTH"},
+   "id": "constant/CONNECTOR_NAME_MAX_LENGTH",
+   "expected": {"value": 200}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptCatalog.catalog_name_bounds",
+    "AgentWorkspace.Theorems.Normative.ConceptCatalog.connector_name_is_one_to_200_code_points"],
+   "input": {"module": "skills", "constant": "SKILL_NAME_MAX_LENGTH"},
+   "id": "constant/SKILL_NAME_MAX_LENGTH",
+   "expected": {"value": 64}}],
+ "family": "concept-catalog",
+ "description": "The HTTP length bounds of agent, connector and skill names, instructions and models"}

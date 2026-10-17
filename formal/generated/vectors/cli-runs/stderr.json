@@ -1,0 +1,15 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.CliRuns.error_stderr_order",
+    "AgentWorkspace.Theorems.Invariants.CliRuns.sigint_exit_priority"],
+   "input": {"interrupted": false},
+   "id": "api-details",
+   "expected": ["error: conflict: try later", "  field: bad"]},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.CliRuns.error_stderr_order",
+    "AgentWorkspace.Theorems.Invariants.CliRuns.sigint_exit_priority"],
+   "input": {"interrupted": true},
+   "id": "interrupted",
+   "expected": ["interrupted"]}],
+ "family": "cli-runs",
+ "description": "Failure line order"}

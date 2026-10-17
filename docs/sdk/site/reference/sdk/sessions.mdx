@@ -1,0 +1,142 @@
+---
+title: "SessionsClient"
+description: "Every method of SessionsClient, its parameters, return type, and route."
+---
+
+<Note>This page is generated from `packages/sdk/src/resources/sessions.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+`/api/sessions/**` — spec §20.
+
+## list
+
+One page of the sessions the caller may see, newest first by creation. Pass `nextCursor` back
+as `cursor` for the next page; a cursor is bound to this list and this workspace.
+
+```ts
+list(query?: ListSessionsQuery, options?: RequestOptions): Promise<SessionListResponse>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `query` | `ListSessionsQuery` | No |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<SessionListResponse>`
+
+**Route:** `GET /api/sessions`
+
+## listAll
+
+Every session the caller may see, one page request at a time: `for await (const session of
+aw.sessions.listAll({ limit: 50 }))`. Stops after the page whose `nextCursor` is `null`.
+
+```ts
+listAll(query?: ListSessionsQuery, options?: RequestOptions): AsyncGenerator<SessionResource, void, undefined>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `query` | `ListSessionsQuery` | No |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `AsyncGenerator<SessionResource, void, undefined>`
+
+## get
+
+```ts
+async get(sessionId: string, options?: RequestOptions): Promise<SessionResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `sessionId` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<SessionResource>`
+
+**Route:** `GET /api/sessions/:sessionId`
+
+## update
+
+Rename, archive (`status: 'archived'`) or restore (`status: 'active'`) a session.
+
+```ts
+async update(sessionId: string, patch: UpdateSessionPatch, options?: RequestOptions): Promise<SessionResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `sessionId` | `string` | Yes |
+| `patch` | `UpdateSessionPatch` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<SessionResource>`
+
+**Route:** `PATCH /api/sessions/:sessionId`
+
+## transcript.read
+
+The stored transcript, one provider-native entry per JSONL line, in append order. Empty for
+a session that exists and has no turns yet; `404 transcript_not_found` for one never
+written, and `409 session_archived` while the session is archived.
+
+```ts
+async read(engineSessionId: string, address?: ReadTranscriptOptions, options?: RequestOptions): Promise<readonly TranscriptEntry[]>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `engineSessionId` | `string` | Yes |
+| `address` | `ReadTranscriptOptions` | No |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<readonly TranscriptEntry[]>`
+
+**Route:** `GET /api/sessions/:engineSessionId/transcript`
+
+## transcript.subkeys
+
+The subagent transcripts stored under the session, each readable through `subpath`.
+
+```ts
+async subkeys(engineSessionId: string, address?: TranscriptAddress, options?: RequestOptions): Promise<readonly string[]>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `engineSessionId` | `string` | Yes |
+| `address` | `TranscriptAddress` | No |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<readonly string[]>`
+
+**Route:** `GET /api/sessions/:engineSessionId/subkeys`
+
+## ListSessionsQuery
+
+`status`, `limit` (1–200; omitted for every remaining row) and a previous page's `nextCursor`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `status` | `undefined \| "active" \| "archived"` | No | Omit for every session the caller may see, in either state. |
+| `limit` | `undefined \| number` | No |  |
+| `cursor` | `undefined \| string` | No |  |
+
+## ReadTranscriptOptions
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `subpath` | `undefined \| string` | No | A subagent transcript's key (`subagents/agent-<id>`); omit for the main transcript. |
+| `projectKey` | `undefined \| string` | No |  |
+
+## TranscriptAddress
+
+Where a transcript is stored. `projectKey` is the tenant key the transcript routes store
+under — the caller's workspace id, also reported by `SessionsClient.list` as
+`projectKey`. Issue #235 (S-21): omit it to default to the caller's own workspace key; the
+server still refuses a *stated* key that is not the caller's (`403 project_key_mismatch`)
+rather than silently storing under it.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `projectKey` | `undefined \| string` | No |  |

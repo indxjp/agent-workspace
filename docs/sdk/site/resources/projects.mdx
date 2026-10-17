@@ -1,0 +1,356 @@
+---
+title: "Projects"
+description: "Group sessions under a name with shared defaults, archive and restore them, and attribute sessions to a project before their first run."
+---
+
+<Info>
+
+- **Read this when:** you want to group a team's or a customer's sessions under one name with a default agent, model, files and MCP servers, or retire such a group.
+- **You will learn:** what a project holds and what it never grants, who can see it, and how to attribute a session to a project before its first run.
+- **Used in:** [Chapter 4 · Put it in your product](/path/embed) and [Chapter 6 · Run it for your team](/path/operate).
+
+</Info>
+
+What you can do with a project:
+
+- [Create](#create), [list](#list), [get](#get) and [update](#update) projects, with a [visibility](#project_visibilities) of `private`, `workspace` or `public`.
+- [Archive](#archive) a project and [restore](#restore) it later; its history stays readable.
+- [Start a session](#startsession) attributed to the project before its first run, or [adopt](#adoptsession) an existing session that has no runs yet.
+
+`aw.projects` is the client family for `/api/projects/**` (`packages/sdk/src/resources/projects.ts`,
+contract `@indx-workspace/contracts/projects`). A **project** groups sessions under a name and a
+set of defaults (a default agent, a default model, a visibility, attached files and MCP servers). A
+session's project attribution is set once, before its first run, and never rewritten after — that
+is what `startSession` and `adoptSession` exist to do safely.
+
+```ts title="projects.ts" claim="compile"
+import { createClient } from '@indx-workspace/sdk';
+
+const baseUrl = process.env.AGENT_WORKSPACE_URL;
+const apiKey = process.env.AGENT_WORKSPACE_API_KEY;
+if (baseUrl === undefined || apiKey === undefined) {
+  throw new Error('Set AGENT_WORKSPACE_URL and AGENT_WORKSPACE_API_KEY');
+}
+const aw = createClient({
+  baseUrl,
+  auth: { kind: 'api-key', apiKey },
+});
+
+// Active projects (the default filter).
+const projects = await aw.projects.list();
+
+// Create one.
+const project = await aw.projects.create({
+  name: 'Customer onboarding',
+  visibility: 'workspace',
+  fileIds: [],
+  mcpServerIds: [],
+});
+
+// Read it back.
+const same = await aw.projects.get(project.id);
+
+// Rename it.
+const renamed = await aw.projects.update(project.id, { name: 'Customer onboarding (2026)' });
+
+// Open a session attributed to it before the first run.
+const { id: sessionId, agentId } = await aw.projects.startSession(project.id);
+console.log(`session ${sessionId} will run as agent ${agentId}`);
+
+// Retire it once the work is done; bring it back if you need to.
+await aw.projects.archive(project.id);
+await aw.projects.restore(project.id);
+```
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw projects list
+aw projects create --name "Customer onboarding"
+aw projects get <id>
+aw projects update <id> --name "Customer onboarding (2026)"
+aw projects start-session <id>
+aw projects archive <id>
+aw projects restore <id>
+```
+
+</CodeGroup>
+
+## `PROJECT_VISIBILITIES`
+
+```ts title="illustrative" claim="illustrative"
+export const PROJECT_VISIBILITIES = ['private', 'workspace', 'public'] as const;
+export type ProjectVisibility = (typeof PROJECT_VISIBILITIES)[number];
+```
+
+Who can see a project: `private` to its owner, `workspace` to every member, or `public`. Reference:
+[`PROJECT_VISIBILITIES`](/reference/contracts/projects#project_visibilities).
+
+## list
+
+`GET /api/projects?archived=`
+
+Every project the caller may see, filtered by `archived` (`ListProjectsQuery.archived`, one of
+`active` — the default — `archived`, or `all`, from `ProjectListFilter`). Unwraps to the bare
+array.
+
+```ts title="illustrative" claim="illustrative"
+import type { ListProjectsQuery } from '@indx-workspace/sdk';
+
+const active = await aw.projects.list(); // { archived: 'active' } is the default
+const archived: ListProjectsQuery = { archived: 'archived' };
+await aw.projects.list(archived);
+const everything = await aw.projects.list({ archived: 'all' });
+```
+
+| Code                              | Status | Meaning                                                             |
+| --------------------------------- | ------ | ------------------------------------------------------------------- |
+| `projects_runtime_not_configured` | 503    | This deployment has no projects API configured.                     |
+| `unauthenticated`                 | 401    | The request carried no usable session or key.                       |
+| `forbidden`                       | 403    | The caller's authorisation identity resolved a different workspace. |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw projects list
+aw projects list --archived all
+```
+
+</CodeGroup>
+
+Reference: [`projects.list`](/reference/sdk/projects#list), [`ProjectListResponseSchema`](/reference/contracts/projects#projectlistresponseschema).
+
+## get
+
+`GET /api/projects/:id`
+
+One project by id.
+
+```ts title="illustrative" claim="illustrative"
+const project = await aw.projects.get('a1b2c3d4-...');
+```
+
+| Code                              | Status | Meaning                                         |
+| --------------------------------- | ------ | ----------------------------------------------- |
+| `projects_runtime_not_configured` | 503    | This deployment has no projects API configured. |
+| `unauthenticated`                 | 401    | The request carried no usable session or key.   |
+| `project_not_found`               | 404    | No project with that id in this workspace.      |
+| `forbidden`                       | 403    | The caller may not read this project.           |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw projects get <id>
+```
+
+</CodeGroup>
+
+Reference: [`projects.get`](/reference/sdk/projects#get), [`ProjectResourceSchema`](/reference/contracts/projects#projectresourceschema).
+
+## create
+
+`POST /api/projects`
+
+```ts title="illustrative" claim="illustrative"
+import type { ProjectCreateInput } from '@indx-workspace/contracts/projects';
+
+const input: ProjectCreateInput = {
+  name: 'Customer onboarding',
+  instructions: 'Answer only from the attached files.',
+  defaultAgentId: null,
+  visibility: 'workspace',
+  fileIds: [],
+  mcpServerIds: [],
+};
+const project = await aw.projects.create(input);
+```
+
+Projects never grant tools or permissions and carry no model, budget, or runtime settings of their
+own — those fields (`tools`, `permissions`, `model`, `budget`, `runtime`) are refused if present in
+the body.
+
+| Code                              | Status | Meaning                                                                                                                  |
+| --------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `projects_runtime_not_configured` | 503    | This deployment has no projects API configured.                                                                          |
+| `unauthenticated`                 | 401    | The request carried no usable session or key.                                                                            |
+| `forbidden`                       | 403    | The caller may not create a project.                                                                                     |
+| `invalid_project`                 | 400    | The body is not a JSON object, `name` is blank, an unknown or forbidden field is present, or a field is the wrong shape. |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw projects create --name "Customer onboarding"
+aw projects create --file project.json
+```
+
+</CodeGroup>
+
+Reference: [`projects.create`](/reference/sdk/projects#create), [`ProjectResourceSchema`](/reference/contracts/projects#projectresourceschema).
+
+## update
+
+`PATCH /api/projects/:id`
+
+Every field is optional; only what you send changes.
+
+```ts title="illustrative" claim="illustrative"
+import type { ProjectPatchInput } from '@indx-workspace/contracts/projects';
+
+const patch: ProjectPatchInput = { visibility: 'private' };
+const updated = await aw.projects.update(project.id, patch);
+
+// defaultModelConnectionId and defaultModel must be set (or cleared) together.
+await aw.projects.update(project.id, { defaultModelConnectionId: null, defaultModel: null });
+```
+
+| Code                              | Status | Meaning                                                                                                                                                                                                                        |
+| --------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `projects_runtime_not_configured` | 503    | This deployment has no projects API configured.                                                                                                                                                                                |
+| `unauthenticated`                 | 401    | The request carried no usable session or key.                                                                                                                                                                                  |
+| `forbidden`                       | 403    | The caller may not edit this project.                                                                                                                                                                                          |
+| `invalid_project`                 | 400    | The body is malformed, e.g. `defaultModelConnectionId` and `defaultModel` were not updated together.                                                                                                                           |
+| `unknown_model_connection`        | 400    | `defaultModelConnectionId` does not name a model connection in this workspace (also covers a connection from another workspace — the same rejection on purpose, so the response cannot be used to probe another tenant's ids). |
+| `project_not_found`               | 404    | No project with that id in this workspace.                                                                                                                                                                                     |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw projects update <id> --name "New name"
+aw projects update <id> --file patch.json
+```
+
+</CodeGroup>
+
+Reference: [`projects.update`](/reference/sdk/projects#update), [`ProjectPatchInput`](/reference/contracts/projects#projectpatchinput).
+
+## archive
+
+`POST /api/projects/:id/archive`
+
+Retire a project: it keeps its history and stops accepting new sessions or adoptions, but stays
+readable. Idempotent — archiving twice answers `200` both times.
+
+```ts title="illustrative" claim="illustrative"
+const archived = await aw.projects.archive(project.id);
+console.log(archived.archivedAt); // an ISO timestamp, was null
+```
+
+<Note>
+  A caller who may not see this project at all, and a caller who can see it but is refused (a
+  Builder who did not create it, any Admin, any Viewer), get the identical `404 project_not_found`
+  here — a deliberate concealment that differs from `GET`/`PATCH /api/projects/:id`, which answer a
+  genuine `403` for the second case.
+</Note>
+
+| Code                | Status | Meaning                                                                 |
+| ------------------- | ------ | ----------------------------------------------------------------------- |
+| `project_not_found` | 404    | No such project, or the caller may not archive it (see the note above). |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw projects archive <id>
+```
+
+</CodeGroup>
+
+Reference: [`projects.archive`](/reference/sdk/projects#archive), [`ProjectResourceSchema`](/reference/contracts/projects#projectresourceschema).
+
+## restore
+
+`POST /api/projects/:id/restore`
+
+Bring an archived project back to active. Idempotent, with the same concealment rule as `archive`.
+
+```ts title="illustrative" claim="illustrative"
+const restored = await aw.projects.restore(project.id);
+console.log(restored.archivedAt); // null again
+```
+
+| Code                | Status | Meaning                                            |
+| ------------------- | ------ | -------------------------------------------------- |
+| `project_not_found` | 404    | No such project, or the caller may not restore it. |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw projects restore <id>
+```
+
+</CodeGroup>
+
+Reference: [`projects.restore`](/reference/sdk/projects#restore), [`ProjectResourceSchema`](/reference/contracts/projects#projectresourceschema).
+
+## startSession
+
+`POST /api/projects/:id/sessions` (no `sessionId` in the body)
+
+Open a new session attributed to the project _before_ its first run, so the attribution is set at
+creation and never rewritten. Pass the returned `id` as `sessionId` when you start a run. Omit
+`agentId` to use the project's `defaultAgentId`.
+
+```ts title="illustrative" claim="illustrative"
+import type { StartProjectSessionInput } from '@indx-workspace/sdk';
+
+const input: StartProjectSessionInput = {}; // or { agentId: '...' }
+const { id: sessionId, projectId, agentId } = await aw.projects.startSession(project.id, input);
+
+const { run } = await aw.runs.start(agentId, { prompt: 'Get started.', sessionId });
+```
+
+| Code                                 | Status | Meaning                                                                                                                          |
+| ------------------------------------ | ------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| `project_not_found`                  | 404    | No project with that id in this workspace.                                                                                       |
+| `project_archived`                   | 409    | The project is archived; restore it before starting a session in it.                                                             |
+| `invalid_body`                       | 400    | `agentId` was present and was not a non-empty string.                                                                            |
+| `project_default_agent_unresolvable` | 422    | No `agentId` was given and the project has no usable `defaultAgentId` (missing, or naming an agent no longer in this workspace). |
+| `project_session_agent_not_found`    | 422    | An explicit `agentId` was given and it does not exist in this workspace.                                                         |
+| `project_session_start_failed`       | 422    | The session could not be created for another reason surfaced by name (e.g. an unknown member or principal).                      |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw projects start-session <id>
+aw projects start-session <id> <agent-id>
+```
+
+</CodeGroup>
+
+Reference: [`projects.startSession`](/reference/sdk/projects#startsession), [`ProjectSessionResponseSchema`](/reference/contracts/projects#projectsessionresponseschema).
+
+## adoptSession
+
+`POST /api/projects/:id/sessions` (with `sessionId` in the body)
+
+The same route as `startSession`: a body naming a `sessionId` moves that existing session into the
+project instead of starting one. Moving is checked on both ends — the destination project, and (if
+the session already belongs to one) the source project — so a caller must be able to edit both.
+
+```ts title="illustrative" claim="illustrative"
+const { projectId, sessionId } = await aw.projects.adoptSession(project.id, existingSessionId);
+```
+
+| Code                           | Status | Meaning                                                                                                                          |
+| ------------------------------ | ------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| `project_not_found`            | 404    | No project with that id in this workspace.                                                                                       |
+| `project_archived`             | 409    | The destination project is archived.                                                                                             |
+| `forbidden`                    | 403    | The caller may not edit the session's current project.                                                                           |
+| `project_or_session_not_found` | 404    | The session does not exist, or the move failed for a reason resolving to "not found".                                            |
+| `project_session_has_runs`     | 409    | The session already has at least one run; a run's project attribution can never be rewritten, so the session can no longer move. |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw projects adopt-session <id> <session-id>
+```
+
+</CodeGroup>
+
+Reference: [`projects.adoptSession`](/reference/sdk/projects#adoptsession), [`ProjectSessionMoveResponseSchema`](/reference/contracts/projects#projectsessionmoveresponseschema).
+
+## Open questions
+
+- `create`'s runtime validation folds several distinct problems (blank name, unknown field, a
+  forbidden field, wrong-shaped `fileIds`/`mcpServerIds`) into one `400 invalid_project` code with
+  a different message per case (`apps/web/server/projects/http.ts`). The message is the only way to
+  tell them apart on the wire today; not resolved here by inventing sub-codes.

@@ -1,0 +1,14 @@
+{
+  "definition": {
+    "kind": "prompt",
+    "model": "gpt-5-mini",
+    "instructions": "You are a helpful assistant.",
+    "tools": [
+      {
+        "type": "a2a",
+        "a2a_version": "1.0",
+        "project_connection_id": "aw-agent-billing-specialist"
+      }
+    ]
+  }
+}

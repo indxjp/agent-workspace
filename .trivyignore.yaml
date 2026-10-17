@@ -1,0 +1,18 @@
+# Exceptions to the release trivy gate (infra/release/trivy-gate.sh, ADR-0087 D4).
+#
+# An entry here is a finding proven not to apply, never a finding that is inconvenient. Each one is
+# scoped to the paths it was proven for, states why, and expires: after `expired_at` trivy reports
+# the finding again and the gate fails until someone decides afresh. Prefer fixing. The PR that adds
+# or renews an entry lists it in its body.
+secrets:
+  - id: azure-storage-account-key
+    paths:
+      - '/srv/apps/web/.next/server/chunks/packages_core_dist_storage_index_*.js'
+      - '/srv/apps/web/.next/server/chunks/packages_core_dist_storage_index_*.js.map'
+    statement: >-
+      The Azurite emulator's well-known development key (AccountName=devstoreaccount1), which
+      Microsoft publishes and which authenticates to nothing but a local emulator. It is a constant
+      inside @azure/storage-blob (its UseDevelopmentStorage=true connection string); Next.js
+      bundles that module into the web server chunk of packages/core's storage module. No
+      credential of this deployment is in the image (#373).
+    expired_at: 2027-03-31

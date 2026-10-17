@@ -1,0 +1,340 @@
+---
+title: "a2a"
+description: "The @indx-workspace/contracts/a2a exports, sorted alphabetically."
+---
+
+<Note>This page is generated from `packages/contracts/src/a2a.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## A2A_ERROR_CODES
+
+| Key | Value |
+| --- | --- |
+| `parse_error` | `-32700` |
+| `invalid_request` | `-32600` |
+| `method_not_found` | `-32601` |
+| `invalid_params` | `-32602` |
+| `internal_error` | `-32603` |
+| `task_not_found` | `-32001` |
+| `task_not_cancelable` | `-32002` |
+| `push_notification_not_supported` | `-32003` |
+| `unsupported_operation` | `-32004` |
+| `content_type_not_supported` | `-32005` |
+
+## A2A_PROTOCOL_VERSION
+
+The card's `protocolVersion`. Verified against A2A v0.3.0
+(`__fixtures__/a2a-spec.v0_3_0.agent-card.json`): the field is a free string whose default is
+'0.3.0'. We emit that default, which is also what Google's REST registration examples for
+Gemini Enterprise use (only its console sample shows '0.3').
+P8 and U3b read this constant; change only here.
+
+Value: `'0.3.0'`
+
+## A2A_TASK_STATES
+
+- `'submitted'`
+- `'working'`
+- `'input-required'`
+- `'completed'`
+- `'canceled'`
+- `'failed'`
+- `'rejected'`
+- `'auth-required'`
+- `'unknown'`
+
+## A2aAgentCard
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `protocolVersion` | `"0.3.0"` | Yes |  |
+| `name` | `string` | Yes |  |
+| `description` | `string` | Yes |  |
+| `url` | `string` | Yes |  |
+| `preferredTransport` | `"JSONRPC"` | Yes |  |
+| `version` | `string` | Yes |  |
+| `capabilities` | `{ streaming: true; pushNotifications: false; }` | Yes |  |
+| `defaultInputModes` | `string[]` | Yes |  |
+| `defaultOutputModes` | `string[]` | Yes |  |
+| `skills` | `{ id: string; name: string; description: string; tags: string[]; examples?: string[] \| undefined; }[]` | Yes |  |
+| `securitySchemes` | `{ awBearer: { type: "http"; scheme: "bearer"; }; }` | Yes |  |
+| `security` | `{ awBearer: string[]; }[]` | Yes |  |
+
+## A2aAgentCardSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `protocolVersion` | `"0.3.0"` | Yes |  |
+| `name` | `string` | Yes |  |
+| `description` | `string` | Yes |  |
+| `url` | `string` | Yes |  |
+| `preferredTransport` | `"JSONRPC"` | Yes |  |
+| `version` | `string` | Yes |  |
+| `capabilities` | `{ streaming: true; pushNotifications: false; }` | Yes |  |
+| `defaultInputModes` | `string[]` | Yes |  |
+| `defaultOutputModes` | `string[]` | Yes |  |
+| `skills` | `{ id: string; name: string; description: string; tags: string[]; examples?: string[] \| undefined; }[]` | Yes |  |
+| `securitySchemes` | `{ awBearer: { type: "http"; scheme: "bearer"; }; }` | Yes |  |
+| `security` | `{ awBearer: string[]; }[]` | Yes |  |
+
+## A2aAgentMessage
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"message"` | Yes |  |
+| `messageId` | `string` | Yes |  |
+| `role` | `"agent" \| "user"` | Yes |  |
+| `parts` | `A2aTextPart[]` | Yes |  |
+| `contextId` | `undefined \| string` | No |  |
+| `taskId` | `undefined \| string` | No |  |
+
+## A2aAgentMessageSchema
+
+A message the server emits: text parts only.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"message"` | Yes |  |
+| `messageId` | `string` | Yes |  |
+| `role` | `"agent" \| "user"` | Yes |  |
+| `parts` | `A2aTextPart[]` | Yes |  |
+| `contextId` | `undefined \| string` | No |  |
+| `taskId` | `undefined \| string` | No |  |
+
+## A2aArtifact
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `artifactId` | `string` | Yes |  |
+| `parts` | `A2aTextPart[]` | Yes |  |
+| `name` | `undefined \| string` | No |  |
+
+## A2aArtifactSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `artifactId` | `string` | Yes |  |
+| `parts` | `A2aTextPart[]` | Yes |  |
+| `name` | `undefined \| string` | No |  |
+
+## A2aArtifactUpdateEvent
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"artifact-update"` | Yes |  |
+| `taskId` | `string` | Yes |  |
+| `contextId` | `string` | Yes |  |
+| `artifact` | `A2aArtifact` | Yes |  |
+| `append` | `undefined \| false \| true` | No |  |
+| `lastChunk` | `undefined \| false \| true` | No |  |
+
+## A2aArtifactUpdateEventSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"artifact-update"` | Yes |  |
+| `taskId` | `string` | Yes |  |
+| `contextId` | `string` | Yes |  |
+| `artifact` | `A2aArtifact` | Yes |  |
+| `append` | `undefined \| false \| true` | No |  |
+| `lastChunk` | `undefined \| false \| true` | No |  |
+
+## A2aJsonRpcRequest
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `jsonrpc` | `"2.0"` | Yes |  |
+| `id` | `null \| string \| number` | Yes |  |
+| `method` | `string` | Yes |  |
+| `params` | `unknown` | No |  |
+
+## A2aJsonRpcRequestSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `jsonrpc` | `"2.0"` | Yes |  |
+| `id` | `null \| string \| number` | Yes |  |
+| `method` | `string` | Yes |  |
+| `params` | `unknown` | No |  |
+
+## A2aJsonRpcResponse
+
+- `{ jsonrpc: "2.0"; id: string | number | null; result: unknown; }`
+- `{ jsonrpc: "2.0"; id: string | number | null; error: { code: number; message: string; data?: unknown; }; }`
+
+## A2aJsonRpcResponseSchema
+
+One JSON-RPC answer: a `message/send` body, or the `data:` of one `message/stream` frame.
+
+- `{ jsonrpc: "2.0"; id: string | number | null; result: unknown; }`
+- `{ jsonrpc: "2.0"; id: string | number | null; error: { code: number; message: string; data?: unknown; }; }`
+
+## A2aMessage
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"message"` | Yes |  |
+| `messageId` | `string` | Yes |  |
+| `role` | `"agent" \| "user"` | Yes |  |
+| `parts` | `(A2aTextPart \| { [x: string]: unknown; kind: "file" \| "data"; })[]` | Yes |  |
+| `contextId` | `undefined \| string` | No |  |
+| `taskId` | `undefined \| string` | No |  |
+| `metadata` | `undefined \| Record<string, unknown>` | No |  |
+
+## A2aMessageSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"message"` | Yes |  |
+| `messageId` | `string` | Yes |  |
+| `role` | `"agent" \| "user"` | Yes |  |
+| `parts` | `(A2aTextPart \| { [x: string]: unknown; kind: "file" \| "data"; })[]` | Yes |  |
+| `contextId` | `undefined \| string` | No |  |
+| `taskId` | `undefined \| string` | No |  |
+| `metadata` | `undefined \| Record<string, unknown>` | No |  |
+
+## A2aMessageSendParams
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `message` | `A2aMessage` | Yes |  |
+| `configuration` | `undefined \| { [x: string]: unknown; acceptedOutputModes?: string[] \| undefined; historyLength?: number \| undefined; pushNotificationConfig?: unknown; blocking?: boolean \| undefined; }` | No |  |
+| `metadata` | `undefined \| Record<string, unknown>` | No |  |
+
+## A2aMessageSendParamsSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `message` | `A2aMessage` | Yes |  |
+| `configuration` | `undefined \| { [x: string]: unknown; acceptedOutputModes?: string[] \| undefined; historyLength?: number \| undefined; pushNotificationConfig?: unknown; blocking?: boolean \| undefined; }` | No |  |
+| `metadata` | `undefined \| Record<string, unknown>` | No |  |
+
+## A2aPart
+
+- `A2aTextPart`
+- `{ [x: string]: unknown; kind: "file" | "data"; }`
+
+## A2aPartSchema
+
+- `A2aTextPart`
+- `{ [x: string]: unknown; kind: "file" | "data"; }`
+
+## A2aStatusUpdateEvent
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"status-update"` | Yes |  |
+| `taskId` | `string` | Yes |  |
+| `contextId` | `string` | Yes |  |
+| `status` | `A2aTaskStatus` | Yes |  |
+| `final` | `false \| true` | Yes |  |
+
+## A2aStatusUpdateEventSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"status-update"` | Yes |  |
+| `taskId` | `string` | Yes |  |
+| `contextId` | `string` | Yes |  |
+| `status` | `A2aTaskStatus` | Yes |  |
+| `final` | `false \| true` | Yes |  |
+
+## A2aTask
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"task"` | Yes |  |
+| `id` | `string` | Yes |  |
+| `contextId` | `string` | Yes |  |
+| `status` | `A2aTaskStatus` | Yes |  |
+| `artifacts` | `undefined \| A2aArtifact[]` | No |  |
+| `history` | `undefined \| A2aAgentMessage[]` | No |  |
+
+## A2aTaskIdParamsSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+
+## A2aTaskQueryParamsSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `historyLength` | `undefined \| number` | No |  |
+
+## A2aTaskSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"task"` | Yes |  |
+| `id` | `string` | Yes |  |
+| `contextId` | `string` | Yes |  |
+| `status` | `A2aTaskStatus` | Yes |  |
+| `artifacts` | `undefined \| A2aArtifact[]` | No |  |
+| `history` | `undefined \| A2aAgentMessage[]` | No |  |
+
+## A2aTaskState
+
+- `"unknown"`
+- `"submitted"`
+- `"working"`
+- `"input-required"`
+- `"completed"`
+- `"canceled"`
+- `"failed"`
+- `"rejected"`
+- `"auth-required"`
+
+## A2aTaskStateSchema
+
+- `"unknown"`
+- `"submitted"`
+- `"working"`
+- `"input-required"`
+- `"completed"`
+- `"canceled"`
+- `"failed"`
+- `"rejected"`
+- `"auth-required"`
+
+## A2aTaskStatus
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `state` | `"unknown" \| "submitted" \| "working" \| "input-required" \| "completed" \| "canceled" \| "failed" \| "rejected" \| "auth-required"` | Yes |  |
+| `message` | `undefined \| A2aAgentMessage` | No |  |
+| `timestamp` | `undefined \| string` | No |  |
+
+## A2aTaskStatusSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `state` | `"unknown" \| "submitted" \| "working" \| "input-required" \| "completed" \| "canceled" \| "failed" \| "rejected" \| "auth-required"` | Yes |  |
+| `message` | `undefined \| A2aAgentMessage` | No |  |
+| `timestamp` | `undefined \| string` | No |  |
+
+## A2aTextPart
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"text"` | Yes |  |
+| `text` | `string` | Yes |  |
+| `metadata` | `undefined \| Record<string, unknown>` | No |  |
+
+## A2aTextPartSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"text"` | Yes |  |
+| `text` | `string` | Yes |  |
+| `metadata` | `undefined \| Record<string, unknown>` | No |  |
+
+## buildA2aAgentCard
+
+Pure; the one card builder the control plane serves and the gemini-enterprise translator (P8) emits.
+`name` is the agent's identifier (skill id, generated description); `displayName` only relabels the
+card and its skill.
+
+```ts
+buildA2aAgentCard(input: { readonly name: string; readonly displayName?: string; readonly description: string | null; readonly url: string; readonly version: string; readonly examples?: readonly string[]; }): A2aAgentCard
+```

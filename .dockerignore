@@ -1,0 +1,87 @@
+# What never enters a build context.
+#
+# Two rules, and the second is the one that matters:
+#
+#   1. Nothing that the image rebuilds anyway. `node_modules/`, `dist/` and `.next/` are produced
+#      inside the build stage from the lockfile and the sources; copying a host copy in would make
+#      the image depend on whatever the last local `pnpm build` happened to leave behind, and on
+#      Windows it would copy `win32-x64` native optional dependencies into a `linux/amd64` image.
+#
+#   2. Nothing that is not needed to *run* the product. Documentation, the HTML mockups, CI
+#      configuration and the wave scripts are all inputs to people, not to a container. Excluding
+#      them is not a size optimisation — it is that a file inside an image is a file an attacker
+#      who reaches the container can read.
+#
+# `migrations/` is deliberately NOT excluded: `packages/core/dist/db/migrate.js` reads
+# `migrations/meta/_journal.json` at start-up and refuses to run without it.
+
+# 1 — rebuilt inside the image
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+.next/
+.next-embedded/
+**/.next/
+**/.next-embedded/
+# @indx-workspace/embedded's packaged build (its Nx output); no image reads it, and CI restores it
+# into the checkout, which must not change the context the images are built from.
+packages/*/publish/
+build/
+**/build/
+coverage/
+**/coverage/
+.terraform/
+**/.terraform/
+*.tsbuildinfo
+**/*.tsbuildinfo
+next-env.d.ts
+**/next-env.d.ts
+
+# 2 — not needed to run the product
+.git/
+.github/
+.claude/
+docs/
+ui/
+tests/
+internal/
+**/*.test.ts
+**/*.test.tsx
+# Agent and contributor instructions, the formal model, the marketing sites, and the repository's
+# own build, test and lint configuration (BH061-059). The Dockerfiles themselves are read by the
+# builder whether or not they are in the context; excluded here, no image can copy them.
+AGENTS.md
+**/AGENTS.md
+CLAUDE.md
+**/CLAUDE.md
+ENGINEERING_GUIDELINES.md
+llms.txt
+formal/
+sites/
+Dockerfile
+*.Dockerfile
+compose.yaml
+playwright*.config.*
+vitest*.config.ts
+knip.json
+jscpd.json
+dependency-cruiser.config.mjs
+.trivyignore.yaml
+
+# `LICENSE` is NOT excluded. Apache-2.0 §4(a) obliges us to give a copy of the licence to every
+# recipient of the work, and an image is a distribution of the work.
+
+# Never, under any circumstances. Patterns are anchored at the context root, so a bare `*.tfvars`
+# would miss `infra/terraform/*/terraform.tfvars`: every secret-bearing pattern carries `**/`.
+# Terraform plan and state files hold every variable in plaintext.
+**/.env
+**/.env.*
+!.env.example
+**/*.tfvars
+**/*.tfplan
+**/*.tfstate
+**/*.tfstate.*
+*.log
+.DS_Store
+Thumbs.db

@@ -1,0 +1,22 @@
+{
+  "protocolVersion": "0.3.0",
+  "name": "support-bot",
+  "description": "Answers support questions",
+  "url": "https://aw.example.com/api/a2a/agents/support-bot",
+  "preferredTransport": "JSONRPC",
+  "version": "3",
+  "capabilities": { "streaming": true, "pushNotifications": false },
+  "defaultInputModes": ["text/plain"],
+  "defaultOutputModes": ["text/plain"],
+  "skills": [
+    {
+      "id": "support-bot",
+      "name": "support-bot",
+      "description": "Answers support questions",
+      "tags": ["agent-workspace"],
+      "examples": ["How do I reset my password?"]
+    }
+  ],
+  "securitySchemes": { "awBearer": { "type": "http", "scheme": "bearer" } },
+  "security": [{ "awBearer": [] }]
+}

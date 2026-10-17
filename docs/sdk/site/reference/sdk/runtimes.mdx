@@ -1,0 +1,117 @@
+---
+title: "RuntimesClient"
+description: "Every method of RuntimesClient, its parameters, return type, and route."
+---
+
+<Note>This page is generated from `packages/sdk/src/resources/runtimes.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+Runtime profiles and connections — spec §5.4 `aw.runtimes`.
+
+## profiles.list
+
+```ts
+async list(options?: RequestOptions): Promise<readonly RuntimeProfileResource[]>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<readonly RuntimeProfileResource[]>`
+
+**Route:** `GET /api/runtime-profiles`
+
+## profiles.get
+
+```ts
+async get(profileId: string, options?: RequestOptions): Promise<RuntimeProfileResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `profileId` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<RuntimeProfileResource>`
+
+**Route:** `GET /api/runtime-profiles/:profileId`
+
+## profiles.create
+
+Create a profile. The server refuses, with `network_policy_not_enforceable` (422), a
+`networkPolicy` the named driver cannot enforce in this deployment.
+
+```ts
+create(input: CreateRuntimeProfileInput, options?: RequestOptions): Promise<RuntimeProfileResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `input` | `CreateRuntimeProfileInput` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<RuntimeProfileResource>`
+
+**Route:** `POST /api/runtime-profiles`
+
+## profiles.update
+
+```ts
+async update(profileId: string, patch: UpdateRuntimeProfilePatch, options?: RequestOptions): Promise<RuntimeProfileResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `profileId` | `string` | Yes |
+| `patch` | `UpdateRuntimeProfilePatch` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<RuntimeProfileResource>`
+
+**Route:** `PATCH /api/runtime-profiles/:profileId`
+
+## profiles.remove
+
+Delete a profile. An agent that referenced it falls back to no profile; nothing cascades.
+
+```ts
+async remove(profileId: string, options?: RequestOptions): Promise<void>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `profileId` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<void>`
+
+**Route:** `DELETE /api/runtime-profiles/:profileId`
+
+## connections.list
+
+```ts
+async list(options?: RequestOptions): Promise<readonly RuntimeConnectionResource[]>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<readonly RuntimeConnectionResource[]>`
+
+**Route:** `GET /api/runtime-connections`
+
+## connections.create
+
+```ts
+create(input: CreateRuntimeConnectionInput, options?: RequestOptions): Promise<RuntimeConnectionResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `input` | `CreateRuntimeConnectionInput` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<RuntimeConnectionResource>`
+
+**Route:** `POST /api/runtime-connections`

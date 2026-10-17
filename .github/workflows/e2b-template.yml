@@ -1,0 +1,100 @@
+name: E2B runtime template
+
+# Builds the production E2B runtime template from the released runtime image, so no person builds it
+# or handles the E2B key (issue #827, #832). `aw deploy` refuses an unpinned E2B template (ADR-0120
+# LC2) and the lightweight journey reads the repository variable `E2B_RUNTIME_TEMPLATE`, which holds
+# the `<template>:<build_id>` this run prints.
+#
+# The run prints the pin to its job summary and does not write the variable: the workflow token has
+# no permission to write Actions variables (`gh variable set` needs a token with the repository
+# `Variables` permission, which GITHUB_TOKEN cannot be granted), and this repository has no such
+# secret. Set it from the summary: `gh variable set E2B_RUNTIME_TEMPLATE --body <pin>`.
+#
+# `infra/e2b/build-template.mjs` talks to the E2B REST API with `fetch`, so there is no CLI to pin.
+# E2B_API_KEY reaches that step through its environment only.
+#
+# The `tool-host` template is the tool sandbox's (ADR-0120 LC5, issue #827): its pin goes to the
+# repository variable `E2B_TOOL_HOST_TEMPLATE`, which `aw deploy` renders as the tool-host flag of an
+# E2B deployment. Run this workflow once per template. No tool-host image is published before a
+# release, so by default E2B builds it from this checkout's tool-host.Dockerfile context (uploaded
+# through E2B's template build API) rather than from a registry image.
+#
+# `cpu_count` / `memory_mb` are the template's size (E2B_CPU_COUNT / E2B_MEMORY_MB), printed in the
+# job summary, for both templates.
+on:
+  workflow_dispatch:
+    inputs:
+      template:
+        description: >-
+          Which template to build: the agent runtime (E2B_RUNTIME_TEMPLATE) or the tool host
+          (E2B_TOOL_HOST_TEMPLATE).
+        required: false
+        default: runtime
+        type: choice
+        options:
+          - runtime
+          - tool-host
+      runtime_image:
+        description: >-
+          Registry reference E2B builds the template from. Empty: the released
+          runtime-claude-agent-sdk image for the runtime template, and for the tool-host template
+          the repository's own tool-host.Dockerfile build context (no registry image needed).
+        required: false
+        default: ''
+        type: string
+      cpu_count:
+        description: >-
+          vCPUs of the template. They size every sandbox started from the template and, as
+          inferred from the SDK but not documented, the build VM; the tool-host install is
+          killed for lack of memory at E2B's default size.
+        required: false
+        default: '2'
+        type: choice
+        options:
+          - '2'
+          - '4'
+          - '8'
+      memory_mb:
+        description: >-
+          Memory of the template in MiB, with the same reach as cpu_count.
+        required: false
+        default: '4096'
+        type: choice
+        options:
+          - '2048'
+          - '4096'
+          - '8192'
+
+concurrency:
+  group: e2b-template
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build template
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: providers-live
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+
+      - name: Build the template
+        run: node infra/e2b/build-template.mjs
+        env:
+          E2B_API_KEY: ${{ secrets.E2B_API_KEY }}
+          RUNTIME_IMAGE: ${{ inputs.runtime_image }}
+          TEMPLATE_KIND: ${{ inputs.template }}
+          E2B_CPU_COUNT: ${{ inputs.cpu_count }}
+          E2B_MEMORY_MB: ${{ inputs.memory_mb }}

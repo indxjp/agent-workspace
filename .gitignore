@@ -1,0 +1,50 @@
+node_modules/
+.next/
+.next-embedded/
+# written by next dev/build
+apps/web/AGENTS.md
+dist/
+build/
+.turbo/
+.terraform/
+*.tfvars
+*.tfplan
+*.tfstate
+*.tfstate.*
+crash.log
+coverage/
+*.tsbuildinfo
+.env
+.env.local
+*.log
+.DS_Store
+Thumbs.db
+next-env.d.ts
+
+# Agent working state, not source. Worktrees for parallel wave tasks live under
+# .claude/worktrees/, and dispatched agents write commit-message and PR-body scratch
+# beside them. None of it is the repository's, and an accidental `git add -A` sweeping
+# a worktree in would commit a second copy of the whole tree. The tracked parts of
+# .claude/ — the committed wave recordings under .claude/workflows/ that plan §2.1
+# rule 3 requires verbatim, and agent and skill definitions — stay tracked and are
+# unaffected, because these entries name directories rather than .claude/ itself.
+.claude/worktrees/
+.claude/jobs/
+.claude/scratch/
+.claude/pr-scratch/
+
+# Codex desktop working state and the local proxy discovery file are machine-local.
+# They may contain nested worktrees or transient connection metadata, never source.
+.codex/
+proxy.port
+
+.nx/
+.vitest-report.json
+
+# Lean build output (docs/adr/0060)
+formal/.lake/
+
+# Route fixtures tests/auth.test.ts writes into the app tree for the length of its run. A killed
+# run leaves them behind (the next run removes them); they must never be committed.
+apps/web/app/api/w1cp06-unregistered/
+apps/web/app/p/w1cp06-unauthenticated/

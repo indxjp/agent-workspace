@@ -1,0 +1,213 @@
+---
+title: "Use cases"
+description: "Six concrete shapes Agent Workspace takes — an in-product copilot, a team workspace with roles, backend automation, a locked-down review agent, a support agent employees can ask, and an agent that runs on the cloud you already approved — each mapped to the surfaces and pages that build it."
+---
+
+<Info>
+- **Read this when:** you know what you want an agent to do and need to see which shape it takes:
+  who drives it, where it runs and what it may touch.
+- **You will learn:** six recurring shapes, the resources and surfaces each one uses, and the
+  page that builds it. For worked, tested examples, see the [use-case gallery](/tutorials).
+- **Used in:** [Chapter 2: Build your agent](/path/build), [Chapter 4: Put it in your
+  product](/path/embed), [Chapter 5: Ship it to your servers](/path/ship) and [Chapter 6: Run it
+  for your team](/path/operate).
+
+</Info>
+
+The configuration surface is the same every time: a workspace, its people, its agents, and the
+files, skills, connectors, model and runtime each agent is given. What changes between use
+cases is *who drives the agent* (a person in the UI, your product, your backend, a terminal),
+*where it executes*, and *what it is allowed to touch*. Each shape below names the surfaces it
+uses — Consume, Configure, Extend, Internal, as defined on [Public surface and
+stability](/concepts/public-surface) — and the page that shows how. Every shape below assumes
+the same three values — stated on [Design principles](/concepts/design-principles) — hold for
+that workspace. No customer names; the roles are real, the companies are not.
+
+## 1. A copilot inside your own product
+
+**Who:** a product team shipping a SaaS application that wants an assistant panel — chat,
+suggestions, a canvas of generated output — without building an agent platform.
+
+**Shape:** your backend holds a Builder API key and starts runs; your frontend renders the
+run's event stream through a relay; the agent's instructions, skills, connectors and
+permissions are managed in Agent Workspace by the people who own them, not redeployed with your
+product. Several agents ("Draft", "Review", "Explain") are offered in a switcher; each person
+keeps one session per agent.
+
+| Resource | How it is configured |
+| --- | --- |
+| Agents | one per capability; `readFiles: true`, `writeFiles` only for the canvas agent |
+| Files | a `canvas/<user>/<session>/` folder per embedded surface, assigned `read-write` |
+| Connectors | your product's own API as an MCP server, `http` transport, a bearer credential |
+| Runtime | `docker`, `networkPolicy: 'none'` for agents that need no egress |
+
+**Surfaces:** Consume (the SDK on your backend, the events parser in your frontend), Configure
+(everything about the agents). No Extend.
+
+**Pages:** [Embed an agent in your product](/building/embedding) is this use case end to end;
+[Build a frontend](/building/frontend) for the store and hook; [Connect an MCP
+server](/building/mcp-servers) for exposing your API to the agent.
+
+## 2. A team workspace with people and roles
+
+**Who:** an engineering or operations group that wants to give a dozen people agents they can
+run from a browser, with a few people allowed to change them and everyone else allowed only to
+use them.
+
+**Shape:** the control plane's own UI is the product. Owners and Admins configure models,
+runtimes and people; Builders create and edit agents, skills and connectors and run their own;
+Viewers run the agents they are granted. Sessions and runs are per person; the audit log and
+run metrics show who ran what and what it cost.
+
+| Resource | How it is configured |
+| --- | --- |
+| People | Owner (one or two), Admin for the platform team, Builder for agent authors, Viewer for everyone else |
+| Agents | owned by the Builder who wrote them; Admins see all |
+| Projects | one per team with a default agent, default model and shared files |
+| Runtime | `docker` on a single VM, or `kubernetes` for several teams |
+
+**Surfaces:** Configure (through the UI); Consume only if someone scripts it with `aw`. This
+is the use case the UI is designed around; the SDK is optional.
+
+**Pages:** [Self-host Agent Workspace](/building/self-hosting), [Workspaces and
+principals](/concepts/workspaces-and-principals), [Team](/resources/team),
+[Projects](/resources/projects).
+
+<Note>
+  A Viewer's "permitted agents" can be managed with `aw.agents.getGrants` and
+  `replaceGrants`. The invitee's accept page remains incomplete; the full invitation flow is
+  tracked as [RF-203](/concepts/roadmap#rf-203-invitation-acceptance).
+</Note>
+
+## 3. Automation from a backend
+
+**Who:** a platform or data team that wants an agent to run on a schedule or in response to an
+event — triage overnight alerts, summarise a day's tickets, draft release notes from a diff — and
+act on the outcome in code.
+
+**Shape:** a service or cron job with a Builder key starts a run, waits for its outcome (or
+follows its stream), reads the settled record's status, usage and cost, and stores or forwards
+the result. No person is in the loop; the agent's permissions are the narrowest that do the
+job.
+
+| Resource | How it is configured |
+| --- | --- |
+| Agent | `runCommands: false`, `unrestrictedNetwork: false`; connectors for the systems it must read |
+| Files | inputs uploaded before the run; outputs read back after |
+| Runtime | `docker` with `timeoutSeconds` and `idleTimeoutSeconds` on the profile; turn and budget limits set through `agents.replacePolicy` |
+
+**Surfaces:** Consume (the SDK, or `aw` from CI), Configure.
+
+**Pages:** [Integrate a backend](/building/backend), [Retries and
+idempotency](/guides/retries-and-idempotency), [CLI vs SDK](/cli/cli-vs-sdk).
+
+<Note>
+  **Today:** a retried start after a lost response may start a second run, and there are no
+  webhooks — poll or stream in-process. **Target:** an `Idempotency-Key` on start. Tracked as
+  [S-6](/concepts/roadmap#s-6-idempotency-keys).
+</Note>
+
+## 4. A review agent with commands allowed — and contained
+
+**Who:** an application-security or code-review function that wants an agent to run linters,
+tests and scanners on a repository, which means shell access, which means isolation matters
+more than anything else.
+
+**Shape:** an agent with `runCommands: true` and a `read-write` file assignment, executing in a
+runtime profile that isolates it: `kubernetes` with a gVisor RuntimeClass where the cluster
+provides one, or `docker` with `networkPolicy: 'none'` so the sandbox can reach the model
+gateway and nothing else. The repository arrives as files or through a connector; findings
+leave as files or as the transcript.
+
+| Resource | How it is configured |
+| --- | --- |
+| Agent | `readFiles`, `writeFiles`, `runCommands: true`; `unrestrictedNetwork: false` |
+| Connectors | a source-control MCP server (remote, bearer credential) |
+| Runtime | `kubernetes` + gVisor, or `docker` + `networkPolicy: 'none'`; `filesystem: 'read-write'`, `persistPaths` for the checkout |
+
+**Surfaces:** Configure; Consume if triggered from CI.
+
+**Pages:** [Choose models and runtimes](/building/models-and-runtimes), [Design an
+agent](/building/agents), [Self-host Agent Workspace](/building/self-hosting) (which drivers
+are verified today — the isolation claim depends on it).
+
+## 5. An internal support agent employees can actually ask
+
+**Who:** an IT service desk or HR operations team that wants a first-line assistant over the
+handbook, the procedures and the ticketing system, with answers people can read without
+understanding tool traces.
+
+**Shape:** one agent, a skill that encodes how to answer, the handbook as files, the ticketing
+and search systems as connectors. People ask it through the control plane's UI or through an
+embedded panel in the intranet (use case 1). The run view shows plain language by default and
+the trace behind a disclosure.
+
+| Resource | How it is configured |
+| --- | --- |
+| Skill | `SKILL.md` with the answering procedure and tone; supporting files for templates |
+| Files | the handbook, assigned `read` |
+| Connectors | internal search and the ticketing system, `http` transport |
+| Runtime | `docker`, sized small; `networkPolicy: 'open'` only if the connectors are external |
+
+**Surfaces:** Configure; Consume for the embedded panel.
+
+**Pages:** [Author a skill](/building/skills), [Connect an MCP server](/building/mcp-servers),
+[Embed an agent in your product](/building/embedding).
+
+## 6. The model and the cloud you already approved
+
+**Who:** a finance or compliance function whose policy names the model provider (an Azure
+OpenAI deployment, a specific region) and the isolation product the company already bought.
+
+**Shape:** the same agent definition as any other, pointed at a different model connection and
+a different runtime profile. Switching either is an update to the agent, audited, with no
+change to the agent's instructions, skills or connectors — the whole point of keeping the
+Claude Agent SDK's options as data.
+
+| Resource | How it is configured |
+| --- | --- |
+| Model connection | `azure-openai` (or `openai-compatible`) with the deployment's credential, write-only |
+| Runtime | a managed-sandbox driver where one is available, otherwise `kubernetes` in the approved region |
+| Agent | unchanged; `modelConnectionId` and `runtimeProfileId` switched |
+
+**Surfaces:** Configure. Extend only if the provider or the sandbox product is one the platform
+does not know yet.
+
+**Pages:** [Choose models and runtimes](/building/models-and-runtimes), [Runtime
+neutrality](/concepts/runtime-neutrality), [Extend the platform](/building/extending-the-platform).
+
+<Note>
+  **Today:** the managed-cloud sandbox drivers are not verified and several named driver ids
+  have no implementation; `azure-openai` and `openai-compatible` connections run through the
+  gateway's provider adapters, whose live-provider behaviour is fixture-verified rather than
+  proven against the provider. **Target:** a published release with the driver matrix
+  proven per driver, on the same native-per-cloud programme as the storage and secret backends.
+  Tracked as
+  [P-6](/concepts/roadmap#p-6-a-published-release-with-signed-images-and-the-installer),
+  [D-2](/concepts/roadmap#d-2-object-storage-on-every-cloud-natively),
+  [D-3](/concepts/roadmap#d-3-secret-backends-on-every-cloud) and
+  [D-4](/concepts/roadmap#d-4-a-verified-managed-cloud-sandbox-per-cloud); the
+  driver standing table is on [Self-host Agent Workspace](/building/self-hosting).
+</Note>
+
+## Reading the pattern
+
+Across all six, the *agent* changes only in its data, the *driver* of the agent changes between
+a browser, your product, your backend and a terminal, and the *platform* does not change at
+all. That is the property the [target architecture](/concepts/target-architecture) protects:
+one API, everything about an agent as configuration, code only at named extension points.
+
+<CardGroup cols={2}>
+  <Card title="What Agent Workspace is" icon="circle-info" href="/concepts/what-is-agent-workspace">
+    The product thesis and the model these use cases share.
+  </Card>
+  <Card title="Which surface for which job" icon="signs-post" href="/building/overview">
+    From "I want to…" to the method and the page.
+  </Card>
+  <Card title="Embed an agent in your product" icon="window" href="/building/embedding">
+    Use case 1 end to end.
+  </Card>
+  <Card title="Self-host Agent Workspace" icon="server" href="/building/self-hosting">
+    Use case 2's starting point, and the driver standing table.
+  </Card>
+</CardGroup>

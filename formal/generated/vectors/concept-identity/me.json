@@ -1,0 +1,65 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Refinement.ConceptIdentity.me_schema_target_refines_current",
+    "AgentWorkspace.Theorems.Refinement.ConceptIdentity.me_rules_agree_on_well_formed_principals"],
+   "input":
+   {"workspaceId": "w1", "userId": "u1", "role": "viewer", "principalId": "p1", "label": "Ada", "kind": "membership"},
+   "id":
+   "me/{\"kind\":\"membership\",\"label\":\"Ada\",\"principalId\":\"p1\",\"role\":\"viewer\",\"userId\":\"u1\",\"workspaceId\":\"w1\"}",
+   "expected": {"acceptedTarget": true, "acceptedCurrent": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Refinement.ConceptIdentity.me_schema_target_refines_current",
+    "AgentWorkspace.Theorems.Refinement.ConceptIdentity.me_rules_agree_on_well_formed_principals"],
+   "input":
+   {"workspaceId": "w1", "userId": null, "role": "viewer", "principalId": "p1", "label": "Ada", "kind": "membership"},
+   "id":
+   "me/{\"kind\":\"membership\",\"label\":\"Ada\",\"principalId\":\"p1\",\"role\":\"viewer\",\"userId\":null,\"workspaceId\":\"w1\"}",
+   "expected": {"acceptedTarget": false, "acceptedCurrent": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Refinement.ConceptIdentity.me_schema_target_refines_current",
+    "AgentWorkspace.Theorems.Refinement.ConceptIdentity.me_rules_agree_on_well_formed_principals"],
+   "input":
+   {"workspaceId": "w1", "userId": "u1", "role": "viewer", "principalId": "p1", "label": "Ada", "kind": "api-key"},
+   "id":
+   "me/{\"kind\":\"api-key\",\"label\":\"Ada\",\"principalId\":\"p1\",\"role\":\"viewer\",\"userId\":\"u1\",\"workspaceId\":\"w1\"}",
+   "expected": {"acceptedTarget": false, "acceptedCurrent": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Refinement.ConceptIdentity.me_schema_target_refines_current",
+    "AgentWorkspace.Theorems.Refinement.ConceptIdentity.me_rules_agree_on_well_formed_principals"],
+   "input":
+   {"workspaceId": "w1", "userId": null, "role": "viewer", "principalId": "p1", "label": "Ada", "kind": "api-key"},
+   "id":
+   "me/{\"kind\":\"api-key\",\"label\":\"Ada\",\"principalId\":\"p1\",\"role\":\"viewer\",\"userId\":null,\"workspaceId\":\"w1\"}",
+   "expected": {"acceptedTarget": true, "acceptedCurrent": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Refinement.ConceptIdentity.me_schema_target_refines_current",
+    "AgentWorkspace.Theorems.Refinement.ConceptIdentity.me_rules_agree_on_well_formed_principals"],
+   "input":
+   {"workspaceId": "w1", "userId": "u1", "role": "owner", "principalId": "", "label": "Ada", "kind": "membership"},
+   "id":
+   "me/{\"kind\":\"membership\",\"label\":\"Ada\",\"principalId\":\"\",\"role\":\"owner\",\"userId\":\"u1\",\"workspaceId\":\"w1\"}",
+   "expected": {"acceptedTarget": false, "acceptedCurrent": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Refinement.ConceptIdentity.me_schema_target_refines_current",
+    "AgentWorkspace.Theorems.Refinement.ConceptIdentity.me_rules_agree_on_well_formed_principals"],
+   "input": {"workspaceId": "w1", "userId": "", "role": "owner", "principalId": "p1", "label": "CI", "kind": "api-key"},
+   "id":
+   "me/{\"kind\":\"api-key\",\"label\":\"CI\",\"principalId\":\"p1\",\"role\":\"owner\",\"userId\":\"\",\"workspaceId\":\"w1\"}",
+   "expected": {"acceptedTarget": false, "acceptedCurrent": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Refinement.ConceptIdentity.me_schema_target_refines_current",
+    "AgentWorkspace.Theorems.Refinement.ConceptIdentity.me_rules_agree_on_well_formed_principals"],
+   "input": {"workspaceId": "", "userId": null, "role": "owner", "principalId": "p1", "label": "CI", "kind": "api-key"},
+   "id":
+   "me/{\"kind\":\"api-key\",\"label\":\"CI\",\"principalId\":\"p1\",\"role\":\"owner\",\"userId\":null,\"workspaceId\":\"\"}",
+   "expected": {"acceptedTarget": false, "acceptedCurrent": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Refinement.ConceptIdentity.me_schema_target_refines_current",
+    "AgentWorkspace.Theorems.Refinement.ConceptIdentity.me_rules_agree_on_well_formed_principals"],
+   "input":
+   {"workspaceId": "w1", "userId": "u1", "role": "admin", "principalId": "p1", "label": "", "kind": "membership"},
+   "id":
+   "me/{\"kind\":\"membership\",\"label\":\"\",\"principalId\":\"p1\",\"role\":\"admin\",\"userId\":\"u1\",\"workspaceId\":\"w1\"}",
+   "expected": {"acceptedTarget": false, "acceptedCurrent": false}}],
+ "family": "concept-identity",
+ "description": "GET /api/me bodies: today's schema and the documented rule"}

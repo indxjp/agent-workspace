@@ -1,0 +1,26 @@
+apiVersion: agentworkspace.dev/v2
+kind: Project
+name: meeting-minutes
+engine: claude-agent-sdk
+# The task tracker is your own MCP server (mcp/tasks.mjs): openapiTool() is read-only, so a write
+# needs a tool you host. A project file names only remote connectors, so run it over Streamable
+# HTTP for `aw dev`, with the secret your backend signs approvals with:
+#   MCP_TRANSPORT=http PORT=8788 APPROVAL_SECRET=… TASKS_FILE=./tasks.json node mcp/tasks.mjs
+connectors:
+  task-tracker:
+    url: http://127.0.0.1:8788/mcp
+    transport: http
+policy:
+  permissions:
+    writeFiles: false
+    runCommands: true
+    unrestrictedNetwork: false
+  limits:
+    maxBudgetUsd: 1
+  promotion:
+    minEvalScore: 0.9
+environments:
+  local:
+    cloud: local
+    identity:
+      bootstrapAdmin: admin@localhost.test

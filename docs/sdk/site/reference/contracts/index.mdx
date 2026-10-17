@@ -1,0 +1,232 @@
+---
+title: "contracts"
+description: "The @indx-workspace/contracts root entry: identifiers and the error envelope."
+---
+
+<Note>This page is generated from `packages/contracts/src/identifiers.ts`, `packages/contracts/src/index.ts`, `packages/contracts/src/problem.ts`, `packages/contracts/src/version.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## ApiProblem
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `error` | `Readonly<{ code: string; message: string; details?: readonly string[] \| undefined; detail?: string \| undefined; }>` | Yes |  |
+
+## ApiProblemBareCodeSchema
+
+The envelope one route still answers with, where `error` is the bare code: `POST
+/api/runtimes/test` (`{ error, message }`). Published for the same reason as
+`ApiProblemDetailSchema`; the route converges on `ApiProblemSchema` through server
+change S-4 (spec 04 §8). A deployment older than SDK unit 6 (#238) also answered `GET
+/api/audit-events` this way.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `error` | `string` | Yes |  |
+| `message` | `undefined \| string` | No |  |
+
+## ApiProblemDetailSchema
+
+The envelope a deployment older than SDK unit 6 (#238) answers with, where the prose field is
+named `detail` rather than `message`. The RBAC layer — the team routes and every `401`, `403`,
+`500 authorisation_undecidable` and `503 rbac_runtime_not_configured` refused before a domain
+handler runs — rendered it. Current servers answer `ApiProblemSchema` instead, so this
+schema no longer describes a live answer; it stays published so the SDK can still read the
+stable `code` from an older deployment, mapping `detail` onto `message`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `error` | `Readonly<{ code: string; detail: string; }>` | Yes |  |
+
+## ApiProblemSchema
+
+The one error envelope every failing `/api/**` route returns.
+
+`code` is the stable, machine-readable part of the contract: a client branches on it, never on
+`message`. `message` is deliberately safe prose the server chose for the client; it never carries
+a raw provider, SQL, filesystem or credential-bearing text. `details` is present only when there
+is more to say than the message — per-field parse errors, for example.
+
+`detail` is the spelling the RBAC layer used before this envelope became the only one. The server
+still renders it, always equal to `message`, so a reader written against the old spelling keeps
+working until the next major release (ADR-0078 D7); a client reads `message`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `error` | `Readonly<{ code: string; message: string; details?: readonly string[] \| undefined; detail?: string \| undefined; }>` | Yes |  |
+
+## COMMON_PROBLEM_CODES
+
+Problem codes shared by every domain, with the status each one travels under.
+
+Domain-owned codes (`agent_not_found`, `session_not_usable`, `project_archived`, …) stay with
+their domain module; this table is only the vocabulary a caller meets on every route.
+
+| Key | Value |
+| --- | --- |
+| `unauthenticated` | `401` |
+| `forbidden` | `403` |
+| `authorisation_undecidable` | `500` |
+| `malformed_body` | `400` |
+| `invalid_body` | `400` |
+| `unsupported_media_type` | `415` |
+| `request_body_too_large` | `413` |
+| `internal_error` | `500` |
+| `service_unavailable` | `503` |
+| `upstream_failure` | `502` |
+
+## CommonProblemCode
+
+- `"unauthenticated"`
+- `"forbidden"`
+- `"authorisation_undecidable"`
+- `"malformed_body"`
+- `"invalid_body"`
+- `"unsupported_media_type"`
+- `"request_body_too_large"`
+- `"internal_error"`
+- `"service_unavailable"`
+- `"upstream_failure"`
+
+## CONTRACTS_MINIMUM_VERSION_HEADER
+
+Response only: the oldest contracts version the server still serves.
+
+Value: `'x-agent-workspace-contracts-minimum'`
+
+## CONTRACTS_VERSION
+
+The version of `@indx-workspace/contracts` this build is; equal to its `package.json` version.
+
+Value: `'0.6.9'`
+
+## CONTRACTS_VERSION_HEADER
+
+Request: the contracts version the client was built against. Response: the server's current one.
+
+Value: `'x-agent-workspace-contracts'`
+
+## CONTRACTS_VERSION_PROBLEM_CODES
+
+The problem codes version negotiation answers with, and the status each travels under.
+
+| Key | Value |
+| --- | --- |
+| `contracts_version_unsupported` | `426` |
+| `contracts_version_malformed` | `400` |
+
+## ContractsVersion
+
+A parsed `MAJOR.MINOR.PATCH`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `major` | `number` | Yes |  |
+| `minor` | `number` | Yes |  |
+| `patch` | `number` | Yes |  |
+
+## ContractsVersionProblemCode
+
+- `"contracts_version_unsupported"`
+- `"contracts_version_malformed"`
+
+## ContractsVersionVerdict
+
+Whether a client version is served. `upgrade` names the side that must move: `client` when the
+client is older than the oldest served version, `server` when it is newer than the server.
+
+- `{ readonly kind: "served"; }`
+- `{ readonly kind: "unsupported"; readonly upgrade: "client" | "server"; }`
+
+## formatInUseReferrer
+
+The one naming rule for "refused while referenced": the code is `<resource>_in_use`, the status
+is `409`, and `details` lists every referrer as `<kind>:<id>` (`agent:3f…`), sorted. The caller
+removes those references and retries; nothing is deleted while any remains.
+
+```ts
+formatInUseReferrer(referrer: InUseReferrer): string
+```
+
+## IN_USE_REFERRER_KINDS
+
+What can hold a reference that keeps a resource from being deleted. A delete of a referenced
+resource is refused, never cascaded, and never left to orphan the referrer (ADR-0077).
+
+- `'agent'`
+- `'connector'`
+- `'model-connection'`
+
+## InUseReferrer
+
+One referrer, as the `details` of a `409 <resource>_in_use` problem carries it.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"agent" \| "connector" \| "model-connection"` | Yes |  |
+| `id` | `string` | Yes |  |
+
+## InUseReferrerKind
+
+- `"agent"`
+- `"connector"`
+- `"model-connection"`
+
+## IsoDateTimeSchema
+
+An ISO-8601 instant as every response renders it: persistence `Date` values cross the wire as
+strings, never as epoch numbers.
+
+`string`
+
+## isUuid
+
+```ts
+isUuid(value: unknown): value is string
+```
+
+## judgeContractsVersion
+
+Judge one client version against a served range.
+
+```ts
+judgeContractsVersion(client: ContractsVersion, range: ServedContractsRange): ContractsVersionVerdict
+```
+
+## parseContractsVersion
+
+Parse a contracts version, or `null` when the text is not one.
+
+```ts
+parseContractsVersion(text: string): ContractsVersion | null
+```
+
+## parseInUseReferrers
+
+Read the referrers back out of a `409 <resource>_in_use` problem's `details`.
+
+```ts
+parseInUseReferrers(details: readonly string[]): readonly InUseReferrer[]
+```
+
+## ServedContractsRange
+
+The range a server serves, inclusive at both ends, compared on `major.minor`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `minimum` | `ContractsVersion` | Yes |  |
+| `current` | `ContractsVersion` | Yes |  |
+
+## UUID_PATTERN
+
+RFC 9562 canonical textual form, any version. Every resource id the control plane issues is a
+`uuid` column, so a path or body id is parsed before it is looked up — never passed through to a
+store to see what happens.
+
+Value: `/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i`
+
+## UuidSchema
+
+A resource identifier as the API mints it.
+
+`string`

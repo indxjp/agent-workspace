@@ -1,0 +1,39 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.OpenAiAgents.every_model_request_goes_to_the_gateway_with_the_run_token",
+    "AgentWorkspace.Theorems.Normative.OpenAiAgents.the_protocol_follows_the_connection"],
+   "input": {"token": "run-token-1", "protocol": "openai-responses", "baseUrl": "http://gateway:8080"},
+   "id": "responses",
+   "expected":
+   {"requests": [{"url": "http://gateway:8080/v1/responses", "authorization": "Bearer run-token-1"}],
+    "connection":
+    {"protocol": "openai-responses",
+     "endpoint": "http://gateway:8080/v1",
+     "client": "openai",
+     "authorization": "Bearer run-token-1"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.OpenAiAgents.every_model_request_goes_to_the_gateway_with_the_run_token",
+    "AgentWorkspace.Theorems.Normative.OpenAiAgents.the_protocol_follows_the_connection"],
+   "input": {"token": "run-token-2", "protocol": "openai-chat-completions", "baseUrl": "https://gw.example/"},
+   "id": "chat-completions-trailing-slash",
+   "expected":
+   {"requests": [{"url": "https://gw.example/v1/chat/completions", "authorization": "Bearer run-token-2"}],
+    "connection":
+    {"protocol": "openai-chat-completions",
+     "endpoint": "https://gw.example/v1",
+     "client": "openai",
+     "authorization": "Bearer run-token-2"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.OpenAiAgents.every_model_request_goes_to_the_gateway_with_the_run_token",
+    "AgentWorkspace.Theorems.Normative.OpenAiAgents.the_protocol_follows_the_connection"],
+   "input": {"token": "run-token-3", "protocol": "anthropic-messages", "baseUrl": "https://gw.example//"},
+   "id": "anthropic-messages",
+   "expected":
+   {"requests": [{"url": "https://gw.example/v1/messages", "authorization": "Bearer run-token-3"}],
+    "connection":
+    {"protocol": "anthropic-messages",
+     "endpoint": "https://gw.example/v1",
+     "client": "aisdk-anthropic",
+     "authorization": "Bearer run-token-3"}}}],
+ "family": "engine-openai-agents",
+ "description": "openAiAgentsModelConnection and the one model request it can issue"}

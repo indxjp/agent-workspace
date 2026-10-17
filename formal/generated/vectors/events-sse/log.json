@@ -1,0 +1,36 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Normative.EventsSse.reset_gap_example",
+    "AgentWorkspace.Theorems.Normative.EventsSse.reset_ahead_examples",
+    "AgentWorkspace.Theorems.Normative.EventsSse.first_connection_announces_retention_gap",
+    "AgentWorkspace.Theorems.Invariants.EventsSse.append_allocates_next_id",
+    "AgentWorkspace.Theorems.Invariants.EventsSse.closed_log_refuses_append",
+    "AgentWorkspace.Theorems.Invariants.EventsSse.pending_is_strictly_after"],
+   "input": {"names": ["system", "system", "result"], "limit": 2, "after": 0},
+   "id": "retained-gap",
+   "expected":
+   {"retained": [2, 3], "reset": {"resumedAfter": "1", "kind": "gap"}, "ids": [1, 2, 3], "closedAppendRefused": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.EventsSse.reset_gap_example",
+    "AgentWorkspace.Theorems.Normative.EventsSse.reset_ahead_examples",
+    "AgentWorkspace.Theorems.Normative.EventsSse.first_connection_announces_retention_gap",
+    "AgentWorkspace.Theorems.Invariants.EventsSse.append_allocates_next_id",
+    "AgentWorkspace.Theorems.Invariants.EventsSse.closed_log_refuses_append",
+    "AgentWorkspace.Theorems.Invariants.EventsSse.pending_is_strictly_after"],
+   "input": {"names": ["system", "result"], "limit": 1, "after": null},
+   "id": "first-connection",
+   "expected":
+   {"retained": [2], "reset": {"resumedAfter": "1", "kind": "gap"}, "ids": [1, 2], "closedAppendRefused": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.EventsSse.reset_gap_example",
+    "AgentWorkspace.Theorems.Normative.EventsSse.reset_ahead_examples",
+    "AgentWorkspace.Theorems.Normative.EventsSse.first_connection_announces_retention_gap",
+    "AgentWorkspace.Theorems.Invariants.EventsSse.append_allocates_next_id",
+    "AgentWorkspace.Theorems.Invariants.EventsSse.closed_log_refuses_append",
+    "AgentWorkspace.Theorems.Invariants.EventsSse.pending_is_strictly_after"],
+   "input": {"names": ["system"], "limit": 2, "after": 3},
+   "id": "ahead",
+   "expected":
+   {"retained": [1], "reset": {"resumedAfter": "0", "kind": "ahead"}, "ids": [1], "closedAppendRefused": true}}],
+ "family": "events-sse",
+ "description": "Run log retention, resume and closure"}

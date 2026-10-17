@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "anyOf": [
+    {
+      "type": "string",
+      "enum": ["claude-agent-sdk", "openai-agents", "pi", "mastra"]
+    },
+    {
+      "oneOf": [
+        {
+          "readOnly": true,
+          "type": "object",
+          "properties": {
+            "autoApprove": {
+              "readOnly": true,
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "id": {
+              "type": "string",
+              "const": "claude-agent-sdk"
+            }
+          },
+          "required": ["id"],
+          "additionalProperties": false
+        },
+        {
+          "readOnly": true,
+          "type": "object",
+          "properties": {
+            "reasoningEffort": {
+              "type": "string",
+              "enum": ["minimal", "low", "medium", "high"]
+            },
+            "parallelToolCalls": {
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string",
+              "const": "openai-agents"
+            }
+          },
+          "required": ["id"],
+          "additionalProperties": false
+        },
+        {
+          "readOnly": true,
+          "type": "object",
+          "properties": {
+            "thinkingLevel": {
+              "type": "string",
+              "enum": ["off", "minimal", "low", "medium", "high"]
+            },
+            "id": {
+              "type": "string",
+              "const": "pi"
+            }
+          },
+          "required": ["id"],
+          "additionalProperties": false
+        },
+        {
+          "readOnly": true,
+          "type": "object",
+          "properties": {
+            "toolCallConcurrency": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16
+            },
+            "id": {
+              "type": "string",
+              "const": "mastra"
+            }
+          },
+          "required": ["id"],
+          "additionalProperties": false
+        }
+      ]
+    }
+  ]
+}

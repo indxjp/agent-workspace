@@ -1,0 +1,578 @@
+---
+title: "project-file"
+description: "The @indx-workspace/contracts/project-file exports, sorted alphabetically."
+---
+
+<Note>This page is generated from `packages/contracts/src/project-file.ts`, `packages/contracts/src/project-platforms.ts`, `packages/contracts/src/url-credential.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## BOOTSTRAP_ADMIN_MAX_LENGTH
+
+The longest bootstrap Owner address, in characters (RFC 5321's path limit, rounded up).
+
+Value: `320`
+
+## BootstrapAdminSchema
+
+The bootstrap Owner's email: the one schema the project file and the local runtime's `start`
+message share, so a project file that validates always fits a `start` message. The length check
+aborts before the pattern runs, so an over-long value is refused without backtracking over it.
+A value holding a C0 control, DEL or a C1 control (U+0000–U+001F, U+007F, U+0080–U+009F) is
+refused before the email pattern runs, because a client prints this address and such a character
+can rewrite what a terminal shows — so no client has to re-check it.
+
+`string`
+
+## DEFAULT_BOOTSTRAP_ADMIN
+
+The bootstrap Owner `aw init` writes for the local environment (ADR-0103, ADR-0109).
+
+Value: `'admin@localhost.test'`
+
+## DEFAULT_LOCAL_PORT
+
+The port `aw dev` serves the local environment on when the file names none (ADR-0109).
+
+Value: `3000`
+
+## DEPLOYMENT_V1_API_VERSION
+
+The CLI's earlier profile format, still read and lifted (its grace period ends at 0.3.0).
+
+Value: `'agentworkspace.dev/v1'`
+
+## DEPLOYMENT_V1_KIND
+
+The one kind of document a v1 profile holds.
+
+Value: `'Deployment'`
+
+## DeploymentDocumentV1
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `cloud` | `"local" \| "aws" \| "gcp" \| "azure"` | Yes |  |
+| `storage` | `ProjectStorage` | Yes |  |
+| `runtime` | `ProjectRuntime` | Yes |  |
+| `identity` | `ProjectIdentity` | Yes |  |
+| `apiVersion` | `undefined \| "agentworkspace.dev/v1"` | No |  |
+| `kind` | `undefined \| "Deployment"` | No |  |
+
+## DeploymentDocumentV1Schema
+
+A v1 `Deployment` profile, structurally: the envelope is optional (as the CLI's grace period
+allows) and all four fields are required. It is not the CLI's profile schema and does not agree
+with it in two directions:
+
+- The CLI trims every text field before checking it; this schema has no transform, so a value
+  with whitespace at either end — only a quoted, padded YAML scalar can carry one — is refused
+  here although `agent-workspace validate` accepts it.
+- The per-cloud rules (which managed store, object scheme and secret backend a cloud may name)
+  live in `packages/cli`'s profile schema until P-2, so a store the CLI refuses for its cloud is
+  accepted here.
+
+The envelope rule (`kind` is required once `apiVersion` is set) and the implemented runtime
+drivers are enforced here as in the CLI.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `cloud` | `"local" \| "aws" \| "gcp" \| "azure"` | Yes |  |
+| `storage` | `ProjectStorage` | Yes |  |
+| `runtime` | `ProjectRuntime` | Yes |  |
+| `identity` | `ProjectIdentity` | Yes |  |
+| `apiVersion` | `undefined \| "agentworkspace.dev/v1"` | No |  |
+| `kind` | `undefined \| "Deployment"` | No |  |
+
+## IMPLEMENTED_RUNTIME_DRIVERS
+
+The runtime drivers `packages/runtime` implements — the ones a project file or a `start` message
+may name. The other ids of `RuntimeDriver` are catalogued but unbuilt, so naming one would
+validate here and fail only when the runtime tried to register it; the CLI's profile schema
+refuses the same ids. A driver joins this list in the change that implements it.
+
+- `'local'`
+- `'sandbox-runtime'`
+- `'docker'`
+- `'kubernetes'`
+- `'cloud-run-service'`
+- `'aca-sessions'`
+
+## ImplementedRuntimeDriver
+
+- `"local"`
+- `"sandbox-runtime"`
+- `"docker"`
+- `"kubernetes"`
+- `"aca-sessions"`
+- `"cloud-run-service"`
+
+## LiftedProjectDocument
+
+A v1 profile lifted into the project shape: one environment, `local` for `cloud: local` (with
+its storage kept, so `aw dev` can refuse a Compose store it does not provide) and `production`
+for every other cloud. It has no `name`, because a v1 profile has none.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `apiVersion` | `"agentworkspace.dev/v2"` | Yes |  |
+| `kind` | `"Project"` | Yes |  |
+| `environments` | `{ readonly local: ProjectEnvironment; readonly production?: never; } \| { readonly production: ProjectEnvironment; readonly local?: never; }` | Yes |  |
+
+## LOCAL_RUNTIME_GATEWAY_PORT
+
+The port the local runtime's model gateway binds before web (ADR-0109: fixed, unlike
+`environments.local.port`). Issue #560: a project port equal to it can never start.
+
+Value: `4000`
+
+## LOCAL_RUNTIME_RESERVED_PORTS
+
+The ports the local runtime keeps for its own services (ADR-0109), with the service each one
+belongs to, so a refusal can name it. `environments.local.port` may be none of them.
+
+- `{ port: LOCAL_RUNTIME_GATEWAY_PORT, service: 'gateway' }`
+- `{ port: LOCAL_RUNTIME_RUNNER_PORT, service: 'runner' }`
+
+## LOCAL_RUNTIME_RUNNER_PORT
+
+The port the local runtime's runner binds before web (ADR-0109: fixed, unlike
+`environments.local.port`). Issue #560: a project port equal to it can never start.
+
+Value: `8080`
+
+## LocalEnvironment
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `cloud` | `"local"` | Yes |  |
+| `identity` | `ProjectIdentity` | Yes |  |
+| `runtime` | `undefined \| ProjectRuntime` | No |  |
+| `port` | `undefined \| number` | No |  |
+| `policy` | `undefined` | No |  |
+
+## LocalEnvironmentSchema
+
+Slice 1's `local` environment: `cloud: local`, and no `storage` key at all — `aw dev` provides
+the stores itself (ADR-0109), so a `storage` block here is refused rather than ignored.
+
+A per-environment `policy` is not built yet (ADR-0102 SD6, issue #524): it is refused at
+`environments.local.policy`, and the top-level `policy` is the one ceiling.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `cloud` | `"local"` | Yes |  |
+| `identity` | `ProjectIdentity` | Yes |  |
+| `runtime` | `undefined \| ProjectRuntime` | No |  |
+| `port` | `undefined \| number` | No |  |
+| `policy` | `undefined` | No |  |
+
+## LocalPortSchema
+
+The port the `local` environment serves web on: a `ProjectPortSchema` that is not one of
+`LOCAL_RUNTIME_RESERVED_PORTS` (ADR-0109, issue #560). A reserved port gets one issue
+naming the service, which a reader prefixes with the field's path. The project file is shared, so
+this follows the fixed ADR-0109 ports whatever a machine's `.env` moves the runner or gateway to;
+the local runtime refuses the ports it will really bind, the embedded PostgreSQL's included,
+again before it starts.
+
+`number`
+
+## LocalRuntimeReservedPort
+
+- `{ readonly port: 4000; readonly service: "gateway"; }`
+- `{ readonly port: 8080; readonly service: "runner"; }`
+
+## LocalRuntimeService
+
+- `"gateway"`
+- `"runner"`
+
+## NAME_KEY_PATTERN
+
+The name-key grammar: lower-case kebab, 1–64 characters, no hyphen at either end. It is the
+skills' grammar, named for what a project, an agent or a surface uses it for — one pattern, so
+the two can never disagree.
+
+Value: `SKILL_NAME_PATTERN`
+
+## PlatformOptions
+
+`Readonly<Record<string, unknown>>`
+
+## PlatformOptionsSchema
+
+Opaque per-platform options: each platform's `optionsSchema` validates them at export time. Here
+only what no platform may accept is refused, on the raw input (before the record drops an own
+`__proto__`): an own `__proto__` key anywhere, a credential-named key whose value is not a
+`{ secret: NAME }` reference, and a URL string carrying a credential.
+
+`Readonly<Record<string, unknown>>`
+
+## ProductionEnvironment
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `target` | `"kubernetes" \| "single-vm" \| "gcp-cloudrun" \| "vercel"` | Yes |  |
+| `url` | `string` | Yes |  |
+
+## ProductionEnvironmentSchema
+
+The `production` environment (issue #621): the deploy recipe it uses and the URL it is served
+at — nothing else. Where its data lives follows from the recipe; `aw deploy` turns it into the
+CLI's v1 profile, which stays internal.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `target` | `"kubernetes" \| "single-vm" \| "gcp-cloudrun" \| "vercel"` | Yes |  |
+| `url` | `string` | Yes |  |
+
+## PROJECT_API_VERSION
+
+Issue #439 (S1-01): `agent-workspace.yaml` as a project file — the `Project` kind of ADR-0103,
+which `aw init` writes, `aw dev` reads and the CLI's `Deployment` profile (v1) is lifted into.
+
+Issue #524 (S2-01a) adds the project's `engine`, `models` (model connections), `connectors` and
+`policy` (the ceiling, ADR-0102 SD6). A credential is always a secret reference
+`{ secret: NAME }`, never a value (C10).
+
+Every schema here is plain structure: no preprocess and no transform, so `z.toJSONSchema` can
+emit the editor schema from the same definitions (ADR-0103's consequence). A local file is not a
+route, so nothing here crosses the HTTP API.
+
+Value: `'agentworkspace.dev/v2'`
+
+## PROJECT_CLOUDS
+
+The clouds an environment may target; `local` is the developer's own machine.
+
+- `'aws'`
+- `'gcp'`
+- `'azure'`
+- `'local'`
+
+## PROJECT_CONNECTOR_AUTH_SCHEMES
+
+The authentication schemes a project file's connector may name (issue #524).
+
+- `'bearer'`
+- `'api-key'`
+
+## PROJECT_CONNECTOR_TRANSPORTS
+
+The transports a project file's connector may use; an absent `transport` means `http`.
+
+- `'http'`
+- `'sse'`
+
+## PROJECT_DEPLOY_TARGETS
+
+The deploy recipes a non-local environment may name (issue #621): `single-vm` is the Compose
+project on one machine, `gcp-cloudrun` the `infra/terraform/gcp-cloudrun` module, `kubernetes`
+the `infra/helm/agent-workspace` chart installed into the cluster the kubeconfig points at,
+`vercel` the whole agent app as Vercel projects (ADR-0120, ADR-0126).
+
+- `'single-vm'`
+- `'gcp-cloudrun'`
+- `'kubernetes'`
+- `'vercel'`
+
+## PROJECT_KIND
+
+The one kind of document a v2 project file holds.
+
+Value: `'Project'`
+
+## PROJECT_RESOURCE_MAP_MAX_ENTRIES
+
+The most entries a project file's `models` or `connectors` map may hold (issue #524).
+
+Value: `64`
+
+## ProjectCloud
+
+- `"local"`
+- `"aws"`
+- `"gcp"`
+- `"azure"`
+
+## ProjectConnector
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `url` | `string` | Yes |  |
+| `transport` | `undefined \| "http" \| "sse"` | No |  |
+| `auth` | `undefined \| Readonly<{ scheme: "bearer" \| "api-key"; credential: Readonly<{ secret: string; }>; }>` | No |  |
+
+## ProjectConnectorAuthScheme
+
+- `"bearer"`
+- `"api-key"`
+
+## ProjectConnectorSchema
+
+One MCP connector a project file declares under `connectors.<name>` (C10, issue #524): its
+`http(s)` URL, its transport, and optionally its credential as a secret reference. An absent
+`transport` means `http`; the schema records that in this comment rather than transforming the
+value, so the editor schema stays exact. A `stdio` connector is refused: a project file names
+only remote connectors.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `url` | `string` | Yes |  |
+| `transport` | `undefined \| "http" \| "sse"` | No |  |
+| `auth` | `undefined \| Readonly<{ scheme: "bearer" \| "api-key"; credential: Readonly<{ secret: string; }>; }>` | No |  |
+
+## ProjectConnectorTransport
+
+- `"http"`
+- `"sse"`
+
+## ProjectDeployTarget
+
+- `"kubernetes"`
+- `"single-vm"`
+- `"gcp-cloudrun"`
+- `"vercel"`
+
+## ProjectDocument
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `apiVersion` | `"agentworkspace.dev/v2"` | Yes |  |
+| `kind` | `"Project"` | Yes |  |
+| `name` | `string` | Yes |  |
+| `environments` | `Readonly<{ local: Readonly<{ cloud: "local"; identity: Readonly<{ bootstrapAdmin: string; oidc?: string \| undefined; }>; runtime?: Readonly<{ default: "local" \| "sandbox-runtime" \| "docker" \| "kubernetes" \| "aca-sessions" \| "cloud-run-service"; }> \| undefined; port?: number \| undefined; policy?: undefined; }>; production?: Readonly<{ target: "kubernetes" \| "single-vm" \| "gcp-cloudrun" \| "vercel"; url: string; }> \| undefined; }>` | Yes |  |
+| `engine` | `undefined \| "claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | No |  |
+| `models` | `undefined \| Readonly<Record<string, Readonly<{ provider: "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible"; credential: Readonly<{ secret: string; }>; baseUrl?: string \| undefined; deployment?: string \| undefined; apiVersion?: string \| undefined; model?: undefined; }>>>` | No |  |
+| `connectors` | `undefined \| Readonly<Record<string, Readonly<{ url: string; transport?: "http" \| "sse" \| undefined; auth?: Readonly<{ scheme: "bearer" \| "api-key"; credential: Readonly<{ secret: string; }>; }> \| undefined; }>>>` | No |  |
+| `policy` | `undefined \| PlatformOptions` | No |  |
+| `platforms` | `undefined \| ProjectPlatforms` | No |  |
+
+## ProjectDocumentSchema
+
+A v2 project file: the `local` environment and, optionally, `production` (issue #621: a deploy
+`target` and a `url`). Any other key — at the root, under `environments` (`preview`), in `local`
+(`storage`) or in `production` (`cloud`) — is refused by a strict object, which reports
+`unrecognized_keys` at the parent's path.
+
+Issue #524 (S2-01a) adds four optional root keys, each absent in every slice-1 file:
+
+- `engine` — the engine an agent that names none runs on (C12);
+- `models` — the model connections `aw dev` keeps in step, by name (C11);
+- `connectors` — the MCP connectors `aw dev` keeps in step, by name (C10);
+- `policy` — the deployment's policy ceiling (ADR-0102 SD6, C13).
+
+Until the units that apply them land, these keys parse and `aw dev` does not act on them yet.
+
+Programme Platform targets adds `platforms` — the agent platforms the project exports or
+publishes to, with their options (brief D7, ADR-0133). `aw dev` ignores it; `aw platforms`
+reads it.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `apiVersion` | `"agentworkspace.dev/v2"` | Yes |  |
+| `kind` | `"Project"` | Yes |  |
+| `name` | `string` | Yes |  |
+| `environments` | `Readonly<{ local: Readonly<{ cloud: "local"; identity: Readonly<{ bootstrapAdmin: string; oidc?: string \| undefined; }>; runtime?: Readonly<{ default: "local" \| "sandbox-runtime" \| "docker" \| "kubernetes" \| "aca-sessions" \| "cloud-run-service"; }> \| undefined; port?: number \| undefined; policy?: undefined; }>; production?: Readonly<{ target: "kubernetes" \| "single-vm" \| "gcp-cloudrun" \| "vercel"; url: string; }> \| undefined; }>` | Yes |  |
+| `engine` | `undefined \| "claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | No |  |
+| `models` | `undefined \| Readonly<Record<string, Readonly<{ provider: "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible"; credential: Readonly<{ secret: string; }>; baseUrl?: string \| undefined; deployment?: string \| undefined; apiVersion?: string \| undefined; model?: undefined; }>>>` | No |  |
+| `connectors` | `undefined \| Readonly<Record<string, Readonly<{ url: string; transport?: "http" \| "sse" \| undefined; auth?: Readonly<{ scheme: "bearer" \| "api-key"; credential: Readonly<{ secret: string; }>; }> \| undefined; }>>>` | No |  |
+| `policy` | `undefined \| PlatformOptions` | No |  |
+| `platforms` | `undefined \| ProjectPlatforms` | No |  |
+
+## ProjectEnvironment
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `cloud` | `"local" \| "aws" \| "gcp" \| "azure"` | Yes |  |
+| `identity` | `ProjectIdentity` | Yes |  |
+| `storage` | `undefined \| ProjectStorage` | No |  |
+| `runtime` | `undefined \| ProjectRuntime` | No |  |
+| `port` | `undefined \| number` | No |  |
+
+## ProjectEnvironmentSchema
+
+One environment of a project, any cloud: the general shape slice 2 onwards builds on.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `cloud` | `"local" \| "aws" \| "gcp" \| "azure"` | Yes |  |
+| `identity` | `ProjectIdentity` | Yes |  |
+| `storage` | `undefined \| ProjectStorage` | No |  |
+| `runtime` | `undefined \| ProjectRuntime` | No |  |
+| `port` | `undefined \| number` | No |  |
+
+## ProjectHttpUrlSchema
+
+An `http:` or `https:` URL, at most `PROJECT_URL_MAX_LENGTH` characters, with no
+credential in it (no user name or password, and no credential query parameter).
+
+`string`
+
+## ProjectIdentity
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `bootstrapAdmin` | `string` | Yes |  |
+| `oidc` | `undefined \| string` | No |  |
+
+## ProjectIdentitySchema
+
+Who may first sign in: the bootstrap Owner's email and, optionally, an https OIDC issuer.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `bootstrapAdmin` | `string` | Yes |  |
+| `oidc` | `undefined \| string` | No |  |
+
+## ProjectModelConnection
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `provider` | `"anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible"` | Yes |  |
+| `credential` | `Readonly<{ secret: string; }>` | Yes |  |
+| `baseUrl` | `undefined \| string` | No |  |
+| `deployment` | `undefined \| string` | No |  |
+| `apiVersion` | `undefined \| string` | No |  |
+| `model` | `undefined` | No |  |
+
+## ProjectModelConnectionSchema
+
+One model connection a project file declares under `models.<name>` (C10, C11, issue #524):
+the provider, the credential as a secret reference, and the provider's settings. Which settings
+a provider accepts and requires is `MODEL_PROVIDER_CONFIG_RULES`, the server's own table: each
+setting it does not accept, and each it requires that is missing, is refused at the setting's
+own path (`models.<name>.deployment`).
+
+A connection carries no model id (C11), so a `model` key is refused at its path; an agent names
+its model.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `provider` | `"anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible"` | Yes |  |
+| `credential` | `Readonly<{ secret: string; }>` | Yes |  |
+| `baseUrl` | `undefined \| string` | No |  |
+| `deployment` | `undefined \| string` | No |  |
+| `apiVersion` | `undefined \| string` | No |  |
+| `model` | `undefined` | No |  |
+
+## ProjectPlatformBinding
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `enabled` | `false \| true` | Yes |  |
+| `options` | `undefined \| PlatformOptions` | No |  |
+| `environments` | `undefined \| PlatformOptions` | No | Overrides merged over `options`, shallowly, by `aw platforms … --env <name>`. |
+
+## ProjectPlatformBindingSchema
+
+One platform's entry under `platforms:` in a v2 project file (brief D7, ADR-0133).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `enabled` | `false \| true` | Yes |  |
+| `options` | `undefined \| PlatformOptions` | No |  |
+| `environments` | `undefined \| PlatformOptions` | No | Overrides merged over `options`, shallowly, by `aw platforms … --env <name>`. |
+
+## ProjectPlatforms
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `claude-managed-agents` | `undefined \| ProjectPlatformBinding` | No |  |
+| `copilot-studio` | `undefined \| ProjectPlatformBinding` | No |  |
+| `m365-declarative-agent` | `undefined \| ProjectPlatformBinding` | No |  |
+| `microsoft-foundry` | `undefined \| ProjectPlatformBinding` | No |  |
+| `gemini-enterprise` | `undefined \| ProjectPlatformBinding` | No |  |
+| `aws-agentcore` | `undefined \| ProjectPlatformBinding` | No |  |
+| `eject-claude-agent-sdk` | `undefined \| ProjectPlatformBinding` | No |  |
+| `eject-mastra` | `undefined \| ProjectPlatformBinding` | No |  |
+| `eject-openai-agents` | `undefined \| ProjectPlatformBinding` | No |  |
+
+## ProjectPlatformsSchema
+
+`platforms:` — one optional binding per platform id; any other key is refused at its own path.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `claude-managed-agents` | `undefined \| ProjectPlatformBinding` | No |  |
+| `copilot-studio` | `undefined \| ProjectPlatformBinding` | No |  |
+| `m365-declarative-agent` | `undefined \| ProjectPlatformBinding` | No |  |
+| `microsoft-foundry` | `undefined \| ProjectPlatformBinding` | No |  |
+| `gemini-enterprise` | `undefined \| ProjectPlatformBinding` | No |  |
+| `aws-agentcore` | `undefined \| ProjectPlatformBinding` | No |  |
+| `eject-claude-agent-sdk` | `undefined \| ProjectPlatformBinding` | No |  |
+| `eject-mastra` | `undefined \| ProjectPlatformBinding` | No |  |
+| `eject-openai-agents` | `undefined \| ProjectPlatformBinding` | No |  |
+
+## ProjectPortSchema
+
+A TCP port the environment serves on.
+
+`number`
+
+## ProjectRead
+
+What `readProjectDocument` read: a v2 document as written, or a lifted v1 profile.
+
+- `{ readonly lifted: false; readonly project: ProjectDocument; }`
+- `{ readonly lifted: true; readonly project: LiftedProjectDocument; }`
+
+## ProjectReadResult
+
+The result of `readProjectDocument`; it never throws.
+
+- `{ readonly success: true; readonly data: ProjectRead; }`
+- `{ readonly success: false; readonly error: z.ZodError; }`
+
+## ProjectRuntime
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `default` | `"local" \| "sandbox-runtime" \| "docker" \| "kubernetes" \| "aca-sessions" \| "cloud-run-service"` | Yes |  |
+
+## ProjectRuntimeSchema
+
+The runtime driver an environment's agents run on unless an agent says otherwise.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `default` | `"local" \| "sandbox-runtime" \| "docker" \| "kubernetes" \| "aca-sessions" \| "cloud-run-service"` | Yes |  |
+
+## ProjectStorage
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `relational` | `string` | Yes |  |
+| `objects` | `string` | Yes |  |
+| `secrets` | `string` | Yes |  |
+
+## ProjectStorageSchema
+
+Where an environment keeps its data. Structural only: which managed store, object scheme and
+secret backend a cloud may name stays in the CLI until P-2.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `relational` | `string` | Yes |  |
+| `objects` | `string` | Yes |  |
+| `secrets` | `string` | Yes |  |
+
+## readProjectDocument
+
+Reads a parsed `agent-workspace.yaml` (the YAML already turned into a value). The envelope
+decides the schema: `agentworkspace.dev/v2` or `kind: Project` is a project file; `v1` or no
+envelope at all is a `Deployment` profile, lifted with `lifted: true`. Any other `apiVersion`
+is refused at `apiVersion`; a kind that contradicts its version, or a `v1` with no kind (as the
+CLI refuses it), at `kind`. Every result is frozen.
+
+```ts
+readProjectDocument(value: unknown): ProjectReadResult
+```
+
+## urlCarriesCredential
+
+Whether a parsed URL carries a credential: a user name or password, or a query parameter in
+`CREDENTIAL_QUERY_PARAMETER_PATTERN`. Pure.
+
+```ts
+urlCarriesCredential(url: URL): boolean
+```

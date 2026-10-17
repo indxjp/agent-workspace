@@ -1,0 +1,428 @@
+---
+title: "Migration roadmap"
+description: "Every gap between Agent Workspace as it exists today — the platform and its SDK — and the target architecture, in one place: what is true now, what the target is, and where the work is tracked."
+---
+
+<Info>
+
+- **Read this when:** a page says **Today / Target** and you want to know what is missing, what will
+  change and where it is tracked.
+- **You will learn:** every open gap between today and the target architecture, grouped by area, and
+  the order the moves are made in.
+- **Used in:** the "What is not there yet" section of every chapter, from [Chapter
+  1](/path/first-agent) to [Chapter 6](/path/operate).
+
+</Info>
+
+This page is the single list that every **Today / Target** callout on this site links to. Each
+entry states the current behaviour (which the rest of this site documents as-is), the target
+behaviour, and where the change is tracked. Nothing here is a promise of a
+date; it is the ordered backlog behind
+[Target architecture](/concepts/target-architecture) and
+[Public surface and stability](/concepts/public-surface).
+
+Identifiers are stable. Most come from the platform's own planning documents; two prefixes (`D-n` and
+`N-n`) are proposed on this site by the [design principles](/concepts/design-principles) and
+become a recorded decision or an API-specification entry before work on them starts:
+
+| Prefix   | Meaning                                                                                                                                      | Tracked in                                                               |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `S-n`    | A control-plane (server) change the API specification requires                                                                               | The API specification                                                    |
+| `RF-nnn` | A refactoring unit of the platform's refactoring programme                                                                                   | The platform refactoring plan                                            |
+| `P-n`    | A publishing, packaging or release step of the SDK or the platform                                                                           | The SDK design                                                           |
+| `K-n`    | A change confined to `@indx-workspace/sdk` or `@indx-workspace/contracts`                                                                    | The SDK design, and this site                                            |
+| `A-n`    | A migration of the control plane's own application onto the SDK                                                                              | The SDK design                                                           |
+| `D-n`    | A data-plane commitment: where state, bytes, secrets and sandboxes live, per cloud, as a verified contract                                   | Proposed here, from [The data plane](/concepts/data-plane)               |
+| `N-n`    | A capability the API does not have and the specification does not yet list, required by the [design principles](/concepts/design-principles) | Proposed here; becomes an `S-n` item when the API specification takes it |
+
+The ordering inside each section is the order in which the items unblock the most consumer
+surface, following the specification's own ordering. The order the items are actually
+_worked_ in — grouped into self-contained units, one GitHub issue each — and the procedure
+every unit follows are in the migration playbook; this page
+stays the list of gaps, and an entry is deleted here when its unit merges.
+
+## The order of the moves
+
+The sequence follows the API specification's ordering ("by how much SDK surface they unblock")
+and the SDK design's migration table, and respects the
+refactoring programme's rule for a dangerous change: add → backfill → switch writers → validate
+→ switch readers → enforce → remove, never a flag day. What each step arrives at is described on
+[Target architecture](/concepts/target-architecture).
+
+<Steps>
+  <Step title="Foundation (done)">
+    Contracts for every route that needs no server change; the client, the CLI, the conformance
+    suite, the generated reference and the staleness gate on this site. This is what the current
+    site documents.
+  </Step>
+  <Step title="The consumer-first server changes (done)">
+    Browser tokens and the JSON workspace switch — `me`, the agent policy route and run interrupt
+    having landed first. Each shipped as a contract, a conformance case, a client method (or, for
+    the switch, a `createClient` option and `aw.workspaces.select`), a CLI command where the
+    binary's own credential can reach it, and a regenerated reference, in one change.
+  </Step>
+  <Step title="Envelope regularity and lifecycle completeness">
+    S-18 for the envelopes (S-16 and S-17 are done); S-4, S-9, S-19 for runtimes; S-11 for the
+    missing operations (S-5, S-10, S-12 and S-20 are done). The refactoring units they depend on (RF-102, RF-201, RF-204,
+    RF-301, RF-304, RF-103, RF-202, RF-203) proceed on the programme's own schedule; a route waits
+    for its unit rather than encoding a shape the unit will change.
+  </Step>
+  <Step title="The control plane consumes the SDK">
+    A-1 one family at a time in the fixed order, A-2 as each family's last importer moves, A-3
+    (RF-501) as the browser data-layer decision, which also decides P-5.
+  </Step>
+  <Step title="Publish">
+    Done for the packages: `@indx-workspace/contracts`, `@indx-workspace/sdk` (with its
+    `./testing` subpath) and `@indx-workspace/aw` publish in lock-step at the contracts version,
+    from a `packages-v<version>` tag under the version negotiation and deprecation
+    policy. P-6, the platform's own release, runs on the release
+    programme's evidence schedule and is what turns "clone and build" into the three-command first
+    run. The OpenAPI document ([Call the API without the SDK](/building/http-api#generate-a-client-in-another-language))
+    is published with the contracts so that a client in any language is generated from the same
+    source.
+  </Step>
+  <Step title="The data plane, cloud by cloud">
+    The deployment profile landed first, because it is what the installer writes and what every
+    other item configures ([The deployment profile](/concepts/data-plane#the-deployment-profile)).
+    Then D-2 and D-3 (native object storage and secret backends) and D-4 (a verified sandbox driver)
+    one cloud at a time — a cell of the [data-plane table](/concepts/data-plane#the-contract) is
+    filled only by a live proof. N-1 to N-4 land as ordinary contract-first routes once the
+    specification takes them.
+  </Step>
+</Steps>
+
+## Publishing and packaging
+
+### P-5 A React binding
+
+**Today:** shipped in 0.4.0 as `@indx-workspace/react` (`<Chat/>` and `useConversation()`), a
+separate package; the SDK itself stays framework-free. A frontend with its own store uses
+`createClient` and `runs.follow` directly — [Build a frontend](/building/frontend) shows both.
+
+**Target:** cache policy and reconnect state beyond the conversation hook, if RF-501 (the browser
+data-layer decision of the refactoring programme) calls for them.
+
+### P-6 A published release with signed images and the installer
+
+**Today:** the `@indx-workspace/{contracts,sdk,aw,cli,embedded,create,react}` packages are on npm and the platform images (`ghcr.io/indxdev/agent-workspace/*`) are published, and the
+`create-agent-workspace` generator (published as `@indx-workspace/cli`, run by
+`npm create @indx-workspace@latest`) pins those images by digest and refuses to write a project
+whose images it cannot resolve to a verified digest ([Self-host Agent
+Workspace](/building/self-hosting)). `npm create` without `--cloud` writes the
+`kind: Project` project that `aw dev` runs on the `@indx-workspace/embedded` local runtime
+([Quickstart](/getting-started/quickstart)), and `-- --cloud local` writes the Compose project.
+The platform's release verdict stays **blocked** until the remaining evidence is in.
+
+**Target:** the four-command path — `npm create @indx-workspace@latest demo -- --yes`,
+`cd demo && npm run dev`, open the `try:` URL, `npx aw check` — works from the
+public registry; and the three-command first run of the deployment project —
+`npm create @indx-workspace@latest my-company-ai -- --cloud local`, `cd my-company-ai`,
+`pnpm start` (Docker Compose) — runs against signed images with SBOM and provenance, gated by
+the platform's release-readiness check, and the same images are consumed by the Helm
+chart.
+
+## The data plane
+
+The [design principles](/concepts/design-principles) make where things live a contract the
+platform owns for the developer; [The data plane](/concepts/data-plane) states that contract
+per store and per cloud. The [deployment
+profile](/concepts/data-plane#the-deployment-profile) is where an operator states that placement;
+these items are what make each value it may name native rather than a workaround.
+
+### D-2 Object storage on every cloud natively
+
+**Today:** AWS S3 and SeaweedFS use the S3 adapter and AWS has an opt-in real-bucket proof; GCP has a
+native GCS adapter and workload-identity Terraform wiring; Azure has a native Blob adapter and
+managed-identity wiring. All required live-bucket proofs remain pending. A local-filesystem store
+serves embedded development.
+
+**Target:** a native backend per cloud behind the same `ObjectStore` contract
+(`packages/core/src/storage/contract.ts`) — S3, GCS and Azure Blob — selected by the storage
+profile's `objects` URL (`s3://`, `gcs://`, `azblob://`), each proven by the storage contract
+suite against the real service.
+
+### D-3 Secret backends on every cloud
+
+**Today:** every stored credential is envelope-encrypted in PostgreSQL under one deployment key.
+Local deployments read `MASTER_ENCRYPTION_KEY`; AWS can decrypt a KMS-wrapped copy of the same key,
+and GCP can load it from Secret Manager under a Cloud KMS CMEK. Their required live rotation proofs
+remain pending. Azure loads the key directly from Key Vault through managed identity and has a
+passing live proof.
+
+**Target:** the master key lives in, or is wrapped by, the cloud's key service — AWS KMS,
+Google Cloud KMS or Secret Manager, Azure Key Vault — selected by the storage profile's
+`secrets` setting, with `local-key` kept for development only; rotation is a documented
+procedure per backend.
+
+### D-4 A verified managed-cloud sandbox per cloud
+
+**Today:** `local`, `docker` and `kubernetes` are implemented;
+`aca-sessions` and `cloud-run-service` are implemented but not exercised by the live driver
+suite; `sandbox-runtime`, `gke-agent-sandbox`, `aws-agentcore`, `aws-ecs` and
+`cloud-run-sandbox` are named in the contract with no implementation (`sandbox-runtime` is no longer
+offered by the CLI or chosen as a default; a project that names it runs on `local`). **Available
+with live proof:** E2B, through `external`, and Vercel Sandbox (`vercel-sandbox`) passed every row of
+the providers-live lane on main (run 37809484699; E2B also 37791379449).
+**Implemented, refuses every run:** Cloudflare Sandbox (`cloudflare-sandbox`): its providers-live
+lane deploys the bridge and proves every network policy refused, so every run is refused by name with
+`network_policy_unsupported` until a live run proves Cloudflare denies egress (ADR-0131); a
+Cloudflare host runs sessions on E2B (`cloudflare-e2b`, run 38215231687). When a run on `external`
+ends, the control plane kills the E2B tool sandboxes that run started (#1066); the session's runtime
+sandbox, and `vercel-sandbox` and `cloudflare-sandbox` sandboxes, end at the provider's deadline, and
+destroying them at session end is a follow-up. **Partly done:** the isolation workflow now
+live-verifies the `docker` driver and the `kubernetes` driver on a kind cluster with Calico (the
+`Isolation` workflow, `.github/workflows/isolation.yml`), and the `docker` driver cuts a run off at its
+`timeoutSeconds` and bounds `/workspace` by `diskMb`. The `restricted` allowlist is **partly done**: the `docker` and `kubernetes`
+drivers route `restricted` and `open` egress through a per-session allowlist proxy when the
+deployment sets `AGENT_WORKSPACE_EGRESS_PROXY_IMAGE` (the repository's `compose.yaml` does; the
+project `aw deploy` writes does not), and refuse `restricted` without it; the isolation
+workflow's docker and kind lanes verify `restricted` (allowed host reachable, other host refused),
+refusal of the metadata address and no DNS egress. An agent without
+`unrestrictedNetwork` gets a network floor instead of `open`, and a run is refused with
+`network_policy_unenforceable` where the driver cannot enforce it. Cloud Run and ACA sessions still
+refuse `restricted`, and neither `cloud-run-service` nor `aca-sessions` has a live proof. The
+`aw deploy` Kubernetes target runs agent sessions on the `kubernetes` driver with the in-cluster
+ServiceAccount, checked on a kind cluster in CI (the `kind-deploy` lane); a managed cluster is not
+proven.
+
+**Target:** one verified sandbox driver per cloud — ECS or AgentCore on AWS, Cloud Run or GKE
+on Google Cloud, ACA Sessions on Azure, Vercel Sandbox on Vercel (the Vercel host deploys and runs
+sessions on E2B, run 38215231687; Vercel Sandbox has no tool host yet, so it refuses a code tool, #940),
+Cloudflare Sandbox on Cloudflare (the Cloudflare host deploys and runs sessions on E2B, run
+38215231687; the native sandbox refuses every run, ADR-0131) — and E2B as a sandbox-only provider through
+`external`, usable from any cloud (verified live) — each with the network policy and filesystem policy it
+enforces recorded in the driver matrix, and the matrix rendered on
+[The data plane](/concepts/data-plane). A driver id stays out of the contract until its
+implementation exists ([Choose models and runtimes](/building/models-and-runtimes)).
+
+## Agents, skills, and connectors
+
+### S-3 Viewer grants
+
+**Done:** a Viewer may run only agents with an explicit `agent_grants` row, and
+`GET`/`PUT /api/agents/:id/grants`, `aw.agents.getGrants` and `replaceGrants` manage those rows
+([Ownership and sharing](/concepts/ownership-and-sharing)). The entry stays so links to it keep
+resolving.
+
+### S-23 A policy body that can name an unpublished engine
+
+**Today:** `AgentPolicy` is a discriminated union over `ENGINE_IDS`, so the SDK and `aw` both
+refuse a policy naming an engine the contracts do not publish before a request is sent.
+`aw agents create|update --engine` therefore resolves the id against
+[`engines.list()`](/resources/engines) itself and refuses an unregistered one as
+`unsupported_engine`, rather than letting the route answer it.
+
+**Target:** a policy request shape whose `engine` is a plain id, so a deployment that has
+shipped an adapter ahead of a contracts release can be asked for it and the server's own
+`400 unsupported_engine` is what a client sees.
+
+### RF-102 Per-row connector authorization
+
+**Today:** the Builder own/other rule the [roles table](/concepts/workspaces-and-principals)
+states for connectors is not enforced by the connector item routes.
+
+**Target:** connectors go through the same `requireResourceAccess` path files and skills use,
+with closed-world route declarations and concealment tests.
+
+### RF-201 Agent archive instead of delete
+
+**Today:** `aw.agents.remove` cascades through the agent's sessions, runs, events, transcripts
+and usage records.
+
+**Target:** `POST /api/agents/:id/archive` and `restore`; history references never cascade;
+`remove` is reserved for a retention workflow.
+
+### N-1 Skill revisions
+
+**Today:** a skill is one mutable directory addressed by `name`; `update` patches it in place,
+every agent that assigns it sees the change on its next run, and there is no way to keep an
+older revision addressable except a second name ([Author a skill](/building/skills)).
+
+**Target:** `skills.publish(name, { files })` creates an immutable revision; an assignment pins
+a revision or `latest`; `skills.get` lists revisions; `agents.export`/`import`
+carry the pinned revision by name and number.
+
+### N-2 An organisation catalog above workspaces
+
+**Today:** the workspace is the sharing boundary. A skill, connector or file is readable by
+every Builder of its workspace and by nobody outside it; to use a skill in a second workspace
+you import it again ([Ownership and sharing](/concepts/ownership-and-sharing)).
+
+**Target:** an organisation — the set of workspaces one deployment's owner administers — with
+its own catalog: a skill or connector published there is assignable from any of the
+organisation's workspaces, still owned by its publisher, still write-only in its credential.
+
+### N-5 Engine identity on the wire
+
+**Done:** `engine` is the discriminant on the policy and is carried by the session, the run and
+every neutral frame, and `engineSessionId` replaced `claudeSessionId`, so a client can ask what
+ran a session; a session is pinned to the engine of its first run
+([Runtime neutrality](/concepts/runtime-neutrality)). The entry stays so links to it keep
+resolving.
+
+### N-6 The engine catalog
+
+**Done:** `GET /api/engines` and [`engines.list()`](/resources/engines) advertise the engines a
+deployment runs, and an agent whose configuration its engine cannot honour is refused with
+`422 engine_capability_unsupported`. The entry stays so links to it keep resolving. What each
+engine supports is on [Runtime neutrality](/concepts/runtime-neutrality); tracked as #301.
+
+## Runs and sessions
+
+### S-6 Idempotency keys
+
+**Today:** a retried `runs.start` after a lost response may start a second run;
+[Retries and idempotency](/guides/retries-and-idempotency) explains how to detect it by listing.
+
+**Target:** an `Idempotency-Key` request header on run start, honoured with the run leases of
+[RF-301](#rf-301-run-leases-and-attempts).
+
+### N-3 Webhooks for run outcomes
+
+**Today:** a backend learns that a run finished by following its stream or polling
+`runs.get`; there is no callback ([Integrate a backend](/building/backend)).
+
+**Target:** a workspace registers an endpoint and receives signed `run.completed`,
+`run.failed` and `run.cancelled` events with the run's status, usage and cost, retried with
+backoff and deduplicated by run id.
+
+### N-7 Neutral `agent.*` frames
+
+**Done:** the stream carries the neutral `agent.*` vocabulary and `toAgentEvent` parses it
+([Run lifecycle](/concepts/run-lifecycle#the-event-stream)). The entry stays so links to it keep
+resolving. Frames recorded under the old names are upgraded on read, so durable runs stay replayable.
+
+### RF-301 Run leases and attempts
+
+**Today:** a queued run is launched by a callback in the web process; if that process dies
+between persisting and launching, the run can strand in `queued`.
+
+**Target:** a database-enforced state machine, a renewable lease, `RunAttempt` records, and a
+reconciler that recovers stale runs. Invisible to the SDK's types; visible in the promise that
+a run always reaches a terminal status.
+
+### K-3 Backoff and retry hints in follow
+
+**Today:** `runs.follow` reconnects after a fixed `reconnectDelayMs` (default 3000, matching
+the server's pinned `retry:`) at most `maxReconnects` times (default 5), and ignores the
+`retry:` field of the stream.
+
+**Target:** the follower observes `retry:` and backs off exponentially between attempts.
+
+## Runtimes, models, secrets, and files
+
+### S-4 Runtime test envelope
+
+**Today:** `POST /api/runtimes/test` answers `{ error, message }` instead of the standard
+problem envelope, so the SDK has no `runtimes.test`.
+
+**Target:** the standard envelope, and `aw.runtimes.test(driver)`.
+
+### S-9 Runtime detection outside setup
+
+**Today:** what the host can run is answered by `GET /api/setup/runtime-detect`, a setup-time
+route the SDK does not wrap.
+
+**Target:** `GET /api/runtimes/detect` publishing the capability table, `aw.runtimes.detect()`,
+and a client-side hint for `422 network_policy_not_enforceable` before a profile is saved.
+
+### S-19 Nullable runtime profile fields
+
+**Today:** `runtimes.profiles.update` can change a sizing field but cannot clear it —
+`{ memoryMb: null }` is `400 invalid_body`.
+
+**Target:** `null` accepted for every nullable field and for `runtimeConnectionId`.
+
+### S-11 File metadata
+
+**Today:** `files.list` carries each entry's size and kind, but there is no metadata-only read of a single file: `files.download` is the only per-file read.
+
+**Target:** `HEAD` or `?metadata=true` on `GET /api/files/:id`, and `aw.files.stat`.
+
+### N-4 Presigned file transfer for browsers
+
+**Today:** a file's bytes always pass through the control plane, and a customer frontend
+uploads or downloads only through its own backend
+([Embed an agent in your product](/building/embedding)).
+
+**Target:** `files.createUploadUrl` and `files.createDownloadUrl` return short-lived URLs on
+the object store (whichever backend [D-2](#d-2-object-storage-on-every-cloud-natively) selects), so a browser holding a
+[browser token](/getting-started/authentication) moves bytes without a relay.
+
+### RF-204 Typed credential ownership
+
+**Today:** a model connection's or runtime connection's credential is a secret row the
+connection references; ownership is by convention.
+
+**Target:** direct, transactional ownership, so rotating or deleting a connection cannot leave
+a dangling secret or an orphaned reference. Credential fields never appear in a response
+schema either way.
+
+### RF-304 Durable storage operations
+
+**Today:** a file operation touches object storage and the database as separate steps; the
+refactoring plan records the crash windows between them.
+
+**Target:** `StorageOperation` records that make the two steps recoverable.
+
+## Envelopes and versioning
+
+### S-18 Principal ids on every membership
+
+**Today:** `/api/memberships` renders `principalId` only on the membership an accepted
+invitation created.
+
+**Target:** `principalId` on every membership, so team management is principal-addressed.
+
+### RF-103 Server-owned share snapshots
+
+**Today:** `POST /api/shares` accepts caller-authored `transcript`, `definition` or `snapshot`
+content.
+
+**Target:** the server loads, redacts, hashes and persists the snapshot itself; the request
+names a subject and options only.
+
+### RF-202 Member offboarding
+
+**Today:** removing a member whose rows are still referenced surfaces a raw database failure.
+
+**Target:** a preflight ownership inventory, transfer or archive, and stable
+`membership_in_use` responses.
+
+### RF-203 Invitation acceptance
+
+**Today:** invitation links point at `/accept-invitation`, a page the control plane does not
+render; the SDK's `team.invitations.accept` exists but the invitee journey is incomplete.
+
+**Target:** the full pending/accept/reject/revoke/expire state machine and an invitee screen.
+
+## The control plane as first consumer
+
+### A-1 Browser screens call the SDK
+
+**Today:** `apps/web/contracts/*.ts` re-export the package's contracts and the run screen's
+live stream and assistant-message parsing come from `@indx-workspace/sdk/events`, but most
+browser screens still call `fetch` and parse responses themselves.
+
+**Target:** every screen goes through `createClient({ auth: { kind: 'session' } })`; the
+application keeps no parser of its own for a family the SDK covers. The SDK design
+lists the order (runs, sessions, workspaces, files/skills/connectors, models/runtimes/
+secrets, team, shares/metrics/audit), each step gated by
+`apps/web/server/sdk-conformance.test.ts`.
+
+### A-2 Remove the application re-exports
+
+**Today:** `apps/web/contracts/{agents,projects,team,invitations,files,runtimes}.ts` exist only
+to re-export `@indx-workspace/contracts` for importers that have not moved.
+
+**Target:** the last importer moves, the re-export is deleted, and an import rule forbids the
+application from re-declaring a published contract.
+
+### A-3 A typed feature layer in the browser
+
+**Today:** the browser's data layer is per-feature `fetch` with ad hoc parsing (RF-501 is the
+open decision).
+
+**Target:** feature-owned screens, hooks and clients over one typed HTTP boundary — the SDK —
+with dependency direction enforced mechanically. This is the decision that also settles
+[P-5](#p-5-a-react-binding).

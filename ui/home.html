@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>New chat — Agent Workspace</title>
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<script>window.PAGE = { nav: "home", crumbs: [["New chat"]] };</script>
+
+<div class="app">
+  <div class="main">
+    <div class="page">
+
+      <div class="hero">
+        <h1>What can I help with?</h1>
+        <div class="hero-sub">Pick an agent, add files or connectors, and start. Everything runs in a sandbox.</div>
+
+        <div class="composer big">
+          <textarea placeholder="Ask anything…" autofocus></textarea>
+
+          <div class="chip-row" id="chips">
+            <span class="chip">contracts/2026-q3 <span class="x" title="Remove">✕</span></span>
+            <span class="chip">Internal Search <span class="x" title="Remove">✕</span></span>
+          </div>
+
+          <div class="tools">
+            <!-- agent picker -->
+            <details class="picker">
+              <summary>Agent: General <span class="caret">▾</span></summary>
+              <div class="panel">
+                <div class="phead">Run this message as</div>
+                <div class="opt on"><div class="grow"><div class="t">General</div><div class="d">Claude Sonnet 5 · read-only sandbox · no connectors</div></div></div>
+                <div class="opt"><div class="grow"><div class="t">Customer Support Agent</div><div class="d">Handbook + Jira · read/write · 3 skills</div></div></div>
+                <div class="opt"><div class="grow"><div class="t">Contract Review</div><div class="d">GPT‑4.1 via Azure · read-only · compatibility mode</div></div></div>
+                <div class="opt"><div class="grow"><div class="t">Invoice Triage</div><div class="d">Claude Haiku 4.5 · 2 connectors</div></div></div>
+                <div class="opt"><div class="grow"><div class="t">Security Review Bot</div><div class="d">Claude Opus 5 · Kubernetes runtime</div></div></div>
+                <div class="pfoot muted">Switching agent mid-conversation starts a new session. <a href="agents.html">Manage agents</a></div>
+              </div>
+            </details>
+
+            <!-- files picker -->
+            <details class="picker">
+              <summary>+ Files <span class="caret">▾</span></summary>
+              <div class="panel">
+                <div class="phead">Available to this agent</div>
+                <div class="opt on"><span class="check on" style="border:0;padding:0"><span class="box"></span></span><div class="grow"><div class="t">contracts/2026-q3</div><div class="d">3 files · 2.9 MB</div></div></div>
+                <div class="opt"><span class="check" style="border:0;padding:0"><span class="box"></span></span><div class="grow"><div class="t">handbook/</div><div class="d">9 files · 4.2 MB</div></div></div>
+                <div class="opt"><span class="check" style="border:0;padding:0"><span class="box"></span></span><div class="grow"><div class="t">templates/</div><div class="d">2 files · 310 KB</div></div></div>
+                <div class="opt"><span class="check" style="border:0;padding:0"><span class="box"></span></span><div class="grow"><div class="t">report-template.docx</div><div class="d">142 KB</div></div></div>
+                <div class="pfoot muted">Only files this agent is permitted to read are listed. <a href="files.html">Upload</a></div>
+              </div>
+            </details>
+
+            <!-- connectors picker -->
+            <details class="picker">
+              <summary>+ Connectors <span class="caret">▾</span></summary>
+              <div class="panel">
+                <div class="phead">Available to this agent</div>
+                <div class="opt on"><span class="check on" style="border:0;padding:0"><span class="box"></span></span><div class="grow"><div class="t">Internal Search</div><div class="d">Remote URL · Bearer token · reachable</div></div></div>
+                <div class="opt"><span class="check" style="border:0;padding:0"><span class="box"></span></span><div class="grow"><div class="t">Jira</div><div class="d">Remote URL · OAuth · reachable</div></div></div>
+                <div class="opt"><span class="check" style="border:0;padding:0"><span class="box"></span></span><div class="grow"><div class="t">GitHub</div><div class="d">Remote URL · API key · reachable</div></div></div>
+                <div class="opt"><span class="check" style="border:0;padding:0"><span class="box"></span></span><div class="grow"><div class="t">Google Drive</div><div class="d">SSE · OAuth · not tested</div></div></div>
+                <div class="pfoot muted">Pickers narrow what the agent may use — they never grant new capability.</div>
+              </div>
+            </details>
+
+            <span class="spacer"></span>
+            <span class="small muted">Standard Sandbox · read-only</span>
+            <a class="btn primary sm" href="agent-run.html">Send</a>
+          </div>
+        </div>
+
+        <div class="section-head"><h2>Recent</h2>
+          <div class="actions"><a class="btn sm ghost" href="runs.html">See all</a></div>
+        </div>
+        <div class="rows">
+          <a class="row" href="agent-run.html">
+            <div class="grow"><div class="title">Q3 contract summary</div>
+              <div class="meta">Contract Review · 3 files · 2 minutes ago</div></div>
+            <div class="right"><span class="badge ok">Completed</span><span>$0.08</span></div>
+          </a>
+          <a class="row" href="agent-run.html">
+            <div class="grow"><div class="title">Handbook: parental leave</div>
+              <div class="meta">Customer Support Agent · yesterday</div></div>
+            <div class="right"><span class="badge ok">Completed</span><span>$0.01</span></div>
+          </a>
+          <a class="row" href="agent-run.html">
+            <div class="grow"><div class="title">Invoice 8842 exception <span class="badge info">Shared</span></div>
+              <div class="meta">Invoice Triage · 2 days ago · public link · 14 views</div></div>
+            <div class="right"><span class="badge ok">Completed</span><span>$0.02</span></div>
+          </a>
+          <a class="row" href="agent-run.html">
+            <div class="grow"><div class="title">Draft weekly report</div>
+              <div class="meta">Weekly Report Writer · 4 days ago</div></div>
+            <div class="right"><span class="badge warn">Interrupted</span><span>$0.06</span></div>
+          </a>
+        </div>
+
+        <div class="section-head"><h2>Projects</h2>
+          <div class="actions"><a class="btn sm ghost" href="projects.html">All projects</a></div>
+        </div>
+        <div class="rows">
+          <a class="row" href="project.html">
+            <div class="grow"><div class="title">Q3 Supplier Contracts</div>
+              <div class="meta">Contract Review · 18 sessions · 34 files</div></div>
+            <div class="right"><span>Updated 12 min ago</span></div>
+          </a>
+          <a class="row" href="project.html">
+            <div class="grow"><div class="title">SOC 2 Evidence</div>
+              <div class="meta">General · 4 sessions · 12 files</div></div>
+            <div class="right"><span>Updated yesterday</span></div>
+          </a>
+          <a class="row" href="project.html">
+            <div class="grow"><div class="title">Onboarding Rewrite</div>
+              <div class="meta">Document Writer · 9 sessions · 6 files</div></div>
+            <div class="right"><span>Updated 5 days ago</span></div>
+          </a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+<script>
+/* close pickers when clicking outside */
+document.addEventListener("click", function (e) {
+  document.querySelectorAll("details.picker[open]").forEach(function (d) {
+    if (!d.contains(e.target)) d.open = false;
+  });
+});
+/* option toggling inside pickers */
+document.addEventListener("click", function (e) {
+  var opt = e.target.closest(".picker .opt");
+  if (!opt) return;
+  var panel = opt.closest(".panel");
+  var summary = panel.parentElement.querySelector("summary");
+  if (summary.textContent.indexOf("Agent:") === 0) {
+    panel.querySelectorAll(".opt").forEach(function (o) { o.classList.remove("on"); });
+    opt.classList.add("on");
+    summary.innerHTML = "Agent: " + opt.querySelector(".t").textContent + ' <span class="caret">▾</span>';
+    panel.parentElement.open = false;
+  } else {
+    opt.classList.toggle("on");
+    var c = opt.querySelector(".check");
+    if (c) c.classList.toggle("on");
+  }
+});
+</script>
+</body>
+</html>

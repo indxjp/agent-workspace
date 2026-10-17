@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Files — Agent Workspace</title>
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<script>window.PAGE = { nav: "files", crumbs: [["Files"]] };</script>
+
+<div class="app">
+  <div class="main">
+    <div class="page">
+
+      <div class="page-head">
+        <div>
+          <h1>Files</h1>
+          <div class="sub">Workspace files the Claude Agent SDK file tools can read and write. No indexing, no embeddings — just files.</div>
+        </div>
+        <div class="actions">
+          <button class="btn" data-toast="New folder created">New folder</button>
+          <button class="btn primary" data-modal-open="m-upload">Upload</button>
+        </div>
+      </div>
+
+      <div class="split">
+        <!-- ---------------- tree ---------------- -->
+        <div class="card">
+          <div class="card-head"><h3>/</h3><div class="actions"><span class="badge outline">SeaweedFS</span></div></div>
+          <div class="card-body tree" style="padding:8px">
+            <div class="node">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M2.5 4.2A1.2 1.2 0 0 1 3.7 3h2.4l1.2 1.6h4.9A1.2 1.2 0 0 1 13.4 5.8v6A1.2 1.2 0 0 1 12.2 13H3.7a1.2 1.2 0 0 1-1.2-1.2z"/></svg>
+              <span class="name">contracts</span><span class="side">34</span>
+            </div>
+            <div class="node indent-1">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M2.5 4.2A1.2 1.2 0 0 1 3.7 3h2.4l1.2 1.6h4.9A1.2 1.2 0 0 1 13.4 5.8v6A1.2 1.2 0 0 1 12.2 13H3.7a1.2 1.2 0 0 1-1.2-1.2z"/></svg>
+              <span class="name">2026-q3</span><span class="side">3</span>
+            </div>
+            <div class="node indent-2 selected">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M4 2.5h4.6L12 5.9V13a.5.5 0 0 1-.5.5h-7A.5.5 0 0 1 4 13z"/><path d="M8.5 2.6v3.3H12"/></svg>
+              <span class="name">agreement-01.pdf</span>
+            </div>
+            <div class="node indent-2">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M4 2.5h4.6L12 5.9V13a.5.5 0 0 1-.5.5h-7A.5.5 0 0 1 4 13z"/><path d="M8.5 2.6v3.3H12"/></svg>
+              <span class="name">agreement-02.pdf</span>
+            </div>
+            <div class="node indent-2">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M4 2.5h4.6L12 5.9V13a.5.5 0 0 1-.5.5h-7A.5.5 0 0 1 4 13z"/><path d="M8.5 2.6v3.3H12"/></svg>
+              <span class="name">agreement-03.pdf</span>
+            </div>
+            <div class="node indent-1">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M4 2.5h4.6L12 5.9V13a.5.5 0 0 1-.5.5h-7A.5.5 0 0 1 4 13z"/><path d="M8.5 2.6v3.3H12"/></svg>
+              <span class="name">pricing.xlsx</span>
+            </div>
+            <div class="node">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M2.5 4.2A1.2 1.2 0 0 1 3.7 3h2.4l1.2 1.6h4.9A1.2 1.2 0 0 1 13.4 5.8v6A1.2 1.2 0 0 1 12.2 13H3.7a1.2 1.2 0 0 1-1.2-1.2z"/></svg>
+              <span class="name">handbook</span><span class="side">9</span>
+            </div>
+            <div class="node">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M2.5 4.2A1.2 1.2 0 0 1 3.7 3h2.4l1.2 1.6h4.9A1.2 1.2 0 0 1 13.4 5.8v6A1.2 1.2 0 0 1 12.2 13H3.7a1.2 1.2 0 0 1-1.2-1.2z"/></svg>
+              <span class="name">templates</span><span class="side">2</span>
+            </div>
+            <div class="node">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M2.5 4.2A1.2 1.2 0 0 1 3.7 3h2.4l1.2 1.6h4.9A1.2 1.2 0 0 1 13.4 5.8v6A1.2 1.2 0 0 1 12.2 13H3.7a1.2 1.2 0 0 1-1.2-1.2z"/></svg>
+              <span class="name">output</span><span class="side">17</span>
+            </div>
+            <div class="node">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M4 2.5h4.6L12 5.9V13a.5.5 0 0 1-.5.5h-7A.5.5 0 0 1 4 13z"/><path d="M8.5 2.6v3.3H12"/></svg>
+              <span class="name">instructions.md</span>
+            </div>
+            <div class="node">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M4 2.5h4.6L12 5.9V13a.5.5 0 0 1-.5.5h-7A.5.5 0 0 1 4 13z"/><path d="M8.5 2.6v3.3H12"/></svg>
+              <span class="name">report-template.docx</span>
+            </div>
+            <div class="node">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M4 2.5h4.6L12 5.9V13a.5.5 0 0 1-.5.5h-7A.5.5 0 0 1 4 13z"/><path d="M8.5 2.6v3.3H12"/></svg>
+              <span class="name">escalation-contacts.md</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ---------------- detail ---------------- -->
+        <div>
+          <div class="card">
+            <div class="card-head">
+              <h3>agreement-01.pdf</h3>
+              <div class="actions">
+                <button class="btn sm" data-toast="Downloading agreement-01.pdf">Download</button>
+                <button class="btn sm" data-toast="Rename">Rename</button>
+                <button class="btn sm danger" data-toast="Deleted (recoverable for 30 days)">Delete</button>
+              </div>
+            </div>
+            <div class="card-body">
+              <dl class="kv">
+                <dt>Path</dt><dd class="mono">/contracts/2026-q3/agreement-01.pdf</dd>
+                <dt>Size</dt><dd>2.1 MB</dd>
+                <dt>Type</dt><dd>application/pdf · 18 pages</dd>
+                <dt>Uploaded</dt><dd>12 Aug 2026 by Kenji Sato</dd>
+                <dt>Storage</dt><dd class="mono">s3://agent-workspace/meridian/contracts/2026-q3/agreement-01.pdf</dd>
+                <dt>Checksum</dt><dd class="mono">sha256:41c0…9ba7</dd>
+              </dl>
+            </div>
+          </div>
+
+          <div class="section-head"><h2>Assigned to agents</h2>
+            <div class="actions"><button class="btn sm" data-toast="Assignment dialog opened">Assign to agent</button></div>
+          </div>
+          <div class="rows">
+            <div class="row">
+              <div class="grow"><div class="title">Contract Review</div>
+                <div class="meta">Folder <span class="mono">contracts/</span> mounted at <span class="mono">/workspace/contracts</span></div></div>
+              <div class="right"><span class="badge outline">Read only</span></div>
+            </div>
+            <div class="row">
+              <div class="grow"><div class="title">Customer Support Agent</div>
+                <div class="meta">Folder <span class="mono">contracts/2026-q3/</span> mounted at <span class="mono">/workspace/contracts/2026-q3</span></div></div>
+              <div class="right"><span class="badge outline">Read only</span></div>
+            </div>
+          </div>
+
+          <div class="section-head"><h2>Storage</h2></div>
+          <div class="card"><div class="card-body">
+            <dl class="kv">
+              <dt>Backend</dt><dd>S3-compatible · SeaweedFS <span class="muted small">· endpoint <span class="mono">http://seaweedfs:8333</span></span></dd>
+              <dt>Bucket</dt><dd class="mono">agent-workspace</dd>
+              <dt>Used</dt><dd>112 MB of 50 GB</dd>
+              <dt>Lifecycle</dt><dd>Deleted files are recoverable for 30 days</dd>
+            </dl>
+            <div class="callout mt16">
+              <span class="ico">ℹ</span>
+              <div class="grow">Object storage is the source of truth. Sandboxes are hydrated from it before a run
+                and only paths marked persistent are written back.</div>
+            </div>
+          </div></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="scrim" id="m-upload" hidden>
+  <div class="modal">
+    <div class="m-head"><h3>Upload files</h3><div class="sub">Files are stored in object storage and hydrated into the sandbox at run time.</div></div>
+    <div class="m-body">
+      <div class="field">
+        <label>Destination folder</label>
+        <select><option>/contracts/2026-q3</option><option>/handbook</option><option>/templates</option><option>/ (root)</option></select>
+      </div>
+      <div style="border:1.5px dashed var(--border-strong);border-radius:var(--radius);padding:30px;text-align:center;color:var(--muted)">
+        Drop files here, or <a href="#" data-toast="File picker opened">choose files</a><br>
+        <span class="small">Up to 100 MB per file</span>
+      </div>
+      <div class="field mt16 mb0">
+        <label>Default access for agents</label>
+        <select><option>Read only</option><option>Read and write</option></select>
+      </div>
+    </div>
+    <div class="m-foot"><button class="btn" data-modal-close>Cancel</button><button class="btn primary" data-modal-close data-toast="Upload complete">Upload</button></div>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

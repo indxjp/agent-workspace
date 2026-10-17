@@ -1,0 +1,60 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.GatewayIngress.ingress_paths_are_the_spec_contract",
+    "AgentWorkspace.Theorems.Adversarial.GatewayIngress.model_ingress_is_route"],
+   "input": {"path": "/v1/messages"},
+   "id": "ingress/messages",
+   "expected": {"resolvesModelKey": true, "metered": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.GatewayIngress.ingress_paths_are_the_spec_contract",
+    "AgentWorkspace.Theorems.Adversarial.GatewayIngress.model_ingress_is_route"],
+   "input": {"path": "/v1/messages/count_tokens"},
+   "id": "ingress/count-tokens",
+   "expected": {"resolvesModelKey": true, "metered": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.GatewayIngress.ingress_paths_are_the_spec_contract",
+    "AgentWorkspace.Theorems.Adversarial.GatewayIngress.model_ingress_is_route"],
+   "input": {"path": "/v1/responses"},
+   "id": "ingress/responses",
+   "expected": {"resolvesModelKey": true, "metered": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.GatewayIngress.ingress_paths_are_the_spec_contract",
+    "AgentWorkspace.Theorems.Adversarial.GatewayIngress.model_ingress_is_route"],
+   "input": {"path": "/v1/chat/completions"},
+   "id": "ingress/chat-completions",
+   "expected": {"resolvesModelKey": true, "metered": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.GatewayIngress.ingress_paths_are_the_spec_contract",
+    "AgentWorkspace.Theorems.Adversarial.GatewayIngress.model_ingress_is_route"],
+   "input": {"path": "/v1/models"},
+   "id": "ingress/models",
+   "expected": {"resolvesModelKey": true, "metered": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.GatewayIngress.ingress_paths_are_the_spec_contract",
+    "AgentWorkspace.Theorems.Adversarial.GatewayIngress.model_ingress_is_route"],
+   "input": {"path": "/health"},
+   "id": "ingress/health",
+   "expected": {"resolvesModelKey": false, "metered": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.GatewayIngress.ingress_paths_are_the_spec_contract",
+    "AgentWorkspace.Theorems.Adversarial.GatewayIngress.tool_ingress_is_unmetered",
+    "AgentWorkspace.Theorems.Adversarial.GatewayIngress.tool_ingress_never_resolves_a_model_key"],
+   "input": {"path": "/v1/tools/:connectorId/mcp"},
+   "id": "ingress/tool",
+   "expected": {"resolvesModelKey": false, "metered": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.GatewayIngress.ingress_paths_are_the_spec_contract",
+    "AgentWorkspace.Theorems.Adversarial.GatewayIngress.tool_ingress_is_unmetered",
+    "AgentWorkspace.Theorems.Adversarial.GatewayIngress.tool_ingress_never_resolves_a_model_key"],
+   "input": {"path": "/v1/tool-sandbox/mcp"},
+   "id": "ingress/tool-sandbox",
+   "expected": {"resolvesModelKey": false, "metered": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.GatewayIngress.ingress_paths_are_the_spec_contract",
+    "AgentWorkspace.Theorems.Adversarial.GatewayIngress.tool_ingress_is_unmetered",
+    "AgentWorkspace.Theorems.Adversarial.GatewayIngress.tool_ingress_never_resolves_a_model_key"],
+   "input": {"path": "/v1/tool-sandbox/endpoint/mcp"},
+   "id": "ingress/tool-sandbox-endpoint",
+   "expected": {"resolvesModelKey": false, "metered": false}}],
+ "family": "gateway-ingress",
+ "description": "The application's route table in order: whether each path is metered and resolves the model key"}

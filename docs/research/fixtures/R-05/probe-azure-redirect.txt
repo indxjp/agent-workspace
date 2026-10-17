@@ -1,0 +1,17 @@
+openai npm package version: 7.10.0
+node: v24.19.0
+
+### A. what `init.redirect` is, per client configuration, on chat.completions.create
+
+  AzureOpenAI + apiKey
+    {"redirect":"manual","api-key header":true,"authorization header":false}
+  AzureOpenAI + azureADTokenProvider
+    {"redirect":"(unset)","api-key header":false,"authorization header":true}
+  plain OpenAI, baseURL {endpoint}/openai/v1, defaultHeaders {api-key}
+    {"redirect":"(unset)","api-key header":true,"authorization header":true}
+
+### B. where the behaviour lives: the only two redirect assignments in openai/azure.js
+  azure.js:89: built.req.redirect = 'manual';
+  azure.js:95: init.redirect = 'manual';
+  enclosing methods: AzureOpenAI.buildRequest() and AzureOpenAI.fetchWithAuth(),
+  both guarded by `headers.has("api-key")`. The base OpenAI class overrides neither.

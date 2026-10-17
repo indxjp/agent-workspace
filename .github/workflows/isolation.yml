@@ -1,0 +1,372 @@
+name: Isolation
+
+# Live isolation conformance for the docker and kubernetes runtime drivers (issue #782). Each lane
+# creates sandboxes through the real driver from packages/runtime and checks them from the inside.
+# The kind lane also installs the Helm chart under its default-deny NetworkPolicy (issue #849).
+# The kind-deploy lane installs it with `aw deploy`, runs one agent turn on the kubernetes driver in
+# the cluster, and runs the isolation cases against the Pods the runner manager creates (issue #854).
+# See infra/tests/isolation/README.md. No secrets are used.
+on:
+  pull_request:
+    paths:
+      - packages/runtime/**
+      - packages/egress-proxy/**
+      - egress-proxy.Dockerfile
+      - infra/tests/isolation/**
+      - infra/helm/**
+      - Dockerfile
+      - apps/runner/**
+      - packages/cli/src/deploy/**
+      - tests/generated-project/**
+      - runtime.Dockerfile
+      - gateway.Dockerfile
+      - .github/workflows/isolation.yml
+  push:
+    branches: [main]
+    paths:
+      - packages/runtime/**
+      - packages/egress-proxy/**
+      - egress-proxy.Dockerfile
+      - infra/tests/isolation/**
+      - infra/helm/**
+      - Dockerfile
+      - apps/runner/**
+      - packages/cli/src/deploy/**
+      - tests/generated-project/**
+      - runtime.Dockerfile
+      - gateway.Dockerfile
+      - .github/workflows/isolation.yml
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: isolation-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  ISOLATION_IMAGE: aw-isolation-probe:ci
+  ISOLATION_PROXY_IMAGE: aw-egress-proxy:ci
+
+jobs:
+  docker:
+    name: docker lane
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      ISOLATION_LANE: docker
+      ISOLATION_RESULTS: ${{ github.workspace }}/results/results-docker.json
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile --filter "@agent-workspace/runtime..."
+
+      - name: Build the runtime package
+        run: pnpm --filter @agent-workspace/runtime build
+
+      - name: Build the probe image
+        run: docker build --tag "$ISOLATION_IMAGE" --file infra/tests/isolation/probe.Dockerfile infra/tests/isolation
+
+      - name: Build the egress proxy image
+        run: docker build --tag "$ISOLATION_PROXY_IMAGE" --file egress-proxy.Dockerfile --target egress-proxy .
+
+      - name: Isolation checks
+        run: |
+          mkdir -p results
+          node --test infra/tests/isolation/isolation.test.mjs
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: isolation-results-docker
+          path: results/results-docker.json
+          if-no-files-found: warn
+
+  kind:
+    name: kind lane
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      ISOLATION_LANE: kind
+      ISOLATION_RESULTS: ${{ github.workspace }}/results/results-kind.json
+      KIND_VERSION: v0.33.0
+      KIND_SHA256: aee6151561422756b764a4ae28e7f44cda5af5a9eead3cc9985112b1de8d8e0d
+      KIND_NODE_IMAGE: kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5
+      CALICO_VERSION: v3.33.0
+      CALICO_SHA256: 2de8f47595fb9c41b3f47d7b767a1f8e72ecf84057af834738ff12689a234da5
+      KIND_CLUSTER: aw-isolation
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile --filter "@agent-workspace/runtime..."
+
+      - name: Build the runtime package
+        run: pnpm --filter @agent-workspace/runtime build
+
+      - name: Build the probe image
+        run: docker build --tag "$ISOLATION_IMAGE" --file infra/tests/isolation/probe.Dockerfile infra/tests/isolation
+
+      - name: Build the egress proxy image
+        run: docker build --tag "$ISOLATION_PROXY_IMAGE" --file egress-proxy.Dockerfile --target egress-proxy .
+
+      # A pinned release binary checked against a sha256 recorded here (the release's own
+      # kind-linux-amd64.sha256sum for KIND_VERSION), instead of a new third-party action
+      # (scripts/check-workflows.mjs allowlists every action).
+      - name: Install kind
+        run: |
+          set -euo pipefail
+          base="https://github.com/kubernetes-sigs/kind/releases/download/${KIND_VERSION}"
+          curl --fail --silent --show-error --location --output kind "${base}/kind-linux-amd64"
+          echo "${KIND_SHA256}  kind" | sha256sum --check -
+          sudo install --mode 0755 kind /usr/local/bin/kind
+          kind version
+
+      # Calico, not the default kindnet, because kindnet does not enforce NetworkPolicy.
+      - name: Create the cluster with Calico
+        run: |
+          set -euo pipefail
+          kind create cluster --name "$KIND_CLUSTER" --image "$KIND_NODE_IMAGE" --config infra/tests/isolation/kind-config.yaml --wait 0s
+          curl --fail --silent --show-error --location --output calico.yaml "https://raw.githubusercontent.com/projectcalico/calico/${CALICO_VERSION}/manifests/calico.yaml"
+          echo "${CALICO_SHA256}  calico.yaml" | sha256sum --check -
+          kubectl apply --filename calico.yaml
+          kubectl --namespace kube-system rollout status daemonset/calico-node --timeout=300s
+          kubectl --namespace kube-system rollout status deployment/calico-kube-controllers --timeout=300s
+          kubectl wait --for=condition=Ready nodes --all --timeout=300s
+
+      - name: Load the probe and egress proxy images into the cluster
+        run: kind load docker-image "$ISOLATION_IMAGE" "$ISOLATION_PROXY_IMAGE" --name "$KIND_CLUSTER"
+
+      - name: Isolation checks
+        run: |
+          mkdir -p results
+          node --test infra/tests/isolation/isolation.test.mjs
+
+      # The kind node keeps running, so its image stays; the rest of the Docker cache goes.
+      - name: Prune Docker after the isolation checks
+        run: docker system prune -af
+
+      # The web image build does not fit next to the runner's preinstalled toolchains.
+      - name: Free disk for the web image
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          df -h /
+
+      # After the isolation checks, which use the `agent-workspace` namespace the chart installs
+      # into. The web image is the one the chart's migrate Job runs; the smoke starts PostgreSQL
+      # itself and installs the chart under its default-deny NetworkPolicy.
+      - name: Build the web image
+        run: docker build --tag aw-web:ci --target web .
+
+      - name: Load the web image into the cluster
+        run: kind load docker-image aw-web:ci --name "$KIND_CLUSTER"
+
+      - name: Chart smoke (migrate Job under default-deny)
+        run: |
+          helm version
+          node infra/tests/isolation/chart-smoke.mjs
+
+      - name: Cluster state on failure
+        if: failure()
+        run: |
+          kubectl get pods,jobs --all-namespaces --output wide || true
+          kubectl get events --all-namespaces --sort-by .lastTimestamp || true
+          kubectl get networkpolicy --all-namespaces || true
+          kubectl get jobs --namespace agent-workspace || true
+          kubectl logs --namespace agent-workspace --selector app.kubernetes.io/name=agent-workspace-migrate --tail 50 --all-containers || true
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: isolation-results-kind
+          path: results/results-kind.json
+          if-no-files-found: warn
+
+  kind-deploy:
+    name: kind-deploy lane
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      ISOLATION_LANE: kind-chart
+      ISOLATION_RESULTS: ${{ github.workspace }}/results/results-kind-chart.json
+      KIND_VERSION: v0.33.0
+      KIND_SHA256: aee6151561422756b764a4ae28e7f44cda5af5a9eead3cc9985112b1de8d8e0d
+      KIND_NODE_IMAGE: kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5
+      CALICO_VERSION: v3.33.0
+      CALICO_SHA256: 2de8f47595fb9c41b3f47d7b767a1f8e72ecf84057af834738ff12689a234da5
+      KIND_CLUSTER: aw-deploy
+      # registry:3.0.0, by its multi-arch index digest (tests/generated-project/run.mjs pins the same).
+      REGISTRY_IMAGE: docker.io/library/registry@sha256:6c5666b861f3505b116bb9aa9b25175e71210414bd010d92035ff64018f9457e
+      KD_REGISTRY: localhost:5001
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # Four platform images, a derived runtime image and the egress proxy are built and held in a
+      # registry on this disk next to the kind node.
+      - name: Free disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          df -h /
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the packages the deploy and the lane run
+        run: pnpm --filter @agent-workspace/runtime --filter @indx-workspace/contracts --filter @indx-workspace/platforms --filter @indx-workspace/sdk --filter @indx-workspace/cli --filter @indx-workspace/aw build
+
+      - name: Build the probe image
+        run: docker build --tag "$ISOLATION_IMAGE" --file infra/tests/isolation/probe.Dockerfile infra/tests/isolation
+
+      - name: Install kind
+        run: |
+          set -euo pipefail
+          base="https://github.com/kubernetes-sigs/kind/releases/download/${KIND_VERSION}"
+          curl --fail --silent --show-error --location --output kind "${base}/kind-linux-amd64"
+          echo "${KIND_SHA256}  kind" | sha256sum --check -
+          sudo install --mode 0755 kind /usr/local/bin/kind
+          kind version
+
+      - name: Start the image registry
+        run: docker run --detach --restart always --name kind-registry --publish 127.0.0.1:5001:5000 "$REGISTRY_IMAGE"
+
+      - name: Create the cluster with Calico
+        run: |
+          set -euo pipefail
+          kind create cluster --name "$KIND_CLUSTER" --image "$KIND_NODE_IMAGE" --config infra/tests/isolation/kind-config.yaml --wait 0s
+          curl --fail --silent --show-error --location --output calico.yaml "https://raw.githubusercontent.com/projectcalico/calico/${CALICO_VERSION}/manifests/calico.yaml"
+          echo "${CALICO_SHA256}  calico.yaml" | sha256sum --check -
+          kubectl apply --filename calico.yaml
+          kubectl --namespace kube-system rollout status daemonset/calico-node --timeout=300s
+          kubectl --namespace kube-system rollout status deployment/calico-kube-controllers --timeout=300s
+          kubectl wait --for=condition=Ready nodes --all --timeout=300s
+
+      # The nodes pull `localhost:5001/...` from the registry container over the kind network.
+      - name: Connect the registry to the cluster
+        run: |
+          set -euo pipefail
+          docker network connect kind kind-registry
+          for node in $(kind get nodes --name "$KIND_CLUSTER"); do
+            docker exec "$node" mkdir -p /etc/containerd/certs.d/localhost:5001
+            printf '[host."http://kind-registry:5000"]\n' | docker exec -i "$node" tee /etc/containerd/certs.d/localhost:5001/hosts.toml
+          done
+
+      - name: Load the probe image into the cluster
+        run: kind load docker-image "$ISOLATION_IMAGE" --name "$KIND_CLUSTER"
+
+      - name: Deploy with aw and run one agent turn
+        run: |
+          helm version
+          node infra/tests/isolation/kind-deploy.mjs
+
+      - name: Isolation checks against runner-manager Pods
+        run: |
+          set -euo pipefail
+          mkdir -p results
+          kubectl port-forward --namespace agent-workspace service/agent-workspace-runner-manager 18090:8080 &
+          forward=$!
+          trap 'kill "$forward"' EXIT
+          token="$(kubectl get secret agent-workspace-secrets --namespace agent-workspace --output jsonpath='{.data.RUNNER_MANAGER_TOKEN}' | base64 --decode)"
+          for attempt in $(seq 1 30); do curl --silent --fail http://127.0.0.1:18090/healthz && break; sleep 2; done
+          ISOLATION_MANAGER_URL=http://127.0.0.1:18090 ISOLATION_MANAGER_TOKEN="$token" ISOLATION_NAMESPACE=agent-workspace \
+            node --test infra/tests/isolation/isolation.test.mjs
+
+      - name: Cluster state on failure
+        if: failure()
+        run: |
+          kubectl get pods,jobs,services,networkpolicy --all-namespaces --output wide || true
+          kubectl get events --all-namespaces --sort-by .lastTimestamp || true
+          kubectl logs --namespace agent-workspace --selector app.kubernetes.io/name=agent-workspace-runner-manager --tail 200 --all-containers || true
+          kubectl logs --namespace agent-workspace --selector app.kubernetes.io/name=agent-workspace-web --tail 200 --all-containers || true
+          kubectl logs --namespace agent-workspace --selector app.kubernetes.io/name=agent-workspace-gateway --tail 200 --all-containers || true
+          kubectl logs --namespace agent-workspace --selector app.kubernetes.io/name=agent-runtime --tail 100 --all-containers || true
+          kubectl logs --namespace aw-fake pod/fake-anthropic --tail 100 || true
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: isolation-results-kind-chart
+          path: results/results-kind-chart.json
+          if-no-files-found: warn
+
+  summary:
+    name: summary
+    needs: [docker, kind, kind-deploy]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+
+      - name: Download results
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          pattern: isolation-results-*
+          path: results
+          merge-multiple: true
+
+      - name: Summary logic
+        run: node --test infra/tests/isolation/summary.test.mjs
+
+      - name: Table
+        run: |
+          set +e
+          node infra/tests/isolation/summary.mjs docker=results/results-docker.json kind=results/results-kind.json kind-chart=results/results-kind-chart.json > summary.md
+          status=$?
+          cat summary.md
+          {
+            echo '## Isolation conformance'
+            echo
+            cat summary.md
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"

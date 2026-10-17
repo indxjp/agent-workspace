@@ -1,0 +1,267 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_write_lands_in_a_read_only_grant",
+    "AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_removal_takes_a_read_only_grant"],
+   "input":
+   {"path": "drafts/a.md",
+    "grants":
+    [{"readOnly": true, "path": "docs", "directory": true},
+     {"readOnly": true, "path": "contracts/signed.pdf", "directory": false},
+     {"readOnly": false, "path": "notes.md", "directory": false}],
+    "cwd": "/workspace"},
+   "id": "sibling",
+   "expected": {"removeAllowed": true, "allowed": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_write_lands_in_a_read_only_grant",
+    "AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_removal_takes_a_read_only_grant"],
+   "input":
+   {"path": "notes.md",
+    "grants":
+    [{"readOnly": true, "path": "docs", "directory": true},
+     {"readOnly": true, "path": "contracts/signed.pdf", "directory": false},
+     {"readOnly": false, "path": "notes.md", "directory": false}],
+    "cwd": "/workspace"},
+   "id": "read-write-grant",
+   "expected": {"removeAllowed": true, "allowed": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_write_lands_in_a_read_only_grant",
+    "AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_removal_takes_a_read_only_grant"],
+   "input":
+   {"path": "/workspace/drafts/a.md",
+    "grants":
+    [{"readOnly": true, "path": "docs", "directory": true},
+     {"readOnly": true, "path": "contracts/signed.pdf", "directory": false},
+     {"readOnly": false, "path": "notes.md", "directory": false}],
+    "cwd": "/workspace"},
+   "id": "absolute-sibling",
+   "expected": {"removeAllowed": true, "allowed": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_write_lands_in_a_read_only_grant",
+    "AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_removal_takes_a_read_only_grant"],
+   "input":
+   {"path": "docs/a.md",
+    "grants":
+    [{"readOnly": true, "path": "docs", "directory": true},
+     {"readOnly": true, "path": "contracts/signed.pdf", "directory": false},
+     {"readOnly": false, "path": "notes.md", "directory": false}],
+    "cwd": "/workspace"},
+   "id": "read-only-directory",
+   "expected": {"removeAllowed": false, "allowed": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_write_lands_in_a_read_only_grant",
+    "AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_removal_takes_a_read_only_grant"],
+   "input":
+   {"path": "docs",
+    "grants":
+    [{"readOnly": true, "path": "docs", "directory": true},
+     {"readOnly": true, "path": "contracts/signed.pdf", "directory": false},
+     {"readOnly": false, "path": "notes.md", "directory": false}],
+    "cwd": "/workspace"},
+   "id": "read-only-directory-itself",
+   "expected": {"removeAllowed": false, "allowed": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_write_lands_in_a_read_only_grant",
+    "AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_removal_takes_a_read_only_grant"],
+   "input":
+   {"path": "contracts/signed.pdf",
+    "grants":
+    [{"readOnly": true, "path": "docs", "directory": true},
+     {"readOnly": true, "path": "contracts/signed.pdf", "directory": false},
+     {"readOnly": false, "path": "notes.md", "directory": false}],
+    "cwd": "/workspace"},
+   "id": "read-only-file",
+   "expected": {"removeAllowed": false, "allowed": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_write_lands_in_a_read_only_grant",
+    "AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_removal_takes_a_read_only_grant"],
+   "input":
+   {"path": "drafts/../docs/a.md",
+    "grants":
+    [{"readOnly": true, "path": "docs", "directory": true},
+     {"readOnly": true, "path": "contracts/signed.pdf", "directory": false},
+     {"readOnly": false, "path": "notes.md", "directory": false}],
+    "cwd": "/workspace"},
+   "id": "dot-dot-into-read-only",
+   "expected": {"removeAllowed": false, "allowed": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_write_lands_in_a_read_only_grant",
+    "AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_removal_takes_a_read_only_grant"],
+   "input":
+   {"path": "/workspace/docs/a.md",
+    "grants":
+    [{"readOnly": true, "path": "docs", "directory": true},
+     {"readOnly": true, "path": "contracts/signed.pdf", "directory": false},
+     {"readOnly": false, "path": "notes.md", "directory": false}],
+    "cwd": "/workspace"},
+   "id": "absolute-into-read-only",
+   "expected": {"removeAllowed": false, "allowed": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_write_lands_in_a_read_only_grant",
+    "AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_removal_takes_a_read_only_grant"],
+   "input":
+   {"path": ".mastra/skills/x/SKILL.md",
+    "grants":
+    [{"readOnly": true, "path": "docs", "directory": true},
+     {"readOnly": true, "path": "contracts/signed.pdf", "directory": false},
+     {"readOnly": false, "path": "notes.md", "directory": false}],
+    "cwd": "/workspace"},
+   "id": "adapter-directory",
+   "expected": {"removeAllowed": false, "allowed": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_write_lands_in_a_read_only_grant",
+    "AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_removal_takes_a_read_only_grant"],
+   "input":
+   {"path": "~/.ssh/id_rsa",
+    "grants":
+    [{"readOnly": true, "path": "docs", "directory": true},
+     {"readOnly": true, "path": "contracts/signed.pdf", "directory": false},
+     {"readOnly": false, "path": "notes.md", "directory": false}],
+    "cwd": "/workspace"},
+   "id": "home",
+   "expected": {"removeAllowed": false, "allowed": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_write_lands_in_a_read_only_grant",
+    "AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_removal_takes_a_read_only_grant"],
+   "input":
+   {"path": "/etc/passwd",
+    "grants":
+    [{"readOnly": true, "path": "docs", "directory": true},
+     {"readOnly": true, "path": "contracts/signed.pdf", "directory": false},
+     {"readOnly": false, "path": "notes.md", "directory": false}],
+    "cwd": "/workspace"},
+   "id": "absolute-outside",
+   "expected": {"removeAllowed": false, "allowed": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_write_lands_in_a_read_only_grant",
+    "AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_removal_takes_a_read_only_grant"],
+   "input":
+   {"path": "/workspacex/a.md",
+    "grants":
+    [{"readOnly": true, "path": "docs", "directory": true},
+     {"readOnly": true, "path": "contracts/signed.pdf", "directory": false},
+     {"readOnly": false, "path": "notes.md", "directory": false}],
+    "cwd": "/workspace"},
+   "id": "prefix-lookalike",
+   "expected": {"removeAllowed": false, "allowed": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_write_lands_in_a_read_only_grant",
+    "AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_removal_takes_a_read_only_grant"],
+   "input":
+   {"path": "../escape.md",
+    "grants":
+    [{"readOnly": true, "path": "docs", "directory": true},
+     {"readOnly": true, "path": "contracts/signed.pdf", "directory": false},
+     {"readOnly": false, "path": "notes.md", "directory": false}],
+    "cwd": "/workspace"},
+   "id": "climbs-out",
+   "expected": {"removeAllowed": false, "allowed": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_write_lands_in_a_read_only_grant",
+    "AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_removal_takes_a_read_only_grant"],
+   "input":
+   {"path": ".",
+    "grants":
+    [{"readOnly": true, "path": "docs", "directory": true},
+     {"readOnly": true, "path": "contracts/signed.pdf", "directory": false},
+     {"readOnly": false, "path": "notes.md", "directory": false}],
+    "cwd": "/workspace"},
+   "id": "root-dot",
+   "expected": {"removeAllowed": false, "allowed": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_write_lands_in_a_read_only_grant",
+    "AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_removal_takes_a_read_only_grant"],
+   "input":
+   {"path": "/workspace/",
+    "grants":
+    [{"readOnly": true, "path": "docs", "directory": true},
+     {"readOnly": true, "path": "contracts/signed.pdf", "directory": false},
+     {"readOnly": false, "path": "notes.md", "directory": false}],
+    "cwd": "/workspace"},
+   "id": "root-absolute",
+   "expected": {"removeAllowed": false, "allowed": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_write_lands_in_a_read_only_grant",
+    "AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_removal_takes_a_read_only_grant"],
+   "input":
+   {"path": "docs-private/a.md",
+    "grants":
+    [{"readOnly": true, "path": "docs", "directory": true},
+     {"readOnly": true, "path": "contracts/signed.pdf", "directory": false},
+     {"readOnly": false, "path": "notes.md", "directory": false}],
+    "cwd": "/workspace"},
+   "id": "prefix-lookalike-relative",
+   "expected": {"removeAllowed": true, "allowed": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_write_lands_in_a_read_only_grant",
+    "AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_removal_takes_a_read_only_grant"],
+   "input":
+   {"path": "contracts",
+    "grants":
+    [{"readOnly": true, "path": "docs", "directory": true},
+     {"readOnly": true, "path": "contracts/signed.pdf", "directory": false},
+     {"readOnly": false, "path": "notes.md", "directory": false}],
+    "cwd": "/workspace"},
+   "id": "parent-of-read-only-file",
+   "expected": {"removeAllowed": false, "allowed": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_write_lands_in_a_read_only_grant",
+    "AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_removal_takes_a_read_only_grant"],
+   "input":
+   {"path": "drafts/../contracts/",
+    "grants":
+    [{"readOnly": true, "path": "docs", "directory": true},
+     {"readOnly": true, "path": "contracts/signed.pdf", "directory": false},
+     {"readOnly": false, "path": "notes.md", "directory": false}],
+    "cwd": "/workspace"},
+   "id": "parent-of-read-only-file-spelled",
+   "expected": {"removeAllowed": false, "allowed": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_write_lands_in_a_read_only_grant",
+    "AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_removal_takes_a_read_only_grant"],
+   "input":
+   {"path": "/workspace/contracts",
+    "grants":
+    [{"readOnly": true, "path": "docs", "directory": true},
+     {"readOnly": true, "path": "contracts/signed.pdf", "directory": false},
+     {"readOnly": false, "path": "notes.md", "directory": false}],
+    "cwd": "/workspace"},
+   "id": "parent-of-read-only-file-absolute",
+   "expected": {"removeAllowed": false, "allowed": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_write_lands_in_a_read_only_grant",
+    "AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_removal_takes_a_read_only_grant"],
+   "input":
+   {"path": "contracts/unsigned.pdf",
+    "grants":
+    [{"readOnly": true, "path": "docs", "directory": true},
+     {"readOnly": true, "path": "contracts/signed.pdf", "directory": false},
+     {"readOnly": false, "path": "notes.md", "directory": false}],
+    "cwd": "/workspace"},
+   "id": "sibling-of-read-only-file",
+   "expected": {"removeAllowed": true, "allowed": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_write_lands_in_a_read_only_grant",
+    "AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_removal_takes_a_read_only_grant"],
+   "input":
+   {"path": ".mastra",
+    "grants":
+    [{"readOnly": true, "path": "docs", "directory": true},
+     {"readOnly": true, "path": "contracts/signed.pdf", "directory": false},
+     {"readOnly": false, "path": "notes.md", "directory": false}],
+    "cwd": "/workspace"},
+   "id": "adapter-directory-itself",
+   "expected": {"removeAllowed": false, "allowed": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_write_lands_in_a_read_only_grant",
+    "AgentWorkspace.Theorems.Adversarial.Mastra.no_permitted_removal_takes_a_read_only_grant"],
+   "input":
+   {"path": "drafts",
+    "grants":
+    [{"readOnly": true, "path": "docs", "directory": true},
+     {"readOnly": true, "path": "contracts/signed.pdf", "directory": false},
+     {"readOnly": false, "path": "notes.md", "directory": false}],
+    "cwd": "/workspace"},
+   "id": "read-write-sibling-directory",
+   "expected": {"removeAllowed": true, "allowed": true}}],
+ "family": "engine-mastra",
+ "description": "mastraWriteAllowed: the filesystem wrapper over grants and path spellings"}

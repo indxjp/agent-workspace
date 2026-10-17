@@ -1,0 +1,408 @@
+/*
+ * The default look of `<Chat/>` and its parts (issue #699): plain CSS, no Tailwind, no build step.
+ * Import it once: `import '@indx-workspace/react/styles.css'`. The hosted surface page imports
+ * this same file, so there is one look.
+ *
+ * It is driven by custom properties. `surfaceThemeStyle` (src/theme.ts, whose SURFACE_DEFAULTS is
+ * the one source of the values) sets --accent, --accent-foreground, --radius, --surface-gap,
+ * --surface-pad and --surface-text on the root, and the palette too when the theme forces a mode.
+ * The palette below is the `system` mode's: light, and dark under prefers-color-scheme; styles.test
+ * checks it matches theme.ts. Override any property on `.aw-surface` to restyle.
+ */
+.aw-surface {
+  --bg: #faf9f7;
+  --surface: #ffffff;
+  --border: #e3e0da;
+  --text: #1b1a18;
+  --text-2: #4a4842;
+  --muted: #7d7a72;
+  --mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font:
+    var(--surface-text, 14px) / 1.5 -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    'Hiragino Kaku Gothic ProN',
+    'Yu Gothic UI',
+    Meiryo,
+    Roboto,
+    Helvetica,
+    Arial,
+    sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  .aw-surface {
+    --bg: #141416;
+    --surface: #1c1c1f;
+    --border: #303036;
+    --text: #ececef;
+    --text-2: #c2c2c8;
+    --muted: #8e8e98;
+  }
+}
+
+.aw-surface *,
+.aw-surface *::before,
+.aw-surface *::after {
+  box-sizing: border-box;
+}
+
+.aw-surface :where(h1, p, ul, ol, dl, dd, pre) {
+  margin: 0;
+}
+
+.aw-surface :where(ul, ol) {
+  padding: 0;
+  list-style: none;
+}
+
+.aw-surface :where(button, textarea, select) {
+  font: inherit;
+  color: inherit;
+}
+
+.aw-surface :where(button) {
+  cursor: pointer;
+}
+
+.aw-surface :disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* The frame, one block per layout. */
+.aw-surface[data-layout='dock'],
+.aw-surface[data-layout='side'] {
+  height: 100vh;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.aw-surface[data-layout='inline'] {
+  gap: var(--surface-gap);
+  padding: var(--surface-pad);
+}
+
+.aw-frame-notice {
+  flex-shrink: 0;
+}
+
+.aw-frame-column {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--surface-gap);
+  width: 100%;
+  max-width: 760px;
+  margin-inline: auto;
+  padding: var(--surface-pad);
+}
+
+.aw-frame-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--surface-gap);
+}
+
+.aw-frame-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* dock and side: the body scrolls; the header and the composer never shrink (issue #558). */
+.aw-surface:is([data-layout='dock'], [data-layout='side']) .aw-frame-header {
+  flex-shrink: 0;
+  padding: 8px var(--surface-pad);
+  border-bottom: 1px solid var(--border);
+}
+
+.aw-surface:is([data-layout='dock'], [data-layout='side']) .aw-frame-body {
+  min-height: 6rem;
+  overflow-y: auto;
+  padding: var(--surface-pad);
+}
+
+.aw-surface:is([data-layout='dock'], [data-layout='side']) .aw-frame-footer {
+  position: sticky;
+  bottom: 0;
+  flex-shrink: 0;
+  max-height: 50vh;
+  overflow-y: auto;
+  padding: var(--surface-pad);
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+
+/* The parts. */
+.aw-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.aw-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.aw-logo {
+  padding: 2px 8px;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--accent-foreground);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.aw-logo-image {
+  width: auto;
+  height: 24px;
+}
+
+.aw-greeting {
+  color: var(--text-2);
+  white-space: pre-wrap;
+}
+
+.aw-prompts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.aw-prompt,
+.aw-switcher,
+.aw-input {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.aw-prompt {
+  padding: 6px 12px;
+  text-align: left;
+}
+
+.aw-switcher {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.aw-disclaimer,
+.aw-trace,
+.aw-feedback,
+.aw-run-status {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.aw-disclaimer,
+.aw-pre {
+  white-space: pre-wrap;
+}
+
+.aw-trace-summary {
+  cursor: pointer;
+}
+
+.aw-trace-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
+}
+
+.aw-trace-step {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.aw-trace-detail {
+  width: 100%;
+}
+
+.aw-mono {
+  font-family: var(--mono);
+}
+
+.aw-result-text,
+.aw-table {
+  font-size: 12px;
+}
+
+.aw-th,
+.aw-td {
+  padding-inline: 8px;
+}
+
+.aw-th {
+  text-align: left;
+}
+
+.aw-card,
+.aw-failure {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.aw-card {
+  font-size: 12px;
+}
+
+.aw-failure {
+  font-size: 13px;
+}
+
+.aw-card-row {
+  display: flex;
+  gap: 8px;
+}
+
+.aw-card-key {
+  font-weight: 600;
+}
+
+.aw-feedback {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.aw-rating {
+  padding-inline: 4px;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+}
+
+.aw-transcript {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.aw-message {
+  padding: 12px;
+}
+
+.aw-message-user {
+  align-self: flex-end;
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.aw-speaker {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.aw-paragraph {
+  white-space: pre-wrap;
+}
+
+/* Assistant Markdown (ADR-0141). No pre-wrap: Markdown decides the line breaks. */
+.aw-prose > :first-child {
+  margin-top: 0;
+}
+
+.aw-prose > :last-child {
+  margin-bottom: 0;
+}
+
+.aw-prose :is(p, ul, ol, pre, blockquote, table) {
+  margin: 0 0 8px;
+}
+
+.aw-prose :is(h1, h2, h3, h4, h5, h6) {
+  margin: 12px 0 6px;
+  font-size: 1em;
+  line-height: 1.3;
+}
+
+.aw-prose h1 {
+  font-size: 1.4em;
+}
+
+.aw-prose h2 {
+  font-size: 1.25em;
+}
+
+.aw-prose h3 {
+  font-size: 1.1em;
+}
+
+.aw-prose :is(ul, ol) {
+  padding-left: 20px;
+}
+
+.aw-prose code {
+  font-family: var(--mono);
+  font-size: 0.9em;
+}
+
+.aw-prose pre {
+  overflow-x: auto;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.aw-prose blockquote {
+  padding-left: 12px;
+  border-left: 3px solid var(--border);
+  color: var(--text-2);
+}
+
+.aw-prose table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.aw-prose :is(th, td) {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+}
+
+.aw-prose a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.aw-prose hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+.aw-composer {
+  display: flex;
+  gap: 8px;
+}
+
+.aw-input {
+  flex: 1;
+  padding: 12px;
+  resize: vertical;
+}
+
+.aw-send {
+  padding-inline: 16px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--accent-foreground);
+}

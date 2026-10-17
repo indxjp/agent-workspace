@@ -1,0 +1,33 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.CliRuns.exit_code_table",
+    "AgentWorkspace.Theorems.Invariants.CliRuns.sdk_failure_maps_to_exit"],
+   "input": {"failure": "usage"},
+   "id": "usage",
+   "expected": {"exit": 2}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.CliRuns.exit_code_table",
+    "AgentWorkspace.Theorems.Invariants.CliRuns.sdk_failure_maps_to_exit"],
+   "input": {"failure": "apiProblem"},
+   "id": "apiProblem",
+   "expected": {"exit": 1}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.CliRuns.exit_code_table",
+    "AgentWorkspace.Theorems.Invariants.CliRuns.sdk_failure_maps_to_exit"],
+   "input": {"failure": "contractViolation"},
+   "id": "contractViolation",
+   "expected": {"exit": 3}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.CliRuns.exit_code_table",
+    "AgentWorkspace.Theorems.Invariants.CliRuns.sdk_failure_maps_to_exit"],
+   "input": {"failure": "transport"},
+   "id": "transport",
+   "expected": {"exit": 4}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.CliRuns.exit_code_table",
+    "AgentWorkspace.Theorems.Invariants.CliRuns.sdk_failure_maps_to_exit"],
+   "input": {"failure": "unexpected"},
+   "id": "unexpected",
+   "expected": {"exit": 1}}],
+ "family": "cli-runs",
+ "description": "Typed failure exits"}

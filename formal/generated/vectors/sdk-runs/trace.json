@@ -1,0 +1,27 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.SdkRuns.repeated_drops_stay_within_budget",
+    "AgentWorkspace.Theorems.Invariants.SdkRuns.reconnect_budget_is_cumulative_witness"],
+   "input": {"maxReconnects": 0, "drops": 0},
+   "id": "0/0",
+   "expected": {"reconnects": 0}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.SdkRuns.repeated_drops_stay_within_budget",
+    "AgentWorkspace.Theorems.Invariants.SdkRuns.reconnect_budget_is_cumulative_witness"],
+   "input": {"maxReconnects": 1, "drops": 1},
+   "id": "1/1",
+   "expected": {"reconnects": 1}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.SdkRuns.repeated_drops_stay_within_budget",
+    "AgentWorkspace.Theorems.Invariants.SdkRuns.reconnect_budget_is_cumulative_witness"],
+   "input": {"maxReconnects": 2, "drops": 5},
+   "id": "2/5",
+   "expected": {"reconnects": 2}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.SdkRuns.repeated_drops_stay_within_budget",
+    "AgentWorkspace.Theorems.Invariants.SdkRuns.reconnect_budget_is_cumulative_witness"],
+   "input": {"maxReconnects": 5, "drops": 8},
+   "id": "5/8",
+   "expected": {"reconnects": 5}}],
+ "family": "sdk-runs",
+ "description": "Multi-drop cumulative reconnect bound"}

@@ -1,0 +1,37 @@
+{{- if .Values.migrations.enabled }}
+# ADR-0122: migrations run once per install or upgrade, before any pod of the new release starts,
+# and a failed migration fails `helm upgrade` instead of leaving pods running against the old schema.
+# The Job reads only the database Secret and uses no ServiceAccount: at pre-install the chart's own
+# ServiceAccounts do not exist yet, and a migration needs no Kubernetes API access. `migrate.js`
+# takes a Postgres advisory lock, so a web pod's entry-point migration that overlaps it waits and
+# then applies nothing.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: agent-workspace-migrate
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-5"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: {{ .Values.migrations.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.migrations.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: "agent-workspace-migrate" }
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext: { runAsNonRoot: true, {{- with .Values.runAsUser }} runAsUser: {{ . }},{{ end }} seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: migrate
+          image: {{ .Values.images.web | quote }}
+          imagePullPolicy: IfNotPresent
+          command: ["node", "/srv/packages/core/dist/db/migrate.js"]
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+          envFrom:
+            - secretRef: { name: {{ .Values.external.databaseUrlSecret | quote }} }
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: "1", memory: 1Gi }
+{{- end }}

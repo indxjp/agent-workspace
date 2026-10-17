@@ -1,0 +1,74 @@
+{
+  "displayName": "Agent Workspace / ${domain}",
+  "mosaicLayout": {
+    "columns": 12,
+    "tiles": [
+      {
+        "xPos": 0,
+        "yPos": 0,
+        "width": 6,
+        "height": 4,
+        "widget": {
+          "title": "HTTPS check pass rate",
+          "xyChart": {
+            "dataSets": [{
+              "timeSeriesQuery": {
+                "timeSeriesFilter": {
+                  "filter": "metric.type=\"monitoring.googleapis.com/uptime_check/check_passed\" AND resource.type=\"uptime_url\" AND resource.label.host=\"${domain}\"",
+                  "aggregation": { "alignmentPeriod": "300s", "perSeriesAligner": "ALIGN_FRACTION_TRUE" }
+                }
+              },
+              "plotType": "LINE"
+            }],
+            "yAxis": { "label": "availability", "scale": "LINEAR" },
+            "thresholds": [{ "value": 0.995, "targetAxis": "Y1", "color": "RED", "direction": "BELOW" }]
+          }
+        }
+      },
+      {
+        "xPos": 6,
+        "yPos": 0,
+        "width": 6,
+        "height": 4,
+        "widget": {
+          "title": "VM CPU utilization",
+          "xyChart": {
+            "dataSets": [{
+              "timeSeriesQuery": {
+                "timeSeriesFilter": {
+                  "filter": "metric.type=\"compute.googleapis.com/instance/cpu/utilization\" AND resource.type=\"gce_instance\" AND resource.label.project_id=\"${project_id}\" AND resource.label.zone=\"${zone}\"",
+                  "aggregation": { "alignmentPeriod": "300s", "perSeriesAligner": "ALIGN_MEAN" }
+                }
+              },
+              "plotType": "LINE"
+            }],
+            "yAxis": { "label": "utilization", "scale": "LINEAR" },
+            "thresholds": [{ "value": 0.85, "targetAxis": "Y1", "color": "RED", "direction": "ABOVE" }]
+          }
+        }
+      },
+      {
+        "xPos": 0,
+        "yPos": 4,
+        "width": 12,
+        "height": 4,
+        "widget": {
+          "title": "VM network bytes",
+          "xyChart": {
+            "dataSets": [{
+              "timeSeriesQuery": {
+                "timeSeriesFilter": {
+                  "filter": "metric.type=one_of(\"compute.googleapis.com/instance/network/received_bytes_count\",\"compute.googleapis.com/instance/network/sent_bytes_count\") AND resource.type=\"gce_instance\" AND resource.label.project_id=\"${project_id}\"",
+                  "aggregation": { "alignmentPeriod": "60s", "perSeriesAligner": "ALIGN_RATE" }
+                }
+              },
+              "plotType": "LINE"
+            }],
+            "yAxis": { "label": "bytes/sec", "scale": "LINEAR" }
+          }
+        }
+      }
+    ]
+  },
+  "labels": { "application": "agent-workspace", "vm": "${vm_name}" }
+}

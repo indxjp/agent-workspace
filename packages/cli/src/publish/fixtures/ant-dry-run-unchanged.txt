@@ -1,0 +1,5 @@
+Preview  ./claude-lock.json
+
+± Name                    Plan
+
+Resources  1 unchanged

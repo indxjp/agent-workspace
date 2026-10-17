@@ -1,0 +1,78 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Normative.EnginePort.compose_accepts_iff_overlap",
+    "AgentWorkspace.Theorems.Normative.EnginePort.resolved_protocol_is_the_engines",
+    "AgentWorkspace.Theorems.Normative.EnginePort.resolved_protocol_is_served"],
+   "input": {"provider": "anthropic", "engineProtocols": ["anthropic-messages"]},
+   "id": "claude-anthropic",
+   "expected": {"served": ["anthropic-messages"], "protocol": "anthropic-messages"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.EnginePort.compose_accepts_iff_overlap",
+    "AgentWorkspace.Theorems.Normative.EnginePort.resolved_protocol_is_the_engines",
+    "AgentWorkspace.Theorems.Normative.EnginePort.resolved_protocol_is_served"],
+   "input": {"provider": "anthropic-compatible", "engineProtocols": ["anthropic-messages"]},
+   "id": "claude-anthropic-compatible",
+   "expected": {"served": ["anthropic-messages"], "protocol": "anthropic-messages"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.EnginePort.compose_accepts_iff_overlap",
+    "AgentWorkspace.Theorems.Normative.EnginePort.resolved_protocol_is_the_engines",
+    "AgentWorkspace.Theorems.Normative.EnginePort.resolved_protocol_is_served"],
+   "input": {"provider": "openai", "engineProtocols": ["anthropic-messages"]},
+   "id": "claude-openai",
+   "expected":
+   {"served": ["anthropic-messages", "openai-responses", "openai-chat-completions"], "protocol": "anthropic-messages"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.EnginePort.compose_accepts_iff_overlap",
+    "AgentWorkspace.Theorems.Normative.EnginePort.resolved_protocol_is_the_engines",
+    "AgentWorkspace.Theorems.Normative.EnginePort.resolved_protocol_is_served"],
+   "input": {"provider": "azure-openai", "engineProtocols": ["anthropic-messages"]},
+   "id": "claude-azure-openai",
+   "expected":
+   {"served": ["anthropic-messages", "openai-responses", "openai-chat-completions"], "protocol": "anthropic-messages"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.EnginePort.compose_accepts_iff_overlap",
+    "AgentWorkspace.Theorems.Normative.EnginePort.resolved_protocol_is_the_engines",
+    "AgentWorkspace.Theorems.Normative.EnginePort.resolved_protocol_is_served"],
+   "input": {"provider": "openai-compatible", "engineProtocols": ["anthropic-messages"]},
+   "id": "claude-openai-compatible",
+   "expected":
+   {"served": ["anthropic-messages", "openai-responses", "openai-chat-completions"], "protocol": "anthropic-messages"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.EnginePort.compose_accepts_iff_overlap",
+    "AgentWorkspace.Theorems.Normative.EnginePort.resolved_protocol_is_the_engines",
+    "AgentWorkspace.Theorems.Normative.EnginePort.resolved_protocol_is_served"],
+   "input": {"provider": "anthropic", "engineProtocols": ["openai-responses"]},
+   "id": "responses-only-anthropic",
+   "expected": {"served": ["anthropic-messages"], "protocol": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.EnginePort.compose_accepts_iff_overlap",
+    "AgentWorkspace.Theorems.Normative.EnginePort.resolved_protocol_is_the_engines",
+    "AgentWorkspace.Theorems.Normative.EnginePort.resolved_protocol_is_served"],
+   "input": {"provider": "openai", "engineProtocols": ["openai-responses"]},
+   "id": "responses-only-openai",
+   "expected":
+   {"served": ["anthropic-messages", "openai-responses", "openai-chat-completions"], "protocol": "openai-responses"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.EnginePort.compose_accepts_iff_overlap",
+    "AgentWorkspace.Theorems.Normative.EnginePort.resolved_protocol_is_the_engines",
+    "AgentWorkspace.Theorems.Normative.EnginePort.resolved_protocol_is_served"],
+   "input": {"provider": "openai", "engineProtocols": ["openai-responses", "anthropic-messages"]},
+   "id": "engine-order-wins",
+   "expected":
+   {"served": ["anthropic-messages", "openai-responses", "openai-chat-completions"], "protocol": "openai-responses"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.EnginePort.compose_accepts_iff_overlap",
+    "AgentWorkspace.Theorems.Normative.EnginePort.resolved_protocol_is_the_engines",
+    "AgentWorkspace.Theorems.Normative.EnginePort.resolved_protocol_is_served"],
+   "input": {"provider": "anthropic", "engineProtocols": ["openai-responses", "anthropic-messages"]},
+   "id": "engine-order-falls-back",
+   "expected": {"served": ["anthropic-messages"], "protocol": "anthropic-messages"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.EnginePort.compose_accepts_iff_overlap",
+    "AgentWorkspace.Theorems.Normative.EnginePort.resolved_protocol_is_the_engines",
+    "AgentWorkspace.Theorems.Normative.EnginePort.resolved_protocol_is_served"],
+   "input": {"provider": "openai", "engineProtocols": []},
+   "id": "engine-speaks-nothing",
+   "expected": {"served": ["anthropic-messages", "openai-responses", "openai-chat-completions"], "protocol": null}}],
+ "family": "engine-compose",
+ "description": "The compose-time protocol check"}

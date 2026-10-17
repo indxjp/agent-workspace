@@ -1,0 +1,64 @@
+{"vectors":
+ [{"witnesses": ["AgentWorkspace.Theorems.Invariants.Mastra.the_thread_round_trips"],
+   "input":
+   {"threadId": "t",
+    "entries":
+    [{"kind": "thread", "id": "t"},
+     {"message": {"threadId": "t", "id": "m1", "body": "The code word is heron."}, "kind": "message"},
+     {"message": {"threadId": "t", "id": "m2", "body": "Noted."}, "kind": "message"}]},
+   "id": "round-trip",
+   "expected":
+   {"messages":
+    [{"threadId": "t", "id": "m1", "body": "The code word is heron."},
+     {"threadId": "t", "id": "m2", "body": "Noted."}]}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.Mastra.the_thread_round_trips"],
+   "input": {"threadId": "t", "entries": [{"kind": "thread", "id": "t"}]},
+   "id": "empty-thread",
+   "expected": {"messages": []}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.Mastra.the_thread_round_trips"],
+   "input":
+   {"threadId": "t",
+    "entries":
+    [{"kind": "thread", "id": "t"},
+     {"message": {"threadId": "t", "id": "m1", "body": "The code word is heron."}, "kind": "message"},
+     {"message": {"threadId": "t", "id": "m2", "body": "Noted."}, "kind": "message"},
+     {"message": {"threadId": "t", "id": "m1", "body": "The code word is heron (edited)."}, "kind": "message"}]},
+   "id": "update-replaces-in-place",
+   "expected":
+   {"messages":
+    [{"threadId": "t", "id": "m1", "body": "The code word is heron (edited)."},
+     {"threadId": "t", "id": "m2", "body": "Noted."}]}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.Mastra.the_thread_round_trips"],
+   "input":
+   {"threadId": "u",
+    "entries":
+    [{"kind": "thread", "id": "t"},
+     {"message": {"threadId": "t", "id": "m1", "body": "The code word is heron."}, "kind": "message"}]},
+   "id": "another-thread",
+   "expected": {"messages": null}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.Mastra.the_thread_round_trips"],
+   "input":
+   {"threadId": "t",
+    "entries":
+    [{"kind": "thread", "id": "t"},
+     {"message": {"threadId": "t", "id": "m1", "body": "The code word is heron."}, "kind": "message"},
+     {"message": {"threadId": "other", "id": "x", "body": "y"}, "kind": "message"}]},
+   "id": "foreign-message",
+   "expected": {"messages": null}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.Mastra.the_thread_round_trips"],
+   "input":
+   {"threadId": "t",
+    "entries": [{"message": {"threadId": "t", "id": "m1", "body": "The code word is heron."}, "kind": "message"}]},
+   "id": "no-thread-record",
+   "expected": {"messages": null}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.Mastra.the_thread_round_trips"],
+   "input":
+   {"threadId": "t",
+    "entries":
+    [{"kind": "thread", "id": "t"},
+     {"message": {"threadId": "t", "id": "m1", "body": "The code word is heron."}, "kind": "message"},
+     {"kind": "foreign"}]},
+   "id": "foreign-entry",
+   "expected": {"messages": null}}],
+ "family": "engine-mastra",
+ "description": "readMastraThread: a thread journalled into the engine-scoped store, folded back by key"}

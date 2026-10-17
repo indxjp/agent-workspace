@@ -1,0 +1,507 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.Release.versions_append_only",
+    "AgentWorkspace.Theorems.Invariants.Release.pointer_targets_existing_version",
+    "AgentWorkspace.Theorems.Adversarial.Release.ui_edit_is_a_version",
+    "AgentWorkspace.Theorems.Normative.Release.promote_without_a_bar_needs_no_evaluation"],
+   "input":
+   {"ops":
+    [{"op": "push", "body": "v1"},
+     {"version": 1, "op": "point", "env": "local"},
+     {"to": "production", "op": "promote", "from": "local"}],
+    "bar": null,
+    "agent": "agent-a"},
+   "id": "promote-without-a-bar-needs-no-evaluation",
+   "expected":
+   {"steps":
+    [{"state":
+      {"versions": 1,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": null, "local": null},
+       "history": {"production": [], "local": []}},
+      "problem": null},
+     {"state":
+      {"versions": 1,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": null, "local": 1},
+       "history": {"production": [], "local": [1]}},
+      "problem": null},
+     {"state":
+      {"versions": 1,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": 1, "local": 1},
+       "history": {"production": [1], "local": [1]}},
+      "problem": null}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.Release.versions_append_only",
+    "AgentWorkspace.Theorems.Invariants.Release.pointer_targets_existing_version",
+    "AgentWorkspace.Theorems.Adversarial.Release.ui_edit_is_a_version",
+    "AgentWorkspace.Theorems.Normative.Release.promote_requires_gate"],
+   "input":
+   {"ops":
+    [{"op": "push", "body": "v1"},
+     {"version": 1, "op": "point", "env": "local"},
+     {"version": 1, "score": 80, "op": "recordEval"},
+     {"to": "production", "op": "promote", "from": "local"}],
+    "bar": 70,
+    "agent": "agent-a"},
+   "id": "promote-passes-the-gate",
+   "expected":
+   {"steps":
+    [{"state":
+      {"versions": 1,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": null, "local": null},
+       "history": {"production": [], "local": []}},
+      "problem": null},
+     {"state":
+      {"versions": 1,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": null, "local": 1},
+       "history": {"production": [], "local": [1]}},
+      "problem": null},
+     {"state":
+      {"versions": 1,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": null, "local": 1},
+       "history": {"production": [], "local": [1]}},
+      "problem": null},
+     {"state":
+      {"versions": 1,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": 1, "local": 1},
+       "history": {"production": [1], "local": [1]}},
+      "problem": null}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.Release.versions_append_only",
+    "AgentWorkspace.Theorems.Invariants.Release.pointer_targets_existing_version",
+    "AgentWorkspace.Theorems.Adversarial.Release.ui_edit_is_a_version",
+    "AgentWorkspace.Theorems.Normative.Release.promote_requires_gate"],
+   "input":
+   {"ops":
+    [{"op": "push", "body": "v1"},
+     {"version": 1, "op": "point", "env": "local"},
+     {"to": "production", "op": "promote", "from": "local"}],
+    "bar": 70,
+    "agent": "agent-a"},
+   "id": "promote-without-a-score-is-not-evaluated",
+   "expected":
+   {"steps":
+    [{"state":
+      {"versions": 1,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": null, "local": null},
+       "history": {"production": [], "local": []}},
+      "problem": null},
+     {"state":
+      {"versions": 1,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": null, "local": 1},
+       "history": {"production": [], "local": [1]}},
+      "problem": null},
+     {"state":
+      {"versions": 1,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": null, "local": 1},
+       "history": {"production": [], "local": [1]}},
+      "problem": "promotion_not_evaluated"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.Release.versions_append_only",
+    "AgentWorkspace.Theorems.Invariants.Release.pointer_targets_existing_version",
+    "AgentWorkspace.Theorems.Adversarial.Release.ui_edit_is_a_version",
+    "AgentWorkspace.Theorems.Normative.Release.promote_requires_gate"],
+   "input":
+   {"ops":
+    [{"op": "push", "body": "v1"},
+     {"version": 1, "op": "point", "env": "local"},
+     {"version": 1, "score": 60, "op": "recordEval"},
+     {"to": "production", "op": "promote", "from": "local"},
+     {"version": 1, "score": 70, "op": "recordEval"},
+     {"to": "production", "op": "promote", "from": "local"}],
+    "bar": 70,
+    "agent": "agent-a"},
+   "id": "promote-below-the-bar-fails-the-gate",
+   "expected":
+   {"steps":
+    [{"state":
+      {"versions": 1,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": null, "local": null},
+       "history": {"production": [], "local": []}},
+      "problem": null},
+     {"state":
+      {"versions": 1,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": null, "local": 1},
+       "history": {"production": [], "local": [1]}},
+      "problem": null},
+     {"state":
+      {"versions": 1,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": null, "local": 1},
+       "history": {"production": [], "local": [1]}},
+      "problem": null},
+     {"state":
+      {"versions": 1,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": null, "local": 1},
+       "history": {"production": [], "local": [1]}},
+      "problem": "promotion_gate_failed"},
+     {"state":
+      {"versions": 1,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": null, "local": 1},
+       "history": {"production": [], "local": [1]}},
+      "problem": null},
+     {"state":
+      {"versions": 1,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": 1, "local": 1},
+       "history": {"production": [1], "local": [1]}},
+      "problem": null}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.Release.versions_append_only",
+    "AgentWorkspace.Theorems.Invariants.Release.pointer_targets_existing_version",
+    "AgentWorkspace.Theorems.Adversarial.Release.ui_edit_is_a_version"],
+   "input":
+   {"ops":
+    [{"op": "push", "body": "v1"},
+     {"version": 1, "op": "point", "env": "production"},
+     {"version": 1, "score": 90, "op": "recordEval"},
+     {"version": 1, "op": "point", "env": "production"}],
+    "bar": 70,
+    "agent": "agent-a"},
+   "id": "point-production-passes-the-gate-too",
+   "expected":
+   {"steps":
+    [{"state":
+      {"versions": 1,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": null, "local": null},
+       "history": {"production": [], "local": []}},
+      "problem": null},
+     {"state":
+      {"versions": 1,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": null, "local": null},
+       "history": {"production": [], "local": []}},
+      "problem": "promotion_not_evaluated"},
+     {"state":
+      {"versions": 1,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": null, "local": null},
+       "history": {"production": [], "local": []}},
+      "problem": null},
+     {"state":
+      {"versions": 1,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": 1, "local": null},
+       "history": {"production": [1], "local": []}},
+      "problem": null}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.Release.versions_append_only",
+    "AgentWorkspace.Theorems.Invariants.Release.pointer_targets_existing_version",
+    "AgentWorkspace.Theorems.Adversarial.Release.ui_edit_is_a_version"],
+   "input":
+   {"ops":
+    [{"op": "push", "body": "v1"},
+     {"version": 2, "op": "point", "env": "local"},
+     {"version": 3, "score": 50, "op": "recordEval"}],
+    "bar": null,
+    "agent": "agent-a"},
+   "id": "point-at-a-missing-version-is-refused",
+   "expected":
+   {"steps":
+    [{"state":
+      {"versions": 1,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": null, "local": null},
+       "history": {"production": [], "local": []}},
+      "problem": null},
+     {"state":
+      {"versions": 1,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": null, "local": null},
+       "history": {"production": [], "local": []}},
+      "problem": "version_not_found"},
+     {"state":
+      {"versions": 1,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": null, "local": null},
+       "history": {"production": [], "local": []}},
+      "problem": "version_not_found"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.Release.versions_append_only",
+    "AgentWorkspace.Theorems.Invariants.Release.pointer_targets_existing_version",
+    "AgentWorkspace.Theorems.Adversarial.Release.ui_edit_is_a_version",
+    "AgentWorkspace.Theorems.Normative.Release.promote_requires_gate",
+    "AgentWorkspace.Theorems.Invariants.Release.rollback_restores_previous",
+    "AgentWorkspace.Theorems.Invariants.Release.rollback_after_promote_is_identity"],
+   "input":
+   {"ops":
+    [{"op": "push", "body": "v1"},
+     {"version": 1, "op": "point", "env": "local"},
+     {"version": 1, "score": 60, "op": "recordEval"},
+     {"to": "production", "op": "promote", "from": "local"},
+     {"op": "push", "body": "v2"},
+     {"version": 2, "op": "point", "env": "local"},
+     {"version": 2, "score": 70, "op": "recordEval"},
+     {"to": "production", "op": "promote", "from": "local"},
+     {"op": "rollback", "env": "production"}],
+    "bar": 50,
+    "agent": "agent-a"},
+   "id": "promote-then-rollback-is-identity",
+   "expected":
+   {"steps":
+    [{"state":
+      {"versions": 1,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": null, "local": null},
+       "history": {"production": [], "local": []}},
+      "problem": null},
+     {"state":
+      {"versions": 1,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": null, "local": 1},
+       "history": {"production": [], "local": [1]}},
+      "problem": null},
+     {"state":
+      {"versions": 1,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": null, "local": 1},
+       "history": {"production": [], "local": [1]}},
+      "problem": null},
+     {"state":
+      {"versions": 1,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": 1, "local": 1},
+       "history": {"production": [1], "local": [1]}},
+      "problem": null},
+     {"state":
+      {"versions": 2,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": 1, "local": 1},
+       "history": {"production": [1], "local": [1]}},
+      "problem": null},
+     {"state":
+      {"versions": 2,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": 1, "local": 2},
+       "history": {"production": [1], "local": [2, 1]}},
+      "problem": null},
+     {"state":
+      {"versions": 2,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": 1, "local": 2},
+       "history": {"production": [1], "local": [2, 1]}},
+      "problem": null},
+     {"state":
+      {"versions": 2,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": 2, "local": 2},
+       "history": {"production": [2, 1], "local": [2, 1]}},
+      "problem": null},
+     {"state":
+      {"versions": 2,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": 1, "local": 2},
+       "history": {"production": [1], "local": [2, 1]}},
+      "problem": null}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.Release.versions_append_only",
+    "AgentWorkspace.Theorems.Invariants.Release.pointer_targets_existing_version",
+    "AgentWorkspace.Theorems.Adversarial.Release.ui_edit_is_a_version",
+    "AgentWorkspace.Theorems.Invariants.Release.rollback_restores_previous"],
+   "input":
+   {"ops":
+    [{"op": "push", "body": "v1"},
+     {"op": "push", "body": "v2"},
+     {"op": "push", "body": "v3"},
+     {"version": 1, "op": "point", "env": "local"},
+     {"version": 2, "op": "point", "env": "local"},
+     {"version": 3, "op": "point", "env": "local"},
+     {"op": "rollback", "env": "local"},
+     {"op": "rollback", "env": "local"},
+     {"op": "rollback", "env": "local"}],
+    "bar": null,
+    "agent": "agent-a"},
+   "id": "rollback-twice-steps-back-twice",
+   "expected":
+   {"steps":
+    [{"state":
+      {"versions": 1,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": null, "local": null},
+       "history": {"production": [], "local": []}},
+      "problem": null},
+     {"state":
+      {"versions": 2,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": null, "local": null},
+       "history": {"production": [], "local": []}},
+      "problem": null},
+     {"state":
+      {"versions": 3,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": null, "local": null},
+       "history": {"production": [], "local": []}},
+      "problem": null},
+     {"state":
+      {"versions": 3,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": null, "local": 1},
+       "history": {"production": [], "local": [1]}},
+      "problem": null},
+     {"state":
+      {"versions": 3,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": null, "local": 2},
+       "history": {"production": [], "local": [2, 1]}},
+      "problem": null},
+     {"state":
+      {"versions": 3,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": null, "local": 3},
+       "history": {"production": [], "local": [3, 2, 1]}},
+      "problem": null},
+     {"state":
+      {"versions": 3,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": null, "local": 2},
+       "history": {"production": [], "local": [2, 1]}},
+      "problem": null},
+     {"state":
+      {"versions": 3,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": null, "local": 1},
+       "history": {"production": [], "local": [1]}},
+      "problem": null},
+     {"state":
+      {"versions": 3,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": null, "local": 1},
+       "history": {"production": [], "local": [1]}},
+      "problem": "nothing_to_roll_back"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.Release.versions_append_only",
+    "AgentWorkspace.Theorems.Invariants.Release.pointer_targets_existing_version",
+    "AgentWorkspace.Theorems.Adversarial.Release.ui_edit_is_a_version"],
+   "input":
+   {"ops":
+    [{"op": "rollback", "env": "local"},
+     {"op": "push", "body": "v1"},
+     {"version": 1, "op": "point", "env": "local"},
+     {"op": "rollback", "env": "local"}],
+    "bar": null,
+    "agent": "agent-a"},
+   "id": "rollback-needs-a-previous-version",
+   "expected":
+   {"steps":
+    [{"state":
+      {"versions": 0,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": null, "local": null},
+       "history": {"production": [], "local": []}},
+      "problem": "nothing_to_roll_back"},
+     {"state":
+      {"versions": 1,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": null, "local": null},
+       "history": {"production": [], "local": []}},
+      "problem": null},
+     {"state":
+      {"versions": 1,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": null, "local": 1},
+       "history": {"production": [], "local": [1]}},
+      "problem": null},
+     {"state":
+      {"versions": 1,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": null, "local": 1},
+       "history": {"production": [], "local": [1]}},
+      "problem": "nothing_to_roll_back"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.Release.versions_append_only",
+    "AgentWorkspace.Theorems.Invariants.Release.pointer_targets_existing_version",
+    "AgentWorkspace.Theorems.Adversarial.Release.ui_edit_is_a_version",
+    "AgentWorkspace.Theorems.Adversarial.Release.session_version_stable"],
+   "input":
+   {"ops":
+    [{"session": "s1", "op": "startSession", "env": "local"},
+     {"op": "push", "body": "v1"},
+     {"version": 1, "op": "point", "env": "local"},
+     {"session": "s1", "op": "startSession", "env": "local"},
+     {"op": "push", "body": "v2"},
+     {"version": 2, "op": "point", "env": "local"},
+     {"session": "s2", "op": "startSession", "env": "local"},
+     {"op": "rollback", "env": "local"},
+     {"session": "s1", "op": "startSession", "env": "local"},
+     {"to": "production", "op": "promote", "from": "local"}],
+    "bar": null,
+    "agent": "agent-a"},
+   "id": "a-conversation-keeps-its-version",
+   "expected":
+   {"steps":
+    [{"state":
+      {"versions": 0,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": null, "local": null},
+       "history": {"production": [], "local": []}},
+      "problem": "no_pointer"},
+     {"state":
+      {"versions": 1,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": null, "local": null},
+       "history": {"production": [], "local": []}},
+      "problem": null},
+     {"state":
+      {"versions": 1,
+       "sessions": {"s2": null, "s1": null},
+       "pointer": {"production": null, "local": 1},
+       "history": {"production": [], "local": [1]}},
+      "problem": null},
+     {"state":
+      {"versions": 1,
+       "sessions": {"s2": null, "s1": 1},
+       "pointer": {"production": null, "local": 1},
+       "history": {"production": [], "local": [1]}},
+      "problem": null},
+     {"state":
+      {"versions": 2,
+       "sessions": {"s2": null, "s1": 1},
+       "pointer": {"production": null, "local": 1},
+       "history": {"production": [], "local": [1]}},
+      "problem": null},
+     {"state":
+      {"versions": 2,
+       "sessions": {"s2": null, "s1": 1},
+       "pointer": {"production": null, "local": 2},
+       "history": {"production": [], "local": [2, 1]}},
+      "problem": null},
+     {"state":
+      {"versions": 2,
+       "sessions": {"s2": 2, "s1": 1},
+       "pointer": {"production": null, "local": 2},
+       "history": {"production": [], "local": [2, 1]}},
+      "problem": null},
+     {"state":
+      {"versions": 2,
+       "sessions": {"s2": 2, "s1": 1},
+       "pointer": {"production": null, "local": 1},
+       "history": {"production": [], "local": [1]}},
+      "problem": null},
+     {"state":
+      {"versions": 2,
+       "sessions": {"s2": 2, "s1": 1},
+       "pointer": {"production": null, "local": 1},
+       "history": {"production": [], "local": [1]}},
+      "problem": "session_already_started"},
+     {"state":
+      {"versions": 2,
+       "sessions": {"s2": 2, "s1": 1},
+       "pointer": {"production": 1, "local": 1},
+       "history": {"production": [1], "local": [1]}},
+      "problem": null}]}}],
+ "family": "release",
+ "description": "step: environments, pointer history, the promotion gate, pinned conversations"}

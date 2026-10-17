@@ -1,0 +1,276 @@
+name: Providers live
+
+# Live isolation lane for the provider sandboxes behind the `external` (E2B), `vercel-sandbox` and
+# `cloudflare-sandbox` drivers (issue #832, ADR-0120 LC4). One job per provider creates real sandboxes
+# from the probe image (infra/tests/providers/probe.Dockerfile) through the driver from
+# packages/runtime and records provider x check outcomes. See infra/tests/providers/README.md.
+#
+# Each lane derives its probe artefact inside the run (infra/tests/providers/prepare.mjs): an E2B
+# template, the Vercel project and a Vercel Container Registry image, a Cloudflare registry image,
+# cached under a fixed name by the content hash of the probe files. The repository variables
+# E2B_PROBE_TEMPLATE, VERCEL_PROJECT_ID, VERCEL_PROBE_IMAGE and CLOUDFLARE_PROBE_IMAGE are optional
+# overrides; when set, nothing is built for that value.
+#
+# Never runs on pull requests and is not a required check for release PRs: it depends on third-party
+# accounts. A provider whose credential is not configured reads `skipped` and the summary job goes
+# red; a skipped row is never green. A build or push failure reads `fail` with the reason. A
+# scheduled run with a failed or missing check opens (or comments on) an issue labelled provider-lane.
+on:
+  schedule:
+    - cron: '43 4 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: providers-live
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  e2b:
+    name: e2b lane
+    runs-on: ubuntu-latest
+    environment: providers-live
+    timeout-minutes: 45
+    env:
+      PROVIDERS_LANE: e2b
+      PROVIDERS_RESULTS: ${{ github.workspace }}/results/results-e2b.json
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile --filter "@agent-workspace/runtime..."
+
+      - name: Build the runtime package
+        run: pnpm --filter @agent-workspace/runtime build
+
+      - name: Build the probe template and run the provider checks
+        run: |
+          mkdir -p results
+          node --test infra/tests/providers/lane.test.mjs
+        env:
+          E2B_API_KEY: ${{ secrets.E2B_API_KEY }}
+          # Optional override: when set, no template is built.
+          E2B_PROBE_TEMPLATE: ${{ vars.E2B_PROBE_TEMPLATE }}
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: providers-results-e2b
+          path: results/results-e2b.json
+          if-no-files-found: warn
+
+  vercel:
+    name: vercel lane
+    runs-on: ubuntu-latest
+    environment: providers-live
+    timeout-minutes: 45
+    env:
+      PROVIDERS_LANE: vercel
+      PROVIDERS_RESULTS: ${{ github.workspace }}/results/results-vercel.json
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile --filter "@agent-workspace/runtime..."
+
+      - name: Build the runtime package
+        run: pnpm --filter @agent-workspace/runtime build
+
+      # A docker-container builder: the default docker driver cannot push the zstd layers VCR needs.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Resolve the project, push the probe image and run the provider checks
+        run: |
+          mkdir -p results
+          node --test infra/tests/providers/lane.test.mjs
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+          # Optional overrides: when set, the project is not resolved or created / no image is pushed.
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+          VERCEL_PROBE_IMAGE: ${{ vars.VERCEL_PROBE_IMAGE }}
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: providers-results-vercel
+          path: results/results-vercel.json
+          if-no-files-found: warn
+
+  # Absorbs the opt-in "Cloudflare sandbox live" workflow of #856: the lane deploys the bridge Worker
+  # to a throwaway name, runs the checks through it and deletes the Worker and its Containers
+  # applications in a finally block. A run that dies mid-way leaves agent-workspace-sandbox-bridge-ci-*
+  # behind; a later run sweeps that prefix (entries older than 4 hours) before deploying. See the README.
+  cloudflare:
+    name: cloudflare lane
+    runs-on: ubuntu-latest
+    environment: providers-live
+    timeout-minutes: 45
+    env:
+      PROVIDERS_LANE: cloudflare
+      PROVIDERS_RESULTS: ${{ github.workspace }}/results/results-cloudflare.json
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile --filter "@agent-workspace/runtime..."
+
+      - name: Build the runtime package
+        run: pnpm --filter @agent-workspace/runtime build
+
+      - name: Push the probe image and run the provider checks
+        run: |
+          mkdir -p results
+          node --test infra/tests/providers/lane.test.mjs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # Optional override (digest-pinned reference): when set, no image is pushed.
+          CLOUDFLARE_PROBE_IMAGE: ${{ vars.CLOUDFLARE_PROBE_IMAGE }}
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: providers-results-cloudflare
+          path: results/results-cloudflare.json
+          if-no-files-found: warn
+
+  summary:
+    name: summary
+    needs: [e2b, vercel, cloudflare]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      report: ${{ steps.table.outputs.report }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+
+      - name: Download results
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          pattern: providers-results-*
+          path: results
+          merge-multiple: true
+
+      - name: Lane logic
+        run: node --test infra/tests/providers/unit.test.mjs
+
+      # The isolation summary reads skipped, fail, inconclusive and a missing file as not clean, so
+      # this step exits 1 over any of them. An issue is filed only for fail, inconclusive or a missing
+      # results file: a skipped-only run is a configuration gap, named in the table.
+      - name: Table
+        id: table
+        if: always()
+        run: |
+          set +e
+          node infra/tests/isolation/summary.mjs e2b=results/results-e2b.json vercel=results/results-vercel.json cloudflare=results/results-cloudflare.json > summary.md
+          status=$?
+          cat summary.md
+          {
+            echo '## Provider sandbox live lane'
+            echo
+            cat summary.md
+            echo
+            echo '`skipped` means a credential is not configured for that provider. It is not a pass.'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if grep -Eq '\| (fail|inconclusive|missing) \|' summary.md \
+            || [ ! -f results/results-e2b.json ] || [ ! -f results/results-vercel.json ] || [ ! -f results/results-cloudflare.json ]; then
+            echo 'report=true' >> "$GITHUB_OUTPUT"
+          fi
+          exit "$status"
+
+      - name: Upload table
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: providers-summary
+          path: summary.md
+          if-no-files-found: warn
+
+  report:
+    name: report
+    needs: [e2b, vercel, cloudflare, summary]
+    if: always() && github.event_name == 'schedule' && (needs.summary.outputs.report == 'true' || needs.e2b.result == 'failure' || needs.vercel.result == 'failure' || needs.cloudflare.result == 'failure')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Download table
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: providers-summary
+
+      - name: Open or update the provider-lane issue
+        run: |
+          set -euo pipefail
+          gh label create provider-lane --description 'Provider sandbox live lane' --color B60205 --force
+          {
+            echo "The scheduled provider sandbox live lane has a failed, inconclusive or missing check, or a failed provider job: ${RUN_URL}"
+            echo
+            echo 'A failed provider job can mean its cleanup failed: check the run for a leaked sandbox or Worker.'
+            echo
+            cat summary.md
+          } > body.md
+          number="$(gh issue list --label provider-lane --state open --limit 1 --json number --jq '.[0].number // empty')"
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body-file body.md
+          else
+            gh issue create --label provider-lane --title 'Provider sandbox live lane is failing' --body-file body.md
+          fi

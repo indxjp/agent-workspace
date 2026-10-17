@@ -1,0 +1,138 @@
+---
+title: "AWS AgentCore"
+description: "Export an agent as an Amazon Bedrock AgentCore harness project, learn the options and the model mapping it needs, and deploy it with the agentcore tool."
+---
+
+<Info>
+**Chapter 7 · Run it on other platforms — step 7 of 9** · [the chapter map](/path/platforms)
+
+- **You will:** export `assistant` as an AgentCore project with one managed harness.
+- **You will learn:** the two required options, how Claude model ids map to Bedrock, and that the platform id and the runtime driver id are different things.
+- **You need:** [step 1](/platforms/overview); to publish, the `agentcore` command-line tool and AWS credentials.
+</Info>
+
+## What you can do
+
+Amazon Bedrock AgentCore runs an agent as a managed harness in your AWS account. The export is an
+AgentCore project the vendor's tool can validate and deploy.
+
+<Warning>
+`aws-agentcore` is also the id of a runtime driver, where it names the sandbox a run executes in.
+This page is about the platform you publish an agent to. Choosing the platform here does not change
+where your runs execute, and the driver does not publish anything.
+</Warning>
+
+## Before you start
+
+Two options are required, `region` (for example `us-east-1`) and `accountId` (12 digits). If the
+agent names a model that has no known Bedrock id, the export is refused with
+`platform_model_unsupported` until you name the model yourself:
+
+```yaml title="agent-workspace.yaml (illustrative)" claim="illustrative"
+platforms:
+  aws-agentcore:
+    enabled: true
+    options:
+      region: us-east-1
+      accountId: "123456789012"
+      model:
+        provider: bedrock
+        modelId: global.anthropic.claude-sonnet-4-6
+```
+
+Without `model`, three Claude ids are mapped for you: `claude-sonnet-4-6`, `claude-opus-4-7` and
+`claude-opus-4-5-20251101`. Any other model needs the option. For the `open_ai` and `gemini`
+providers it also needs `apiKeyCredential`, the name of a credential held in AgentCore.
+
+A fresh project's agent names no model; the export still succeeds but writes a harness without
+one, which `agentcore validate` rejects. Set `model` (or give the agent one of the three Claude ids
+above) first.
+
+| Option                 | What it does                                                                        |
+| ---------------------- | ----------------------------------------------------------------------------------- |
+| `region`, `accountId`  | Required. Where the project deploys                                                 |
+| `model`                | `provider` (`bedrock`, `open_ai`, `gemini` or `lite_llm`), `modelId`, `apiKeyCredential` |
+| `harnessName`          | Replaces the name derived from the agent (`support-triage` becomes `support_triage`) |
+| `projectName`          | Replaces the derived project name (`SupportTriage`)                                 |
+| `skillsS3Uri`          | An `s3://bucket/prefix/` location for skills; without it skills are dropped         |
+| `webSearchGatewayArn`  | A gateway that offers web search (`us-east-1` only)                                 |
+| `openapiGateways`      | A gateway ARN per OpenAPI tool name                                                 |
+
+To publish you need the vendor's `agentcore` tool. Install it with `npm install -g @aws/agentcore`.
+The AWS credentials and region come from your own profile or environment; `aw` passes none.
+
+## Export
+
+```sh title="Export to AWS AgentCore (illustrative)" claim="illustrative"
+npx aw platforms export --platform aws-agentcore
+```
+
+| Path                                      | What it is                                                                    |
+| ----------------------------------------- | ----------------------------------------------------------------------------- |
+| `agentcore/agentcore.json`                | The AgentCore project                                                         |
+| `agentcore/aws-targets.json`              | The deployment target: account and region                                     |
+| `app/<harness>/harness.json`              | The harness: model, tools and limits                                          |
+| `app/<harness>/system-prompt.md`          | The instructions                                                              |
+| `app/<harness>/skills/…`                  | Skill files, only when you set `skillsS3Uri`                                  |
+
+One harness holds one agent, so only the root agent is exported.
+
+## What maps and what is dropped
+
+These are the verdicts the AgentCore compiler writes to the export report, with the reason for
+each. The [platform compatibility matrix](/platforms/matrix) shows what the platform supports, so
+a cell there can differ from the verdict a field gets here:
+
+| Your agent has…                    | On AgentCore                                                                           |
+| ---------------------------------- | -------------------------------------------------------------------------------------- |
+| Instructions                       | `native`                                                                               |
+| Model                              | `mapped` to a Bedrock model                                                            |
+| Remote MCP servers                 | `native`; dropped, `field_unsupported`, when it uses `oauth2`                          |
+| Code tools                         | `mapped` to the project's MCP endpoint; dropped, `code_tool_needs_public_mcp`, with no endpoint or an `oauth2` one |
+| Code execution, web fetch          | `mapped` to the AgentCore code interpreter and browser                                 |
+| File access                        | `mapped` when write files is granted; otherwise dropped, `builtin_unsupported`         |
+| Run commands, write files          | `native`: the shell and the file tool are allowed only when granted                    |
+| Read files                         | dropped, `permissions_unsupported`, when granted without write files; `mapped` when write files is granted alone; otherwise `native` |
+| Unrestricted network               | `native` when granted; `mapped` when not granted and the agent has no shell; dropped, `permissions_unsupported`, when not granted and run commands is |
+| Turn limit                         | `mapped`; the budget in dollars is dropped, `limits_unsupported`                       |
+| Description, engine                | dropped, `field_unsupported`                                                           |
+| Subagents                          | dropped, `subagents_unsupported`                                                       |
+| Knowledge                          | dropped, `knowledge_unsupported`                                                       |
+| Web search                         | `mapped` behind `webSearchGatewayArn`; without it dropped, `builtin_unsupported`       |
+| OpenAPI tools                      | `mapped` behind its gateway in `openapiGateways`; without one dropped, `field_unsupported`; with `allow` rules dropped, `permissions_unsupported`, even when a gateway is set |
+| Skills                             | dropped, `skills_unsupported`, unless you set `skillsS3Uri`; upload the files there yourself |
+| Local (stdio) MCP servers          | dropped, `stdio_mcp_unsupported`                                                       |
+
+A model with no known Bedrock id and no `model` option is refused with `platform_model_unsupported`.
+
+## Publish
+
+```sh title="Validate and plan, then deploy (illustrative)" claim="illustrative"
+npx aw platforms publish --platform aws-agentcore
+npx aw platforms publish --platform aws-agentcore --yes
+```
+
+Publishing runs `agentcore validate`, then `agentcore deploy --dry-run --json` for the plan, and
+with `--yes` the deploy itself. Afterwards, check the result with `agentcore status`. The shape of
+the dry-run output is inferred from the vendor's documentation (unverified against a live tenant);
+anything unrecognised counts as a change.
+
+## Your tools
+
+Remote MCP servers are carried as they are. Web search and OpenAPI tools need a gateway you already
+have: set `webSearchGatewayArn` or one entry of `openapiGateways` per tool.
+
+To reach your code tools, add `publicBaseUrl` and `toolAuth`
+([how that works](/platforms/overview#your-code-tools-on-another-platform)). The harness takes a
+static bearer key: a `toolAuth` with `scheme: oauth2` is dropped.
+
+## What is not there yet
+
+- The `agentcore deploy --dry-run --json` output shape is unverified against a live tenant.
+- A harness without a model is rejected by `agentcore validate`; set `model` first.
+- Publishing does not upload skills: copy the files to `skillsS3Uri` yourself.
+- Subagents, knowledge and the dollar budget are dropped.
+
+<Card title="Next: Eject to plain code" icon="arrow-right" href="/platforms/eject">
+  Leave platforms behind and generate a TypeScript project.
+</Card>

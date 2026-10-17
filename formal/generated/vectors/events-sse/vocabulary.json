@@ -1,0 +1,23 @@
+{"vectors":
+ [{"witnesses": ["AgentWorkspace.Theorems.WellFormed.EventsSse.event_names_equal_phase_one"],
+   "input": null,
+   "id": "names",
+   "expected":
+   {"status": "run.status",
+    "relayed": ["system", "system-unknown", "result", "result-unknown", "sdk-event", "unknown", "malformed"],
+    "control": ["done", "run-failed", "stream-reset"]}},
+  {"witnesses": ["AgentWorkspace.Theorems.Adversarial.EventsSse.runtime_cannot_claim_control_or_platform_name"],
+   "input": null,
+   "id": "server-names",
+   "expected":
+   {"reserved": ["done", "run-failed", "stream-reset", "error", "run.status"],
+    "control": ["done", "run-failed", "stream-reset", "error"]}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.EventsSse.sse_headers_are_exact"],
+   "input": null,
+   "id": "headers",
+   "expected":
+   {"X-Accel-Buffering": "no",
+    "Content-Type": "text/event-stream; charset=utf-8",
+    "Cache-Control": "no-cache, no-transform"}}],
+ "family": "events-sse",
+ "description": "Contract and server frame names and headers"}

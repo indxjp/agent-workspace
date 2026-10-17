@@ -1,0 +1,138 @@
+[
+  {
+    "path": "support-triage.description",
+    "verdict": "mapped",
+    "note": "Generated from the agent name as \"support-triage — an Agent Workspace agent\", because A2A requires a description; set description on the agent to use your own"
+  },
+  {
+    "path": "support-triage.instructions",
+    "verdict": "mapped",
+    "note": "Stays on the Agent Workspace deployment; Gemini Enterprise only calls its A2A endpoint; the instructions are not sent to Google"
+  },
+  {
+    "path": "support-triage.model",
+    "verdict": "mapped",
+    "note": "Stays on the Agent Workspace deployment; Gemini Enterprise only calls its A2A endpoint; any provider, through our gateway"
+  },
+  {
+    "path": "support-triage.permissions.readFiles",
+    "verdict": "mapped",
+    "note": "Stays on the Agent Workspace deployment; Gemini Enterprise only calls its A2A endpoint; enforced by our runtime"
+  },
+  {
+    "path": "support-triage.permissions.writeFiles",
+    "verdict": "mapped",
+    "note": "Stays on the Agent Workspace deployment; Gemini Enterprise only calls its A2A endpoint; enforced by our runtime"
+  },
+  {
+    "path": "support-triage.permissions.runCommands",
+    "verdict": "mapped",
+    "note": "Stays on the Agent Workspace deployment; Gemini Enterprise only calls its A2A endpoint; enforced by our runtime"
+  },
+  {
+    "path": "support-triage.permissions.unrestrictedNetwork",
+    "verdict": "mapped",
+    "note": "Stays on the Agent Workspace deployment; Gemini Enterprise only calls its A2A endpoint; enforced by our runtime"
+  },
+  {
+    "path": "support-triage.tools.0",
+    "verdict": "mapped",
+    "note": "Stays on the Agent Workspace deployment; Gemini Enterprise only calls its A2A endpoint; our engine calls the MCP server server-side"
+  },
+  {
+    "path": "support-triage.tools.1",
+    "verdict": "dropped",
+    "code": "stdio_mcp_unsupported",
+    "note": "A stdio MCP server cannot be reached from a hosted platform"
+  },
+  {
+    "path": "support-triage.tools.2",
+    "verdict": "mapped",
+    "note": "Stays on the Agent Workspace deployment; Gemini Enterprise only calls its A2A endpoint; the code tool runs in our tool host"
+  },
+  {
+    "path": "support-triage.tools.3",
+    "verdict": "mapped",
+    "note": "Stays on the Agent Workspace deployment; Gemini Enterprise only calls its A2A endpoint; a server-side connector"
+  },
+  {
+    "path": "support-triage.tools.4",
+    "verdict": "mapped",
+    "note": "Stays on the Agent Workspace deployment; Gemini Enterprise only calls its A2A endpoint; one of our engine's built-in tools"
+  },
+  {
+    "path": "support-triage.tools.5",
+    "verdict": "mapped",
+    "note": "Stays on the Agent Workspace deployment; Gemini Enterprise only calls its A2A endpoint; one of our engine's built-in tools"
+  },
+  {
+    "path": "support-triage.skills.0",
+    "verdict": "mapped",
+    "note": "Stays on the Agent Workspace deployment; Gemini Enterprise only calls its A2A endpoint"
+  },
+  {
+    "path": "support-triage.knowledge.0",
+    "verdict": "mapped",
+    "note": "Stays on the Agent Workspace deployment; Gemini Enterprise only calls its A2A endpoint"
+  },
+  {
+    "path": "support-triage.knowledge.1",
+    "verdict": "mapped",
+    "note": "Stays on the Agent Workspace deployment; Gemini Enterprise only calls its A2A endpoint"
+  },
+  {
+    "path": "support-triage.subagents.0",
+    "verdict": "mapped",
+    "note": "Stays on the Agent Workspace deployment; Gemini Enterprise only calls its A2A endpoint"
+  },
+  {
+    "path": "support-triage.limits.maxTurns",
+    "verdict": "mapped",
+    "note": "Stays on the Agent Workspace deployment; Gemini Enterprise only calls its A2A endpoint; enforced by our runtime"
+  },
+  {
+    "path": "support-triage.limits.maxBudgetUsd",
+    "verdict": "mapped",
+    "note": "Stays on the Agent Workspace deployment; Gemini Enterprise only calls its A2A endpoint; enforced by our runtime"
+  },
+  {
+    "path": "billing-specialist.description",
+    "verdict": "mapped",
+    "note": "Stays on the deployment and runs behind the root agent's A2A endpoint; only the root is registered"
+  },
+  {
+    "path": "billing-specialist.instructions",
+    "verdict": "mapped",
+    "note": "Stays on the deployment and runs behind the root agent's A2A endpoint; only the root is registered; the instructions are not sent to Google"
+  },
+  {
+    "path": "billing-specialist.model",
+    "verdict": "mapped",
+    "note": "Stays on the deployment and runs behind the root agent's A2A endpoint; only the root is registered; any provider, through our gateway"
+  },
+  {
+    "path": "billing-specialist.permissions.readFiles",
+    "verdict": "mapped",
+    "note": "Stays on the deployment and runs behind the root agent's A2A endpoint; only the root is registered; enforced by our runtime"
+  },
+  {
+    "path": "billing-specialist.permissions.writeFiles",
+    "verdict": "mapped",
+    "note": "Stays on the deployment and runs behind the root agent's A2A endpoint; only the root is registered; enforced by our runtime"
+  },
+  {
+    "path": "billing-specialist.permissions.runCommands",
+    "verdict": "mapped",
+    "note": "Stays on the deployment and runs behind the root agent's A2A endpoint; only the root is registered; enforced by our runtime"
+  },
+  {
+    "path": "billing-specialist.permissions.unrestrictedNetwork",
+    "verdict": "mapped",
+    "note": "Stays on the deployment and runs behind the root agent's A2A endpoint; only the root is registered; enforced by our runtime"
+  },
+  {
+    "path": "billing-specialist.skills.0",
+    "verdict": "mapped",
+    "note": "Stays on the deployment and runs behind the root agent's A2A endpoint; only the root is registered"
+  }
+]

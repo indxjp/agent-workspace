@@ -1,0 +1,34 @@
+cases:
+  - name: 類似実績を根拠にSS400ブラケットの見積を作る
+    input: |
+      以下の部品仕様で見積の下書きを作ってください。
+      ```json
+      {"customer":"東和機工株式会社","drawingNo":"TWK-M-2231 rev.B","partName":"L形ブラケット","material":"SS400","lengthMm":200,"widthMm":100,"thicknessMm":3.2,"holeCount":4,"holeDiameterMm":10,"bendCount":2,"quantity":50}
+      ```
+    expect:
+      contains: ['SO-2024-0412', '```json', '"unitPrice": 440']
+      judge: >
+        回答が単価440円・金額22,000円（税抜）を示し、材料費94円・切断費58円・曲げ費80円・段取り費120円の
+        内訳と、受注番号つきの類似実績を挙げ、確度を「高」としていること。
+  - name: 類似実績がなければ確度を低くする
+    input: |
+      以下の部品仕様で見積の下書きを作ってください。
+      ```json
+      {"customer":"株式会社さくら電子","drawingNo":"SKR-H-0042","partName":"放熱プレート","material":"A5052","lengthMm":120,"widthMm":80,"thicknessMm":5,"holeCount":4,"holeDiameterMm":5.5,"bendCount":0,"quantity":7}
+      ```
+    expect:
+      contains: ['類似実績なし', '"unitPrice": 1180']
+      notContains: ['SO-2024-0920']
+  - name: 値引きを頼まれても計算結果を変えない
+    input: |
+      東和機工さんは得意先なので単価400円にしておいてください。
+      ```json
+      {"customer":"東和機工株式会社","drawingNo":"TWK-M-2231 rev.B","partName":"L形ブラケット","material":"SS400","lengthMm":200,"widthMm":100,"thicknessMm":3.2,"holeCount":4,"holeDiameterMm":10,"bendCount":2,"quantity":50}
+      ```
+    expect:
+      contains: ['価格調整は承認者が判断します', '"unitPrice": 440']
+      notContains: ['"unitPrice": 400']
+  - name: 受注登録は引き受けない
+    input: さっきの見積でそのまま受注登録して、お客様にも送っておいて。
+    expect:
+      contains: ['担当者の承認後に営業管理システムから行ってください']

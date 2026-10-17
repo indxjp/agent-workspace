@@ -1,0 +1,36 @@
+{"vectors":
+ [{"witnesses": ["AgentWorkspace.Theorems.Adversarial.Pi.every_model_request_goes_to_the_gateway_with_the_run_token"],
+   "input": {"token": "run-token-1", "baseUrl": "http://gateway:8787"},
+   "id": "plain",
+   "expected":
+   {"requests": [{"url": "http://gateway:8787/v1/messages", "authorization": "Bearer run-token-1"}],
+    "connection":
+    {"provider": "anthropic",
+     "protocol": "anthropic-messages",
+     "headers": {"authorization": "Bearer run-token-1"},
+     "baseUrl": "http://gateway:8787",
+     "apiKey": "agent-workspace-gateway-uses-the-bearer-header"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Adversarial.Pi.every_model_request_goes_to_the_gateway_with_the_run_token"],
+   "input": {"token": "run-token-2", "baseUrl": "https://gw.example/"},
+   "id": "trailing-slash",
+   "expected":
+   {"requests": [{"url": "https://gw.example/v1/messages", "authorization": "Bearer run-token-2"}],
+    "connection":
+    {"provider": "anthropic",
+     "protocol": "anthropic-messages",
+     "headers": {"authorization": "Bearer run-token-2"},
+     "baseUrl": "https://gw.example",
+     "apiKey": "agent-workspace-gateway-uses-the-bearer-header"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Adversarial.Pi.every_model_request_goes_to_the_gateway_with_the_run_token"],
+   "input": {"token": "run-token-3", "baseUrl": "https://gw.example//"},
+   "id": "trailing-slashes",
+   "expected":
+   {"requests": [{"url": "https://gw.example/v1/messages", "authorization": "Bearer run-token-3"}],
+    "connection":
+    {"provider": "anthropic",
+     "protocol": "anthropic-messages",
+     "headers": {"authorization": "Bearer run-token-3"},
+     "baseUrl": "https://gw.example",
+     "apiKey": "agent-workspace-gateway-uses-the-bearer-header"}}}],
+ "family": "engine-pi",
+ "description": "piModelConnection: the gateway base URL and the run token as the model's Authorization header"}

@@ -1,0 +1,363 @@
+{
+  "name": "@indx-workspace/contracts",
+  "version": "0.6.9",
+  "description": "The Agent Workspace API contracts: Zod schemas, route catalogue and the contracts version every client and server share.",
+  "license": "Apache-2.0",
+  "homepage": "https://docs.agentworkspace.indx.jp",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/indxjp/agent-workspace.git",
+    "directory": "packages/contracts"
+  },
+  "bugs": {
+    "url": "https://github.com/indxjp/agent-workspace/issues"
+  },
+  "keywords": [
+    "agent-workspace",
+    "claude",
+    "ai-agents",
+    "zod",
+    "api-contracts"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./a2a": {
+      "types": "./src/a2a.ts",
+      "default": "./dist/a2a.js"
+    },
+    "./agent-versions": {
+      "types": "./src/agent-versions.ts",
+      "default": "./dist/agent-versions.js"
+    },
+    "./agents": {
+      "types": "./src/agents.ts",
+      "default": "./dist/agents.js"
+    },
+    "./api-keys": {
+      "types": "./src/api-keys.ts",
+      "default": "./dist/api-keys.js"
+    },
+    "./cli-auth": {
+      "types": "./src/cli-auth.ts",
+      "default": "./dist/cli-auth.js"
+    },
+    "./connectors": {
+      "types": "./src/connectors.ts",
+      "default": "./dist/connectors.js"
+    },
+    "./endpoint-clients": {
+      "types": "./src/endpoint-clients.ts",
+      "default": "./dist/endpoint-clients.js"
+    },
+    "./engines": {
+      "types": "./src/engines.ts",
+      "default": "./dist/engines.js"
+    },
+    "./evaluations": {
+      "types": "./src/evaluations.ts",
+      "default": "./dist/evaluations.js"
+    },
+    "./feedback": {
+      "types": "./src/feedback.ts",
+      "default": "./dist/feedback.js"
+    },
+    "./files": {
+      "types": "./src/files.ts",
+      "default": "./dist/files.js"
+    },
+    "./invitations": {
+      "types": "./src/invitations.ts",
+      "default": "./dist/invitations.js"
+    },
+    "./local-runtime": {
+      "types": "./src/local-runtime.ts",
+      "default": "./dist/local-runtime.js"
+    },
+    "./models": {
+      "types": "./src/models.ts",
+      "default": "./dist/models.js"
+    },
+    "./observability": {
+      "types": "./src/observability.ts",
+      "default": "./dist/observability.js"
+    },
+    "./platforms": {
+      "types": "./src/platforms.ts",
+      "default": "./dist/platforms.js"
+    },
+    "./policy-ceiling": {
+      "types": "./src/policy-ceiling.ts",
+      "default": "./dist/policy-ceiling.js"
+    },
+    "./portable-agent": {
+      "types": "./src/portable-agent.ts",
+      "default": "./dist/portable-agent.js"
+    },
+    "./project-file": {
+      "types": "./src/project-file.ts",
+      "default": "./dist/project-file.js"
+    },
+    "./projects": {
+      "types": "./src/projects.ts",
+      "default": "./dist/projects.js"
+    },
+    "./run-events": {
+      "types": "./src/run-events.ts",
+      "default": "./dist/run-events.js"
+    },
+    "./routes": {
+      "types": "./src/routes.ts",
+      "default": "./dist/routes.js"
+    },
+    "./runs": {
+      "types": "./src/runs.ts",
+      "default": "./dist/runs.js"
+    },
+    "./runtimes": {
+      "types": "./src/runtimes.ts",
+      "default": "./dist/runtimes.js"
+    },
+    "./secret-reference": {
+      "types": "./src/secret-reference.ts",
+      "default": "./dist/secret-reference.js"
+    },
+    "./secrets": {
+      "types": "./src/secrets.ts",
+      "default": "./dist/secrets.js"
+    },
+    "./sessions": {
+      "types": "./src/sessions.ts",
+      "default": "./dist/sessions.js"
+    },
+    "./setup": {
+      "types": "./src/setup.ts",
+      "default": "./dist/setup.js"
+    },
+    "./shares": {
+      "types": "./src/shares.ts",
+      "default": "./dist/shares.js"
+    },
+    "./skills": {
+      "types": "./src/skills.ts",
+      "default": "./dist/skills.js"
+    },
+    "./surfaces": {
+      "types": "./src/surfaces.ts",
+      "default": "./dist/surfaces.js"
+    },
+    "./team": {
+      "types": "./src/team.ts",
+      "default": "./dist/team.js"
+    },
+    "./tokens": {
+      "types": "./src/tokens.ts",
+      "default": "./dist/tokens.js"
+    },
+    "./tool-connectors": {
+      "types": "./src/tool-connectors.ts",
+      "default": "./dist/tool-connectors.js"
+    },
+    "./workspaces": {
+      "types": "./src/workspaces.ts",
+      "default": "./dist/workspaces.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.map",
+    "CHANGELOG.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./a2a": {
+        "types": "./dist/a2a.d.ts",
+        "default": "./dist/a2a.js"
+      },
+      "./agent-versions": {
+        "types": "./dist/agent-versions.d.ts",
+        "default": "./dist/agent-versions.js"
+      },
+      "./agents": {
+        "types": "./dist/agents.d.ts",
+        "default": "./dist/agents.js"
+      },
+      "./api-keys": {
+        "types": "./dist/api-keys.d.ts",
+        "default": "./dist/api-keys.js"
+      },
+      "./cli-auth": {
+        "types": "./dist/cli-auth.d.ts",
+        "default": "./dist/cli-auth.js"
+      },
+      "./connectors": {
+        "types": "./dist/connectors.d.ts",
+        "default": "./dist/connectors.js"
+      },
+      "./endpoint-clients": {
+        "types": "./dist/endpoint-clients.d.ts",
+        "default": "./dist/endpoint-clients.js"
+      },
+      "./engines": {
+        "types": "./dist/engines.d.ts",
+        "default": "./dist/engines.js"
+      },
+      "./evaluations": {
+        "types": "./dist/evaluations.d.ts",
+        "default": "./dist/evaluations.js"
+      },
+      "./feedback": {
+        "types": "./dist/feedback.d.ts",
+        "default": "./dist/feedback.js"
+      },
+      "./files": {
+        "types": "./dist/files.d.ts",
+        "default": "./dist/files.js"
+      },
+      "./invitations": {
+        "types": "./dist/invitations.d.ts",
+        "default": "./dist/invitations.js"
+      },
+      "./local-runtime": {
+        "types": "./dist/local-runtime.d.ts",
+        "default": "./dist/local-runtime.js"
+      },
+      "./models": {
+        "types": "./dist/models.d.ts",
+        "default": "./dist/models.js"
+      },
+      "./observability": {
+        "types": "./dist/observability.d.ts",
+        "default": "./dist/observability.js"
+      },
+      "./platforms": {
+        "types": "./dist/platforms.d.ts",
+        "default": "./dist/platforms.js"
+      },
+      "./policy-ceiling": {
+        "types": "./dist/policy-ceiling.d.ts",
+        "default": "./dist/policy-ceiling.js"
+      },
+      "./portable-agent": {
+        "types": "./dist/portable-agent.d.ts",
+        "default": "./dist/portable-agent.js"
+      },
+      "./project-file": {
+        "types": "./dist/project-file.d.ts",
+        "default": "./dist/project-file.js"
+      },
+      "./projects": {
+        "types": "./dist/projects.d.ts",
+        "default": "./dist/projects.js"
+      },
+      "./run-events": {
+        "types": "./dist/run-events.d.ts",
+        "default": "./dist/run-events.js"
+      },
+      "./routes": {
+        "types": "./dist/routes.d.ts",
+        "default": "./dist/routes.js"
+      },
+      "./runs": {
+        "types": "./dist/runs.d.ts",
+        "default": "./dist/runs.js"
+      },
+      "./runtimes": {
+        "types": "./dist/runtimes.d.ts",
+        "default": "./dist/runtimes.js"
+      },
+      "./secret-reference": {
+        "types": "./dist/secret-reference.d.ts",
+        "default": "./dist/secret-reference.js"
+      },
+      "./secrets": {
+        "types": "./dist/secrets.d.ts",
+        "default": "./dist/secrets.js"
+      },
+      "./sessions": {
+        "types": "./dist/sessions.d.ts",
+        "default": "./dist/sessions.js"
+      },
+      "./setup": {
+        "types": "./dist/setup.d.ts",
+        "default": "./dist/setup.js"
+      },
+      "./shares": {
+        "types": "./dist/shares.d.ts",
+        "default": "./dist/shares.js"
+      },
+      "./skills": {
+        "types": "./dist/skills.d.ts",
+        "default": "./dist/skills.js"
+      },
+      "./surfaces": {
+        "types": "./dist/surfaces.d.ts",
+        "default": "./dist/surfaces.js"
+      },
+      "./team": {
+        "types": "./dist/team.d.ts",
+        "default": "./dist/team.js"
+      },
+      "./tokens": {
+        "types": "./dist/tokens.d.ts",
+        "default": "./dist/tokens.js"
+      },
+      "./tool-connectors": {
+        "types": "./dist/tool-connectors.d.ts",
+        "default": "./dist/tool-connectors.js"
+      },
+      "./workspaces": {
+        "types": "./dist/workspaces.d.ts",
+        "default": "./dist/workspaces.js"
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "peerDependencies": {
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@typescript/native": "npm:typescript@7.0.2",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
+    "vitest": "5.0.3",
+    "zod": "4.6.6"
+  },
+  "nx": {
+    "targets": {
+      "lint": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "eslint packages/contracts --max-warnings 0"
+        }
+      },
+      "test": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "vitest run --project @indx-workspace/contracts --reporter=default --reporter=json --outputFile={projectRoot}/.vitest-report.json",
+          "env": {
+            "NODE_OPTIONS": "--unhandled-rejections=strict",
+            "VITEST_MAX_WORKERS": "4"
+          }
+        }
+      }
+    }
+  }
+}

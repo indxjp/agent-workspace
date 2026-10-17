@@ -1,0 +1,43 @@
+{"vectors":
+ [{"witnesses": ["AgentWorkspace.Theorems.Normative.ConceptWork.resumable_means_active_and_reported"],
+   "input":
+   {"kind": "launch", "id": "0f8fad5b-d9cb-469f-a165-70867728950e", "engineSessionId": null, "agentId": "agent-1"},
+   "id": "launch/null",
+   "expected": {"mode": "fresh"}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.ConceptWork.resumable_means_active_and_reported"],
+   "input":
+   {"kind": "launch",
+    "id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+    "engineSessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+    "agentId": "agent-1"},
+   "id": "launch/\"0f8fad5b-d9cb-469f-a165-70867728950e\"",
+   "expected": {"mode": "resume"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptWork.reported_identity_must_be_the_platform_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.recording_keeps_the_session_identity"],
+   "input":
+   {"reported": "0f8fad5b-d9cb-469f-a165-70867728950e",
+    "kind": "record",
+    "id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+    "agentId": "agent-1"},
+   "id": "record/\"0f8fad5b-d9cb-469f-a165-70867728950e\"",
+   "expected":
+   {"recorded": true, "engineSessionId": "0f8fad5b-d9cb-469f-a165-70867728950e", "engine": "claude-agent-sdk"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptWork.reported_identity_must_be_the_platform_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.recording_keeps_the_session_identity"],
+   "input":
+   {"reported": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    "kind": "record",
+    "id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+    "agentId": "agent-1"},
+   "id": "record/\"7c9e6679-7425-40de-944b-e07fc1f90ae7\"",
+   "expected": {"recorded": false, "engineSessionId": null, "engine": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptWork.reported_identity_must_be_the_platform_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.recording_keeps_the_session_identity"],
+   "input": {"reported": "", "kind": "record", "id": "0f8fad5b-d9cb-469f-a165-70867728950e", "agentId": "agent-1"},
+   "id": "record/\"\"",
+   "expected": {"recorded": false, "engineSessionId": null, "engine": null}}],
+ "family": "concept-work",
+ "description": "Session launch mode and reported SDK identity"}

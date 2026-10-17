@@ -1,0 +1,16 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/copilot/plugin/v2.4/schema.json",
+  "schema_version": "v2.4",
+  "name_for_human": "Contoso MCP",
+  "namespace": "contosomcp",
+  "description_for_human": "Tools from the Contoso MCP server.",
+  "functions": [],
+  "runtimes": [
+    {
+      "type": "RemoteMCPServer",
+      "auth": { "type": "None" },
+      "spec": { "url": "https://api.contoso.com/mcp" },
+      "run_for_functions": ["*"]
+    }
+  ]
+}

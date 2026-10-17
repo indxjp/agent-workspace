@@ -1,0 +1,13 @@
+{
+  "customer": "東和機工株式会社",
+  "drawingNo": "TWK-M-2231 rev.B",
+  "partName": "L形ブラケット",
+  "material": "SS400",
+  "lengthMm": 200,
+  "widthMm": 100,
+  "thicknessMm": 3.2,
+  "holeCount": 4,
+  "holeDiameterMm": 10,
+  "bendCount": 2,
+  "quantity": 50
+}

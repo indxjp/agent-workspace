@@ -1,0 +1,32 @@
+[
+  {
+    "matrix": "A.10",
+    "columns": ["sbx-rt"],
+    "rows": [
+      "Per-session isolation",
+      "Domain allowlist",
+      "Deny-all egress",
+      "Persistent filesystem",
+      "Bounded session life"
+    ],
+    "missingResource": "a registered Sandbox Runtime lifecycle on this host",
+    "command": "pnpm vitest run tests/conformance/a12-local.test.ts packages/runtime/src/docker.test.ts",
+    "output": "local and docker ran; sbx-rt is not registered by the control plane",
+    "achievedWithoutIt": "the driver is reported as unverified and no positive mark is emitted"
+  },
+  {
+    "matrix": "A.10",
+    "columns": ["k8s"],
+    "rows": [
+      "Per-session isolation",
+      "Domain allowlist",
+      "Deny-all egress",
+      "Persistent filesystem",
+      "Bounded session life"
+    ],
+    "missingResource": "a Kubernetes cluster and current context",
+    "command": "kubectl config current-context",
+    "output": "no current context",
+    "achievedWithoutIt": "the driver is registered and every scenario-backed cell remains unverified"
+  }
+]

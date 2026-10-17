@@ -1,0 +1,9 @@
+storageClassName: thin-csi
+runtimeClassName: ""
+dns:
+  namespace: openshift-dns
+  podSelector:
+    dns.operator.openshift.io/daemonset-dns: default
+ingress:
+  controllerNamespace: openshift-ingress
+runAsUser: null

@@ -1,0 +1,148 @@
+---
+title: "Configuration"
+description: "Point the client at your control plane, add headers, set a timeout, cancel a call, bring your own fetch, and the environment variable convention this documentation uses."
+---
+
+<Info>
+
+- **Read this when:** you create the SDK client in your backend and need a base URL with a path
+  prefix, extra headers, a timeout, cancellation or your own `fetch`.
+- **You will learn:** every `ClientOptions` field and its default, how request paths are joined, and
+  the environment variable convention the docs and `aw` share.
+- **Used in:** [Chapter 4: Put it in your product](/path/embed).
+
+</Info>
+
+`createClient` takes one `ClientOptions` object: only `baseUrl` and `auth` are required, and the
+rest have sensible defaults. For the full type signature, see [Client](/reference/sdk/client).
+
+**What you can do**
+
+- [Point the client at your control plane](#point-the-client-at-your-control-plane), with or without a path prefix.
+- [Add a header to every request](#add-a-header-to-every-request).
+- [Give up when the server does not answer](#give-up-when-the-server-does-not-answer).
+- [Cancel one call or stream](#cancel-one-call-or-stream).
+- [Bring your own fetch](#bring-your-own-fetch) for tests or another runtime.
+- [Read the URL and key from the environment](#environment-variables).
+
+<Accordion title="The ClientOptions and RequestOptions types">
+
+```ts title="illustrative" claim="illustrative"
+interface ClientOptions {
+  readonly baseUrl: string | URL;
+  readonly auth: ClientAuth;
+  readonly fetch?: typeof fetch;
+  readonly headers?: Readonly<Record<string, string>>;
+  readonly timeoutMs?: number;
+}
+
+interface RequestOptions {
+  readonly signal?: AbortSignal;
+}
+```
+
+</Accordion>
+
+## Point the client at your control plane
+
+`baseUrl` is the control plane's origin, optionally with a path prefix; it accepts a `string` or
+a `URL`. `auth` is required too, with no default — see
+[Authentication](/getting-started/authentication) for which kind to use.
+
+```ts title="illustrative" claim="illustrative"
+createClient({ baseUrl: 'https://agents.example.com', auth /* … */ });
+createClient({ baseUrl: 'https://example.com/aw', auth /* … */ }); // path prefix
+```
+
+The prefix is kept: `https://example.com/aw` plus `/api/agents` resolves to
+`https://example.com/aw/api/agents`, and a trailing slash on `baseUrl` is stripped first.
+
+<Accordion title="How request paths are joined (resolveApiUrl)">
+
+```ts title="illustrative" claim="illustrative"
+export function resolveApiUrl(baseUrl: string | URL, path: string, query?: URLSearchParams): URL {
+  const base = new URL(String(baseUrl));
+  const prefix = base.pathname.replace(/\/+$/u, ''); // trailing slashes dropped
+  const url = new URL(`${prefix}${path}`, base.origin);
+  if (query !== undefined) url.search = query.toString();
+  return url;
+}
+```
+
+</Accordion>
+
+## Add a header to every request
+
+`headers` adds extra headers to every request — a trace id, a `User-Agent`, anything your
+infrastructure wants attached. They are applied after the SDK's own `accept`, `content-type` and
+(for `api-key` auth) `authorization` headers, so a header here can override the SDK's default
+`accept` or `content-type` but not silently disappear.
+
+<Warning>
+  Never put a credential in `headers`. Authentication is `auth`'s job; `headers` exists for
+  everything else. The client already refuses to let you pass an `Authorization` value through
+  `auth` for anything but the defined `ClientAuth` kinds, and there is no supported way to smuggle a
+  second credential through here — do not try.
+</Warning>
+
+## Give up when the server does not answer
+
+`timeoutMs` aborts a request that has produced **no response headers** within that many
+milliseconds. It covers headers only: once `fetch` resolves, a streamed body (`runs.events`,
+`runs.follow`) may stay open far longer. There is no separate "whole request" or "whole stream"
+timeout in the SDK.
+
+A timeout surfaces as a `TransportError` with `aborted: true` (its `cause` is a `DOMException`
+named `TimeoutError`) — indistinguishable, by design, from an ordinary dropped connection.
+`runs.follow` treats it like any other dropped connection and reconnects; only the caller's own
+`{ signal }` ends a `follow` call for good. See [Timeouts and
+cancellation](/guides/timeouts-and-cancellation) for the full mechanics.
+
+## Cancel one call or stream
+
+Every SDK method takes a trailing options argument with one field, `signal`:
+
+```ts title="illustrative" claim="illustrative"
+const controller = new AbortController();
+const promise = aw.runs.get(runId, { signal: controller.signal });
+controller.abort();
+```
+
+Aborting ends the call — including a stream started with `events` or `follow` — with a
+`TransportError` whose `aborted` is `true`. This is the only cancellation mechanism the SDK has;
+there is no method-level timeout separate from the client-wide `timeoutMs`.
+
+## Bring your own fetch
+
+`fetch` defaults to the global `fetch`, bound to `globalThis`. Pass your own for a test double, a
+runtime without a global `fetch`, or a `fetch` that wraps the real one (retries, logging, a
+proxy). Anything conforming to the standard `fetch` signature works, including one that returns a
+`ReadableStream` body for `runs.events`/`runs.follow` to read. See [Testing](/guides/testing) for
+injecting a `fetch` in your own tests.
+
+The SDK also ships a ready-made fetch double as `@indx-workspace/sdk/testing`; see
+[Testing](/guides/testing).
+
+## Environment variables
+
+`createClient` reads **no environment variables**. Every option is passed explicitly; how the
+value reaches your code — `process.env`, a secrets manager, a config file — is up to you.
+
+`AGENT_WORKSPACE_URL` and `AGENT_WORKSPACE_API_KEY` are the names the `aw` CLI reads, and this
+documentation uses the same two names by convention so an example works the same way as a script
+or through `aw`. The snippet that reads them is on
+[Authentication](/getting-started/authentication#api-key-—-a-backend-ci-or-the-cli).
+
+See [Configuration](/cli/configuration) for the CLI's full precedence order (flags, then these two
+variables, then the project file `agent-workspace.yaml`, then the `default` profile). When the URL
+comes from the project file, `aw` never sends `AGENT_WORKSPACE_API_KEY` or a profile's key to it:
+it uses a key piped with `--api-key-stdin`, else the local key `aw dev` stored for that URL, else
+the token `aw login` stored for it.
+
+## See also
+
+- [Client](/reference/sdk/client) — the generated reference for `createClient`,
+  `ClientOptions`, `ClientAuth`, `RequestOptions`, and the three error classes.
+- [Timeouts and cancellation](/guides/timeouts-and-cancellation) — `timeoutMs` and
+  `signal` worked through in detail, including how they combine.
+- [Authentication](/getting-started/authentication) — `auth` in depth.

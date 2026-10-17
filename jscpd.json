@@ -1,0 +1,21 @@
+{
+  "threshold": 3,
+  "minLines": 10,
+  "minTokens": 80,
+  "reporters": ["console"],
+  "format": ["typescript", "javascript"],
+  "ignore": [
+    "**/*.test.*",
+    "**/*.spec.*",
+    "**/dist/**",
+    "**/.next/**",
+    "**/.next-embedded/**",
+    "**/coverage/**",
+    "**/node_modules/**",
+    ".claude/**",
+    ".codex/**",
+    "docs/**",
+    "ui/**",
+    "migrations/**"
+  ]
+}

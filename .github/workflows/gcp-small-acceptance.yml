@@ -1,0 +1,144 @@
+name: GCP small deployment acceptance
+
+on:
+  workflow_dispatch:
+    inputs:
+      project_id:
+        description: Disposable GCP project id
+        required: true
+        type: string
+      region:
+        description: GCP region
+        required: true
+        default: us-central1
+        type: string
+      zone:
+        description: GCP zone
+        required: true
+        default: us-central1-a
+        type: string
+      domain:
+        description: Preconfigured DNS name for the reserved address
+        required: true
+        type: string
+      state_bucket:
+        description: Existing protected Terraform state bucket
+        required: true
+        type: string
+      destroy_on_complete:
+        description: Destroy disposable resources after evidence collection
+        required: true
+        default: true
+        type: boolean
+
+concurrency:
+  group: gcp-small-${{ inputs.project_id }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  apply-rebuild-restore:
+    runs-on: ubuntu-latest
+    environment: gcp-acceptance
+    timeout-minutes: 90
+    env:
+      PROJECT_ID: ${{ inputs.project_id }}
+      ZONE: ${{ inputs.zone }}
+      VM_NAME: agent-workspace
+      PUBLIC_URL: https://${{ inputs.domain }}
+      TF_VAR_project_id: ${{ inputs.project_id }}
+      TF_VAR_region: ${{ inputs.region }}
+      TF_VAR_zone: ${{ inputs.zone }}
+      TF_VAR_domain: ${{ inputs.domain }}
+      TF_VAR_tls_email: ${{ vars.GCP_TLS_EMAIL }}
+      TF_VAR_bootstrap_admin_email: gcp-acceptance@example.invalid
+      TF_VAR_images: ${{ vars.GCP_SMALL_IMAGES_JSON }}
+      TF_VAR_gateway_pricing_json: ${{ vars.GCP_GATEWAY_PRICING_JSON }}
+      TF_VAR_secret_versions: '{"postgres_password":"1","session_secret":"1","master_encryption_key":"1","gateway_token_secret":"1","runner_manager_token":"1","bootstrap_admin_password":"1"}'
+      TF_VAR_operator_members: '[]'
+      TF_VAR_enable_iap_ssh: 'true'
+      TF_VAR_deletion_protection: 'false'
+      EVIDENCE_DIR: dist/drills/gcp-small
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_TERRAFORM_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.9.8
+      - name: Validate configuration and immutable inputs
+        run: |
+          set -euo pipefail
+          terraform -chdir=infra/terraform/gcp-small fmt -check -recursive
+          terraform -chdir=infra/terraform/gcp-small init -backend=false
+          terraform -chdir=infra/terraform/gcp-small validate
+          node infra/tests/contracts.test.mjs
+          test -n "$TF_VAR_images"
+      - name: Initialize remote state and apply infrastructure
+        run: |
+          terraform -chdir=infra/terraform/gcp-small init \
+            -reconfigure \
+            -backend-config="bucket=${{ inputs.state_bucket }}" \
+            -backend-config="prefix=gcp-small/${{ github.run_id }}"
+          terraform -chdir=infra/terraform/gcp-small apply -auto-approve
+      - name: Upload ephemeral secret values outside Terraform state
+        run: |
+          set -euo pipefail
+          put() { openssl rand -hex "$2" | gcloud secrets versions add "agent-workspace-$1" --project "$PROJECT_ID" --data-file=- >/dev/null; }
+          put postgres-password 24
+          put session-secret 32
+          put master-encryption-key 32
+          put gateway-token-secret 32
+          put runner-manager-token 32
+          put bootstrap-admin-password 24
+          gcloud compute instances reset "$VM_NAME" --project "$PROJECT_ID" --zone "$ZONE"
+      - name: Wait for HTTPS and run smoke/upgrade/rollback/backup proof
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --show-error --proto '=https' --tlsv1.2 "$PUBLIC_URL/" >/dev/null; then break; fi
+            sleep 10
+          done
+          sh infra/drills/gcp-small-drill.sh smoke
+          node --input-type=module -e '
+            import { writeFileSync } from "node:fs";
+            const images = JSON.parse(process.env.TF_VAR_images);
+            const names = { web: "WEB_IMAGE", gateway: "GATEWAY_IMAGE", runner: "RUNNER_IMAGE", runtime: "RUNTIME_IMAGE", postgres: "POSTGRES_IMAGE", proxy: "PROXY_IMAGE" };
+            writeFileSync("candidate-images.env", Object.entries(names).map(([key, name]) => `${name}=${images[key]}`).join("\n") + "\n");
+          '
+          CANDIDATE_IMAGES=candidate-images.env sh infra/drills/gcp-small-drill.sh upgrade
+          sh infra/drills/gcp-small-drill.sh rollback
+          sh infra/drills/gcp-small-drill.sh backup
+      - name: Replace the VM and restore the newest application backup
+        run: |
+          set -euo pipefail
+          bucket="$(terraform -chdir=infra/terraform/gcp-small output -raw backup_bucket)"
+          backup="$(gcloud storage ls "gs://$bucket/application/**" | sed -n 's#/[^/]*$##p' | sort -u | tail -1)"
+          test -n "$backup"
+          export ALLOW_VM_REBUILD="replace-$VM_NAME"
+          sh infra/drills/gcp-small-drill.sh rebuild
+          export BACKUP_URI="$backup"
+          export ALLOW_DESTRUCTIVE_RESTORE="restore-$VM_NAME"
+          sh infra/drills/gcp-small-drill.sh restore
+      - name: Record exact candidate identity
+        if: always()
+        run: |
+          mkdir -p dist/drills
+          git rev-parse HEAD > dist/drills/commit-sha.txt
+          terraform -chdir=infra/terraform/gcp-small output -json > dist/drills/terraform-outputs.json || true
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: gcp-small-${{ github.sha }}-${{ github.run_id }}
+          path: dist/drills/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Destroy disposable resources
+        if: always() && inputs.destroy_on_complete
+        run: terraform -chdir=infra/terraform/gcp-small destroy -auto-approve

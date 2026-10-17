@@ -1,0 +1,1349 @@
+[
+  {
+    "name": "type:assistant",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "assistant"
+        },
+        "type": "assistant",
+        "payload": {
+          "type": "assistant"
+        }
+      }
+    ]
+  },
+  {
+    "name": "type:user",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "user"
+        },
+        "type": "user",
+        "payload": {
+          "type": "user"
+        }
+      }
+    ]
+  },
+  {
+    "name": "type:result",
+    "frames": [
+      {
+        "frame": "agent.result",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "result",
+          "subtype": "init",
+          "session_id": "sess_1"
+        },
+        "stopReason": "error",
+        "turns": null,
+        "engineCostUsd": null
+      }
+    ]
+  },
+  {
+    "name": "type:system",
+    "frames": [
+      {
+        "frame": "agent.session",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "system",
+          "subtype": "init",
+          "session_id": "sess_1"
+        },
+        "engineSessionId": "sess_1",
+        "model": null
+      }
+    ]
+  },
+  {
+    "name": "type:stream_event",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "stream_event"
+        },
+        "type": "stream_event",
+        "payload": {
+          "type": "stream_event"
+        }
+      }
+    ]
+  },
+  {
+    "name": "type:tool_progress",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "tool_progress"
+        },
+        "type": "tool_progress",
+        "payload": {
+          "type": "tool_progress"
+        }
+      }
+    ]
+  },
+  {
+    "name": "type:tool_use_summary",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "tool_use_summary"
+        },
+        "type": "tool_use_summary",
+        "payload": {
+          "type": "tool_use_summary"
+        }
+      }
+    ]
+  },
+  {
+    "name": "type:auth_status",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "auth_status"
+        },
+        "type": "auth_status",
+        "payload": {
+          "type": "auth_status"
+        }
+      }
+    ]
+  },
+  {
+    "name": "type:rate_limit_event",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "rate_limit_event"
+        },
+        "type": "rate_limit_event",
+        "payload": {
+          "type": "rate_limit_event"
+        }
+      }
+    ]
+  },
+  {
+    "name": "type:prompt_suggestion",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "prompt_suggestion"
+        },
+        "type": "prompt_suggestion",
+        "payload": {
+          "type": "prompt_suggestion"
+        }
+      }
+    ]
+  },
+  {
+    "name": "type:conversation_reset",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "conversation_reset"
+        },
+        "type": "conversation_reset",
+        "payload": {
+          "type": "conversation_reset"
+        }
+      }
+    ]
+  },
+  {
+    "name": "system:init",
+    "frames": [
+      {
+        "frame": "agent.session",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "system",
+          "subtype": "init",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        },
+        "engineSessionId": "sess_1",
+        "model": "claude-opus-5"
+      }
+    ]
+  },
+  {
+    "name": "system:compact_boundary",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "system",
+          "subtype": "compact_boundary",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        },
+        "type": "system/compact_boundary",
+        "payload": {
+          "type": "system",
+          "subtype": "compact_boundary",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        }
+      }
+    ]
+  },
+  {
+    "name": "system:status",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "system",
+          "subtype": "status",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        },
+        "type": "system/status",
+        "payload": {
+          "type": "system",
+          "subtype": "status",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        }
+      }
+    ]
+  },
+  {
+    "name": "system:api_retry",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "system",
+          "subtype": "api_retry",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        },
+        "type": "system/api_retry",
+        "payload": {
+          "type": "system",
+          "subtype": "api_retry",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        }
+      }
+    ]
+  },
+  {
+    "name": "system:control_request_progress",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "system",
+          "subtype": "control_request_progress",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        },
+        "type": "system/control_request_progress",
+        "payload": {
+          "type": "system",
+          "subtype": "control_request_progress",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        }
+      }
+    ]
+  },
+  {
+    "name": "system:model_refusal_fallback",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "system",
+          "subtype": "model_refusal_fallback",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        },
+        "type": "system/model_refusal_fallback",
+        "payload": {
+          "type": "system",
+          "subtype": "model_refusal_fallback",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        }
+      }
+    ]
+  },
+  {
+    "name": "system:model_refusal_no_fallback",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "system",
+          "subtype": "model_refusal_no_fallback",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        },
+        "type": "system/model_refusal_no_fallback",
+        "payload": {
+          "type": "system",
+          "subtype": "model_refusal_no_fallback",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        }
+      }
+    ]
+  },
+  {
+    "name": "system:local_command_output",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "system",
+          "subtype": "local_command_output",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        },
+        "type": "system/local_command_output",
+        "payload": {
+          "type": "system",
+          "subtype": "local_command_output",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        }
+      }
+    ]
+  },
+  {
+    "name": "system:hook_started",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "system",
+          "subtype": "hook_started",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        },
+        "type": "system/hook_started",
+        "payload": {
+          "type": "system",
+          "subtype": "hook_started",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        }
+      }
+    ]
+  },
+  {
+    "name": "system:hook_progress",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "system",
+          "subtype": "hook_progress",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        },
+        "type": "system/hook_progress",
+        "payload": {
+          "type": "system",
+          "subtype": "hook_progress",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        }
+      }
+    ]
+  },
+  {
+    "name": "system:hook_response",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "system",
+          "subtype": "hook_response",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        },
+        "type": "system/hook_response",
+        "payload": {
+          "type": "system",
+          "subtype": "hook_response",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        }
+      }
+    ]
+  },
+  {
+    "name": "system:plugin_install",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "system",
+          "subtype": "plugin_install",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        },
+        "type": "system/plugin_install",
+        "payload": {
+          "type": "system",
+          "subtype": "plugin_install",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        }
+      }
+    ]
+  },
+  {
+    "name": "system:task_notification",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "system",
+          "subtype": "task_notification",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        },
+        "type": "system/task_notification",
+        "payload": {
+          "type": "system",
+          "subtype": "task_notification",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        }
+      }
+    ]
+  },
+  {
+    "name": "system:task_started",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "system",
+          "subtype": "task_started",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        },
+        "type": "system/task_started",
+        "payload": {
+          "type": "system",
+          "subtype": "task_started",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        }
+      }
+    ]
+  },
+  {
+    "name": "system:task_updated",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "system",
+          "subtype": "task_updated",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        },
+        "type": "system/task_updated",
+        "payload": {
+          "type": "system",
+          "subtype": "task_updated",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        }
+      }
+    ]
+  },
+  {
+    "name": "system:task_progress",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "system",
+          "subtype": "task_progress",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        },
+        "type": "system/task_progress",
+        "payload": {
+          "type": "system",
+          "subtype": "task_progress",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        }
+      }
+    ]
+  },
+  {
+    "name": "system:background_tasks_changed",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "system",
+          "subtype": "background_tasks_changed",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        },
+        "type": "system/background_tasks_changed",
+        "payload": {
+          "type": "system",
+          "subtype": "background_tasks_changed",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        }
+      }
+    ]
+  },
+  {
+    "name": "system:thinking_tokens",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "system",
+          "subtype": "thinking_tokens",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        },
+        "type": "system/thinking_tokens",
+        "payload": {
+          "type": "system",
+          "subtype": "thinking_tokens",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        }
+      }
+    ]
+  },
+  {
+    "name": "system:session_state_changed",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "system",
+          "subtype": "session_state_changed",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        },
+        "type": "system/session_state_changed",
+        "payload": {
+          "type": "system",
+          "subtype": "session_state_changed",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        }
+      }
+    ]
+  },
+  {
+    "name": "system:worker_shutting_down",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "system",
+          "subtype": "worker_shutting_down",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        },
+        "type": "system/worker_shutting_down",
+        "payload": {
+          "type": "system",
+          "subtype": "worker_shutting_down",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        }
+      }
+    ]
+  },
+  {
+    "name": "system:commands_changed",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "system",
+          "subtype": "commands_changed",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        },
+        "type": "system/commands_changed",
+        "payload": {
+          "type": "system",
+          "subtype": "commands_changed",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        }
+      }
+    ]
+  },
+  {
+    "name": "system:notification",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "system",
+          "subtype": "notification",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        },
+        "type": "system/notification",
+        "payload": {
+          "type": "system",
+          "subtype": "notification",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        }
+      }
+    ]
+  },
+  {
+    "name": "system:files_persisted",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "system",
+          "subtype": "files_persisted",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        },
+        "type": "system/files_persisted",
+        "payload": {
+          "type": "system",
+          "subtype": "files_persisted",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        }
+      }
+    ]
+  },
+  {
+    "name": "system:memory_recall",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "system",
+          "subtype": "memory_recall",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        },
+        "type": "system/memory_recall",
+        "payload": {
+          "type": "system",
+          "subtype": "memory_recall",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        }
+      }
+    ]
+  },
+  {
+    "name": "system:elicitation_complete",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "system",
+          "subtype": "elicitation_complete",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        },
+        "type": "system/elicitation_complete",
+        "payload": {
+          "type": "system",
+          "subtype": "elicitation_complete",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        }
+      }
+    ]
+  },
+  {
+    "name": "system:permission_denied",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "system",
+          "subtype": "permission_denied",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        },
+        "type": "system/permission_denied",
+        "payload": {
+          "type": "system",
+          "subtype": "permission_denied",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        }
+      }
+    ]
+  },
+  {
+    "name": "system:mirror_error",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "system",
+          "subtype": "mirror_error",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        },
+        "type": "system/mirror_error",
+        "payload": {
+          "type": "system",
+          "subtype": "mirror_error",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        }
+      }
+    ]
+  },
+  {
+    "name": "system:informational",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "system",
+          "subtype": "informational",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        },
+        "type": "system/informational",
+        "payload": {
+          "type": "system",
+          "subtype": "informational",
+          "session_id": "sess_1",
+          "model": "claude-opus-5"
+        }
+      }
+    ]
+  },
+  {
+    "name": "system:init-without-session",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "system",
+          "subtype": "init"
+        },
+        "type": "system/init",
+        "payload": {
+          "type": "system",
+          "subtype": "init"
+        }
+      }
+    ]
+  },
+  {
+    "name": "system:unknown-subtype",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "system",
+          "subtype": "from_the_future",
+          "n": 1
+        },
+        "type": "system/from_the_future",
+        "payload": {
+          "type": "system",
+          "subtype": "from_the_future",
+          "n": 1
+        }
+      }
+    ]
+  },
+  {
+    "name": "result:success",
+    "frames": [
+      {
+        "frame": "agent.result",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "result",
+          "subtype": "success",
+          "total_cost_usd": 0.5,
+          "num_turns": 3
+        },
+        "stopReason": "end_turn",
+        "turns": 3,
+        "engineCostUsd": 0.5
+      }
+    ]
+  },
+  {
+    "name": "result:error_during_execution",
+    "frames": [
+      {
+        "frame": "agent.result",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "result",
+          "subtype": "error_during_execution",
+          "total_cost_usd": 0.5,
+          "num_turns": 3
+        },
+        "stopReason": "error",
+        "turns": 3,
+        "engineCostUsd": 0.5
+      }
+    ]
+  },
+  {
+    "name": "result:error_max_turns",
+    "frames": [
+      {
+        "frame": "agent.result",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "result",
+          "subtype": "error_max_turns",
+          "total_cost_usd": 0.5,
+          "num_turns": 3
+        },
+        "stopReason": "max_turns",
+        "turns": 3,
+        "engineCostUsd": 0.5
+      }
+    ]
+  },
+  {
+    "name": "result:error_max_budget_usd",
+    "frames": [
+      {
+        "frame": "agent.result",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "result",
+          "subtype": "error_max_budget_usd",
+          "total_cost_usd": 0.5,
+          "num_turns": 3
+        },
+        "stopReason": "max_budget",
+        "turns": 3,
+        "engineCostUsd": 0.5
+      }
+    ]
+  },
+  {
+    "name": "result:error_max_structured_output_retries",
+    "frames": [
+      {
+        "frame": "agent.result",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "result",
+          "subtype": "error_max_structured_output_retries",
+          "total_cost_usd": 0.5,
+          "num_turns": 3
+        },
+        "stopReason": "error",
+        "turns": 3,
+        "engineCostUsd": 0.5
+      }
+    ]
+  },
+  {
+    "name": "result:unknown-subtype",
+    "frames": [
+      {
+        "frame": "agent.result",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "result",
+          "subtype": "error_from_the_future"
+        },
+        "stopReason": "error",
+        "turns": null,
+        "engineCostUsd": null
+      }
+    ]
+  },
+  {
+    "name": "result:negative-cost",
+    "frames": [
+      {
+        "frame": "agent.result",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "result",
+          "subtype": "success",
+          "total_cost_usd": -1
+        },
+        "stopReason": "end_turn",
+        "turns": null,
+        "engineCostUsd": null
+      }
+    ]
+  },
+  {
+    "name": "result:usage",
+    "frames": [
+      {
+        "frame": "agent.usage",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "result",
+          "subtype": "success",
+          "total_cost_usd": 0.25,
+          "modelUsage": {
+            "claude-opus-5": {
+              "inputTokens": 10,
+              "outputTokens": 40,
+              "cacheReadInputTokens": 5,
+              "cacheCreationInputTokens": 2,
+              "thinkingTokens": 8
+            },
+            "claude-haiku-4-5": {
+              "inputTokens": 1,
+              "outputTokens": 2
+            }
+          }
+        },
+        "inputTokens": 11,
+        "outputTokens": 42,
+        "cacheReadInputTokens": 5,
+        "cacheCreationInputTokens": 2,
+        "reasoningTokens": 8
+      },
+      {
+        "frame": "agent.result",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "result",
+          "subtype": "success",
+          "total_cost_usd": 0.25,
+          "modelUsage": {
+            "claude-opus-5": {
+              "inputTokens": 10,
+              "outputTokens": 40,
+              "cacheReadInputTokens": 5,
+              "cacheCreationInputTokens": 2,
+              "thinkingTokens": 8
+            },
+            "claude-haiku-4-5": {
+              "inputTokens": 1,
+              "outputTokens": 2
+            }
+          }
+        },
+        "stopReason": "end_turn",
+        "turns": null,
+        "engineCostUsd": 0.25
+      }
+    ]
+  },
+  {
+    "name": "assistant:tools",
+    "frames": [
+      {
+        "frame": "agent.message",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "assistant",
+          "session_id": "sess_1",
+          "uuid": "uuid-1",
+          "message": {
+            "id": "msg_1",
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "let me look"
+              },
+              {
+                "type": "text",
+                "text": "Reading the file."
+              },
+              {
+                "type": "tool_use",
+                "id": "tool_1",
+                "name": "Read",
+                "input": {
+                  "path": "/etc/hosts"
+                }
+              },
+              {
+                "type": "tool_use",
+                "id": "tool_2",
+                "name": "mcp__github__issues",
+                "input": {}
+              }
+            ]
+          }
+        },
+        "messageId": "msg_1",
+        "role": "assistant",
+        "blocks": [
+          {
+            "type": "reasoning",
+            "text": "let me look"
+          },
+          {
+            "type": "text",
+            "text": "Reading the file."
+          }
+        ]
+      },
+      {
+        "frame": "agent.tool.call",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "assistant",
+          "session_id": "sess_1",
+          "uuid": "uuid-1",
+          "message": {
+            "id": "msg_1",
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "let me look"
+              },
+              {
+                "type": "text",
+                "text": "Reading the file."
+              },
+              {
+                "type": "tool_use",
+                "id": "tool_1",
+                "name": "Read",
+                "input": {
+                  "path": "/etc/hosts"
+                }
+              },
+              {
+                "type": "tool_use",
+                "id": "tool_2",
+                "name": "mcp__github__issues",
+                "input": {}
+              }
+            ]
+          }
+        },
+        "toolCallId": "tool_1",
+        "name": "Read",
+        "kind": "read",
+        "input": {
+          "path": "/etc/hosts"
+        }
+      },
+      {
+        "frame": "agent.tool.call",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "assistant",
+          "session_id": "sess_1",
+          "uuid": "uuid-1",
+          "message": {
+            "id": "msg_1",
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "let me look"
+              },
+              {
+                "type": "text",
+                "text": "Reading the file."
+              },
+              {
+                "type": "tool_use",
+                "id": "tool_1",
+                "name": "Read",
+                "input": {
+                  "path": "/etc/hosts"
+                }
+              },
+              {
+                "type": "tool_use",
+                "id": "tool_2",
+                "name": "mcp__github__issues",
+                "input": {}
+              }
+            ]
+          }
+        },
+        "toolCallId": "tool_2",
+        "name": "mcp__github__issues",
+        "kind": "mcp",
+        "input": {}
+      }
+    ]
+  },
+  {
+    "name": "assistant:no-message",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "assistant",
+          "session_id": "s"
+        },
+        "type": "assistant",
+        "payload": {
+          "type": "assistant",
+          "session_id": "s"
+        }
+      }
+    ]
+  },
+  {
+    "name": "assistant:tool-without-input",
+    "frames": [
+      {
+        "frame": "agent.tool.call",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "assistant",
+          "message": {
+            "id": "msg_1",
+            "content": [
+              {
+                "type": "tool_use",
+                "id": "tool_1",
+                "name": "Grep"
+              }
+            ]
+          }
+        },
+        "toolCallId": "tool_1",
+        "name": "Grep",
+        "kind": "search",
+        "input": null
+      }
+    ]
+  },
+  {
+    "name": "user:tool-result",
+    "frames": [
+      {
+        "frame": "agent.tool.result",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "user",
+          "session_id": "sess_1",
+          "uuid": "uuid-2",
+          "message": {
+            "content": [
+              {
+                "type": "tool_result",
+                "tool_use_id": "tool_1",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "127.0.0.1"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "toolCallId": "tool_1",
+        "status": "completed",
+        "output": "127.0.0.1",
+        "isError": false
+      }
+    ]
+  },
+  {
+    "name": "user:error-result",
+    "frames": [
+      {
+        "frame": "agent.message",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "user",
+          "uuid": "uuid-3",
+          "message": {
+            "content": [
+              {
+                "type": "text",
+                "text": "hello"
+              },
+              {
+                "type": "tool_result",
+                "tool_use_id": "tool_9",
+                "content": "boom",
+                "is_error": true
+              }
+            ]
+          }
+        },
+        "messageId": "uuid-3",
+        "role": "user",
+        "blocks": [
+          {
+            "type": "text",
+            "text": "hello"
+          }
+        ]
+      },
+      {
+        "frame": "agent.tool.result",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "user",
+          "uuid": "uuid-3",
+          "message": {
+            "content": [
+              {
+                "type": "text",
+                "text": "hello"
+              },
+              {
+                "type": "tool_result",
+                "tool_use_id": "tool_9",
+                "content": "boom",
+                "is_error": true
+              }
+            ]
+          }
+        },
+        "toolCallId": "tool_9",
+        "status": "completed",
+        "output": "boom",
+        "isError": true
+      }
+    ]
+  },
+  {
+    "name": "user:image-only",
+    "frames": [
+      {
+        "frame": "agent.native",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": "user",
+          "message": {
+            "content": [
+              {
+                "type": "image",
+                "source": {}
+              }
+            ]
+          }
+        },
+        "type": "user",
+        "payload": {
+          "type": "user",
+          "message": {
+            "content": [
+              {
+                "type": "image",
+                "source": {}
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "malformed:not-an-object",
+    "frames": [
+      {
+        "frame": "agent.malformed",
+        "engine": "claude-agent-sdk",
+        "raw": "not an object",
+        "reason": "an SDK event must be an object; got the string \"not an object\""
+      }
+    ]
+  },
+  {
+    "name": "malformed:no-type",
+    "frames": [
+      {
+        "frame": "agent.malformed",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "subtype": "init"
+        },
+        "reason": "an SDK event must carry a string 'type'; got a value of type undefined"
+      }
+    ]
+  },
+  {
+    "name": "malformed:empty-type",
+    "frames": [
+      {
+        "frame": "agent.malformed",
+        "engine": "claude-agent-sdk",
+        "raw": {
+          "type": ""
+        },
+        "reason": "an SDK event must carry a non-empty 'type'; got the string \"\""
+      }
+    ]
+  }
+]

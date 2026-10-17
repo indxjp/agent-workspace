@@ -1,0 +1,27 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Normative.CliRuns.start_mode_cases",
+    "AgentWorkspace.Theorems.Normative.CliRuns.start_secondary_dispatch"],
+   "input": {"wait": false, "follow": false},
+   "id": "false/false",
+   "expected": {"mode": "plain", "calls": ["start"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.CliRuns.start_mode_cases",
+    "AgentWorkspace.Theorems.Normative.CliRuns.start_secondary_dispatch"],
+   "input": {"wait": true, "follow": false},
+   "id": "true/false",
+   "expected": {"mode": "wait", "calls": ["start", "waitForOutcome"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.CliRuns.start_mode_cases",
+    "AgentWorkspace.Theorems.Normative.CliRuns.start_secondary_dispatch"],
+   "input": {"wait": false, "follow": true},
+   "id": "false/true",
+   "expected": {"mode": "follow", "calls": ["start", "follow"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.CliRuns.start_mode_cases",
+    "AgentWorkspace.Theorems.Normative.CliRuns.start_secondary_dispatch"],
+   "input": {"wait": true, "follow": true},
+   "id": "true/true",
+   "expected": {"mode": "invalid", "calls": []}}],
+ "family": "cli-runs",
+ "description": "Start mode combinations"}

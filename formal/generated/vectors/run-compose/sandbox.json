@@ -1,0 +1,23 @@
+{"vectors":
+ [{"witnesses": ["AgentWorkspace.Theorems.WellFormed.RunCompose.sandbox_path_rejects_escape"],
+   "input": {"sessionId": "valid-session_1"},
+   "id": "safe",
+   "expected":
+   {"result":
+    {"projectKey": "workspace-a",
+     "cwd": "/workspace/workspace-a/valid-session_1",
+     "configDir": "/workspace/workspace-a/valid-session_1/.claude"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.RunCompose.sandbox_path_rejects_escape"],
+   "input": {"sessionId": "../other"},
+   "id": "traversal",
+   "expected": {"result": null}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.RunCompose.sandbox_path_rejects_escape"],
+   "input": {"sessionId": ""},
+   "id": "empty",
+   "expected": {"result": null}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.RunCompose.sandbox_path_rejects_escape"],
+   "input": {"sessionId": "-bad"},
+   "id": "leading-hyphen",
+   "expected": {"result": null}}],
+ "family": "run-compose",
+ "description": "Sandbox path and scope derivation"}

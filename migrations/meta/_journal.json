@@ -1,0 +1,384 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1788400075915,
+      "tag": "0000_init",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788487848638,
+      "tag": "0001_w2_resources",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788695500965,
+      "tag": "0002_w3_runtime_profiles",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1788851293231,
+      "tag": "0003_steep_galactus",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1788904489611,
+      "tag": "0004_overconfident_lake",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788957128271,
+      "tag": "0005_durable_sessions_run_tokens",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788961023577,
+      "tag": "0006_familiar_karnak",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788998646804,
+      "tag": "0007_fast_hannibal_king",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789006629844,
+      "tag": "0008_damp_nemesis",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1789025414421,
+      "tag": "0009_special_thena",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1789107610505,
+      "tag": "0010_little_power_pack",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1789121487080,
+      "tag": "0011_goofy_storm",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1789130888712,
+      "tag": "0012_legal_shatterstar",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1789138107076,
+      "tag": "0013_secret_namora",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1789155095448,
+      "tag": "0014_premium_vengeance",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1789176610928,
+      "tag": "0015_amazing_screwball",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1789211754129,
+      "tag": "0016_next_satana",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1789309139686,
+      "tag": "0017_wild_the_executioner",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1789336367586,
+      "tag": "0018_heavy_stone_men",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1789524755042,
+      "tag": "0019_repair_legacy_run_accounting",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1789615057055,
+      "tag": "0020_sparkling_nova",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1790035747302,
+      "tag": "0021_slippery_sister_grimm",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1790069958149,
+      "tag": "0022_warm_paibok",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1790473581638,
+      "tag": "0023_colorful_shotgun",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1790492826870,
+      "tag": "0024_curly_molten_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1790492852184,
+      "tag": "0025_name_the_engine_in_stored_rows",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1790577273540,
+      "tag": "0026_create_the_engine_scoped_session_state_store",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1790577275211,
+      "tag": "0027_backfill_claude_session_state",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1790663240472,
+      "tag": "0028_widen_the_engine_checks_to_openai_agents",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1790685091254,
+      "tag": "0029_widen_the_engine_checks_to_pi",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1790716932853,
+      "tag": "0030_create_the_cli_sessions_table",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1790726056561,
+      "tag": "0031_widen_the_engine_checks_to_mastra",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1790831350949,
+      "tag": "0032_mark_the_setup_agent",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1790888968206,
+      "tag": "0033_create_the_agent_version_store",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1790935714191,
+      "tag": "0034_mark_the_workspace_default_runtime_profile",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1790952994520,
+      "tag": "0035_record_who_a_local_runtime_key_acts_for",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1790993190993,
+      "tag": "0036_add_connector_kinds_and_the_run_tool_snapshot",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1791035239480,
+      "tag": "0037_create_the_surface_session_keys",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1791040505135,
+      "tag": "0038_record_feedback_on_a_run",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1791052909944,
+      "tag": "0039_record_an_evaluation_of_a_version",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1791058172057,
+      "tag": "0040_record_the_materialised_version",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1791061317780,
+      "tag": "0041_pin_a_session_to_its_agent_version",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1791071418164,
+      "tag": "0042_store_the_prompt_of_a_run",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1791076536999,
+      "tag": "0043_record_every_pointer_move",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1791340463749,
+      "tag": "0044_run_evaluations_in_steps",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1791403380920,
+      "tag": "0045_allow_vercel_sandbox_runtime_driver",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1791403380921,
+      "tag": "0046_record_the_tool_sandbox_of_a_run",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1791417663285,
+      "tag": "0047_allow_cloudflare_sandbox_runtime_driver",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1791652990405,
+      "tag": "0048_create_endpoint_clients",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1791665473085,
+      "tag": "0049_add_runtime_verifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1791689157577,
+      "tag": "0050_add_oauth_to_endpoint_clients",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1791730132877,
+      "tag": "0051_backfill_parent_folder_rows",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1791778445280,
+      "tag": "0052_add_openapi_document_to_connectors",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1792108743478,
+      "tag": "0053_drop_duplicate_run_events_index",
+      "breakpoints": true
+    }
+  ]
+}

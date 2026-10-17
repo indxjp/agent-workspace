@@ -1,0 +1,45 @@
+{
+  "name": "@agent-workspace/egress-proxy",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "@typescript/native": "npm:typescript@7.0.2",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
+    "vitest": "5.0.3"
+  },
+  "nx": {
+    "targets": {
+      "lint": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "eslint packages/egress-proxy --max-warnings 0"
+        }
+      },
+      "test": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "vitest run --project @agent-workspace/egress-proxy --reporter=default --reporter=json --outputFile={projectRoot}/.vitest-report.json",
+          "env": {
+            "NODE_OPTIONS": "--unhandled-rejections=strict",
+            "VITEST_MAX_WORKERS": "4"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,342 @@
+---
+title: "Sessions"
+description: "Read, rename, archive and restore platform sessions, and read the provider-native transcript stored under one."
+---
+
+<Info>
+
+- **Read this when:** you continue a conversation across runs, list or rename a user's conversations, archive or restore one, or read what the engine actually stored for it.
+- **You will learn:** how a platform session differs from the engine's session id, how session listing and access work, and how to read the main and subagent transcripts.
+- **Used in:** [Chapter 3 · Test and improve it](/path/test) and [Chapter 4 · Put it in your product](/path/embed).
+
+</Info>
+
+What you can do with a session:
+
+- [List](#list) the sessions you may see (cursor-paged) and [get](#get) one by its platform id.
+- [Rename, archive or restore](#update) a session.
+- Continue it by passing its id as `sessionId` when you [start a run](/resources/runs#start).
+- Read its engine-native [transcript](#transcript-read) and list its [subagent transcripts](#transcript-subkeys).
+
+`aw.sessions` is the client family for `/api/sessions/**` (`packages/sdk/src/resources/sessions.ts`,
+contract `@indx-workspace/contracts/sessions`). A **session** is the platform's own record of a
+conversation with an agent — the row `POST /api/agents/:id/runs` extends with each run
+(`sessionId`). A session's `engineSessionId` is a different identifier: the id the **engine**
+reported for it — the Claude Agent SDK's own session id today — and the key its **transcript**
+(the stored, engine-native turn history) is addressed by. `engine` beside it names which engine
+that was; read the catalogue of them with [`engines.list()`](/resources/engines).
+`aw.sessions` covers the platform row; `aw.sessions.transcript` covers the engine-native store
+underneath it.
+
+```ts title="sessions.ts" claim="compile"
+import { createClient } from '@indx-workspace/sdk';
+
+const baseUrl = process.env.AGENT_WORKSPACE_URL;
+const apiKey = process.env.AGENT_WORKSPACE_API_KEY;
+if (baseUrl === undefined || apiKey === undefined) {
+  throw new Error('Set AGENT_WORKSPACE_URL and AGENT_WORKSPACE_API_KEY');
+}
+const aw = createClient({
+  baseUrl,
+  auth: { kind: 'api-key', apiKey },
+});
+
+// Every active session the caller may see.
+const { sessions } = await aw.sessions.list({ status: 'active' });
+const session = sessions[0];
+if (session === undefined) throw new Error('no active sessions');
+
+// Read the session row.
+const full = await aw.sessions.get(session.id);
+console.log(full.title, full.status, full.resumable);
+
+// Rename it.
+await aw.sessions.update(session.id, { title: 'Renamed from the docs' });
+
+// Read its transcript, if the runtime has resumed it at least once. `projectKey` defaults to
+// the caller's own workspace; pass it only to state a key explicitly.
+if (session.engineSessionId !== null) {
+  const entries = await aw.sessions.transcript.read(session.engineSessionId);
+  console.log(`${entries.length} transcript entries`);
+
+  const subkeys = await aw.sessions.transcript.subkeys(session.engineSessionId);
+  console.log('subagent transcripts:', subkeys);
+}
+```
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw sessions list --status active
+aw sessions get <id>
+aw sessions rename <id> "Renamed from the docs"
+aw sessions transcript <provider-session-id>
+aw sessions subkeys <provider-session-id>
+```
+
+</CodeGroup>
+
+## `SESSION_STATUSES`
+
+```ts title="illustrative" claim="illustrative"
+export const SESSION_STATUSES = ['active', 'archived'] as const;
+export type SessionStatus = (typeof SESSION_STATUSES)[number];
+```
+
+The only two states a session has. `resumable` on `SessionResource` is derived, not stored: `true`
+exactly when `status === 'active'` and `engineSessionId` is not `null` (there is something for the
+runtime to resume). Reference: [`SESSION_STATUSES`](/reference/contracts/sessions#session_statuses).
+
+## list
+
+`GET /api/sessions`
+
+The sessions the caller may see, in either state, filtered by an optional `status`, newest
+**created** first. It returns the whole response body, `{ sessions, projectKey, nextCursor }`
+(`SessionListResponse`). `projectKey` is the tenant key the caller's transcripts are stored under;
+it is always the caller's workspace id, and it is reported here specifically so a caller does not
+have to compute or guess it before reading a transcript.
+
+The list is cursor-paged ([Pagination](/guides/pagination)): `limit` is 1–200, and pass
+`nextCursor` back unchanged as `cursor`. Without a `limit` the route answers every remaining
+session in one page. `listAll` walks the pages for you.
+
+```ts title="illustrative" claim="illustrative"
+import type { ListSessionsQuery } from '@indx-workspace/sdk';
+
+const query: ListSessionsQuery = { status: 'archived', limit: 50 }; // omit status for both states
+const { sessions, projectKey, nextCursor } = await aw.sessions.list(query);
+
+for await (const session of aw.sessions.listAll({ status: 'active', limit: 50 })) {
+  console.log(session.id);
+}
+```
+
+An authenticated `user` principal sees sessions it owns, plus every session when its role is
+`owner` or `admin`; an API-key (`runner`) principal sees only the one session named in its signed
+per-run claim, matched by `engineSessionId`.
+
+| Code                         | Status | Meaning                                                                                     |
+| ---------------------------- | ------ | ------------------------------------------------------------------------------------------- |
+| `session_api_not_configured` | 503    | This deployment has no session store wired in.                                              |
+| `unauthenticated`            | 401    | The request carried no usable session or key.                                               |
+| `session_forbidden`          | 403    | The caller's workspace no longer exists.                                                    |
+| `invalid_session_status`     | 400    | `status` was present and was neither `active` nor `archived`.                               |
+| `invalid_limit`              | 400    | `limit` was present and is not an integer from 1 to 200.                                    |
+| `invalid_cursor`             | 400    | `cursor` is not a `nextCursor` this list minted for the caller's workspace.                 |
+| `pagination_unavailable`     | 400    | `limit` or `cursor` was sent to a deployment with no session repository, which cannot page. |
+| `workspace_not_addressable`  | 500    | The caller's workspace id cannot be a transcript project key (deployment defect).           |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw sessions list
+aw sessions list --status archived --limit 50 --cursor <next-cursor>
+aw sessions list --all
+```
+
+</CodeGroup>
+
+Reference: [`sessions.list`](/reference/sdk/sessions#list), [`SessionListResponseSchema`](/reference/contracts/sessions#sessionlistresponseschema).
+
+## get
+
+`GET /api/sessions/:id`
+
+One session by its platform id (`SessionResource.id` — not `engineSessionId`). Returns the bare
+`SessionResource`, unwrapped from the `{ session }` envelope the route answers with.
+
+```ts title="illustrative" claim="illustrative"
+const session = await aw.sessions.get('a1b2c3d4-...');
+```
+
+| Code                         | Status | Meaning                                                                                       |
+| ---------------------------- | ------ | --------------------------------------------------------------------------------------------- |
+| `session_api_not_configured` | 503    | This deployment has no session store wired in.                                                |
+| `unauthenticated`            | 401    | The request carried no usable session or key.                                                 |
+| `invalid_session_id`         | 400    | The id in the path is not a UUID.                                                             |
+| `session_forbidden`          | 403    | This session is not owned by the caller, and the caller has no administrative session access. |
+| `session_api_not_configured` | 503    | The caller's workspace has no session repository configured for it.                           |
+| `session_not_found`          | 404    | No session with that id in this workspace.                                                    |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw sessions get <id>
+```
+
+</CodeGroup>
+
+Reference: [`sessions.get`](/reference/sdk/sessions#get), [`SessionResourceSchema`](/reference/contracts/sessions#sessionresourceschema).
+
+## update
+
+`PATCH /api/sessions/:id`
+
+Rename a session, archive it (`status: 'archived'`), or restore it (`status: 'active'`) — or any
+combination in one call, via `UpdateSessionPatch`:
+
+```ts title="illustrative" claim="illustrative"
+export interface UpdateSessionPatch {
+  readonly title?: string | null;
+  readonly status?: SessionStatus;
+}
+```
+
+```ts title="illustrative" claim="illustrative"
+// Rename.
+await aw.sessions.update(session.id, { title: 'Q3 onboarding walkthrough' });
+
+// Archive.
+await aw.sessions.update(session.id, { status: 'archived' });
+
+// Restore.
+await aw.sessions.update(session.id, { status: 'active' });
+
+// Clear the title back to none.
+await aw.sessions.update(session.id, { title: null });
+```
+
+<Note>
+  The contract's TSDoc on `UpdateSessionPatch` states that an empty patch is rejected. The route
+  handler (`apps/web/server/sessions/api.ts`) accepts `{ title?, status? }` with any unknown key
+  refused as `400 invalid_body`, but does not appear to reject `{}` itself before handing it to the
+  repository, which treats an empty change set as a no-op `200` returning the session unchanged.
+  This is listed under Open questions below rather than asserted either way.
+</Note>
+
+| Code                         | Status | Meaning                                                                                       |
+| ---------------------------- | ------ | --------------------------------------------------------------------------------------------- |
+| `session_api_not_configured` | 503    | This deployment has no session store wired in.                                                |
+| `unauthenticated`            | 401    | The request carried no usable session or key.                                                 |
+| `invalid_session_id`         | 400    | The id in the path is not a UUID.                                                             |
+| `session_forbidden`          | 403    | This session is not owned by the caller, and the caller has no administrative session access. |
+| `invalid_body`               | 400    | The body is not an object, or carries a key other than `title`/`status`.                      |
+| `invalid_title`              | 400    | `title` is not `null` and is not a non-blank string of at most 200 characters.                |
+| `invalid_session_status`     | 400    | `status` is present and is neither `active` nor `archived`.                                   |
+| `session_not_found`          | 404    | No session with that id in this workspace.                                                    |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw sessions rename <id> "New title"
+aw sessions archive <id>
+aw sessions restore <id>
+```
+
+</CodeGroup>
+
+Reference: [`sessions.update`](/reference/sdk/sessions#update), [`UpdateSessionPatch`](/reference/contracts/sessions#updatesessionpatch).
+
+## transcript.read
+
+`GET /api/sessions/:providerSessionId/transcript?projectKey=&subpath=`
+
+The stored transcript, one provider-native entry per JSONL line the Claude Agent SDK wrote, in
+append order. `TranscriptEntry` is `z.unknown()` in the contract — the line shape belongs to the
+provider, not to this platform, so the schema gives
+it no shape of its own.
+
+Both `transcript.read` and `transcript.subkeys` are keyed by the **provider's** session id
+(`SessionResource.engineSessionId`), never the platform's `SessionResource.id` — that is the id the
+runtime actually resumes by. `projectKey` is the tenant key the transcript is stored under; it
+defaults to the caller's own workspace id (the same value `list()` reports), so most callers pass
+nothing. A call that _does_ state one is still parsed and still compared, and the server refuses
+a value that disagrees with the caller's own workspace (`403 project_key_mismatch`) rather than
+silently storing under it — the TSDoc on `SessionTranscriptClient` explains this is deliberate: a
+silently-defaulted-and-accepted key would hide a misconfigured runtime instead of surfacing it.
+`subpath` addresses one subagent transcript, formatted `subagents/agent-<id>`; omit it for the
+main transcript.
+
+```ts title="illustrative" claim="illustrative"
+const entries = await aw.sessions.transcript.read(session.engineSessionId!);
+for (const entry of entries) {
+  console.log(JSON.stringify(entry)); // provider-native shape; no fixed fields to read here
+}
+
+// A subagent transcript, or a caller stating its own workspace key explicitly:
+import type { ReadTranscriptOptions } from '@indx-workspace/sdk';
+const options: ReadTranscriptOptions = { subpath: 'subagents/agent-1' };
+const subagent = await aw.sessions.transcript.read(session.engineSessionId!, options);
+```
+
+| Code                         | Status | Meaning                                                                                                                                                                               |
+| ---------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `session_api_not_configured` | 503    | This deployment has no session store wired in.                                                                                                                                        |
+| `unauthenticated`            | 401    | The request carried no usable session or key.                                                                                                                                         |
+| `invalid_session_id`         | 400    | The path id is not a UUID.                                                                                                                                                            |
+| `invalid_project_key`        | 400    | `projectKey` is present and does not match `PROJECT_KEY_PATTERN` (`^[A-Za-z0-9_-]{1,64}$`).                                                                                           |
+| `project_key_mismatch`       | 403    | The declared `projectKey` disagrees with the caller's own workspace.                                                                                                                  |
+| `invalid_subpath`            | 400    | `subpath` is present and does not match `TRANSCRIPT_SUBPATH_PATTERN`, or exceeds 128 characters.                                                                                      |
+| `session_forbidden`          | 403    | This session is not owned by the caller, and the caller has no administrative session access.                                                                                         |
+| `session_archived`           | 409    | The session is archived; restore it before reading its transcript.                                                                                                                    |
+| `transcript_not_found`       | 404    | No transcript is stored for this session (and subpath, if any) in this workspace — different from a session that exists but has no turns yet, which answers `200` with `entries: []`. |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw sessions transcript <provider-session-id>
+aw sessions transcript <provider-session-id> --subpath subagents/agent-1
+```
+
+</CodeGroup>
+
+<Tip>
+  `--project-key` is a pure override: the CLI sends nothing by default and so does the SDK, and the
+  server fills in the caller's own workspace. Stating a key only ever restates your own — a key that
+  disagrees with the caller is refused (`403 project_key_mismatch`), which is how a misconfigured
+  runtime is caught.
+</Tip>
+
+Reference: [`sessions.transcript.read`](/reference/sdk/sessions#transcript-read), [`TranscriptResponseSchema`](/reference/contracts/sessions#transcriptresponseschema).
+
+## transcript.subkeys
+
+`GET /api/sessions/:providerSessionId/subkeys?projectKey=`
+
+The `subpath`s stored under one session — the subagent transcripts a caller can then read
+individually through `transcript.read(..., { subpath })`. A sibling route to `.../transcript`
+rather than a field on it, so asking _which_ subagent transcripts exist does not require
+downloading the whole conversation first. Empty when only the main transcript exists.
+
+```ts title="illustrative" claim="illustrative"
+const subkeys = await aw.sessions.transcript.subkeys(session.engineSessionId!);
+// e.g. ["subagents/agent-1", "subagents/agent-2"]
+```
+
+| Code                         | Status | Meaning                                                                                       |
+| ---------------------------- | ------ | --------------------------------------------------------------------------------------------- |
+| `session_api_not_configured` | 503    | This deployment has no session store wired in.                                                |
+| `unauthenticated`            | 401    | The request carried no usable session or key.                                                 |
+| `invalid_session_id`         | 400    | The path id is not a UUID.                                                                    |
+| `invalid_project_key`        | 400    | `projectKey` is present and malformed.                                                        |
+| `project_key_mismatch`       | 403    | The declared `projectKey` disagrees with the caller's own workspace.                          |
+| `session_forbidden`          | 403    | This session is not owned by the caller, and the caller has no administrative session access. |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw sessions subkeys <provider-session-id>
+```
+
+</CodeGroup>
+
+Reference: [`sessions.transcript.subkeys`](/reference/sdk/sessions#transcript-subkeys), [`TranscriptSubkeysResponseSchema`](/reference/contracts/sessions#transcriptsubkeysresponseschema).
+
+<Note>
+  Append and delete on a transcript (`POST`/`DELETE .../transcript`) are the runtime's own write
+  path, not something a caller of this SDK should do — `aw.sessions.transcript` deliberately has no
+  `append` or `delete` method, only `read` and `subkeys`.
+</Note>
+
+## Open questions
+
+- `UpdateSessionPatch`'s TSDoc says "an empty patch is rejected", but the server appears to
+  accept `{}` as a successful no-op `200` rather than a `400`. Not resolved by guessing; flagged
+  here.
+- Whether `sessions.get`/`sessions.update` accept the platform id only, or also the provider
+  (`engineSessionId`) — the route folder is literally named `[engineSessionId]` for both this route
+  and the transcript routes, but `getSession`/`updateSession`'s own doc comments and the contract
+  both call the path segment the platform id for this specific route. Documented here per the
+  contract and SDK TSDoc, which is the more authoritative source for a caller; the routing folder
+  name itself looks like an internal naming leftover worth the orchestrator's attention.

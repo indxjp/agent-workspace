@@ -1,0 +1,28 @@
+{
+  // The type-checking project for the repository-level gates in `tests/`.
+  //
+  // These files are not inside any workspace member — `tests/sdk-surface.test.ts` asserts the
+  // pinned SDK's surface against docs/research/R-01-options.json, which belongs to no single
+  // package — so nothing else claims them. This config exists so type-aware ESLint's
+  // `projectService`, which searches upwards for the nearest `tsconfig.json`, finds a real
+  // project here instead of failing with "was not found by the project service".
+  //
+  // `tsconfig.root.json` also includes `tests/**/*.ts`, and that is not an accident: it is what
+  // makes `pnpm typecheck` (which runs the root config, then each member's) actually check
+  // these files. The two projects agree because both extend the same options.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    // Tests import the repository's `.mjs` scripts, which carry their types in JSDoc (as
+    // `tsconfig.root.json` checks them), so this project reads those types too.
+    "allowJs": true,
+    "checkJs": true,
+    "types": ["node"],
+    // Read from source, as vitest does (`vitest.config.ts`): the root has no dependency on it.
+    "paths": {
+      "@indx-workspace/platforms": ["../packages/platforms/src/index.ts"],
+      "@indx-workspace/platforms/testing": ["../packages/platforms/src/testing/index.ts"]
+    }
+  },
+  "include": ["**/*.ts"]
+}

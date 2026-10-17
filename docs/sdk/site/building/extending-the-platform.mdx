@@ -1,0 +1,585 @@
+---
+title: "Extend the platform"
+description: "The code-level extension points for a contributor working in the agent-workspace repository, and the gates that check each one."
+---
+
+<Info>
+**Chapter 6 · Run it for your team — step 4 of 4** · [the chapter map](/path/operate)
+
+- **You will:** find the code-level extension point for a new runtime driver, model provider, engine or API route.
+- **You will learn:** where each extension point lives, the interface it implements, and the gates that check it.
+- **You need:** a checkout of the platform's repository; this page is for contributors, not SDK users.
+
+</Info>
+
+This page is for a **contributor working inside the `agent-workspace` repository** — not an SDK
+consumer. Nothing described below is reachable through `@indx-workspace/sdk`, the `aw` CLI, or
+any documented `/api/**` route today. If your product needs one of these — a runtime driver for a
+new host, a model provider, a second agent engine, or a route the platform does not yet expose —
+open an issue or a pull request against the platform; there is no way to add one from outside the
+repository.
+
+Every item below is on the **Extend** surface: the code-level extension points of the platform,
+for contributors, as opposed to **Configure** (agents, skills, connectors, and the rest of the
+data a customer changes through the API — see [Design an agent](/building/agents) and
+[Connect an MCP server](/building/mcp-servers)) or **Consume** (the published packages a customer
+writes code against). The last section of this page lists what is explicitly **Internal** —
+code with no compatibility promise that even a contributor does not treat as an extension point.
+
+## Which extension point do I want?
+
+| I want to…                                                                                    | Extension point                                                    | Where the code lives                                                                           |
+| --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| Run agents on a host the platform does not support yet (a new cloud sandbox, a new scheduler) | [A runtime driver](#1-a-runtime-driver)                            | `packages/runtime/src/<driver>.ts`                                                             |
+| Route model calls through a new upstream API                                                  | [A model provider adapter](#2-a-model-provider-adapter)            | `packages/gateway/src/providers/<name>.ts`                                                     |
+| Run agents with something other than the Claude Agent SDK                                     | [An engine](#3-an-engine)                                          | `packages/engine` + `packages/engine-<id>` + `apps/runner/src/engines.ts` (ADR-0065, ADR-0070) |
+| Expose a new capability over HTTP                                                             | [A new `/api/**` route](#4-a-new-api-route-the-contract-first-way) | `packages/contracts` → `apps/web` → `packages/sdk` → `packages/aw`                             |
+
+## 1. A runtime driver
+
+A runtime driver (Extend) decides _where_ an agent's sandbox runs — a local process, a Docker
+container, a Kubernetes pod, a managed cloud sandbox. Existing drivers live one file each under
+`packages/runtime/src/`: `local.ts`, `docker.ts`, `kubernetes.ts`, `cloud-run.ts`,
+`aca-sessions.ts`. Each is re-exported from the package's single entry
+point, `packages/runtime/src/index.ts` (`export * from './<driver>.js'`), which is also the
+package's only `package.json` export — `packages/runtime` declares no subpaths.
+
+The interface is `RuntimeDriver<TRequest, TEvent>`, the whole of it, in
+`packages/runtime/src/driver.ts`:
+
+```ts title="illustrative" claim="illustrative"
+type RuntimeDriverId =
+  | 'local'
+  | 'sandbox-runtime'
+  | 'docker'
+  | 'kubernetes'
+  | 'gke-agent-sandbox'
+  | 'aca-sessions'
+  | 'aws-agentcore'
+  | 'aws-ecs'
+  | 'cloud-run-sandbox' // declared, unimplemented — see the file's own header
+  | 'cloud-run-service'
+  | 'external'
+  | 'vercel-sandbox';
+
+type RuntimeHandle = {
+  readonly id: string;
+  readonly driver: RuntimeDriverId;
+  readonly externalId: string;
+  readonly workspacePath: string;
+  readonly createdAt: Date;
+  readonly expiresAt?: Date;
+};
+
+type RuntimeCapabilities = {
+  readonly isolation: 'none' | 'os-sandbox' | 'container' | 'gvisor' | 'microvm';
+  readonly customImage: boolean;
+  readonly persistentFilesystem: boolean;
+  readonly sessionAffinity: boolean;
+  readonly maxSessionSeconds: number | null;
+  readonly networkPolicies: readonly ('none' | 'allowlist' | 'open')[];
+  readonly execCommands: boolean;
+  readonly gpu: boolean;
+  readonly managedByProvider: boolean;
+  readonly typicalStartMs: number | null;
+};
+
+type RuntimeRunSpec = {
+  readonly runtimeProfileId: string;
+  readonly driver: RuntimeDriverId;
+  readonly runtimeConnectionId?: string;
+  readonly cpu?: number;
+  readonly memoryMb?: number;
+  readonly diskMb?: number;
+  readonly networkPolicy: 'none' | 'restricted' | 'open';
+  readonly allowedDomains?: readonly string[];
+  readonly filesystem: 'read-only' | 'read-write';
+  readonly persistPaths?: readonly string[];
+  readonly timeoutSeconds?: number;
+  readonly idleTimeoutSeconds?: number;
+  readonly driverConfig?: Readonly<Record<string, unknown>>;
+};
+
+type RuntimeConfig = {
+  readonly sessionId: string;
+  readonly workspacePath: string;
+  readonly runtimeProfileId?: string;
+  readonly runSpec?: RuntimeRunSpec;
+};
+
+type AgentConnection<TEvent> = {
+  readonly events: AsyncIterable<TEvent>;
+  readonly sessionId: Promise<string>;
+  interrupt(): Promise<void>;
+};
+
+// packages/runtime/src/driver.ts
+type RuntimeDriver<TRequest, TEvent> = {
+  readonly id: RuntimeDriverId;
+  readonly capabilities: RuntimeCapabilities;
+  create(config: RuntimeConfig): Promise<RuntimeHandle>;
+  startAgent(runtime: RuntimeHandle, request: TRequest): Promise<AgentConnection<TEvent>>;
+  destroy(runtime: RuntimeHandle): Promise<void>;
+  /** Optional — implement only when the driver cannot mount a volume. */
+  putFiles?(runtime: RuntimeHandle, archive: ReadableStream): Promise<void>;
+  getFiles?(runtime: RuntimeHandle, paths: string[]): Promise<ReadableStream>;
+};
+```
+
+`TRequest` and `TEvent` are type parameters rather than concrete imports: `packages/runtime`
+declares **no dependencies at all**, so it cannot import `@agent-workspace/core`'s `RunRequest`
+and `ClassifiedSdkEvent`, the types a real caller supplies. `capabilities` is a field, not a
+method — §14.5's rule is "never pretend drivers are equivalent," and a driver must state its
+isolation level, network policies, and whether it supports a persistent filesystem and session
+affinity up front rather than computing an answer that could change mid-run.
+
+A runtime driver is not registered in a list. Each runner manager serves exactly one driver,
+chosen by its `RUNTIME_DRIVER`, so adding a driver takes three steps:
+
+1. Implement `RuntimeDriver` in `packages/runtime/src/<driver>.ts` and export it from `index.ts`.
+2. Add the id to `SERVED_RUNTIME_DRIVERS` and a branch to `managerDriverOptions` in
+   `apps/runner/src/manager-start.ts`, which is the only place a driver is constructed.
+3. If the id is new, add it to `RUNTIME_DRIVERS` in `packages/contracts/src/runtimes.ts`, under the
+   deprecation policy described above
+   ([Public surface and stability](/concepts/public-surface#versions-and-deprecation)).
+
+The web then lists the runner's driver from `RUNTIME_DRIVER`
+(`apps/web/server/composition/services.ts`). A driver you add is exercised by `packages/runtime`'s
+own tests and by `apps/web/app/api/runtimes/[id]/runtimes-route.test.ts`.
+
+**Gates:**
+
+- `dependency-cruiser.config.mjs`'s `libraries-do-not-import-applications` rule forbids
+  `packages/(core|runtime|gateway|contracts|sdk|aw)` from importing anything under `apps/` — a
+  driver must not import `apps/runner` or `apps/web`. `no-circular-dependencies` and
+  `no-unresolved-imports` apply to every file in `apps/` and `packages/`, this one included.
+- `pnpm package-exports:check` (`scripts/check-package-exports.mjs`) validates that every target a
+  package's `package.json` `exports` map names actually resolves to a file on disk. Since
+  `packages/runtime` exports only `.`, a new driver file reaches consumers through
+  `packages/runtime/src/index.ts`'s `export *` — forgetting that line is invisible to the
+  TypeScript compiler but fails this gate.
+- `packages/runtime/package.json` declares no `@agent-workspace/*` dependency, so a driver here
+  cannot reach `@anthropic-ai/claude-agent-sdk` either: `tests/no-sdk-import.test.ts` asserts that
+  the **only** file in the whole tracked tree allowed to import that package is
+  `apps/runner/src/claude.ts`.
+- `pnpm architecture:check` runs both of the above; `pnpm typecheck` and the package's own
+  `vitest` project (`packages/runtime/src/*.test.ts`) run as for any change.
+
+**Contracts version:** adding an id to `packages/runtime/src/driver.ts`'s `RuntimeDriverId` union
+is internal — nothing outside `packages/runtime` sees it by import. Making that driver
+_selectable_ through the API is a separate, deliberate step: `RUNTIME_DRIVERS` in
+`packages/contracts/src/runtimes.ts` is a **second, hand-maintained list** with the same values
+today (contracts imports nothing from `packages/runtime` — `contracts-depend-on-nothing-in-the-workspace`
+in `dependency-cruiser.config.mjs` forbids it). Adding a value there is a change to a published
+wire enum: run `pnpm docs:generate` to regenerate `reference/contracts/runtimes.mdx`, which
+`pnpm docs:check` verifies is not stale.
+
+## 2. A model provider adapter
+
+A model provider adapter (Extend) decides which upstream API the gateway can proxy a run's model
+calls to. Existing adapters live one file each under `packages/gateway/src/providers/`:
+`anthropic.ts`, `openai.ts`, `azure-openai.ts`, `openai-compatible.ts`.
+
+The interface is `ModelProvider`, in `packages/gateway/src/types.ts`:
+
+```ts title="illustrative" claim="illustrative"
+type ModelInfo = {
+  id: string;
+  type: 'model';
+  display_name: string;
+  created_at: string;
+  [key: string]: unknown;
+};
+
+type AnthropicMessageRequest = { model: string; [key: string]: unknown };
+type AnthropicCountTokensRequest = { model: string; [key: string]: unknown };
+type AnthropicCountTokensResponse = { input_tokens: number };
+
+type RequestContext = {
+  providerId: string;
+  credential: string;
+  requestId: string;
+  settings: Readonly<Record<string, unknown>>;
+  requestHeaders?: Headers;
+  signal?: AbortSignal;
+};
+
+type ModelCapabilities = {
+  streaming: boolean;
+  toolUse: boolean;
+  thinking: boolean;
+  promptCaching: boolean;
+  structuredOutput: boolean;
+  contextManagement: boolean;
+  webSearch: boolean;
+  tokenCounting: boolean;
+};
+
+// packages/gateway/src/types.ts
+interface ModelProvider {
+  id: string;
+  listModels(context: RequestContext): Promise<ModelInfo[]>;
+  createMessage(request: AnthropicMessageRequest, context: RequestContext): Promise<Response>;
+  countTokens?(
+    request: AnthropicCountTokensRequest,
+    context: RequestContext,
+  ): Promise<AnthropicCountTokensResponse>;
+  capabilities: ModelCapabilities;
+}
+```
+
+`RequestContext.credential` is resolved from a short-lived gateway token, never from
+`process.env` — a provider module must read its upstream credential from this parameter and
+nothing else. `RequestContext.requestHeaders` also carries the caller's own gateway credential
+mixed in with protocol headers (`anthropic-*`, for instance); an adapter selects the headers it
+forwards rather than passing the collection through wholesale (see `anthropicRequestHeaders` in
+`packages/gateway/src/providers/anthropic.ts` for the pattern).
+
+Two shapes of adapter exist, and which one to write depends on whether the upstream API already
+speaks the Anthropic Messages wire format:
+
+- **Pass-through** (`anthropic.ts`): the request body and the response stream are forwarded
+  unchanged; only authentication is substituted. No translation module is involved.
+- **Translating** (`openai.ts`, reused by `azure-openai.ts` and `openai-compatible.ts`):
+  `packages/gateway/src/translate/openai.ts` converts an `AnthropicMessageRequest` to the
+  upstream's own request shape (`anthropicToOpenAI`) and its response back
+  (`openAIToAnthropic`); `packages/gateway/src/translate/openai-stream.ts` does the same
+  incrementally for a streaming response (`translateOpenAIStream`). This translation is lossy by
+  design, and the module says exactly where: `OPENAI_CANNOT_REPRESENT` lists what has no upstream
+  equivalent (`stop_sequences`, `tool_result.is_error`, `pause_turn`, and others), and
+  `OPENAI_TRANSLATION_TABLE`/`OPENAI_APPROXIMATION_WARNINGS` document, element by element, which
+  parts of the wire format are `'lossless'` and which are `'approximated'`. A new translating
+  adapter that reuses this module inherits those warnings; one that talks to a genuinely different
+  wire shape needs its own translation module and its own accounting of what cannot be
+  represented.
+
+Registration is `packages/gateway/src/providers/registry.ts`'s `createProviderRegistry()`, which
+returns `readonly ModelProvider[]` built from the fixed `PROVIDER_IDS` tuple
+(`'anthropic' | 'openai' | 'azure-openai' | 'openai-compatible'`) through an internal `row(...)`
+helper. A row is a **request-time delegate**, not a constructed-once instance: endpoint settings
+(`baseUrl`, `deployment`, `apiVersion`) belong to the model connection the run token names, not to
+this process, so the registry defers construction to the moment a `RequestContext` is available. A
+new adapter adds an id to `PROVIDER_IDS` and a `row(...)` entry.
+
+**Gates:**
+
+- The same `libraries-do-not-import-applications`, `no-circular-dependencies`, and
+  `no-unresolved-imports` dependency-cruiser rules as above apply to `packages/gateway`.
+  `packages/gateway/package.json` depends on `@agent-workspace/core` (for `guardedFetch` and the
+  egress policy), which is permitted — the forbidden direction is a library importing an
+  application, not another library.
+- `pnpm package-exports:check`: `packages/gateway`'s `package.json` declares `.`, `./start`,
+  `./tokens`, and `./providers/registry` as its only exports; a new provider file does not need
+  its own subpath, since `createProviderRegistry` re-exports the shared `ModelProvider`,
+  `ModelInfo`, and `RequestContext` types that subpath's consumers need.
+- `tests/no-sdk-import.test.ts` does not apply here: the gateway talks to the Anthropic Messages
+  HTTP API directly over `fetch`, not through the `@anthropic-ai/claude-agent-sdk` npm package
+  that gate confines to `apps/runner/src/claude.ts`. The two are unrelated surfaces that happen to
+  share the name "Anthropic."
+- `tests/gateway-inventory.test.ts` and `apps/web/server/sdk-conformance.test.ts` both call
+  `createProviderRegistry()` and assert against `PROVIDER_IDS` — a new row is visible to both
+  without further wiring.
+
+**Contracts version:** as with a runtime driver, the gateway's `PROVIDER_IDS` is internal to
+`packages/gateway`. `MODEL_PROVIDERS` in `packages/contracts/src/runs.ts` is the separate,
+published enum a model connection's `provider` field is validated against (also consumed by
+`MODEL_PROVIDER_CONFIG_RULES` in `packages/contracts/src/models.ts`), and adding a value there is
+a contracts change with the same `pnpm docs:generate`/`pnpm docs:check` obligation.
+
+A new enum value is a minor contracts release, and the release is negotiated: every client sends
+the `X-Agent-Workspace-Contracts` version it was built against, and a control plane that does not
+serve it answers `426 contracts_version_unsupported` before touching anything
+([Public surface and stability](/concepts/public-surface#versions-and-deprecation)).
+
+## 3. An engine
+
+A runtime **driver** (above) decides _where_ an agent's sandbox runs; an **engine** decides _what
+runs inside it_ — the harness that turns an agent definition and a prompt into model calls, tool
+calls and a stream of events. ADR-0065 makes the engine an
+extension point; ADR-0070 records the
+shape the port actually took. API specification §6.4 lists the units that build it.
+
+**Adding an engine is adding a package.** It does not mean editing `apps/runner`: the runner
+reaches an adapter through exactly one file, `apps/runner/src/engines.ts`, and
+`dependency-cruiser.config.mjs` enforces that rather than leaving it to review.
+
+### What the platform supplies
+
+1. **The port.** `@agent-workspace/engine` publishes `AgentEngine`: `compile(request)`, a pure
+   translation of the neutral `EngineRunRequest` into engine-native options **or a typed
+   refusal**, and `start(request, context)`, which returns a connection of neutral `agent.*`
+   frames. It depends on `@indx-workspace/contracts` and zod, and nothing else — anything the
+   port imported would become something every adapter has to carry.
+2. **The shared decisions.** `path-grant.ts` (what a file grant's path names, including through
+   `..`), `sandbox-env.ts` (spec A.11's _"provider master credentials never enter a sandbox"_,
+   as a property of the environment rather than one provider's spelling), and `frames.ts` (the
+   `agent.*` builders, so an adapter names its engine once and never forgets to cap `raw`).
+3. **The registry.** `apps/runner/src/engines.ts` maps an engine id to a **literal** dynamic
+   import of its adapter package. An image that ships no adapter for an id answers the run with
+   `run-error {code: 'engine_not_installed'}` **before any output frame**, and `GET /healthz`
+   reports the engines that actually loaded. It never falls back to another engine.
+4. **The conformance kit.** `@agent-workspace/engine/testing` — one scenario list every adapter
+   is driven through, plus a scripted fake gateway, a fake session store, and
+   `createScriptedEngine`, a real adapter over a fake engine that the runner's own tests use so
+   they need no third-party SDK.
+
+### What an adapter supplies
+
+Start from `createEngineAdapter` in `@agent-workspace/engine`. It writes the `start` skeleton for
+you — compile-or-throw, the abort controller, the first `agent.session` frame, the
+cancelled-before-start branch, the `completed` flag, `interrupt` and the engine session id
+promise — so the adapter supplies `compile` and, per run, a plan: its events, the mapper from
+those to neutral frames, which event ends the run, and its durability verdict. The same package
+exports the helpers `compile` opens with: `parsePolicyArm`, `normaliseRequestGrants`,
+`provisionalBudget`, `requireGateway`, `sandboxRefusal` and `forkRefusal`; `permissionToolPlan` for
+the permission-to-tool mapping; `workspacePathVerdict`, `workspaceWriteVerdict` and
+`resolvedWorkspacePathVerdict` for the tool guard; and `StoreWriteLog` with `storeDurability` for
+the session bridge. Derive the policy arm from the catalogue with `engineSettingsSchema(id)`
+rather than writing a second schema.
+
+One package, `packages/engine-<id>`, with:
+
+- **exactly one boundary file** that imports the third-party SDK. Add a row to
+  `ENGINE_SDK_BOUNDARIES` in `tests/no-sdk-import.test.ts`; that table applies the same set
+  equality and the same emitted-`.d.ts` leak check to every engine, so a second adapter gets the
+  gate rather than an exception. An SDK type on an _exported_ signature is the failure mode the
+  `.d.ts` half catches: it moves the import site instead of removing it.
+- **`compile`**, pure, returning `{ ok: true, compiled }` or an `EngineRefusal` carrying one of
+  `engine_policy_invalid`, `engine_capability_unsupported`, `engine_credential_refused`,
+  `engine_path_grant_refused`. A refusal is a value, not a throw: the runner turns the code into
+  a frame a control plane branches on, and a thrown `Error` carries only a sentence.
+- **`capabilities`**, the ENG-02 set, and **`protectedConfigDirectory`** — the directory the
+  engine keeps its own configuration in, so the runner can refuse a tenant file there without
+  knowing the name. Nothing outside your package may name that directory; the control plane's
+  `sandboxFor` and `packages/runtime`'s `sessionWorkspacePaths` take it as a parameter.
+- **`placeSkills`**, pure: one workspace-relative path per file of every granted skill, under
+  `protectedConfigDirectory`. The runner writes the bytes with the machinery it already has
+  (symlink refusal, read-only modes, removing what a revoked assignment left behind) and checks
+  every path with `skillPlacementVerdict` first, so a placement outside your own directory refuses
+  the run rather than landing tenant content beside the agent's working files. Reach for
+  `skillsUnderConfigDirectory` if your engine uses the usual `<config>/skills/<name>/` layout.
+- **the tool policy your engine actually runs with**, compiled from the request's _portable_
+  inputs. `portable.permissions` is four booleans and `portable.mcpServers` is a record of
+  connector keys; turning either into your engine's tool vocabulary is your package's job, and the
+  conformance kit's `permissionAllowed` is how it is checked. See `packages/engine-claude-agent-sdk/src/tools.ts`
+  for the worked example — the permission floor, the stored arm unioned in (never replaced), the
+  `mcp__<server>__*` approvals, and the file-grant denials, in that order.
+- **a passing conformance run**, which is one test:
+
+  ```ts title="illustrative" claim="illustrative"
+  import { expectConformance } from '@agent-workspace/engine/testing';
+
+  it('passes the engine conformance kit', async () => {
+    await expectConformance({
+      engine: MY_ENGINE_ADAPTER,
+      policy: {/* a policy arm this engine accepts */},
+      unreadablePolicy: {/* one it must refuse */},
+      compiledEnv: (compiled) => compiled.env,
+      writeAllowed: (compiled, path) => /* does this compile allow a write there? */ true,
+      permissionAllowed: (compiled, permission) => /* is that switch still honoured? */ true,
+    });
+  });
+  ```
+
+### The rule an adapter cannot bend
+
+**Refuse, never ignore.** The portable core — `instructions`, the four `permissions` booleans,
+file grants, connectors, skills, `(modelConnectionId, model)`, `limits` — is honoured exactly,
+or the platform refuses: `422 engine_capability_unsupported` naming the missing capability, at
+agent save and again at run compose. An adapter never emulates a capability its engine lacks, and
+never re-implements one its engine has: the platform does not own an agent loop, a tool executor,
+a memory system or prompt templates, and an adapter is not a place to smuggle one in.
+
+<a id="protocol-check" />
+
+### The protocol check
+
+An engine does not talk to a provider; it talks to the gateway (§26) in one of the dialects
+`WIRE_PROTOCOLS` names. So compose refuses a run whose engine speaks nothing the gateway serves
+for its model connection's provider, with `engine_model_protocol_unsupported`
+(`apps/web/server/engines/protocol.ts`). The model connection is resolved while the run is
+composed, so the refusal arrives as the run's failure — its public error begins
+`engine_model_protocol_unsupported: ` and names the dialects that would have worked — before any
+runtime is asked for anything. Every provider answers `anthropic-messages`, because
+that is the gateway's own request shape; only the OpenAI family can be handed an
+`openai-responses` or `openai-chat-completions` body to forward. Without the check the failure
+arrives minutes later as a provider error on a run that was already accepted.
+
+<a id="credentials" />
+
+### Credentials and the sandbox
+
+The port hands every adapter an `EngineGatewayConnection` — a base URL, a short-lived run token,
+and the protocol — **programmatically**. Most engines pass it as a parameter. The Claude adapter
+is the exception and says why: its bundled CLI is a subprocess that reads `ANTHROPIC_BASE_URL`
+and `ANTHROPIC_AUTH_TOKEN` out of its environment, so it, and only it, translates the connection
+back into two variables. Whatever route an adapter takes, its compiled environment is checked by
+`sandboxEnvironmentVerdict`: no `ANTHROPIC_API_KEY`, and every `*_API_KEY` / `*_AUTH_TOKEN`
+holding this run's own token and not a provider credential.
+
+<a id="file-grants" />
+
+### File grants
+
+The runner writes a run's granted files into the sandbox — that is engine-neutral and needs a
+filesystem. Compiling a read-only grant into your engine's tool-permission grammar is not: use
+`normaliseGrantPath` and `writeGrantVerdict` rather than writing a second path check, because a
+read-only grant must be unwritable through every spelling of its path and
+`formal/AgentWorkspace/Authz/PathGrant.lean` is where that is proved once for all adapters.
+`normaliseGrants` refuses a grant that escapes the workspace, is absolute, or names your own
+configuration directory, so a rule is never compiled over a path the rule does not mean.
+
+<a id="skills" />
+
+### Skills
+
+_Where_ a skill goes is entirely yours: the Claude Agent SDK reads
+`${CLAUDE_CONFIG_DIR}/skills/<name>/` and the next engine will not. So the port hands an adapter
+`{ name, files }`, `placeSkills` answers with one workspace-relative path per file, and the runner
+writes the bytes — the division ADR-0072 settles, because writing safely into a sandbox is a
+filesystem problem the runner has already solved once and only the destination differs per engine.
+
+`skillPlacementVerdict` checks every answer before a byte is written, and names four ways an
+adapter can be wrong plus one way it can look right while doing nothing: a path outside your
+declared directory, a path that does not normalise, a placement for a skill the request did not
+grant, two placements on one path, and — the vacuity control — a granted skill with **no**
+placement at all. An adapter that returns `[]` therefore cannot pass a check about where its skills
+land.
+
+<a id="registry" />
+
+### Registering it
+
+`apps/runner/src/engines.ts` holds one row per engine — the id and a **literal** dynamic import.
+The specifier must be a literal: `tests/no-sdk-import.test.ts` resolves every module reference
+with the TypeScript compiler and refuses one it cannot read (ADR-0031), so an id interpolated
+into a specifier fails the gate rather than passing it. Add the package to the runtime image's
+`deps` stage in `runtime.Dockerfile`, add an engine-matrix column by re-running
+`pnpm docs:generate`, and pin the SDK version in `apps/web/server/engines/registry.ts` so the
+control plane can offer it.
+
+What the platform knows about an engine is one entry in `ENGINE_CATALOGUE`
+(`packages/contracts/src/engine-catalogue.ts`, ADR-0136): its display name, capabilities,
+engine-native settings, how it narrows a policy, the tool names it withholds, its MCP tool-name
+form and its session-stream key scheme. Adding an engine is, in order: add the id to `ENGINE_IDS`,
+add its catalogue entry (the `Record<EngineId, …>` type refuses a missing one), register its policy
+arm in the contracts arm list (a compile-time guard fails the build if an id has no arm), generate
+the migration with `pnpm --filter @agent-workspace/core db:generate`, add the adapter package, and
+add the runner and image rows above. The adapter reads its capabilities from the catalogue rather
+than restating them.
+
+<Note>
+  **Today:** the port, the shared decisions, the registry and the conformance kit all exist, and
+  four adapters sit behind them: `claude-agent-sdk` (`packages/engine-claude-agent-sdk`),
+  `openai-agents` (`packages/engine-openai-agents`, ADR-0074), `pi` (`packages/engine-pi`, ADR-0081)
+  and `mastra` (`packages/engine-mastra`, ADR-0084). The private `/run` contract carries a
+  **portable core** plus one named engine arm, so nothing outside an adapter names a tool, a skill
+  directory or a configuration directory (ADR-0072). `packages/engine-openai-agents` is the worked
+  example of this section: one boundary file, a pure SDK-free `compile`, a frame mapper, a `Session`
+  over the engine-scoped store, and the whole conformance kit passing. `packages/engine-pi` is the
+  example of an engine that lacks a capability: it declares `mcp: false` and passes the kit's
+  `connectors-are-honoured-or-refused-by-name` scenario only by refusing a connector by name with
+  `engine_capability_unsupported`. `pi`, `openai-agents` and `mastra`, the three non-Claude
+  adapters, are all built on `createEngineAdapter`; ACP follows on issue #299.
+</Note>
+
+## 4. A new API route the contract-first way
+
+A new route is not a file you add to `apps/web/app/api/`; it is a claim that must be proven four
+ways before the route counts as part of the surface (API specification §9). A row of §5's SDK
+coverage table moves from "not yet" to done only when all four hold:
+
+1. **Contract** — the schema exists in `@indx-workspace/contracts` (a new or extended file under
+   `packages/contracts/src/`), with valid, invalid, unknown-key, missing-field, and bound cases
+   tested in that package.
+2. **Conformance** — `apps/web/server/sdk-conformance.test.ts` proves the server's real serializer
+   (or parser, for a request body) satisfies that schema. This is the seam that keeps the
+   contracts package and the application from drifting: it fails the moment either side changes
+   without the other.
+3. **Client** — the `@indx-workspace/sdk` method exists in `packages/sdk/src/resources/*.ts`,
+   tested against a recording `fetch` double (`packages/sdk/src/testing.ts`) for the success path,
+   each documented problem code, a contract violation, and an abort.
+4. **Consumption** — at least one real caller in `apps/web` or `packages/aw` uses the method
+   instead of a private parser, so the contract has a consumer and cannot silently rot.
+
+Then, in order: run `pnpm docs:generate` so the new schema and method appear in
+`docs/sdk/site/reference/**` (checked by `pnpm docs:check`), and add the `aw` command
+(`packages/aw/src/commands/<family>.ts`, wired through `packages/aw/src/args.ts`) if the route is
+one the CLI's credentials can reach — an API key, or a person's token after `aw login` for a
+route that refuses an API key (API specification §7.2).
+
+**Gates, beyond the four proofs:**
+
+- `tests/route-inventory.test.ts` derives the served route surface from every tracked
+  `apps/web/app/**/route.ts` and compares it against the union of
+  `tests/route-declarations/<TASK-ID>.ts` — one hand-maintained file per owning task. A route that
+  exists in code but is declared nowhere fails the gate by name; so does a declaration marked
+  `landed: true` with no route file behind it.
+- **The shape rule** (ADR-0026, enforced by the same test): a declared path must be
+  `/api/<resource>`, `/api/<resource>/:id`, or `/api/<resource>/:id/<sub>` — lower-case,
+  hyphenated, **plural** resource segments, no verb in the resource position
+  (`create`, `rename`, `export`, and similar are rejected by name).
+- **The mandate rule**: a route API specification §34 already prints needs no
+  further justification; a route it does not print must carry a `mandate` naming the specification
+  section that requires it — a citation the gate looks up, so it cannot be invented.
+- Adding or changing a route under `apps/web/app/api/**` also touches `apps/web/server/<domain>`,
+  which is governed by the same `dependency-cruiser` rules as everything else:
+  `browser-ui-does-not-import-server-values` and `browser-ui-does-not-import-persistence` keep
+  `apps/web/components` from reaching into it directly.
+
+## What is not an extension point
+
+Three things a contributor might reach for, and why none of them is one — from
+the architecture's repository ownership table:
+
+- **`packages/core`** (Internal) — database repositories, secrets, storage, audit, and telemetry.
+  Every server-side package (`apps/web`, `apps/runner`, `packages/gateway`) depends on it, and a
+  runtime driver's `create()` or a route's handler may end up calling into it, but it is not
+  itself one of the four extension points above: its "must not own" column is explicit —
+  "application composition or UI." Changes to it are platform-team refactors, not a customer- or
+  contributor-facing surface with a compatibility promise.
+- **The runner's private `/run` protocol** — `apps/runner/src/http-contract.ts`'s five endpoints
+  (`GET /healthz`, `POST /run`, `POST /interrupt`, `POST /files`, `GET /files`) are the HTTP
+  contract a runtime driver's _client_ side speaks to reach a container (extension point 1 above,
+  for a driver that runs over HTTP — `kubernetes`, `cloud-run-service`, `aca-sessions`,
+  `aws-agentcore`). The protocol itself, and `apps/runner`'s own dispatch of it in `server.ts`, is
+  Internal: a driver author implements a client against it; nobody rewrites it to add a driver.
+- **`apps/web/server/**`** (Internal) — "domain application operations and adapters." Adding a
+route (extension point 4 above) does mean editing files here, but that is not a standing
+invitation to treat this directory as a stable extension point: what turns an edit here into a
+supported addition to the platform is the four-proof contract-first process and the
+route-inventory gate, not any compatibility promise `apps/web/server` itself makes. Its internals
+  may be restructured at any time.
+
+## What you can and cannot do today
+
+| Do                                                                                                   | How                                                                                                                                                                                                                                                             |
+| ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Add a runtime driver                                                                                 | Implement `RuntimeDriver` in `packages/runtime/src/<driver>.ts`, export it from `index.ts`, add its id to `SERVED_RUNTIME_DRIVERS` and `managerDriverOptions` in `apps/runner/src/manager-start.ts`, and a new id to `RUNTIME_DRIVERS` in `packages/contracts`. |
+| Add a model provider adapter                                                                         | Implement `ModelProvider` in a new `packages/gateway/src/providers/<name>.ts`; add an id to `PROVIDER_IDS` and a `row(...)` entry in `packages/gateway/src/providers/registry.ts`.                                                                              |
+| Add another agent engine                                                                             | Add a package `packages/engine-<id>` that implements the engine port and passes the conformance kit, then register it in `apps/runner/src/engines.ts` and `apps/web/server/engines/registry.ts` — see [§3](#3-an-engine) and [Registering it](#registering-it). |
+| Add a new `/api/**` route                                                                            | Prove all four of API specification §9's rows (contract, conformance, client, consumption), then `pnpm docs:generate`, then add the `aw` command if the CLI's credential can reach it.                                                                          |
+| Restructure `packages/core`, the runner's private `/run` protocol, or `apps/web/server/**` internals | Not an extension point — see above. These change under the owning area's own review, with no compatibility promise to any of the four surfaces.                                                                                                                 |
+
+A change to a published contract — a new `RUNTIME_DRIVERS` or `MODEL_PROVIDERS` value included —
+ships under the [deprecation policy](/concepts/public-surface#versions-and-deprecation), and a
+client outside the served range is refused with `426` rather than meeting the new value unannounced.
+
+## See also
+
+<CardGroup cols={2}>
+  <Card title="Building overview" href="/building/overview">
+    Where a customer's own code fits against the SDK, the CLI, and the control plane.
+  </Card>
+  <Card title="Choose models and runtimes" href="/building/models-and-runtimes">
+    The Configure-surface counterpart to sections 1 and 2 above: selecting an existing driver and
+    provider as data, rather than writing a new one.
+  </Card>
+  <Card title="SDK architecture" href="/concepts/architecture">
+    The system shape this page's ownership rules and dependency-cruiser gates are drawn from.
+  </Card>
+  <Card title="Roadmap" href="/concepts/roadmap">
+    Every pending server change named in this page's Today/Target callouts, and the rest of the
+    platform's gaps.
+  </Card>
+</CardGroup>

@@ -1,0 +1,9 @@
+#!include:.gitignore
+.git/
+.codex/
+.github/
+docs/
+ui/
+tests/e2e/results/
+*.log
+proxy.port

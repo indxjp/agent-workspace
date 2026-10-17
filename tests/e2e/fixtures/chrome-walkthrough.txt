@@ -1,0 +1,2 @@
+CHROME_UPLOAD_SENTINEL=indigo-maple-842
+This file exists only to verify the browser upload and chat retrieval flow.

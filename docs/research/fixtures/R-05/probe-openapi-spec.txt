@@ -1,0 +1,52 @@
+### 1. File identity
+  bytes        : [33m1470255[39m
+  sha256       : 9fade08c5d30751828e67fecca63b3800567c802d1d6c4c91bba3d193843f7a8
+  openapi      : 3.2.0
+  info.title   : Azure AI Foundry Models Service
+  info.version : v1
+  servers      : [{"url":"{endpoint}/openai/v1","description":"Azure AI Foundry Models APIs","variables":{"endpoint":{"default":"","description":"A supported Azure AI Foundry Models APIs endpoint, including protocol and hostname.\nFor example:\nhttps://westus.api.cognitive.microsoft.com)."}}}]
+
+### 2. The api-version query parameter
+  distinct declarations: 1
+  {
+    "name": "api-version",
+    "in": "query",
+    "required": false,
+    "description": "The explicit Azure AI Foundry Models API version to use for this request.\n`v1` if not otherwise specified.",
+    "schema": {
+      "$ref": "#/components/schemas/AzureAIFoundryModelsApiVersion",
+      "default": "v1"
+    }
+  }
+  AzureAIFoundryModelsApiVersion = {"type":"string","enum":["v1","preview"]}
+
+### 3. Responses-API paths declared in the spec
+  POST  {endpoint}/openai/v1/responses
+  GET/DELETE  {endpoint}/openai/v1/responses/{response_id}
+  POST  {endpoint}/openai/v1/responses/{response_id}/cancel
+  GET  {endpoint}/openai/v1/responses/{response_id}/input_items
+
+### 4. Content filtering — Responses API surface
+  OpenAI.Response.content_filters = {"type":"array","items":{"$ref":"#/components/schemas/AzureContentFilterForResponsesAPI"},"description":"The content filter results from RAI."}
+  AzureContentFilterForResponsesAPI.properties = blocked, source_type, content_filter_results, content_filter_offsets, tool_call_id
+  AzureContentFilterForResponsesAPI.required   = ["blocked","source_type","content_filter_results","content_filter_offsets"]
+  .blocked      = {"type":"boolean","description":"Indicate if the response is blocked."}
+  .source_type  = {"type":"string","description":"The name of the source type of the message."}
+  .content_filter_offsets -> {"$ref":"#/components/schemas/AzureContentFilterResultOffsets"}
+  AzureContentFilterResultOffsets = {"type":"object","required":["start_offset","end_offset","check_offset"],"properties":{"start_offset":{"type":"integer","format":"int32"},"end_offset":{"type":"integer","format":"int32"},"check_offset":{"type":"integer","format":"int32"}}}
+
+### 5. Content filtering — Chat Completions surface
+  200 body top-level properties = id, choices, created, model, system_fingerprint, object, usage, prompt_filter_results
+  prompt_filter_results.type       = array
+  prompt_filter_results.items props= prompt_index, content_filter_results
+  prompt_index                     = {"type":"integer","format":"int32","description":"The index of the input prompt that this content filter result corresponds to."}
+  choice properties                = finish_reason, index, message, logprobs, content_filter_results
+  choice.finish_reason             = {"type":"string","enum":["stop","length","tool_calls","content_filter","function_call"]}
+  choice.content_filter_results    = {"$ref":"#/components/schemas/AzureContentFilterResultForChoice"}
+
+### 6. Raw-byte occurrence counts (grep over the undecoded file text)
+  "prompt_filter_results": 2
+  "prompt_index": 3
+  "content_filters": 4
+  "content_filter_results": 8
+  "reference-preview": 0

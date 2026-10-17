@@ -1,0 +1,17 @@
+{
+  "framework": null,
+  "installCommand": "pnpm install --frozen-lockfile --filter \"{./packages/gateway}...\"",
+  "buildCommand": "pnpm --filter \"{./packages/gateway}...\" run build && mkdir -p public && printf 'User-agent: *\\nDisallow: /\\n' > public/robots.txt",
+  "outputDirectory": "public",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/api"
+    }
+  ],
+  "functions": {
+    "api/index.js": {
+      "maxDuration": 300
+    }
+  }
+}

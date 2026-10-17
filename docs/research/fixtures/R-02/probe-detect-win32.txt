@@ -1,0 +1,87 @@
+== platform ==
+MINGW64_NT-10.0-26200 user 3.6.6-1cdd4371.x86_64 2026-01-15 22:20 UTC x86_64 Msys
+
+== node/npm/npx ==
+v24.19.0
+11.17.0
+11.17.0
+
+== linux/macOS host prerequisites (spec A.3: bubblewrap, socat, ripgrep) ==
+bwrap: NOT found on PATH
+socat: NOT found on PATH
+rg: found at /c/Users/user/AppData/Local/Microsoft/WinGet/Packages/BurntSushi.ripgrep.MSVC_Microsoft.Winget.Source_8wekyb3d8bbwe/ripgrep-15.2.0-x86_64-pc-windows-msvc/rg
+(macOS needs ripgrep only — sandbox-exec ships with the OS.)
+
+== windows: has `windows-install` already been run on this machine? ==
+-- registry key HKLM\SOFTWARE\sandbox-runtime (holds the DPAPI-encrypted
+   sandbox-account credential + CA record; absence means never installed) --
+registry key absent (rc=1) — windows-install has NOT been run on this machine
+
+-- local account `srt-sandbox` (created by windows-install) --
+srt-sandbox account: NOT present
+
+== fallback driver candidate on this OS ==
+Docker version 29.7.2, build a7dcaa6
+
+== npm registry: current published version, license, engines, publish date ==
+0.0.75
+license: Apache-2.0
+engines: { node: '>=20.11.0' } 
+published (npm 'time' for 0.0.75): 2026-09-01T19:59:56.982Z
+
+== GitHub: repository identity and the v0.0.75 release ==
+-- the plan's and spec's URL still points at the old org; where does it go? --
+anthropic-experimental/sandbox-runtime: 301 -> https://github.com/anthropics/sandbox-runtime
+-- API full_name (follows the rename) --
+anthropics/sandbox-runtime
+-- v0.0.75 release publish date --
+v0.0.75 published_at=2026-09-01T19:57:01Z
+
+== install into a scratch dir and probe the CLI directly (no PATH shim) ==
+package.json version : 0.0.75
+`srt --version` output: 1.0.0
+MISMATCH — matches upstream issue #207 (`-V` prints a stale/wrong version).
+Do not use this string as an availability or version-pinning signal.
+
+== the CLI's own `--help` (argument parsing only — see the exec attempt below) ==
+Usage: srt [options] [command] [command...]
+
+Run commands in a sandbox with network and filesystem restrictions
+
+Arguments:
+  command                      command to run in the sandbox
+
+Options:
+  -V, --version                output the version number
+  -d, --debug                  enable debug logging
+  -s, --settings <path>        path to config file (default:
+                               ~/.srt-settings.json)
+  -c <command>                 run command string directly (like sh -c), no
+                               escaping applied
+  --control-fd <fd>            read config updates from file descriptor (JSON
+                               lines protocol)
+  -h, --help                   display help for command
+
+Commands:
+  windows-install [options]    Windows: provision the `srt-sandbox` user
+                               account + install WFP filters (one UAC prompt).
+                               No logout needed.
+  windows-uninstall [options]  Windows: remove WFP filters + the `srt-sandbox`
+                               account (one UAC prompt).
+
+== does the Windows helper binary ship inside the npm package? ==
+-rwxr-xr-x 1 user 197609 2739200 Sep  5 15:28 node_modules/@anthropic-ai/sandbox-runtime/vendor/srt-win/arm64/srt-win.exe
+-rwxr-xr-x 1 user 197609 3072000 Sep  5 15:28 node_modules/@anthropic-ai/sandbox-runtime/vendor/srt-win/x64/srt-win.exe
+
+== package license/engines as installed (package.json in the tarball) ==
+license: Apache-2.0
+engines: {"node":">=20.11.0"}
+
+== EXEC ATTEMPT: can srt actually RUN a command on this Windows host? ==
+-- (this is the check that distinguishes `execCommands` from argument parsing) --
+Error: Sandbox dependencies not available: Sandbox user is not provisioned (user=false, cred=false). Windows sandbox needs a one-time install (one UAC prompt):
+  npx sandbox-runtime windows-install
+  — or call installWindowsSandbox(), or run `srt-win.exe install` directly.
+No logout is needed: the WFP filter keys on the dedicated `srt-sandbox` user's SID, so your network is unaffected.
+exit code: 1
+

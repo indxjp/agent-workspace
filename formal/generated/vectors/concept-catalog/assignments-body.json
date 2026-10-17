@@ -1,0 +1,79 @@
+{"vectors":
+ [{"witnesses": ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.accepted_assignment_body_keeps_every_id"],
+   "input": {"body": {"skillIds": [], "files": [], "connectorIds": []}},
+   "id": "assignments-body/{\"connectorIds\":[],\"files\":[],\"skillIds\":[]}",
+   "expected": {"value": {"skillIds": [], "files": [], "connectorIds": []}, "valid": true}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.accepted_assignment_body_keeps_every_id"],
+   "input":
+   {"body":
+    {"skillIds": ["k1"],
+     "files": [{"fileId": "f1", "access": "read"}, {"fileId": "f2", "access": "read-write"}],
+     "connectorIds": ["c1"]}},
+   "id":
+   "assignments-body/{\"connectorIds\":[\"c1\"],\"files\":[{\"access\":\"read\",\"fileId\":\"f1\"},{\"access\":\"read-write\",\"fileId\":\"f2\"}],\"skillIds\":[\"k1\"]}",
+   "expected":
+   {"value":
+    {"skillIds": ["k1"],
+     "files": [{"fileId": "f1", "access": "read"}, {"fileId": "f2", "access": "read-write"}],
+     "connectorIds": ["c1"]},
+    "valid": true}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.accepted_assignment_body_keeps_every_id"],
+   "input":
+   {"body":
+    {"skillIds": ["k1", "k1"],
+     "files": [{"fileId": "f1", "access": "read"}, {"fileId": "f1", "access": "read-write"}],
+     "connectorIds": ["c1", "c1"]}},
+   "id":
+   "assignments-body/{\"connectorIds\":[\"c1\",\"c1\"],\"files\":[{\"access\":\"read\",\"fileId\":\"f1\"},{\"access\":\"read-write\",\"fileId\":\"f1\"}],\"skillIds\":[\"k1\",\"k1\"]}",
+   "expected":
+   {"value":
+    {"skillIds": ["k1", "k1"],
+     "files": [{"fileId": "f1", "access": "read"}, {"fileId": "f1", "access": "read-write"}],
+     "connectorIds": ["c1", "c1"]},
+    "valid": true}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.accepted_assignment_body_keeps_every_id"],
+   "input": {"body": {"skillIds": [], "files": [{"fileId": "", "access": "read"}], "connectorIds": []}},
+   "id": "assignments-body/{\"connectorIds\":[],\"files\":[{\"access\":\"read\",\"fileId\":\"\"}],\"skillIds\":[]}",
+   "expected": {"valid": false}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.accepted_assignment_body_keeps_every_id"],
+   "input": {"body": {"skillIds": [], "files": [{"fileId": "f1", "access": "write"}], "connectorIds": []}},
+   "id": "assignments-body/{\"connectorIds\":[],\"files\":[{\"access\":\"write\",\"fileId\":\"f1\"}],\"skillIds\":[]}",
+   "expected": {"valid": false}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.accepted_assignment_body_keeps_every_id"],
+   "input": {"body": {"skillIds": [], "files": [{"fileId": "f1", "access": "READ"}], "connectorIds": []}},
+   "id": "assignments-body/{\"connectorIds\":[],\"files\":[{\"access\":\"READ\",\"fileId\":\"f1\"}],\"skillIds\":[]}",
+   "expected": {"valid": false}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.accepted_assignment_body_keeps_every_id"],
+   "input": {"body": {"skillIds": [], "files": [{"fileId": "f1", "access": "readWrite"}], "connectorIds": []}},
+   "id":
+   "assignments-body/{\"connectorIds\":[],\"files\":[{\"access\":\"readWrite\",\"fileId\":\"f1\"}],\"skillIds\":[]}",
+   "expected": {"valid": false}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.accepted_assignment_body_keeps_every_id"],
+   "input": {"body": {"skillIds": [], "files": [{"fileId": "f1", "access": ""}], "connectorIds": []}},
+   "id": "assignments-body/{\"connectorIds\":[],\"files\":[{\"access\":\"\",\"fileId\":\"f1\"}],\"skillIds\":[]}",
+   "expected": {"valid": false}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.accepted_assignment_body_keeps_every_id"],
+   "input": {"body": {"skillIds": [""], "files": [], "connectorIds": []}},
+   "id": "assignments-body/{\"connectorIds\":[],\"files\":[],\"skillIds\":[\"\"]}",
+   "expected": {"valid": false}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.accepted_assignment_body_keeps_every_id"],
+   "input": {"body": {"skillIds": [], "files": [], "connectorIds": [""]}},
+   "id": "assignments-body/{\"connectorIds\":[\"\"],\"files\":[],\"skillIds\":[]}",
+   "expected": {"valid": false}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.accepted_assignment_body_keeps_every_id"],
+   "input": {"body": {"skillIds": ["k1"], "policy": true, "files": [], "connectorIds": ["c1"]}},
+   "id": "assignments-body/{\"connectorIds\":[\"c1\"],\"files\":[],\"policy\":true,\"skillIds\":[\"k1\"]}",
+   "expected": {"valid": false}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.accepted_assignment_body_keeps_every_id"],
+   "input": {"body": {"skillIds": [], "grants": true, "files": [], "connectorIds": []}},
+   "id": "assignments-body/{\"connectorIds\":[],\"files\":[],\"grants\":true,\"skillIds\":[]}",
+   "expected": {"valid": false}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.accepted_assignment_body_keeps_every_id"],
+   "input": {"body": {"skillIds": [" "], "files": [{"fileId": " ", "access": "read"}], "connectorIds": [" "]}},
+   "id":
+   "assignments-body/{\"connectorIds\":[\" \"],\"files\":[{\"access\":\"read\",\"fileId\":\" \"}],\"skillIds\":[\" \"]}",
+   "expected":
+   {"value": {"skillIds": [" "], "files": [{"fileId": " ", "access": "read"}], "connectorIds": [" "]}, "valid": true}}],
+ "family": "concept-catalog",
+ "description":
+ "AgentResourceAssignmentsSchema: non-empty ids, the closed access set, no unknown key, duplicates admitted"}

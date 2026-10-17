@@ -1,0 +1,695 @@
+---
+title: "tool-connectors"
+description: "The @indx-workspace/contracts/tool-connectors exports, sorted alphabetically."
+---
+
+<Note>This page is generated from `packages/contracts/src/tool-connectors.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## AllowedOperations
+
+What `selectAllowedOperations` decides.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `admitted` | `readonly Candidate[]` | Yes | The admitted operations, in document order, each once. |
+| `refusals` | `readonly AllowRuleRefusal[]` | Yes |  |
+
+## AllowRuleRefusal
+
+An `allow` rule `selectAllowedOperations` refuses, at its path in the create body.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | `readonly ["allow", number]` | Yes |  |
+| `code` | `"connector_spec_invalid" \| "connector_write_unsupported"` | Yes |  |
+| `message` | `string` | Yes |  |
+
+## AW_DEV_TOOLS_CONNECTOR
+
+The local-only MCP connector `aw dev` registers for the tool host that serves `defineTool` code
+tools (issue #693, ADR-0115). An agent version lists it in `resources.connectors`; a version
+that does is refused for any environment but `local` (`code_tool_needs_host`).
+
+Value: `'aw-dev-tools'`
+
+## CONNECTOR_SERVER_KEY_MAX_LENGTH
+
+The longest MCP connector name `connectorServerKey` uses as its key: the length of
+`connector-<uuid>`, so no model-visible tool name is longer than it was (ADR-0113 SD13, #1109).
+
+Value: `46`
+
+## connectorServerKey
+
+An MCP connector's server key in the engine configuration (ADR-0113 SD13, amended by #1109), the
+one definition compose and the tests share. Pure.
+
+The connector `name` verbatim when it is a project key (`NAME_KEY_PATTERN`), at most
+`CONNECTOR_SERVER_KEY_MAX_LENGTH` characters, does not start with `connector-`, is not one
+of `RESERVED_MCP_SERVER_KEYS` and is not in `taken` (the run's tool connector keys, from
+`toolServerKeys`); otherwise `connector-<connectorId>`. A model copies a name it can read;
+it mistypes a UUID. A slug has no `_`, so `mcp__<key>__<tool>` splits in one place, and names are
+unique in a workspace, so two MCP connectors never share a slug. The result always satisfies
+the MCP server-name grammar.
+
+```ts
+connectorServerKey(name: string, connectorId: string, taken: ReadonlySet<string>): string
+```
+
+## CreateOpenApiConnectorInput
+
+The body of `POST /api/connectors` for an `openapi` connector, as a client writes it.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"openapi"` | Yes |  |
+| `name` | `string` | Yes |  |
+| `document` | `string` | Yes |  |
+| `allow` | `readonly string[]` | Yes |  |
+| `baseUrl` | `undefined \| string` | No |  |
+| `auth` | `undefined \| "bearer" \| "none" \| Readonly<{ header: string; }>` | No |  |
+| `credential` | `undefined \| string` | No |  |
+| `dryRun` | `undefined \| true` | No |  |
+
+## CreateOpenApiConnectorRequestSchema
+
+The body of `POST /api/connectors` for an `openapi` connector (ADR-0113 SD1, SD4, SD14, SD15,
+C15).
+
+- `document`: the OpenAPI document as text, up to 1 MiB; the server never fetches one.
+- `baseUrl`: when absent, `servers[0]` decides it at registration (SD15).
+- `allow`: the `GET`/`HEAD` rules that pick the operations to expose (SD14).
+- `auth` (default `none`) and `credential`, write-only: required when `auth` is not `none` and
+  refused when it is.
+- `dryRun: true` checks the body and the document without saving.
+
+The HTTP body carries the credential value; the define-time form (`openapiTool`) carries a
+`{ secret: NAME }` reference in its place.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"openapi"` | Yes |  |
+| `name` | `string` | Yes |  |
+| `document` | `string` | Yes |  |
+| `allow` | `readonly string[]` | Yes |  |
+| `auth` | `"bearer" \| "none" \| Readonly<{ header: string; }>` | Yes |  |
+| `baseUrl` | `undefined \| string` | No |  |
+| `credential` | `undefined \| string` | No |  |
+| `dryRun` | `undefined \| true` | No |  |
+
+## CreatePostgresConnectorInput
+
+The body of `POST /api/connectors` for a `postgres` connector, as a client writes it.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"postgres"` | Yes |  |
+| `name` | `string` | Yes |  |
+| `credential` | `string` | Yes |  |
+| `tables` | `readonly string[]` | Yes |  |
+| `readOnly` | `false \| true` | Yes |  |
+| `maxRows` | `undefined \| number` | No |  |
+| `dryRun` | `undefined \| true` | No |  |
+
+## CreatePostgresConnectorRequestSchema
+
+The body of `POST /api/connectors` for a `postgres` connector (ADR-0113 SD1, SD4, C15).
+
+- `credential`: the connection URL, write-only, sealed as a secret and never returned.
+- `tables`: the 1–64 qualified tables it may read.
+- `readOnly: true`, required: slice 2 offers only structured, parameterised reads (SD4);
+  `false` is `422 connector_write_unsupported`.
+- `maxRows` (default 100, at most 1000) and `dryRun: true`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"postgres"` | Yes |  |
+| `name` | `string` | Yes |  |
+| `credential` | `string` | Yes |  |
+| `tables` | `readonly string[]` | Yes |  |
+| `readOnly` | `true` | Yes |  |
+| `maxRows` | `number` | Yes |  |
+| `dryRun` | `undefined \| true` | No |  |
+
+## CreateToolConnectorInput
+
+A tool connector create body, as a client writes it.
+
+- `CreateOpenApiConnectorInput`
+- `CreatePostgresConnectorInput`
+
+## CreateToolConnectorRequestSchema
+
+The body of `POST /api/connectors` for a tool connector, discriminated by `kind` (C15). A body
+without `kind` is an MCP connector (`CreateConnectorInput`).
+
+- `Readonly<{ kind: "openapi"; name: string; document: string; allow: readonly string[]; auth: "bearer" | "none" | Readonly<{ header: string; }>; baseUrl?: string | undefined; credential?: string | undefined; dryRun?: true | undefined; }>`
+- `Readonly<{ kind: "postgres"; name: string; credential: string; tables: readonly string[]; readOnly: true; maxRows: number; dryRun?: true | undefined; }>`
+
+## describeToolRule
+
+A tool rule for a person to read: a rule stored as `mcp__connector-<id>__<tool>` followed by the
+connector's current key, `mcp__connector-<id>__<tool> (<key>)`. `connectorNames` is keyed by
+`connector-<id>`. Any other rule, and a connector with no entry, is returned unchanged. Display
+only; never store or send the result back as a rule. Pure.
+
+```ts
+describeToolRule(rule: string, connectorNames: Readonly<Record<string, string>>): string
+```
+
+## GATEWAY_TOOL_ROUTE
+
+The gateway route an engine reaches a tool connector through (ADR-0113 SD2, C16). Compose hands
+the engine `{ type: 'http', url: '<gateway>' + gatewayToolPath(id), headers: { authorization:
+'Bearer <run token>' } }` and nothing else credential-bearing.
+
+| Key | Value |
+| --- | --- |
+| `method` | `'POST'` |
+| `path` | `'/v1/tools/:connectorId/mcp'` |
+
+## GATEWAY_TOOL_SANDBOX_ROUTE
+
+The gateway route an agent reaches its session's tool sandbox through (ADR-0118 TS3). It is keyed
+by the run token alone: the gateway reads the run's recorded sandbox origin, adds the sandbox's
+own bearer, and forwards the MCP request. Compose hands the engine `{ type: 'http', url:
+'<gateway>' + path, headers: { authorization: 'Bearer <run token>' } }` and no sandbox token.
+
+| Key | Value |
+| --- | --- |
+| `method` | `'POST'` |
+| `path` | `'/v1/tool-sandbox/mcp'` |
+
+## gatewayToolPath
+
+The path of `GATEWAY_TOOL_ROUTE` for one connector. It is only ever given a database id,
+so a value that is not a UUID is a programming error and throws a `RangeError`.
+
+```ts
+gatewayToolPath(connectorId: string): string
+```
+
+## OPENAPI_ALLOW_MAX_RULES
+
+The most rules one `allow` list may hold (C15).
+
+Value: `256`
+
+## OPENAPI_AUTH_HEADER_REFUSED_NAMES
+
+Header names an `openapi` connector may never put its credential in, compared ignoring case:
+they frame the request, so a credential there would change what is sent.
+
+- `'host'`
+- `'content-length'`
+- `'content-type'`
+- `'transfer-encoding'`
+- `'connection'`
+- `'keep-alive'`
+- `'upgrade'`
+- `'te'`
+- `'trailer'`
+- `'proxy-connection'`
+
+## OPENAPI_DOCUMENT_MAX_BYTES
+
+The largest OpenAPI document a create body may carry, in UTF-8 bytes (C15). The server never
+fetches a document; `aw` sends it as text.
+
+Value: `1024 * 1024`
+
+## OPENAPI_OPERATIONS_MAX
+
+The most operations one `openapi` connector may expose as tools.
+
+Value: `128`
+
+## OpenApiAllowRuleSchema
+
+One `allow` rule (ADR-0113 SD4, SD14, C15): `GET <glob>`, `HEAD <glob>` or `operationId:<id>`.
+
+A glob starts with `/`; each segment is a literal (printable ASCII without `/ ? # *`), `*` (one
+segment) or `**` (zero or more, last segment only). `GET` and `HEAD` are upper case. Another
+HTTP method in any case (`POST /refunds`, `post /refunds`) is refused with `params.problemCode`
+`connector_write_unsupported`. An
+operation id is 1–256 characters with no whitespace or control character.
+
+`string`
+
+## OpenApiAllowSchema
+
+An `allow` list: 1–`OPENAPI_ALLOW_MAX_RULES` rules, no exact duplicates.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `length` | `number` | Yes | Gets the length of the array. This is a number one higher than the highest element defined in an array. |
+| `toString` | `() => string` | Yes | Returns a string representation of an array. |
+| `toLocaleString` | `{ (): string; (locales: string \| string[], options?: Intl.NumberFormatOptions & Intl.DateTimeFormatOptions): string; }` | Yes | Returns a string representation of an array. The elements are converted to string using their toLocaleString methods. |
+| `concat` | `{ (...items: ConcatArray<string>[]): string[]; (...items: (string \| ConcatArray<string>)[]): string[]; }` | Yes | Combines two or more arrays. |
+| `join` | `(separator?: string) => string` | Yes | Adds all the elements of an array separated by the specified separator string. |
+| `slice` | `(start?: number, end?: number) => string[]` | Yes | Returns a section of an array. |
+| `indexOf` | `(searchElement: string, fromIndex?: number) => number` | Yes | Returns the index of the first occurrence of a value in an array. |
+| `lastIndexOf` | `(searchElement: string, fromIndex?: number) => number` | Yes | Returns the index of the last occurrence of a specified value in an array. |
+| `every` | `{ <S extends string>(predicate: (value: string, index: number, array: readonly string[]) => value is S, thisArg?: any): this is readonly S[]; (predicate: (value: string, index: number, array: readonly string[]) => unknown, thisArg?: any): boolean; }` | Yes | Determines whether all the members of an array satisfy the specified test. |
+| `some` | `(predicate: (value: string, index: number, array: readonly string[]) => unknown, thisArg?: any) => boolean` | Yes | Determines whether the specified callback function returns true for any element of an array. |
+| `forEach` | `(callbackfn: (value: string, index: number, array: readonly string[]) => void, thisArg?: any) => void` | Yes | Performs the specified action for each element in an array. |
+| `map` | `<U>(callbackfn: (value: string, index: number, array: readonly string[]) => U, thisArg?: any) => U[]` | Yes | Calls a defined callback function on each element of an array, and returns an array that contains the results. |
+| `filter` | `{ <S extends string>(predicate: (value: string, index: number, array: readonly string[]) => value is S, thisArg?: any): S[]; (predicate: (value: string, index: number, array: readonly string[]) => unknown, thisArg?: any): string[]; }` | Yes | Returns the elements of an array that meet the condition specified in a callback function. |
+| `reduce` | `{ (callbackfn: (previousValue: string, currentValue: string, currentIndex: number, array: readonly string[]) => string): string; (callbackfn: (previousValue: string, currentValue: string, currentIndex: number, array: readonly string[]) => string, initialValue: string): string; <U>(callbackfn: (previousValue: U, currentValue: string, currentIndex: number, array: readonly string[]) => U, initialValue: U): U; }` | Yes | Calls the specified callback function for all the elements in an array. The return value of the callback function is the accumulated result, and is provided as an argument in the next call to the callback function. |
+| `reduceRight` | `{ (callbackfn: (previousValue: string, currentValue: string, currentIndex: number, array: readonly string[]) => string): string; (callbackfn: (previousValue: string, currentValue: string, currentIndex: number, array: readonly string[]) => string, initialValue: string): string; <U>(callbackfn: (previousValue: U, currentValue: string, currentIndex: number, array: readonly string[]) => U, initialValue: U): U; }` | Yes | Calls the specified callback function for all the elements in an array, in descending order. The return value of the callback function is the accumulated result, and is provided as an argument in the next call to the callback function. |
+| `find` | `{ <S extends string>(predicate: (value: string, index: number, obj: readonly string[]) => value is S, thisArg?: any): S \| undefined; (predicate: (value: string, index: number, obj: readonly string[]) => unknown, thisArg?: any): string \| undefined; }` | Yes | Returns the value of the first element in the array where predicate is true, and undefined otherwise. |
+| `findIndex` | `(predicate: (value: string, index: number, obj: readonly string[]) => unknown, thisArg?: any) => number` | Yes | Returns the index of the first element in the array where predicate is true, and -1 otherwise. |
+| `entries` | `() => ArrayIterator<[number, string]>` | Yes | Returns an iterable of key, value pairs for every entry in the array |
+| `keys` | `() => ArrayIterator<number>` | Yes | Returns an iterable of keys in the array |
+| `values` | `() => ArrayIterator<string>` | Yes | Returns an iterable of values in the array |
+| `includes` | `(searchElement: string, fromIndex?: number) => boolean` | Yes | Determines whether an array includes a certain element, returning true or false as appropriate. |
+| `flatMap` | `<U, This = undefined>(callback: (this: This, value: string, index: number, array: string[]) => U \| readonly U[], thisArg?: This \| undefined) => U[]` | Yes | Calls a defined callback function on each element of an array. Then, flattens the result into a new array. This is identical to a map followed by flat with depth 1. |
+| `flat` | `<A, D extends number = 1>(this: A, depth?: D \| undefined) => FlatArray<A, D>[]` | Yes | Returns a new array with all sub-array elements concatenated into it recursively up to the specified depth. |
+| `at` | `(index: number) => string \| undefined` | Yes | Returns the item located at the specified index. |
+| `findLast` | `{ <S extends string>(predicate: (value: string, index: number, array: readonly string[]) => value is S, thisArg?: any): S \| undefined; (predicate: (value: string, index: number, array: readonly string[]) => unknown, thisArg?: any): string \| undefined; }` | Yes | Returns the value of the last element in the array where predicate is true, and undefined otherwise. |
+| `findLastIndex` | `(predicate: (value: string, index: number, array: readonly string[]) => unknown, thisArg?: any) => number` | Yes | Returns the index of the last element in the array where predicate is true, and -1 otherwise. |
+| `toReversed` | `() => string[]` | Yes | Copies the array and returns the copied array with all of its elements reversed. |
+| `toSorted` | `(compareFn?: ((a: string, b: string) => number) \| undefined) => string[]` | Yes | Copies and sorts the array. |
+| `toSpliced` | `{ (start: number, deleteCount: number, ...items: string[]): string[]; (start: number, deleteCount?: number): string[]; }` | Yes | Copies an array and removes elements while, if necessary, inserting new elements in their place, returning the remaining elements. |
+| `with` | `(index: number, value: string) => string[]` | Yes | Copies an array, then overwrites the value at the provided index with the given value. If the index is negative, then it replaces from the end of the array |
+| `[Symbol.iterator]` | `() => ArrayIterator<string>` | Yes | Iterator of values in the array. |
+| `[Symbol.unscopables]` | `{ readonly [x: number]: boolean \| undefined; readonly length?: boolean; toString?: boolean; toLocaleString?: boolean; concat?: boolean; join?: boolean; slice?: boolean; indexOf?: boolean; lastIndexOf?: boolean; every?: boolean; some?: boolean; forEach?: boolean; map?: boolean; filter?: boolean; reduce?: boolean; reduceRight?: boolean; find?: boolean; findIndex?: boolean; entries?: boolean; keys?: boolean; values?: boolean; includes?: boolean; flatMap?: boolean; flat?: boolean; at?: boolean; findLast?: boolean; findLastIndex?: boolean; toReversed?: boolean; toSorted?: boolean; toSpliced?: boolean; with?: boolean; [Symbol.iterator]?: boolean; readonly [Symbol.unscopables]?: boolean; }` | Yes | Is an object whose properties have the value 'true' when they will be absent when used in a 'with' statement. |
+
+## OpenApiAuth
+
+How an `openapi` connector presents its credential.
+
+- `"bearer"`
+- `"none"`
+- `Readonly<{ header: string; }>`
+
+## OpenApiAuthSchema
+
+How an `openapi` connector presents its credential: `none`, `bearer` (`Authorization: Bearer`)
+or `{ header }`, a named header that is an RFC 9110 token and not in
+`OPENAPI_AUTH_HEADER_REFUSED_NAMES`.
+
+- `"bearer"`
+- `"none"`
+- `Readonly<{ header: string; }>`
+
+## OpenApiOperationCandidate
+
+One operation of an OpenAPI document, as registration hands it to `selectAllowedOperations`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `method` | `string` | Yes | The HTTP method, in any case. |
+| `path` | `string` | Yes | The path template, e.g. `/orders/{orderId}`. |
+| `operationId` | `undefined \| string` | No |  |
+
+## OpenApiSpecSummarySchema
+
+What the resource says about the saved document: its SHA-256 digest, its size in bytes and its
+`info.title` when it has one. Never the document itself.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `digest` | `string` | Yes |  |
+| `bytes` | `number` | Yes |  |
+| `title` | `undefined \| string` | No |  |
+
+## OpenApiToolConfig
+
+The `openapi` half of a connector resource.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `spec` | `Readonly<{ digest: string; bytes: number; title?: string \| undefined; }>` | Yes |  |
+| `baseUrl` | `string` | Yes |  |
+| `auth` | `"bearer" \| "none" \| Readonly<{ header: string; }>` | Yes |  |
+| `allow` | `readonly string[]` | Yes |  |
+| `operations` | `readonly ToolOperation[]` | Yes |  |
+
+## OpenApiToolConfigSchema
+
+The `openapi` half of a connector resource (C15, C17): the document summary, the base URL, how
+the credential is presented, the `allow` rules and the 1–`OPENAPI_OPERATIONS_MAX`
+operations they admit, unique by name (a duplicate carries `params.problemCode`
+`connector_tool_name_collision`). Registration refuses an `allow` that admits nothing.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `spec` | `Readonly<{ digest: string; bytes: number; title?: string \| undefined; }>` | Yes |  |
+| `baseUrl` | `string` | Yes |  |
+| `auth` | `"bearer" \| "none" \| Readonly<{ header: string; }>` | Yes |  |
+| `allow` | `readonly string[]` | Yes |  |
+| `operations` | `readonly ToolOperation[]` | Yes |  |
+
+## parseGatewayToolPath
+
+The connector id in a `GATEWAY_TOOL_ROUTE` path, or `null` when the path is not one.
+
+```ts
+parseGatewayToolPath(pathname: string): string | null
+```
+
+## POSTGRES_DEFAULT_MAX_ROWS
+
+The `maxRows` a `postgres` create body gets when it names none.
+
+Value: `100`
+
+## POSTGRES_MAX_ROWS_LIMIT
+
+The highest `maxRows` a `postgres` connector may set (C15).
+
+Value: `1000`
+
+## POSTGRES_TABLES_MAX
+
+The most tables one `postgres` connector may name (C15).
+
+Value: `64`
+
+## POSTGRES_TOOL_OPERATION_NAMES
+
+The three operations every `postgres` connector exposes (C17).
+
+- `'list_tables'`
+- `'describe'`
+- `'select'`
+
+## POSTGRES_URL_QUERY_PARAMETERS
+
+The query parameters a `postgres` connection URL may carry. Every other one is refused, because
+libpq and `pg` read connection settings from the query: `host` and `hostaddr` replace the host
+in the authority, `port` its port, `options` sets session settings such as
+`default_transaction_read_only`, and `sslrootcert`, `passfile` or `service` name files on the
+gateway's disk.
+
+- `'sslmode'`
+- `'connect_timeout'`
+- `'application_name'`
+
+## PostgresMaxRowsSchema
+
+The most rows one `select` returns: an integer 1–`POSTGRES_MAX_ROWS_LIMIT`.
+
+`number`
+
+## PostgresTableNameSchema
+
+A table a `postgres` connector reads: `schema.table`, each part an unquoted-style identifier of
+at most 63 characters. These are exact catalog names; the gateway quotes them. A table in a
+system schema (`pg_catalog`, `pg_toast`, any `pg_*`, `information_schema`) is refused: a tool
+reads the developer's tables, never the catalog.
+
+`string`
+
+## PostgresTablesSchema
+
+The tables a `postgres` connector reads: 1–`POSTGRES_TABLES_MAX`, unique.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `length` | `number` | Yes | Gets the length of the array. This is a number one higher than the highest element defined in an array. |
+| `toString` | `() => string` | Yes | Returns a string representation of an array. |
+| `toLocaleString` | `{ (): string; (locales: string \| string[], options?: Intl.NumberFormatOptions & Intl.DateTimeFormatOptions): string; }` | Yes | Returns a string representation of an array. The elements are converted to string using their toLocaleString methods. |
+| `concat` | `{ (...items: ConcatArray<string>[]): string[]; (...items: (string \| ConcatArray<string>)[]): string[]; }` | Yes | Combines two or more arrays. |
+| `join` | `(separator?: string) => string` | Yes | Adds all the elements of an array separated by the specified separator string. |
+| `slice` | `(start?: number, end?: number) => string[]` | Yes | Returns a section of an array. |
+| `indexOf` | `(searchElement: string, fromIndex?: number) => number` | Yes | Returns the index of the first occurrence of a value in an array. |
+| `lastIndexOf` | `(searchElement: string, fromIndex?: number) => number` | Yes | Returns the index of the last occurrence of a specified value in an array. |
+| `every` | `{ <S extends string>(predicate: (value: string, index: number, array: readonly string[]) => value is S, thisArg?: any): this is readonly S[]; (predicate: (value: string, index: number, array: readonly string[]) => unknown, thisArg?: any): boolean; }` | Yes | Determines whether all the members of an array satisfy the specified test. |
+| `some` | `(predicate: (value: string, index: number, array: readonly string[]) => unknown, thisArg?: any) => boolean` | Yes | Determines whether the specified callback function returns true for any element of an array. |
+| `forEach` | `(callbackfn: (value: string, index: number, array: readonly string[]) => void, thisArg?: any) => void` | Yes | Performs the specified action for each element in an array. |
+| `map` | `<U>(callbackfn: (value: string, index: number, array: readonly string[]) => U, thisArg?: any) => U[]` | Yes | Calls a defined callback function on each element of an array, and returns an array that contains the results. |
+| `filter` | `{ <S extends string>(predicate: (value: string, index: number, array: readonly string[]) => value is S, thisArg?: any): S[]; (predicate: (value: string, index: number, array: readonly string[]) => unknown, thisArg?: any): string[]; }` | Yes | Returns the elements of an array that meet the condition specified in a callback function. |
+| `reduce` | `{ (callbackfn: (previousValue: string, currentValue: string, currentIndex: number, array: readonly string[]) => string): string; (callbackfn: (previousValue: string, currentValue: string, currentIndex: number, array: readonly string[]) => string, initialValue: string): string; <U>(callbackfn: (previousValue: U, currentValue: string, currentIndex: number, array: readonly string[]) => U, initialValue: U): U; }` | Yes | Calls the specified callback function for all the elements in an array. The return value of the callback function is the accumulated result, and is provided as an argument in the next call to the callback function. |
+| `reduceRight` | `{ (callbackfn: (previousValue: string, currentValue: string, currentIndex: number, array: readonly string[]) => string): string; (callbackfn: (previousValue: string, currentValue: string, currentIndex: number, array: readonly string[]) => string, initialValue: string): string; <U>(callbackfn: (previousValue: U, currentValue: string, currentIndex: number, array: readonly string[]) => U, initialValue: U): U; }` | Yes | Calls the specified callback function for all the elements in an array, in descending order. The return value of the callback function is the accumulated result, and is provided as an argument in the next call to the callback function. |
+| `find` | `{ <S extends string>(predicate: (value: string, index: number, obj: readonly string[]) => value is S, thisArg?: any): S \| undefined; (predicate: (value: string, index: number, obj: readonly string[]) => unknown, thisArg?: any): string \| undefined; }` | Yes | Returns the value of the first element in the array where predicate is true, and undefined otherwise. |
+| `findIndex` | `(predicate: (value: string, index: number, obj: readonly string[]) => unknown, thisArg?: any) => number` | Yes | Returns the index of the first element in the array where predicate is true, and -1 otherwise. |
+| `entries` | `() => ArrayIterator<[number, string]>` | Yes | Returns an iterable of key, value pairs for every entry in the array |
+| `keys` | `() => ArrayIterator<number>` | Yes | Returns an iterable of keys in the array |
+| `values` | `() => ArrayIterator<string>` | Yes | Returns an iterable of values in the array |
+| `includes` | `(searchElement: string, fromIndex?: number) => boolean` | Yes | Determines whether an array includes a certain element, returning true or false as appropriate. |
+| `flatMap` | `<U, This = undefined>(callback: (this: This, value: string, index: number, array: string[]) => U \| readonly U[], thisArg?: This \| undefined) => U[]` | Yes | Calls a defined callback function on each element of an array. Then, flattens the result into a new array. This is identical to a map followed by flat with depth 1. |
+| `flat` | `<A, D extends number = 1>(this: A, depth?: D \| undefined) => FlatArray<A, D>[]` | Yes | Returns a new array with all sub-array elements concatenated into it recursively up to the specified depth. |
+| `at` | `(index: number) => string \| undefined` | Yes | Returns the item located at the specified index. |
+| `findLast` | `{ <S extends string>(predicate: (value: string, index: number, array: readonly string[]) => value is S, thisArg?: any): S \| undefined; (predicate: (value: string, index: number, array: readonly string[]) => unknown, thisArg?: any): string \| undefined; }` | Yes | Returns the value of the last element in the array where predicate is true, and undefined otherwise. |
+| `findLastIndex` | `(predicate: (value: string, index: number, array: readonly string[]) => unknown, thisArg?: any) => number` | Yes | Returns the index of the last element in the array where predicate is true, and -1 otherwise. |
+| `toReversed` | `() => string[]` | Yes | Copies the array and returns the copied array with all of its elements reversed. |
+| `toSorted` | `(compareFn?: ((a: string, b: string) => number) \| undefined) => string[]` | Yes | Copies and sorts the array. |
+| `toSpliced` | `{ (start: number, deleteCount: number, ...items: string[]): string[]; (start: number, deleteCount?: number): string[]; }` | Yes | Copies an array and removes elements while, if necessary, inserting new elements in their place, returning the remaining elements. |
+| `with` | `(index: number, value: string) => string[]` | Yes | Copies an array, then overwrites the value at the provided index with the given value. If the index is negative, then it replaces from the end of the array |
+| `[Symbol.iterator]` | `() => ArrayIterator<string>` | Yes | Iterator of values in the array. |
+| `[Symbol.unscopables]` | `{ readonly [x: number]: boolean \| undefined; readonly length?: boolean; toString?: boolean; toLocaleString?: boolean; concat?: boolean; join?: boolean; slice?: boolean; indexOf?: boolean; lastIndexOf?: boolean; every?: boolean; some?: boolean; forEach?: boolean; map?: boolean; filter?: boolean; reduce?: boolean; reduceRight?: boolean; find?: boolean; findIndex?: boolean; entries?: boolean; keys?: boolean; values?: boolean; includes?: boolean; flatMap?: boolean; flat?: boolean; at?: boolean; findLast?: boolean; findLastIndex?: boolean; toReversed?: boolean; toSorted?: boolean; toSpliced?: boolean; with?: boolean; [Symbol.iterator]?: boolean; readonly [Symbol.unscopables]?: boolean; }` | Yes | Is an object whose properties have the value 'true' when they will be absent when used in a 'with' statement. |
+
+## PostgresToolConfig
+
+The `postgres` half of a connector resource.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `tables` | `readonly string[]` | Yes |  |
+| `readOnly` | `true` | Yes |  |
+| `maxRows` | `number` | Yes |  |
+
+## PostgresToolConfigSchema
+
+The `postgres` half of a connector resource (C15): its tables, `readOnly: true` and `maxRows`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `tables` | `readonly string[]` | Yes |  |
+| `readOnly` | `true` | Yes |  |
+| `maxRows` | `number` | Yes |  |
+
+## problemCodeOfIssue
+
+The tool connector problem code a Zod issue carries in `params.problemCode`, or `null` when it
+carries none. The server answers an issue with a code under that code's status, and any other
+issue as `400 invalid_body`.
+
+```ts
+problemCodeOfIssue(issue: z.core.$ZodIssue): ToolConnectorProblemCode | null
+```
+
+## RESERVED_MCP_SERVER_KEYS
+
+MCP server keys a run's other components own, which no connector may take (ADR-0113 SD13): the
+Claude adapter's skill-script server.
+
+- `'agent-workspace'`
+
+## selectAllowedOperations
+
+The operations an `allow` list admits (ADR-0113 SD4, SD14), shared by registration (S2-02c) and
+the tests. Pure.
+
+A path rule admits each operation of its method whose template matches segment by segment: a
+template segment `{x}` is one segment, `*` matches exactly one, a trailing `**` zero or more and
+a literal itself only. `GET /orders/*` admits `/orders/{orderId}`, not `/orders/{orderId}/items`.
+A path rule that admits no operation is refused as `connector_spec_invalid`. An `operationId:`
+rule admits its operation when that is `GET` or `HEAD`; one naming another method is refused as
+`connector_write_unsupported`, one naming no operation as `connector_spec_invalid`. A rule the
+schema would refuse is refused here the same way.
+
+A candidate whose path is not a valid template (it does not start with `/`, is too long, or
+holds whitespace or a control character) is never admitted, by any rule.
+
+```ts
+selectAllowedOperations(allow: readonly string[], candidates: readonly Candidate[]): AllowedOperations<Candidate>
+```
+
+## TOOL_CONNECTOR_KINDS
+
+The tool connectors (ADR-0113 SD1, plan C15): a connector of kind `openapi` (a read-only HTTP
+API described by an OpenAPI document) or `postgres` (structured, parameterised reads from named
+tables). Both run in the gateway behind `GATEWAY_TOOL_ROUTE` (C16), never in the sandbox.
+A connector without a kind is an MCP connector (`@indx-workspace/contracts/connectors`).
+
+This module imports `zod`, the identifier helpers, the URL credential check and the project key
+grammar only (none of which import it back), so the connector resource can build on it without a
+cycle. Every message here is fixed text; none echoes a
+credential, a URL or the document.
+
+- `'openapi'`
+- `'postgres'`
+
+## TOOL_CONNECTOR_PROBLEM_CODES
+
+Problem codes the tool connector routes add to the connector routes' table, with the status each
+travels under (ADR-0113 SD4, C15, C17).
+
+- `connector_spec_invalid`: the document is empty, too large or unusable, or an `allow` rule
+  names no operation or admits nothing (`selectAllowedOperations`).
+- `connector_write_unsupported`: an `allow` rule names a method other than `GET`/`HEAD` (in any
+  case), an `operationId:` rule names such an operation, or a `postgres` body sets `readOnly`
+  to anything but `true` (SD4).
+- `connector_tool_name_collision`: two operations of one connector get the same name (C17).
+- `connector_kind_unsupported`: the body names a kind this server does not create.
+
+| Key | Value |
+| --- | --- |
+| `connector_spec_invalid` | `422` |
+| `connector_write_unsupported` | `422` |
+| `connector_tool_name_collision` | `422` |
+| `connector_kind_unsupported` | `400` |
+
+## TOOL_GATEWAY_PROBLEM_CODES
+
+Problem codes the gateway's tool route answers with at run time (C16).
+
+The gateway answers a disabled connector, or one from another workspace, with
+`403 tool_not_in_run` as well, so the route never reveals whether a connector exists. S2-02d may
+refine this.
+
+| Key | Value |
+| --- | --- |
+| `tool_run_not_active` | `401` |
+| `tool_not_in_run` | `403` |
+| `tool_upstream_failed` | `502` |
+| `tool_upstream_timeout` | `504` |
+
+## TOOL_NAME_MAX_LENGTH
+
+The longest model-visible tool name an engine accepts (ADR-0113 SD13).
+
+Value: `64`
+
+## TOOL_OPERATION_METHODS
+
+The only HTTP methods an `openapi` connector exposes in slice 2 (ADR-0113 SD4).
+
+- `'GET'`
+- `'HEAD'`
+
+## TOOL_OPERATION_NAME_MAX_LENGTH
+
+The longest operation name (ADR-0113 SD13, C17): Claude's worst case is
+`mcp__<key>__<operation>`, so the cap is 64 − `'mcp__'.length` − 16 − `'__'.length` = 41.
+
+Value: `41`
+
+## TOOL_OPERATION_NAME_PATTERN
+
+An operation name as the gateway lists it to the model (C17).
+
+Value: `/^[A-Za-z0-9_-]{1,41}$/u`
+
+## TOOL_OPERATION_PATH_MAX_LENGTH
+
+The longest operation path template or `allow` path glob, in characters.
+
+Value: `2048`
+
+## TOOL_SANDBOX_CONNECTOR_URL
+
+The URL `aw push` registers `aw-dev-tools` at on a deployment whose tool sandbox is enabled
+(ADR-0118 TS3, TS8). It is a reserved name (RFC 6761) that nothing dials: the connector exists
+so a version can reference it and be promoted, while a run reaches the session's tool sandbox
+through `GATEWAY_TOOL_SANDBOX_ROUTE`, whose origin the server records per run.
+
+Value: `'https://tool-sandbox.invalid/mcp'`
+
+## TOOL_SERVER_KEY_MAX_LENGTH
+
+The longest MCP server key `toolServerKey` returns (ADR-0113 SD13).
+
+Value: `16`
+
+## ToolConnectorKind
+
+One of `TOOL_CONNECTOR_KINDS`.
+
+- `"openapi"`
+- `"postgres"`
+
+## ToolConnectorProblemCode
+
+One of the keys of `TOOL_CONNECTOR_PROBLEM_CODES`.
+
+- `"connector_spec_invalid"`
+- `"connector_write_unsupported"`
+- `"connector_tool_name_collision"`
+- `"connector_kind_unsupported"`
+
+## ToolGatewayProblemCode
+
+One of the keys of `TOOL_GATEWAY_PROBLEM_CODES`.
+
+- `"tool_run_not_active"`
+- `"tool_not_in_run"`
+- `"tool_upstream_failed"`
+- `"tool_upstream_timeout"`
+
+## ToolOperation
+
+One of the operations an `openapi` connector exposes.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `method` | `"GET" \| "HEAD"` | Yes |  |
+| `path` | `string` | Yes |  |
+
+## ToolOperationMethod
+
+One of `TOOL_OPERATION_METHODS`.
+
+- `"GET"`
+- `"HEAD"`
+
+## ToolOperationNameSchema
+
+An operation name as the gateway lists it (C17): `TOOL_OPERATION_NAME_PATTERN`.
+
+`string`
+
+## ToolOperationSchema
+
+One tool an `openapi` connector exposes (C17): its name, its read method and its path template.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `method` | `"GET" \| "HEAD"` | Yes |  |
+| `path` | `string` | Yes |  |
+
+## toolRuleConnectorServer
+
+The server segment `connector-<id>` of a tool rule stored by connector id (`mcp__connector-<id>__
+<tool>`, ADR-0113 SD13), or `null` for any other rule. Pure.
+
+```ts
+toolRuleConnectorServer(rule: string): string | null
+```
+
+## toolServerKey
+
+A tool connector's MCP server key in the engine configuration (ADR-0113 SD13, C17), the one
+definition compose and the tests share. Pure.
+
+The connector name, read by code point: ASCII `A`–`Z` lower-cased and every other character
+outside `[a-z0-9_]` replaced by `_`, with each run of `_` collapsed to one; prefixed with `t_`
+when it starts with a digit, or `t` when it starts with `_`; cut to
+`TOOL_SERVER_KEY_MAX_LENGTH` with a trailing `_` dropped. An `ordinal` of 2 or more
+(connectors colliding in one run, in id order) appends `_<ordinal>` within the same 16
+characters. A key therefore never contains `__` or ends in `_`, so `mcp__<key>__<operation>`
+splits in one place only. An ordinal that is not a safe integer of at least 1, or whose suffix
+leaves no room for a key, throws a `RangeError`.
+
+The key alone is not unique: `a` with ordinal 2 and a connector named `a_2` both give `a_2`.
+Compose keys a run's connectors with `toolServerKeys`, which checks the final keys.
+
+```ts
+toolServerKey(name: string, ordinal?: number): string
+```
+
+## toolServerKeys
+
+The MCP server keys of one run's tool connectors, given their names in id order (ADR-0113 SD13).
+Each connector takes `toolServerKey` with the lowest ordinal whose key no earlier
+connector holds, so the keys are unique even when a name such as `a_2` spells another's
+suffixed key: `['a', 'a', 'a_2']` gives `['a', 'a_2', 'a_2_2']`. Pure.
+
+```ts
+toolServerKeys(namesInIdOrder: readonly string[]): readonly string[]
+```

@@ -1,0 +1,310 @@
+---
+title: "Build a frontend"
+description: "Which credential a browser page can actually use, showing a surface's chat in React, rendering a live run, and listing sessions and runs for a UI."
+---
+
+<Info>
+**Chapter 4 · Put it in your product — step 3 of 8** · [the chapter map](/path/embed)
+
+- **You will:** put the agent on a web page: the surface's chat as one component, or a live run in your own UI.
+- **You will learn:** which credential a page can use, how a deployed page on another origin is admitted, and how to handle a stream reset and unmount.
+- **You need:** the credentials from [Authentication](/getting-started/authentication).
+
+</Info>
+
+Put an agent on a web page: show a surface's chat with one component, or render any run's live
+stream in your own UI. Start by checking which credential your page may use. `createClient` and
+`aw.runs.*` are the **Consume** surface ([Public surface and stability](/concepts/public-surface)).
+
+What you can do:
+
+- [Pick the credential your page can use](#pick-the-credential-your-page-can-use)
+- [Show a surface's chat on a React page](#chat-component-react), on your own origin
+- [Render a live run](#render-a-live-run), with reset and unmount handled
+- [List sessions and page through runs](#list-sessions-and-page-through-runs)
+
+## Pick the credential your page can use
+
+| You are building                                                                       | Credential                                                       | Works today?                                                                                                              |
+| -------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| A screen inside the control plane's own web app (`apps/web`)                           | `auth: { kind: 'session' }`                                      | Yes — the page and the API share an origin, so the browser's session cookie is already there.                             |
+| A customer's own frontend, on its own origin, reading a stream your backend relays     | None in the browser — your backend holds the API key             | Yes — [Embed an agent in your product](/building/embedding) is that shape end to end.                                     |
+| A customer's own React page that shows a hosted surface's chat                         | None you manage — the visitor's session is opened by the surface | Yes — [`<Chat/>` from `@indx-workspace/react`](#chat-component-react), with `baseUrl` and the surface's `allowedOrigins`. |
+| A customer's own frontend, on its own origin, that calls the rest of this API directly | Nothing safe yet                                                 | No — see below.                                                                                                           |
+
+<Warning>
+  Never ship a workspace API key (`ak_live_…`) to a browser. It is a long-lived credential with the
+  full authority of whatever role it was minted with — unscoped to a run, a session, or an origin.
+  Anyone who can read your page's network traffic or bundle can read it.
+</Warning>
+
+`auth: { kind: 'session' }` sends no credential of its own: it asks `fetch` to include
+`credentials: 'include'`, which only works because the page and the API share an origin and the
+browser already carries the control plane's session cookie
+([Which credential for which job](/concepts/workspaces-and-principals#which-credential-for-which-job)).
+The control plane sets no general CORS headers, so from a customer's own origin that `fetch` is
+blocked before auth is even considered, and the cookie would not be sent cross-origin anyway.
+
+<Note>
+  **Today:** `auth: { kind: 'browser-token', token }` — a short-lived, run- or session-scoped
+  bearer your *backend* mints (`aw.tokens.mint`) and hands to your *frontend* — is a real, scoped
+  credential (see [Authentication](/getting-started/authentication)). It still needs the frontend
+  to share an origin with the control plane, or reach it through a same-origin proxy: the general
+  API sends no CORS headers, so a genuinely cross-origin `fetch` is blocked before the token is
+  ever read. The one exception is a hosted surface's visitor chat, below.
+</Note>
+
+For a frontend on a different origin with no proxy, your backend holds the API key and calls the
+SDK ([Integrate a backend](/building/backend)), and your frontend talks only to your backend.
+[Embed an agent in your product](/building/embedding) has that relay end to end. Everything below
+about rendering a stream applies unchanged to a relayed stream read with `readSseFrames`.
+
+## Chat component (React)
+
+If the page is a React page and you want the hosted surface's chat, you need no store and no
+credential of your own. `@indx-workspace/react` (0.4.0) is that chat as a component (React 18.3 or 19
+is a peer dependency):
+
+```sh claim="run"
+npm install @indx-workspace/react @indx-workspace/sdk
+```
+
+```tsx title="support-chat.tsx" claim="compile"
+import { Chat } from '@indx-workspace/react';
+
+export function SupportChat() {
+  return <Chat surface="main" baseUrl="https://agents.example.com" />;
+}
+```
+
+`surface` is the surface's name (`/p/s/<name>`), and `baseUrl` is the Agent Workspace, or a proxy
+of it, instead of the page's own origin. The component opens the visitor's session on the first
+message, follows each run, shows the tool steps before an answer and the feedback buttons after
+it, and honours the surface's theme, language, layout and parts.
+
+- **Replace a part:** `components={{ Composer: MyComposer }}` swaps any of `MessageList`,
+  `Message`, `Composer` and `ToolResult`; each receives only the props its exported type declares
+  (`MessageListProps`, `MessageProps`, `ComposerProps`, `ToolResultProps`).
+- **Draw everything yourself:** `useConversation({ surface, baseUrl })` is the same conversation
+  without markup, returning `messages`, `status`, `send(prompt)` and more.
+- **Style it:** import `@indx-workspace/react/styles.css` once.
+
+[Your own React](/building/react) walks through all three.
+
+**Cross-origin.** A page on another origin can talk to the Agent Workspace when the surface lists
+that origin in `allowedOrigins` (up to 20 origins such as `https://shop.example.com`, no path and
+no wildcard). The session bootstrap and the four visitor run routes answer the browser's CORS
+preflight for those origins, with no credentials, and no cookie is ever sent. For any other
+origin, serve the page from the workspace's origin, or proxy `/p/s/*` and `/api/*` to it and set
+`baseUrl` to the proxy. A refused origin gets no CORS headers, so the browser reports it as a
+network failure: the chat tells the visitor the assistant could not be reached and logs the
+origin to add to `allowedOrigins` in the browser console. `limits.turnsPerConversation` caps how many turns one visitor session may
+send; at the cap `status` is `ended`.
+
+## Render a live run
+
+`aw.runs.follow` streams a run and reconnects a dropped connection on its own (unlike
+`aw.runs.events`, one connection with no retry). Turn each frame into the assistant's text:
+
+```ts title="run-view.ts" claim="compile"
+import { createClient } from '@indx-workspace/sdk';
+import { assistantResponseFromAgentEvent, toAgentEvent } from '@indx-workspace/sdk/events';
+
+declare const runId: string; // the run your backend started
+
+const aw = createClient({ baseUrl: window.location.origin, auth: { kind: 'session' } });
+
+for await (const frame of aw.runs.follow(runId)) {
+  const event = toAgentEvent(frame);
+  if (event === null) continue; // a platform frame: run-status, run-failed, stream-reset, done
+  const response = assistantResponseFromAgentEvent(event);
+  if (response !== null) console.log(response.id, response.text.join('\n')); // replace by id, don't append
+}
+```
+
+A real chat view must also handle two things this loop skips:
+
+1. **`stream-reset`:** the server could not resume from your cursor. Discard what you rendered and
+   start clean; do not append it as one more event.
+2. **Unmount:** `follow` is open-ended. Pass your own `{ signal }` and abort it when the view goes
+   away, or the tab leaks a connection.
+
+<AccordionGroup>
+  <Accordion title="A framework-agnostic run store that handles both">
+
+```ts title="run-store.ts" claim="compile"
+import { TransportError, type AgentWorkspaceClient } from '@indx-workspace/sdk';
+import {
+  assistantResponseFromAgentEvent,
+  toAgentEvent,
+  type AssistantResponse,
+} from '@indx-workspace/sdk/events';
+
+export interface RunStoreState {
+  readonly status: 'connecting' | 'streaming' | 'done' | 'error';
+  readonly messages: readonly AssistantResponse[];
+  readonly error: string | null;
+}
+
+export type RunStoreListener = (state: RunStoreState) => void;
+
+/**
+ * A framework-agnostic store for one run's chat view: createRunStore(aw, runId) starts following
+ * immediately, subscribe(listener) is called with every new state (and once, right away, with the
+ * current one), and stop() aborts the underlying follow() — call it when the view unmounts.
+ */
+export function createRunStore(aw: AgentWorkspaceClient, runId: string) {
+  let state: RunStoreState = { status: 'connecting', messages: [], error: null };
+  const listeners = new Set<RunStoreListener>();
+  const controller = new AbortController();
+
+  function emit(next: RunStoreState): void {
+    state = next;
+    for (const listener of listeners) listener(state);
+  }
+
+  function upsertMessage(message: AssistantResponse): void {
+    // Same id = a grown snapshot of the same turn (see AssistantResponse) — replace, don't append.
+    const index = state.messages.findIndex((existing) => existing.id === message.id);
+    const messages =
+      index === -1
+        ? [...state.messages, message]
+        : state.messages.map((existing, i) => (i === index ? message : existing));
+    emit({ status: 'streaming', messages, error: null });
+  }
+
+  void (async () => {
+    try {
+      for await (const frame of aw.runs.follow(runId, { signal: controller.signal })) {
+        if (frame.kind === 'stream-reset') {
+          emit({ ...state, messages: [] }); // discard what's rendered — see /guides/streaming
+          continue;
+        }
+        const event = toAgentEvent(frame);
+        if (event === null) continue;
+        const response = assistantResponseFromAgentEvent(event);
+        if (response !== null) upsertMessage(response);
+      }
+      emit({ ...state, status: 'done' });
+    } catch (error) {
+      if (error instanceof TransportError && error.aborted) return; // stop() was called — not a failure
+      emit({
+        ...state,
+        status: 'error',
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  })();
+
+  return {
+    getState: (): RunStoreState => state,
+    subscribe(listener: RunStoreListener): () => void {
+      listeners.add(listener);
+      listener(state);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    stop(): void {
+      controller.abort();
+    },
+  };
+}
+```
+
+  </Accordion>
+  <Accordion title="A thin React hook over the store">
+
+The store does the work; the hook only wires it to the component's lifetime.
+
+```jsx title="use-run.jsx (illustrative)" claim="illustrative"
+import { useEffect, useRef, useState } from 'react';
+import { createRunStore } from './run-store';
+
+export function useRun(aw, runId) {
+  const [state, setState] = useState({ status: 'connecting', messages: [], error: null });
+  const storeRef = useRef(null);
+
+  useEffect(() => {
+    const store = createRunStore(aw, runId);
+    storeRef.current = store;
+    const unsubscribe = store.subscribe(setState);
+    return () => {
+      unsubscribe();
+      store.stop(); // abort follow() — never leave a stream open past unmount
+    };
+  }, [aw, runId]);
+
+  return state; // { status, messages, error }
+}
+```
+
+  </Accordion>
+</AccordionGroup>
+
+For a custom store, `createClient` plus a hand-written store like the one above remains
+supported; the SDK itself stays framework-free by design, and the first-party React binding is
+`@indx-workspace/react` ([P-5](/concepts/roadmap#p-5-a-react-binding)).
+
+For something other than a text chat, branch on `toAgentEvent`'s `frame` yourself
+(`agent.tool.call`, `agent.tool.result`, `agent.usage`, `agent.result` and the rest) instead of
+`assistantResponseFromAgentEvent`, which answers only the assistant's visible text. See
+[The neutral `AgentEvent` view](/guides/streaming#the-neutral-agentevent-view).
+
+## List sessions and page through runs
+
+`sessions.list` returns every session at once (no cursor yet); `runs.list` is cursor-paged. Pass
+`nextCursor` back as `cursor` until it is `null`:
+
+```ts title="session-and-run-lists.ts (illustrative)" claim="illustrative"
+const signal = new AbortController().signal; // tie this to your component's own lifetime
+const { sessions } = await aw.sessions.list({ status: 'active' }, { signal });
+const page = await aw.runs.list({ agent: agentId, limit: 20 }, { signal });
+if (page.nextCursor !== null) {
+  const next = await aw.runs.list(
+    { agent: agentId, limit: 20, cursor: page.nextCursor },
+    { signal },
+  );
+}
+```
+
+`RunListQuery` has no `sessionId` filter: list by agent (or project) and filter one session's runs
+client-side. Every filter and field is on [Sessions](/resources/sessions), [Runs](/resources/runs)
+and [Pagination](/guides/pagination).
+
+## What you can and cannot do today
+
+| Do                                                                      | How                                                                                                                                            |
+| ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Render a live run in the control plane's own UI                         | `createClient({ auth: { kind: 'session' } })` + `aw.runs.follow` + `toAgentEvent` + `assistantResponseFromAgentEvent`                          |
+| List and page a workspace's sessions and runs                           | `aw.sessions.list` (whole array) and `aw.runs.list` (cursor-paged) — see [Pagination](/guides/pagination)                                      |
+| Abort a stream cleanly on unmount                                       | Pass `{ signal }` to `follow`, abort it in your teardown — see [Timeouts and cancellation](/guides/timeouts-and-cancellation)                  |
+| Show a surface's chat on a customer's own React page, on another origin | `<Chat baseUrl>` from `@indx-workspace/react`, with the origin in the surface's `allowedOrigins` — see [Chat component](#chat-component-react) |
+| Call the rest of this API from a customer's own frontend origin         | Not yet — see [Pick the credential your page can use](#pick-the-credential-your-page-can-use)                                                  |
+| Get a React hook for a conversation                                     | `useConversation()` from `@indx-workspace/react`                                                                                               |
+| Get a cache or reconnect policy for your own run store                  | Not yet — write your own store, as above                                                                                                       |
+
+<Note>
+  **Today:** `apps/web`'s own browser screens mostly still call `fetch` and parse responses
+  themselves; only the run screen's live stream and assistant-message parsing already go through
+  `@indx-workspace/sdk/events`. **Target:** every screen goes through `createClient` and the
+  application keeps no parser of its own for a family the SDK covers, migrated one resource family
+  at a time. Tracked as [A-1](/concepts/roadmap#a-1-browser-screens-call-the-sdk).
+</Note>
+
+## See also
+
+<CardGroup cols={2}>
+  <Card title="Integrate a backend" href="/building/backend">
+    Where the API key actually lives, and how a backend starts and waits on a run.
+  </Card>
+  <Card title="Streaming" href="/guides/streaming">
+    The full SSE wire format, `events` vs `follow`, reconnection, and the neutral event view.
+  </Card>
+  <Card title="Sessions" href="/resources/sessions">
+    The session record, transcripts, and archiving.
+  </Card>
+  <Card title="Runs" href="/resources/runs">
+    The run record, every `list` filter, and what `done` does and doesn't mean.
+  </Card>
+</CardGroup>

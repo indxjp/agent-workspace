@@ -1,0 +1,232 @@
+# The Compose project name, and with it every container, volume and network name, comes from
+# COMPOSE_PROJECT_NAME in .env: create-agent-workspace derives it from this directory's name, so
+# two generated projects, or one next to another Compose project, never adopt each other's
+# containers (`agent-workspace start` runs `up --remove-orphans`). PORT in .env is the host
+# address and port the web service is published on (`127.0.0.1:3000`, loopback only); change it to
+# publish on another port, or write the port alone to publish on every interface. `agent-workspace stop` takes the project down, with the
+# runtime sandboxes the runner started beside it; `--volumes` also removes the data volumes.
+name: ${COMPOSE_PROJECT_NAME:?set COMPOSE_PROJECT_NAME in .env}
+
+x-defaults: &defaults
+  restart: unless-stopped
+  init: true
+  security_opt: [no-new-privileges:true]
+
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE:?POSTGRES_IMAGE must be digest pinned}
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_INITDB_ARGS: '--locale-provider=icu --icu-locale=en-US --encoding=UTF8'
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    volumes: [postgres-data:/var/lib/postgresql/data]
+    networks: [control]
+
+  # S3-compatible object storage: SeaweedFS (Apache-2.0), `weed server -s3` on one persistent
+  # volume. docs/adr/0067-the-bundled-object-store-is-seaweedfs.md records the flags: master,
+  # volume and filer stay on the container's loopback, only the signed S3 gateway listens on the
+  # network, and the two keys create its only identity, so an unsigned request is refused.
+  seaweedfs:
+    <<: *defaults
+    profiles: [object-storage]
+    image: ${SEAWEEDFS_IMAGE:?SEAWEEDFS_IMAGE must be digest pinned}
+    # The image's own `seaweed` user, which owns `/data` in the image and so in a fresh volume;
+    # running as it directly skips the entry point's root-only chown and privilege drop, which
+    # `cap_drop: [ALL]` would refuse.
+    user: '1000:1000'
+    command:
+      - server
+      - -ip=127.0.0.1
+      - -ip.bind=127.0.0.1
+      - -s3
+      - -s3.ip.bind=0.0.0.0
+      - -s3.port.iceberg=0
+      - -s3.port.lance=0
+      - -master.telemetry=false
+    read_only: true
+    cap_drop: [ALL]
+    environment:
+      AWS_ACCESS_KEY_ID: ${SEAWEEDFS_ACCESS_KEY_ID:?set SEAWEEDFS_ACCESS_KEY_ID in .env}
+      AWS_SECRET_ACCESS_KEY: ${SEAWEEDFS_SECRET_ACCESS_KEY:?set SEAWEEDFS_SECRET_ACCESS_KEY in .env}
+    # Block form: inside a flow sequence the option commas would split the entry.
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:8333/healthz]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    volumes: [seaweedfs-data:/data]
+    networks: [control]
+
+  runner:
+    <<: *defaults
+    image: ${RUNNER_IMAGE:?RUNNER_IMAGE must be digest pinned}
+    read_only: true
+    cap_drop: [ALL]
+    group_add: ['${DOCKER_GID:-0}']
+    environment:
+      AW_SESSION_MIRROR_URL: ${AW_SESSION_MIRROR_URL:?set AW_SESSION_MIRROR_URL in .env}
+      RUNTIME_DRIVER: ${RUNTIME_DRIVER:?set RUNTIME_DRIVER in .env}
+      AGENT_WORKSPACE_RUNTIME_IMAGE_CLAUDE_AGENT_SDK: ${AGENT_WORKSPACE_RUNTIME_IMAGE_CLAUDE_AGENT_SDK:?AGENT_WORKSPACE_RUNTIME_IMAGE_CLAUDE_AGENT_SDK must be digest pinned}
+      # The runtime driver attaches every sandbox to this network by name, and refuses one that is
+      # not internal or lacks the agent-workspace.runtime=docker-network label (packages/runtime).
+      RUNTIME_NETWORK: ${COMPOSE_PROJECT_NAME:?set COMPOSE_PROJECT_NAME in .env}-runtime-control
+      # Every sandbox is labelled agent-workspace.compose-project=<this>, and the runner removes
+      # its sandboxes when it is stopped, so `down` is not left with a network one still holds.
+      COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:?set COMPOSE_PROJECT_NAME in .env}
+      RUNNER_MANAGER_TOKEN: ${RUNNER_MANAGER_TOKEN:?set RUNNER_MANAGER_TOKEN in .env}
+      PORT: '8090'
+      # ADR-0117: set EGRESS_PROXY_IMAGE in .env to the release's egress-proxy image, pinned by
+      # digest, and `restricted` and `open` sandboxes go through a per-session allowlist proxy.
+      # Empty, `restricted` is refused by name and `open` runs on Docker's bridge. `web` reads the
+      # same value, so a profile it cannot enforce is refused when it is saved.
+      AGENT_WORKSPACE_EGRESS_PROXY_IMAGE: ${EGRESS_PROXY_IMAGE:-}
+      # The one host a proxied sandbox reaches directly rather than through the proxy.
+      RUNTIME_PROXY_BYPASS: gateway
+    # Time to remove every sandbox before Docker's SIGKILL; the default 10s is tight for many.
+    stop_grace_period: 30s
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - runtime-workspaces:/workspace
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:8090/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [control, runtime-control]
+
+  gateway:
+    <<: *defaults
+    image: ${GATEWAY_IMAGE:?GATEWAY_IMAGE must be digest pinned}
+    read_only: true
+    cap_drop: [ALL]
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
+      MASTER_ENCRYPTION_KEY: ${MASTER_ENCRYPTION_KEY:?set MASTER_ENCRYPTION_KEY in .env}
+      GATEWAY_TOKEN_SECRET: ${GATEWAY_TOKEN_SECRET:?set GATEWAY_TOKEN_SECRET in .env}
+      GATEWAY_PRICING_JSON: ${GATEWAY_PRICING_JSON:?set GATEWAY_PRICING_JSON in .env}
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=32m
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+    networks: [control, provider-egress, runtime-control]
+
+  web:
+    <<: *defaults
+    image: ${WEB_IMAGE:?WEB_IMAGE must be digest pinned}
+    read_only: true
+    cap_drop: [ALL]
+    depends_on:
+      gateway: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+      runner: { condition: service_healthy }
+      # `seaweedfs` only exists under the `object-storage` profile; `required: false` waits for it
+      # to become healthy when that profile is active, and is skipped without error when it is not
+      # (e.g. external S3 is configured instead).
+      seaweedfs: { condition: service_healthy, required: false }
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
+      MASTER_ENCRYPTION_KEY: ${MASTER_ENCRYPTION_KEY:?set MASTER_ENCRYPTION_KEY in .env}
+      OBJECT_STORAGE_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:-}
+      OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:-}
+      OBJECT_STORAGE_FORCE_PATH_STYLE: ${OBJECT_STORAGE_FORCE_PATH_STYLE:-true}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: ${OBJECT_STORAGE_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${OBJECT_STORAGE_SECRET_ACCESS_KEY:-}
+      BOOTSTRAP_ADMIN: ${BOOTSTRAP_ADMIN:?set BOOTSTRAP_ADMIN in .env}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:?set BOOTSTRAP_ADMIN_PASSWORD in .env}
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
+      # Scopes the sign-in cookie to this project (`__Host-aw_session_<project>`): browsers share
+      # cookies across ports, so two projects on localhost would otherwise sign each other out.
+      AW_INSTANCE_ID: ${COMPOSE_PROJECT_NAME:?set COMPOSE_PROJECT_NAME in .env}
+      WORKSPACE_SLUG: ${WORKSPACE_SLUG:-default}
+      WORKSPACE_NAME: ${WORKSPACE_NAME:-Default Workspace}
+      RUNNER_URL: ${RUNNER_URL:?set RUNNER_URL in .env}
+      RUNNER_MANAGER_URL: ${RUNNER_MANAGER_URL:?set RUNNER_MANAGER_URL in .env}
+      RUNNER_MANAGER_TOKEN: ${RUNNER_MANAGER_TOKEN:?set RUNNER_MANAGER_TOKEN in .env}
+      RUNTIME_DRIVER: ${RUNTIME_DRIVER:?set RUNTIME_DRIVER in .env}
+      # ENG-07 (ADR-0073): the engines this control plane offers are the ones it has an image for.
+      AGENT_WORKSPACE_RUNTIME_IMAGE_CLAUDE_AGENT_SDK: ${AGENT_WORKSPACE_RUNTIME_IMAGE_CLAUDE_AGENT_SDK:?AGENT_WORKSPACE_RUNTIME_IMAGE_CLAUDE_AGENT_SDK must be digest pinned}
+      # The image the Runtimes page's Test Runtime approval is keyed to; unset, the web process
+      # falls back to a development tag no generated project runs.
+      RUNTIME_IMAGE: ${AGENT_WORKSPACE_RUNTIME_IMAGE_CLAUDE_AGENT_SDK:?AGENT_WORKSPACE_RUNTIME_IMAGE_CLAUDE_AGENT_SDK must be digest pinned}
+      # The runner manager's egress proxy image (see `runner`): set, `restricted` profiles are
+      # accepted; empty, they are refused with `network_policy_not_enforceable` when saved.
+      AGENT_WORKSPACE_EGRESS_PROXY_IMAGE: ${EGRESS_PROXY_IMAGE:-}
+      MODEL_GATEWAY_URL: ${MODEL_GATEWAY_URL:?set MODEL_GATEWAY_URL in .env}
+      GATEWAY_TOKEN_SECRET: ${GATEWAY_TOKEN_SECRET:?set GATEWAY_TOKEN_SECRET in .env}
+      AW_FILE_STORAGE_ROOT: /var/lib/agent-workspace/files
+      AW_SKILL_STORAGE_ROOT: /var/lib/agent-workspace/skills
+      AW_SESSION_TRANSCRIPT_ROOT: /var/lib/agent-workspace/sessions
+      AW_RUNTIME_VERIFICATION_FILE: /var/lib/agent-workspace/runtime-verifications.json
+      AW_SESSION_TRANSCRIPT_RETENTION_DAYS: '30'
+      AW_SESSION_RETENTION_DRY_RUN: 'false'
+      # This project publishes the web port directly, so nothing rewrites X-Forwarded-For. Raise
+      # it to the exact number of proxies once you put one in front, or public shares fail closed.
+      AW_TRUSTED_PROXY_HOPS: ${AW_TRUSTED_PROXY_HOPS:-0}
+      # The project's policy ceiling (`aw deploy` writes it); blank means no ceiling.
+      AW_DEPLOYMENT_POLICY: ${AW_DEPLOYMENT_POLICY:-}
+      # The deployment's public https origin (`aw deploy` writes it); blank keeps A2A cards off.
+      AW_PUBLIC_URL: ${AW_PUBLIC_URL:-}
+    ports: ['${PORT:-3000}:3000']
+    volumes: [workspace-data:/var/lib/agent-workspace]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+      - /srv/apps/web/.next/cache:rw,nosuid,nodev,size=128m
+    # Docker publishes no port for a container attached only to internal networks, so `web` alone
+    # also joins `web-ingress`, the one non-internal network that carries its published port.
+    networks: [control, web-ingress]
+
+volumes:
+  postgres-data:
+  seaweedfs-data:
+  workspace-data:
+  runtime-workspaces:
+
+networks:
+  control:
+    internal: true
+  # Only `web` joins it: the host reaches the published web port through it, and no other service
+  # gains a route off the internal networks. Like any non-internal bridge it also gives `web`
+  # outbound access (masqueraded), which `web` needs anyway for OIDC discovery and similar calls.
+  web-ingress: {}
+  provider-egress:
+    name: ${COMPOSE_PROJECT_NAME:?set COMPOSE_PROJECT_NAME in .env}-provider-egress
+    attachable: true
+  runtime-control:
+    name: ${COMPOSE_PROJECT_NAME:?set COMPOSE_PROJECT_NAME in .env}-runtime-control
+    internal: true
+    attachable: true
+    labels:
+      agent-workspace.runtime: docker-network

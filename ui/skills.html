@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skills — Agent Workspace</title>
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<script>window.PAGE = { nav: "skills", crumbs: [["Skills"]] };</script>
+
+<div class="app">
+  <div class="main">
+    <div class="page">
+
+      <div class="page-head">
+        <div>
+          <h1>Skills</h1>
+          <div class="sub">Claude-native skills. Each one is a <span class="mono">SKILL.md</span> plus its supporting files — no proprietary format.</div>
+        </div>
+        <div class="actions">
+          <button class="btn" data-modal-open="m-import-skill">Import</button>
+          <a class="btn primary" href="skill.html">New skill</a>
+        </div>
+      </div>
+
+      <div class="rows">
+        <a class="row" href="skill.html">
+          <div class="row-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M8 2.2 9.7 6l4 .4-3 2.7.9 3.9L8 11l-3.6 2 .9-3.9-3-2.7 4-.4z"/></svg></div>
+          <div class="grow">
+            <div class="title">Invoice Review <span class="badge ok">Enabled</span></div>
+            <div class="meta">Checks invoice totals, tax treatment and PO matching · 3 supporting files · used by 2 agents</div>
+          </div>
+          <div class="right"><span class="mono">.claude/skills/invoice-review</span></div>
+        </a>
+        <a class="row" href="skill.html">
+          <div class="row-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M8 2.2 9.7 6l4 .4-3 2.7.9 3.9L8 11l-3.6 2 .9-3.9-3-2.7 4-.4z"/></svg></div>
+          <div class="grow">
+            <div class="title">Security Review <span class="badge ok">Enabled</span></div>
+            <div class="meta">Reviews diffs against the internal security checklist · 1 supporting file · used by 1 agent</div>
+          </div>
+          <div class="right"><span class="mono">.claude/skills/security-review</span></div>
+        </a>
+        <a class="row" href="skill.html">
+          <div class="row-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M8 2.2 9.7 6l4 .4-3 2.7.9 3.9L8 11l-3.6 2 .9-3.9-3-2.7 4-.4z"/></svg></div>
+          <div class="grow">
+            <div class="title">Financial Analysis <span class="badge muted">Disabled</span></div>
+            <div class="meta">Quarter-on-quarter comparisons from spreadsheet exports · 2 supporting files · not assigned</div>
+          </div>
+          <div class="right"><span class="mono">.claude/skills/financial-analysis</span></div>
+        </a>
+        <a class="row" href="skill.html">
+          <div class="row-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M8 2.2 9.7 6l4 .4-3 2.7.9 3.9L8 11l-3.6 2 .9-3.9-3-2.7 4-.4z"/></svg></div>
+          <div class="grow">
+            <div class="title">Document Writer <span class="badge ok">Enabled</span> <span class="badge info">Shared</span></div>
+            <div class="meta">Produces .docx and Markdown deliverables from templates · 4 supporting files · used by 3 agents</div>
+          </div>
+          <div class="right"><span class="mono">.claude/skills/document-writer</span></div>
+        </a>
+      </div>
+
+      <div class="callout mt24">
+        <span class="ico">ℹ</span>
+        <div class="grow">
+          Skills are stored exactly as Claude expects them and materialised into
+          <span class="mono">.claude/skills/&lt;name&gt;/</span> inside the sandbox before each run. An existing skill
+          directory can be imported unchanged, and any skill here can be exported back out.
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="scrim" id="m-import-skill" hidden>
+  <div class="modal">
+    <div class="m-head"><h3>Import a skill</h3><div class="sub">Bring in an existing Claude skill directory.</div></div>
+    <div class="m-body">
+      <div style="border:1.5px dashed var(--border-strong);border-radius:var(--radius);padding:28px;text-align:center;color:var(--muted)">
+        Drop a folder containing <span class="mono">SKILL.md</span>, or a <span class="mono">.zip</span> of it<br>
+        <a href="#" data-toast="File picker opened">choose a folder</a>
+      </div>
+      <div class="callout mt16">
+        <span class="ico">ℹ</span>
+        <div class="grow">The directory is stored as-is. Front matter (<span class="mono">name</span>,
+          <span class="mono">description</span>, <span class="mono">allowed-tools</span>) is read into the fields on
+          the skill page, but the file remains the source of truth.</div>
+      </div>
+    </div>
+    <div class="m-foot"><button class="btn" data-modal-close>Cancel</button><button class="btn primary" data-modal-close data-toast="Skill imported">Import</button></div>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

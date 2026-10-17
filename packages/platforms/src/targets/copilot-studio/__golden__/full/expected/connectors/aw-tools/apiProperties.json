@@ -1,0 +1,23 @@
+{
+  "properties": {
+    "connectionParameters": {
+      "api_key": {
+        "type": "securestring",
+        "uiDefinition": {
+          "displayName": "ACME_TOOL_ENDPOINT_TOKEN",
+          "description": "The value of secret ACME_TOOL_ENDPOINT_TOKEN, as 'Bearer <token>'",
+          "tooltip": "Agent Workspace secret ACME_TOOL_ENDPOINT_TOKEN",
+          "constraints": {
+            "tabIndex": 2,
+            "clearText": false,
+            "required": "true"
+          }
+        }
+      }
+    },
+    "iconBrandColor": "#007ee5",
+    "capabilities": [],
+    "publisher": "Agent Workspace",
+    "stackOwner": "Agent Workspace"
+  }
+}

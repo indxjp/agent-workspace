@@ -1,0 +1,25 @@
+apiVersion: agentworkspace.dev/v2
+kind: Project
+name: excel-consolidation
+engine: claude-agent-sdk
+# The file search is your own MCP server (mcp/file-finder.mjs), standing in for SharePoint, Box or
+# the file server's index. A project file names only remote connectors, so run it over HTTP:
+#   FILE_ROOT=/srv/branch-reports MCP_TRANSPORT=http PORT=8788 node mcp/file-finder.mjs
+connectors:
+  file-finder:
+    url: http://127.0.0.1:8788/mcp
+    transport: http
+policy:
+  permissions:
+    writeFiles: false
+    runCommands: true
+    unrestrictedNetwork: false
+  limits:
+    maxBudgetUsd: 2
+  promotion:
+    minEvalScore: 0.9
+environments:
+  local:
+    cloud: local
+    identity:
+      bootstrapAdmin: admin@localhost.test

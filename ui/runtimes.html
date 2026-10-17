@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Runtimes — Agent Workspace</title>
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<script>window.PAGE = { nav: "runtimes", crumbs: [["Administration"], ["Runtimes"]] };</script>
+
+<div class="app">
+  <div class="main">
+    <div class="page">
+
+      <div class="page-head">
+        <div>
+          <h1>Runtimes</h1>
+          <div class="sub">Where agents actually run. The operator decides this, not the codebase.</div>
+        </div>
+        <div class="actions">
+          <button class="btn primary" data-modal-open="m-new-profile">New profile</button>
+        </div>
+      </div>
+
+      <div class="tabs" data-tabs>
+        <button data-tab="profiles" class="active">Runtime profiles</button>
+        <button data-tab="drivers">Drivers</button>
+        <button data-tab="caps">Capabilities</button>
+      </div>
+
+      <!-- ---------------- profiles ---------------- -->
+      <section class="tabpanel active" data-panel="profiles">
+        <div class="rows">
+          <div class="row">
+            <div class="grow">
+              <div class="title">Standard <span class="badge ok">Verified</span> <span class="badge info">Default</span></div>
+              <div class="meta">Docker · 1 CPU · 1 GB RAM · 5 GB disk · Network: Restricted · Filesystem: read-write</div>
+            </div>
+            <div class="right"><span>4 agents</span><button class="btn sm" data-modal-open="m-test">Test</button><button class="btn sm" data-modal-open="m-edit-profile">Edit</button></div>
+          </div>
+          <div class="row">
+            <div class="grow">
+              <div class="title">Heavy <span class="badge ok">Verified</span></div>
+              <div class="meta">Kubernetes · 4 CPU · 8 GB RAM · 20 GB disk · Network: Restricted · gVisor RuntimeClass</div>
+            </div>
+            <div class="right"><span>1 agent</span><button class="btn sm" data-modal-open="m-test">Test</button><button class="btn sm" data-modal-open="m-edit-profile">Edit</button></div>
+          </div>
+          <div class="row">
+            <div class="grow">
+              <div class="title">Read Only <span class="badge ok">Verified</span></div>
+              <div class="meta">Docker · 1 CPU · 1 GB RAM · Filesystem: read-only · Network: gateway only</div>
+            </div>
+            <div class="right"><span>1 agent</span><button class="btn sm" data-modal-open="m-test">Test</button><button class="btn sm" data-modal-open="m-edit-profile">Edit</button></div>
+          </div>
+          <div class="row">
+            <div class="grow">
+              <div class="title">Azure Sessions <span class="badge warn">Unverified</span></div>
+              <div class="meta">Azure Container Apps dynamic sessions · pool <span class="mono">agent-workspace-runtimes</span> · Hyper-V per session</div>
+            </div>
+            <div class="right"><span>0 agents</span><button class="btn sm" data-modal-open="m-test">Test</button><button class="btn sm" data-modal-open="m-edit-profile">Edit</button></div>
+          </div>
+        </div>
+
+        <div class="callout warn mt16">
+          <span class="ico">⚠</span>
+          <div class="grow">
+            <b>“Azure Sessions” has never passed a runtime test.</b> A profile is shown as unverified until
+            <i>create → echo → destroy</i> has succeeded at least once, and agents cannot be deployed onto it.
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------------- drivers ---------------- -->
+      <section class="tabpanel" data-panel="drivers">
+        <div class="section-head mt0"><h2>Runtime</h2>
+          <div class="hint">A driver is selectable only when a connection exists, the image is reachable, and a test has passed.</div>
+        </div>
+
+        <div class="choices">
+          <div class="choice">
+            <div class="mark"></div>
+            <div class="grow">
+              <div class="t">This machine <span class="badge danger">No isolation</span></div>
+              <div class="d">Development only. The agent runs as a child process of the runner, as the same user.</div>
+            </div>
+            <div class="side">no isolation</div>
+          </div>
+
+          <div class="choice">
+            <div class="mark"></div>
+            <div class="grow">
+              <div class="t">Sandboxed process</div>
+              <div class="d">bubblewrap on Linux, Seatbelt on macOS. Filesystem and network allowlists without a container.</div>
+            </div>
+            <div class="side">no container per session</div>
+          </div>
+
+          <div class="choice selected">
+            <div class="mark"></div>
+            <div class="grow">
+              <div class="t">Docker <span class="badge ok">In use</span> <span class="badge info">Recommended</span></div>
+              <div class="d">One container per session, capabilities dropped, read-only root, egress network limited to the gateway.</div>
+            </div>
+            <div class="side">recommended for self-hosting</div>
+          </div>
+
+          <div class="choice">
+            <div class="mark"></div>
+            <div class="grow">
+              <div class="t">Kubernetes <span class="badge ok">Connected</span></div>
+              <div class="d">One Pod per runtime · namespace <span class="mono">agent-sandboxes</span> · default-deny NetworkPolicy · optional gVisor RuntimeClass</div>
+            </div>
+            <div class="side">portable enterprise</div>
+          </div>
+
+          <div class="choice" data-reveal="managed">
+            <div class="mark"></div>
+            <div class="grow">
+              <div class="t">Managed sandbox</div>
+              <div class="d">Use the isolation product your organisation already buys.</div>
+              <div class="sub-choices">
+                <div class="choice" style="padding:9px 11px">
+                  <div class="mark"></div>
+                  <div class="grow"><div class="t">Azure Container Apps dynamic sessions <span class="badge warn">Unverified</span></div>
+                    <div class="d">Pool registered · Hyper-V per session · network policy fixed when the pool is created, reported by the registry</div></div>
+                  <div class="side">~200 ms</div>
+                </div>
+                <div class="choice disabled" style="padding:9px 11px">
+                  <div class="mark"></div>
+                  <div class="grow"><div class="t">Amazon Bedrock AgentCore Runtime</div>
+                    <div class="d">Image not published to ECR for this account (arm64 required). <a href="#" data-toast="Opens the publishing guide">How to publish</a></div></div>
+                </div>
+                <div class="choice disabled" style="padding:9px 11px">
+                  <div class="mark"></div>
+                  <div class="grow"><div class="t">Amazon ECS on Fargate</div>
+                    <div class="d">Not configured — no task definition registered. <a href="#" data-toast="Opens the setup guide">Set up</a></div></div>
+                </div>
+                <div class="choice disabled" style="padding:9px 11px">
+                  <div class="mark"></div>
+                  <div class="grow"><div class="t">Google Cloud Run sandboxes</div>
+                    <div class="d">Not configured — no runner deployed with <span class="mono">--sandbox-launcher</span>.</div></div>
+                </div>
+                <div class="choice disabled" style="padding:9px 11px">
+                  <div class="mark"></div>
+                  <div class="grow"><div class="t">GKE Agent Sandbox</div>
+                    <div class="d">Not configured — cluster does not expose the Sandbox CRDs.</div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="choice disabled">
+            <div class="mark"></div>
+            <div class="grow">
+              <div class="t">External provider</div>
+              <div class="d">E2B, Daytona, Modal, Vercel Sandbox, Cloudflare Sandboxes. None registered.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="btn-row mt16">
+          <button class="btn" data-modal-open="m-test">Test Runtime</button>
+          <button class="btn primary" data-toast="Runtime selection saved">Save</button>
+        </div>
+
+        <div class="callout mt16">
+          <span class="ico">ℹ</span>
+          <div class="grow">
+            A driver that is not usable here is shown <b>disabled with the reason</b>, never hidden. The control
+            plane registers and selects runtimes — it does not build images, create session pools or provision
+            clusters.
+          </div>
+        </div>
+
+        <div class="section-head"><h2>Runtime image</h2></div>
+        <div class="card"><div class="card-body">
+          <dl class="kv">
+            <dt>Image</dt><dd class="mono">agent-workspace/runtime@sha256:9f2c1a…4b1e</dd>
+            <dt>Version</dt><dd>0.4.2 <span class="muted small">· deployed by digest, not by tag</span></dd>
+            <dt>Architectures</dt><dd>linux/amd64, linux/arm64</dd>
+            <dt>Registries</dt><dd class="mono">registry.meridian.example · agentworkspace.azurecr.io</dd>
+            <dt>Contract</dt><dd class="mono">GET /healthz · POST /run · POST /interrupt · POST /files · GET /files</dd>
+          </dl>
+        </div></div>
+      </section>
+
+      <!-- ---------------- capabilities ---------------- -->
+      <section class="tabpanel" data-panel="caps">
+        <div class="section-head mt0"><h2>Driver capabilities</h2>
+          <div class="hint">Derived from the driver conformance suite. Never assumed.</div>
+        </div>
+        <div class="card">
+          <div class="table-wrap">
+          <table class="tbl matrix">
+            <thead><tr>
+              <th>Property</th><th>local</th><th>sandbox<br>process</th><th>docker</th><th>k8s</th><th>GKE<br>sandbox</th><th>ACA<br>sessions</th><th>Agent<br>Core</th><th>ECS</th><th>Cloud<br>Run</th>
+            </tr></thead>
+            <tbody>
+              <tr><td>Isolation</td><td class="n">none</td><td class="a">OS</td><td class="y">ctr</td><td class="y">ctr</td><td class="y">gVisor</td><td class="y">Hyper‑V</td><td class="y">microVM</td><td class="y">VM</td><td class="y">sandbox</td></tr>
+              <tr><td>Custom image</td><td class="n">—</td><td class="n">—</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+              <tr><td>Per-session isolation</td><td class="n">—</td><td class="a">~</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+              <tr><td>Domain allowlist</td><td class="a">~</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="n">—</td><td class="a">~</td><td class="a">~</td><td class="a">~</td></tr>
+              <tr><td>Deny-all egress</td><td class="n">—</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+              <tr><td>Persistent filesystem</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="n">—</td><td class="a">~</td><td class="a">~</td><td class="a">~</td></tr>
+              <tr><td>Bounded session life</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="a">~</td><td class="a">~</td><td class="a">cooldown</td><td class="a">~8 h</td><td class="n">—</td><td class="n">—</td></tr>
+              <tr><td>Typical start</td><td>ms</td><td>ms</td><td>~1 s</td><td>~3 s</td><td>&lt;1 s</td><td>ms</td><td>~1 s</td><td>~10 s</td><td>ms</td></tr>
+              <tr><td>Needs Docker socket</td><td class="n">—</td><td class="n">—</td><td class="y">✓</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">—</td></tr>
+            </tbody>
+          </table>
+          </div>
+          <div class="card-foot small muted">
+            <span style="color:var(--ok);font-weight:700">✓</span> native ·
+            <span style="color:var(--warn);font-weight:700">~</span> approximated or conditional ·
+            <span style="color:var(--muted);font-weight:700">—</span> unsupported
+          </div>
+        </div>
+
+        <div class="section-head"><h2>How “Network: Restricted” is enforced</h2></div>
+        <div class="card">
+          <div class="table-wrap">
+          <table class="tbl">
+            <thead><tr><th>Driver</th><th>none</th><th>restricted (allowlist)</th><th>open</th></tr></thead>
+            <tbody>
+              <tr><td>sandbox process</td><td>default deny</td><td>domain allowlist via the built-in proxy (no TLS inspection)</td><td>allow all</td></tr>
+              <tr><td>docker</td><td><span class="mono">--network none</span> + gateway route</td><td>egress network plus an allowlisting proxy container</td><td>bridge network</td></tr>
+              <tr><td>kubernetes</td><td>default-deny NetworkPolicy</td><td>NetworkPolicy plus egress proxy</td><td>permissive policy</td></tr>
+              <tr><td>aca-sessions</td><td><span class="mono">EgressDisabled</span></td><td><b style="color:var(--warn)">not supported</b> — approximated with an egress-enabled pool behind our proxy</td><td><span class="mono">EgressEnabled</span></td></tr>
+              <tr><td>aws-agentcore</td><td>network mode <span class="mono">Sandbox</span></td><td>VPC mode plus security groups / egress proxy</td><td>network mode <span class="mono">Public</span></td></tr>
+              <tr><td>aws-ecs</td><td>no NAT, no internet gateway</td><td>security groups, VPC endpoints, egress proxy</td><td>public subnet or NAT</td></tr>
+              <tr><td>cloud-run-sandbox</td><td>default (no <span class="mono">--allow-egress</span>)</td><td><span class="mono">--allow-egress</span> plus VPC egress and Cloud NAT rules</td><td><span class="mono">--allow-egress</span></td></tr>
+            </tbody>
+          </table>
+          </div>
+        </div>
+
+        <div class="callout mt16">
+          <span class="ico">ℹ</span>
+          <div class="grow">
+            <b>“None” always means “the gateway and nothing else”</b>, never “no network at all” — an agent that
+            cannot reach the gateway cannot call a model.
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<!-- test runtime -->
+<div class="scrim" id="m-test" hidden>
+  <div class="modal">
+    <div class="m-head"><h3>Test runtime</h3><div class="sub">Creates a real sandbox, runs <span class="mono">echo</span>, and destroys it.</div></div>
+    <div class="m-body">
+      <div class="card"><div class="card-body event-log">
+        <div class="line"><span class="ts">1</span><span class="ev">create</span><span class="dt">docker run --cap-drop ALL --read-only --user 1000:1000 … → aw-test-6a2f · 940 ms</span></div>
+        <div class="line"><span class="ts">2</span><span class="ev">healthz</span><span class="dt">GET /healthz → 200 · 42 ms</span></div>
+        <div class="line"><span class="ts">3</span><span class="ev">exec</span><span class="dt">echo "runtime-ok" → runtime-ok · 18 ms</span></div>
+        <div class="line"><span class="ts">4</span><span class="ev">network</span><span class="dt">gateway reachable · blocked host refused as expected</span></div>
+        <div class="line"><span class="ts">5</span><span class="ev">destroy</span><span class="dt">container removed · 120 ms</span></div>
+      </div></div>
+      <div class="callout ok mt16">
+        <span class="ico">✓</span>
+        <div class="grow"><b>Runtime verified.</b> Total 1.12 s. This profile can now be selected by agents.</div>
+      </div>
+    </div>
+    <div class="m-foot"><button class="btn" data-modal-close>Close</button><button class="btn primary" data-modal-close data-toast="Marked as verified">Save result</button></div>
+  </div>
+</div>
+
+<!-- new / edit profile -->
+<div class="scrim" id="m-new-profile" hidden>
+  <div class="modal wide">
+    <div class="m-head"><h3>New runtime profile</h3><div class="sub">How much machine, and how much network.</div></div>
+    <div class="m-body">
+      <div class="field"><label>Name</label><input type="text" placeholder="e.g. Standard"></div>
+      <div class="field">
+        <label>Driver</label>
+        <select><option>Docker</option><option>Kubernetes</option><option>Sandboxed process</option><option>Azure Container Apps dynamic sessions</option></select>
+      </div>
+      <div class="field row2">
+        <div><label>CPU</label><select><option>1 CPU</option><option>2 CPU</option><option>4 CPU</option></select></div>
+        <div><label>Memory</label><select><option>1 GB</option><option>2 GB</option><option>8 GB</option></select></div>
+      </div>
+      <div class="field row2">
+        <div><label>Disk</label><select><option>5 GB</option><option>20 GB</option></select></div>
+        <div><label>Timeout</label><select><option>30 minutes</option><option>2 hours</option><option>No limit</option></select></div>
+      </div>
+      <div class="field">
+        <label>Network</label>
+        <div class="choices">
+          <div class="choice"><div class="mark"></div><div class="grow"><div class="t">None</div><div class="d">The model gateway and nothing else</div></div></div>
+          <div class="choice selected"><div class="mark"></div><div class="grow"><div class="t">Restricted</div><div class="d">The gateway plus the hosts of enabled connectors</div></div></div>
+          <div class="choice"><div class="mark"></div><div class="grow"><div class="t">Open</div><div class="d">Unrestricted egress. Not recommended.</div></div></div>
+        </div>
+      </div>
+      <div class="field mb0">
+        <label>Filesystem</label>
+        <select><option>Read and write</option><option>Read only</option></select>
+      </div>
+
+      <details class="adv">
+        <summary>Advanced <span class="hint">driver configuration</span></summary>
+        <div class="adv-body">
+          <div class="field"><label>Allowed domains</label><input type="text" class="mono-input" value="mcp.meridian.internal, meridian.atlassian.net"></div>
+          <div class="field"><label>Persist paths</label><input type="text" class="mono-input" value="/workspace/output"></div>
+          <div class="field mb0"><label>driverConfig</label>
+            <pre class="code">{ <span class="k">"runtime"</span>: <span class="s">"runsc"</span>, <span class="k">"pidsLimit"</span>: 256 }</pre>
+            <div class="help">Validated per driver. Never required — every driver ships defaults.</div>
+          </div>
+        </div>
+      </details>
+    </div>
+    <div class="m-foot"><button class="btn" data-modal-close>Cancel</button><button class="btn primary" data-modal-close data-toast="Profile created — run a test before assigning agents">Create profile</button></div>
+  </div>
+</div>
+
+<div class="scrim" id="m-edit-profile" hidden>
+  <div class="modal">
+    <div class="m-head"><h3>Standard</h3><div class="sub">Docker · used by 4 agents</div></div>
+    <div class="m-body">
+      <div class="field row2">
+        <div><label>CPU</label><select><option selected>1 CPU</option><option>2 CPU</option></select></div>
+        <div><label>Memory</label><select><option selected>1 GB</option><option>2 GB</option></select></div>
+      </div>
+      <div class="field mb0"><label>Network</label><select><option selected>Restricted</option><option>None</option><option>Open</option></select></div>
+      <div class="callout warn mt16">
+        <span class="ico">⚠</span>
+        <div class="grow">Changes apply <b>from the next run</b> for all 4 agents using this profile. Runs already
+          in flight finish on the current settings.</div>
+      </div>
+    </div>
+    <div class="m-foot"><button class="btn" data-modal-close>Cancel</button><button class="btn primary" data-modal-close data-toast="Profile updated">Save</button></div>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

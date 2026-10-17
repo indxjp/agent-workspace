@@ -1,0 +1,178 @@
+---
+title: "workspaces"
+description: "The @indx-workspace/contracts/workspaces exports, sorted alphabetically."
+---
+
+<Note>This page is generated from `packages/contracts/src/workspaces.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## CreateWorkspaceInput
+
+The body of `POST /api/workspaces`. `slug` is lower-case letters, digits and hyphens.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `slug` | `string` | Yes |  |
+
+## SharingPolicy
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `publicSharing` | `false \| true` | Yes |  |
+
+## SharingPolicySchema
+
+The workspace's sharing policy, as `GET /api/sharing-policies` and `PATCH /api/sharing-policies`
+both render it. `publicSharing` is whether a member may publish a public (`/p/<token>`) share;
+it is the same fact `WorkspaceResource.publicSharingEnabled` reports, read through the sharing
+routes so every role can see it.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `publicSharing` | `false \| true` | Yes |  |
+
+## UpdateSharingPolicyInput
+
+The body of `PATCH /api/sharing-policies`. Only an Owner may change the policy (`403 forbidden`
+for every other role); a body whose `publicSharing` is not a boolean is `400 invalid_policy`,
+and one that is not JSON is `400 invalid_share`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `publicSharing` | `false \| true` | Yes |  |
+
+## UpdateWorkspacePatch
+
+The body of `PATCH /api/workspaces/:id`: rename, archive, and/or restore.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `undefined \| string` | No |  |
+| `archived` | `undefined \| false \| true` | No |  |
+
+## WORKSPACE_NAME_MAX_LENGTH
+
+The bounds `POST /api/workspaces` applies to its two fields.
+
+Value: `200`
+
+## WORKSPACE_SLUG_MAX_LENGTH
+
+Value: `64`
+
+## WorkspaceListResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `workspaces` | `readonly WorkspaceMembershipView[]` | Yes |  |
+
+## WorkspaceListResponseSchema
+
+The body of `GET /api/workspaces`: exactly the workspaces the caller belongs to.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `workspaces` | `readonly WorkspaceMembershipView[]` | Yes |  |
+
+## WorkspaceMembershipResponseSchema
+
+The body of `GET /api/workspaces/:id` and `POST /api/workspaces`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `workspace` | `WorkspaceMembershipView` | Yes |  |
+
+## WorkspaceMembershipView
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `role` | `"owner" \| "admin" \| "builder" \| "viewer"` | Yes |  |
+| `id` | `string` | Yes |  |
+| `slug` | `string` | Yes |  |
+| `name` | `string` | Yes |  |
+| `publicSharingEnabled` | `false \| true` | Yes |  |
+| `archivedAt` | `null \| string` | Yes | `null` while the workspace is active. |
+| `createdAt` | `string` | Yes |  |
+| `updatedAt` | `string` | Yes |  |
+
+## WorkspaceMembershipViewSchema
+
+A workspace joined to the role the caller holds in it — every item of `GET /api/workspaces`,
+the body of `GET /api/workspaces/:id`, and the `201` of `POST /api/workspaces`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `role` | `"owner" \| "admin" \| "builder" \| "viewer"` | Yes |  |
+| `id` | `string` | Yes |  |
+| `slug` | `string` | Yes |  |
+| `name` | `string` | Yes |  |
+| `publicSharingEnabled` | `false \| true` | Yes |  |
+| `archivedAt` | `null \| string` | Yes | `null` while the workspace is active. |
+| `createdAt` | `string` | Yes |  |
+| `updatedAt` | `string` | Yes |  |
+
+## WorkspaceResource
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `slug` | `string` | Yes |  |
+| `name` | `string` | Yes |  |
+| `publicSharingEnabled` | `false \| true` | Yes |  |
+| `archivedAt` | `null \| string` | Yes | `null` while the workspace is active. |
+| `createdAt` | `string` | Yes |  |
+| `updatedAt` | `string` | Yes |  |
+
+## WorkspaceResourceSchema
+
+A workspace as `PATCH /api/workspaces/:id` renders it. Dates are ISO-8601 strings.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `slug` | `string` | Yes |  |
+| `name` | `string` | Yes |  |
+| `publicSharingEnabled` | `false \| true` | Yes |  |
+| `archivedAt` | `null \| string` | Yes | `null` while the workspace is active. |
+| `createdAt` | `string` | Yes |  |
+| `updatedAt` | `string` | Yes |  |
+
+## WorkspaceResponseSchema
+
+The body of `PATCH /api/workspaces/:id`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `workspace` | `WorkspaceResource` | Yes |  |
+
+## WorkspaceSwitchRequest
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `workspace` | `string` | Yes |  |
+
+## WorkspaceSwitchRequestSchema
+
+Issue #236 (SDK-04, S-2): the JSON body of `POST /api/auth/workspace` when the caller sends
+`Content-Type: application/json` instead of a form. `workspace` is an id or a slug, exactly as
+the form field of the same name is read today.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `workspace` | `string` | Yes |  |
+
+## WorkspaceSwitchResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `workspace` | `WorkspaceMembershipView` | Yes |  |
+
+## WorkspaceSwitchResponseSchema
+
+The `200` of the JSON workspace switch: the membership the caller's session now carries, in the
+same shape `GET /api/workspaces/:id` renders one. The new session cookie travels as `Set-Cookie`,
+never in this body.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `workspace` | `WorkspaceMembershipView` | Yes |  |

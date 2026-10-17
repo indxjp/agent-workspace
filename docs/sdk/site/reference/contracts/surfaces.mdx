@@ -1,0 +1,539 @@
+---
+title: "surfaces"
+description: "The @indx-workspace/contracts/surfaces exports, sorted alphabetically."
+---
+
+<Note>This page is generated from `packages/contracts/src/surfaces.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## SURFACE_AGENT_SWITCHER_MAX
+
+The most agents a surface's agent switcher may offer (ADR-0108 SD10; issue #537).
+
+Value: `6`
+
+## SURFACE_ALLOWED_ORIGINS_MAX
+
+The most origins `allowedOrigins` may list (issue #622).
+
+Value: `20`
+
+## SURFACE_DENSITIES
+
+How tightly a surface spaces its content (ADR-0108 rung ①; issue #440).
+
+- `'compact'`
+- `'comfortable'`
+
+## SURFACE_DISCLAIMER_MAX_LENGTH
+
+The longest disclaimer, in characters (ADR-0108; issue #440).
+
+Value: `1000`
+
+## SURFACE_GREETING_MAX_LENGTH
+
+The longest greeting, in characters (ADR-0108; issue #440).
+
+Value: `500`
+
+## SURFACE_LAYOUTS
+
+Issue #440 (S1-02): a surface as code — what `defineSurface()` returns (C3), what a version's
+body carries next to its agent definition (ADR-0101), and what the hosted widget at
+`/p/s/<name>` reads its look from. It accepts rungs ① (look) and ② (layout and parts) of
+ADR-0108; rung ② is complete since issue #537 (ADR-0108 SD10): history, feedback, the agent
+switcher, a full tool trace and built-in tool-result components. Allowed origins and limits
+embed a surface on a customer's own site (issue #622). Audience and attachments arrive in later
+units, and until then a strict object refuses each of them rather than accepting and ignoring it.
+
+Every schema here is plain structure: no default and no transform, so the parsed value is the
+value written, and `z.toJSONSchema` can emit an editor schema from the same definitions.
+
+- `'dock'`
+- `'side'`
+- `'page'`
+- `'inline'`
+
+## SURFACE_LIMIT_PROBLEM_CODES
+
+The abuse-limit refusals of a surface's visitor (issue #622). `surface_rate_limited` answers a
+session, turn or rating past its per-minute limit and carries `Retry-After`;
+`surface_turn_limit_reached` answers a turn past `limits.turnsPerConversation` and is final for
+that conversation. Turns answer them on `POST /api/agents/:id/runs`, ratings on
+`POST /api/runs/:id/feedback`.
+
+| Key | Value |
+| --- | --- |
+| `surface_rate_limited` | `429` |
+| `surface_turn_limit_reached` | `429` |
+
+## SURFACE_LOCALES
+
+The languages a surface's own chrome is shown in (ADR-0108 rung ①; issue #440).
+
+- `'en'`
+- `'ja'`
+
+## SURFACE_LOGO_URL_MAX_LENGTH
+
+The longest https logo URL, in characters (ADR-0108; issue #440).
+
+Value: `2048`
+
+## SURFACE_NAME_MAX_LENGTH
+
+The longest surface name, in characters; the name-key grammar's own bound (issue #440).
+
+Value: `64`
+
+## SURFACE_RADIUS_MAX
+
+The largest corner radius a theme may set, in CSS pixels (ADR-0108; issue #440).
+
+Value: `32`
+
+## SURFACE_RESUME_KEY_PATTERN
+
+A resume key: the base64url of 32 random bytes, 43 characters — the shape of a browser token's
+secret half (ADR-0105, C18; issue #537).
+
+Value: `/^[A-Za-z0-9_-]{43}$/u`
+
+## SURFACE_SESSION_PROBLEM_CODES
+
+The problem codes `POST /p/s/<name>/sessions` answers with, and each one's HTTP status (ADR-0105
+slice 1; S1-17, issue #455). `surface_sessions_unavailable` means the surface lists no
+`allowedOrigins` and one of ADR-0105's four local conditions failed — the flag, a loopback
+listen host, a loopback request host, a same-origin request — and is a `404` so a deployment
+that does not serve local sessions looks like one with no such route.
+`surface_origin_not_allowed` means the surface lists origins and the request came from none of
+them, nor from this origin (issue #622). A refused first run names its missing piece with the
+run-start codes. `surface_session_not_resumable` and `surface_agent_not_offered` refuse a resume
+and an agent the surface does not offer (C18; issue #537).
+
+| Key | Value |
+| --- | --- |
+| `surface_sessions_unavailable` | `404` |
+| `surface_origin_not_allowed` | `403` |
+| `surface_rate_limited` | `SURFACE_LIMIT_PROBLEM_CODES.surface_rate_limited` |
+| `surface_not_found` | `404` |
+| `invalid_body` | `400` |
+| `surface_sessions_not_configured` | `503` |
+| `surface_session_not_resumable` | `404` |
+| `surface_agent_not_offered` | `404` |
+
+## SURFACE_SESSION_TTL_SECONDS
+
+How long a hosted surface page's local session token lives, in seconds (ADR-0105 slice 1;
+S1-17, issue #455). It is the browser-token ceiling (`BROWSER_TOKEN_MAX_TTL_SECONDS`), so a
+conversation outlives the default five-minute token; the chat opens a new session once when it
+expires.
+
+Value: `3600`
+
+## SURFACE_SUGGESTED_PROMPT_MAX_LENGTH
+
+The longest suggested prompt, in characters (ADR-0108; issue #440).
+
+Value: `200`
+
+## SURFACE_SUGGESTED_PROMPTS_MAX
+
+The most suggested prompts a surface may show (ADR-0108; issue #440).
+
+Value: `6`
+
+## SURFACE_THEME_MODES
+
+The colour schemes a surface may follow (ADR-0108 rung ①; issue #440).
+
+- `'light'`
+- `'dark'`
+- `'system'`
+
+## SURFACE_TOOL_NAME_PATTERN
+
+A `toolResults` key: a tool name as a run's `agent.tool.call` frame carries it, up to the
+64-character model-visible cap, so engine-prefixed names such as `mcp__<key>__<op>` fit; how a
+prefixed MCP name is matched is S2-05d's (ADR-0108 SD10; issue #537).
+
+Value: `/^[A-Za-z0-9_-]{1,64}$/u`
+
+## SURFACE_TOOL_RESULT_COMPONENTS
+
+The built-in components a tool's result may render as (ADR-0108 SD10; issue #537). A tool not
+named in `toolResults` renders as `text`.
+
+- `'text'`
+- `'card'`
+- `'table'`
+
+## SURFACE_TOOL_RESULTS_MAX_ENTRIES
+
+The most entries `toolResults` may hold (ADR-0108 SD10; issue #537).
+
+Value: `64`
+
+## SURFACE_TOOL_TRACE_MODES
+
+How a surface shows the agent's tool calls (ADR-0108 rung ②; issue #440). `full` completes
+rung ② (ADR-0108 SD10; issue #537).
+
+- `'hidden'`
+- `'collapsed'`
+- `'full'`
+
+## SURFACE_TURNS_PER_CONVERSATION_MAX
+
+The most turns `limits.turnsPerConversation` may allow (issue #622).
+
+Value: `1000`
+
+## SurfaceAllowedOriginsSchema
+
+The origins a surface may be embedded and opened from (issue #622): 1–
+`SURFACE_ALLOWED_ORIGINS_MAX` canonical origins, none repeated. The control plane derives
+the page's `frame-ancestors`, the session route's `Origin` check and its CORS answer from it.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `length` | `number` | Yes | Gets the length of the array. This is a number one higher than the highest element defined in an array. |
+| `toString` | `() => string` | Yes | Returns a string representation of an array. |
+| `toLocaleString` | `{ (): string; (locales: string \| string[], options?: Intl.NumberFormatOptions & Intl.DateTimeFormatOptions): string; }` | Yes | Returns a string representation of an array. The elements are converted to string using their toLocaleString methods. |
+| `concat` | `{ (...items: ConcatArray<string>[]): string[]; (...items: (string \| ConcatArray<string>)[]): string[]; }` | Yes | Combines two or more arrays. |
+| `join` | `(separator?: string) => string` | Yes | Adds all the elements of an array separated by the specified separator string. |
+| `slice` | `(start?: number, end?: number) => string[]` | Yes | Returns a section of an array. |
+| `indexOf` | `(searchElement: string, fromIndex?: number) => number` | Yes | Returns the index of the first occurrence of a value in an array. |
+| `lastIndexOf` | `(searchElement: string, fromIndex?: number) => number` | Yes | Returns the index of the last occurrence of a specified value in an array. |
+| `every` | `{ <S extends string>(predicate: (value: string, index: number, array: readonly string[]) => value is S, thisArg?: any): this is readonly S[]; (predicate: (value: string, index: number, array: readonly string[]) => unknown, thisArg?: any): boolean; }` | Yes | Determines whether all the members of an array satisfy the specified test. |
+| `some` | `(predicate: (value: string, index: number, array: readonly string[]) => unknown, thisArg?: any) => boolean` | Yes | Determines whether the specified callback function returns true for any element of an array. |
+| `forEach` | `(callbackfn: (value: string, index: number, array: readonly string[]) => void, thisArg?: any) => void` | Yes | Performs the specified action for each element in an array. |
+| `map` | `<U>(callbackfn: (value: string, index: number, array: readonly string[]) => U, thisArg?: any) => U[]` | Yes | Calls a defined callback function on each element of an array, and returns an array that contains the results. |
+| `filter` | `{ <S extends string>(predicate: (value: string, index: number, array: readonly string[]) => value is S, thisArg?: any): S[]; (predicate: (value: string, index: number, array: readonly string[]) => unknown, thisArg?: any): string[]; }` | Yes | Returns the elements of an array that meet the condition specified in a callback function. |
+| `reduce` | `{ (callbackfn: (previousValue: string, currentValue: string, currentIndex: number, array: readonly string[]) => string): string; (callbackfn: (previousValue: string, currentValue: string, currentIndex: number, array: readonly string[]) => string, initialValue: string): string; <U>(callbackfn: (previousValue: U, currentValue: string, currentIndex: number, array: readonly string[]) => U, initialValue: U): U; }` | Yes | Calls the specified callback function for all the elements in an array. The return value of the callback function is the accumulated result, and is provided as an argument in the next call to the callback function. |
+| `reduceRight` | `{ (callbackfn: (previousValue: string, currentValue: string, currentIndex: number, array: readonly string[]) => string): string; (callbackfn: (previousValue: string, currentValue: string, currentIndex: number, array: readonly string[]) => string, initialValue: string): string; <U>(callbackfn: (previousValue: U, currentValue: string, currentIndex: number, array: readonly string[]) => U, initialValue: U): U; }` | Yes | Calls the specified callback function for all the elements in an array, in descending order. The return value of the callback function is the accumulated result, and is provided as an argument in the next call to the callback function. |
+| `find` | `{ <S extends string>(predicate: (value: string, index: number, obj: readonly string[]) => value is S, thisArg?: any): S \| undefined; (predicate: (value: string, index: number, obj: readonly string[]) => unknown, thisArg?: any): string \| undefined; }` | Yes | Returns the value of the first element in the array where predicate is true, and undefined otherwise. |
+| `findIndex` | `(predicate: (value: string, index: number, obj: readonly string[]) => unknown, thisArg?: any) => number` | Yes | Returns the index of the first element in the array where predicate is true, and -1 otherwise. |
+| `entries` | `() => ArrayIterator<[number, string]>` | Yes | Returns an iterable of key, value pairs for every entry in the array |
+| `keys` | `() => ArrayIterator<number>` | Yes | Returns an iterable of keys in the array |
+| `values` | `() => ArrayIterator<string>` | Yes | Returns an iterable of values in the array |
+| `includes` | `(searchElement: string, fromIndex?: number) => boolean` | Yes | Determines whether an array includes a certain element, returning true or false as appropriate. |
+| `flatMap` | `<U, This = undefined>(callback: (this: This, value: string, index: number, array: string[]) => U \| readonly U[], thisArg?: This \| undefined) => U[]` | Yes | Calls a defined callback function on each element of an array. Then, flattens the result into a new array. This is identical to a map followed by flat with depth 1. |
+| `flat` | `<A, D extends number = 1>(this: A, depth?: D \| undefined) => FlatArray<A, D>[]` | Yes | Returns a new array with all sub-array elements concatenated into it recursively up to the specified depth. |
+| `at` | `(index: number) => string \| undefined` | Yes | Returns the item located at the specified index. |
+| `findLast` | `{ <S extends string>(predicate: (value: string, index: number, array: readonly string[]) => value is S, thisArg?: any): S \| undefined; (predicate: (value: string, index: number, array: readonly string[]) => unknown, thisArg?: any): string \| undefined; }` | Yes | Returns the value of the last element in the array where predicate is true, and undefined otherwise. |
+| `findLastIndex` | `(predicate: (value: string, index: number, array: readonly string[]) => unknown, thisArg?: any) => number` | Yes | Returns the index of the last element in the array where predicate is true, and -1 otherwise. |
+| `toReversed` | `() => string[]` | Yes | Copies the array and returns the copied array with all of its elements reversed. |
+| `toSorted` | `(compareFn?: ((a: string, b: string) => number) \| undefined) => string[]` | Yes | Copies and sorts the array. |
+| `toSpliced` | `{ (start: number, deleteCount: number, ...items: string[]): string[]; (start: number, deleteCount?: number): string[]; }` | Yes | Copies an array and removes elements while, if necessary, inserting new elements in their place, returning the remaining elements. |
+| `with` | `(index: number, value: string) => string[]` | Yes | Copies an array, then overwrites the value at the provided index with the given value. If the index is negative, then it replaces from the end of the array |
+| `[Symbol.iterator]` | `() => ArrayIterator<string>` | Yes | Iterator of values in the array. |
+| `[Symbol.unscopables]` | `{ readonly [x: number]: boolean \| undefined; readonly length?: boolean; toString?: boolean; toLocaleString?: boolean; concat?: boolean; join?: boolean; slice?: boolean; indexOf?: boolean; lastIndexOf?: boolean; every?: boolean; some?: boolean; forEach?: boolean; map?: boolean; filter?: boolean; reduce?: boolean; reduceRight?: boolean; find?: boolean; findIndex?: boolean; entries?: boolean; keys?: boolean; values?: boolean; includes?: boolean; flatMap?: boolean; flat?: boolean; at?: boolean; findLast?: boolean; findLastIndex?: boolean; toReversed?: boolean; toSorted?: boolean; toSpliced?: boolean; with?: boolean; [Symbol.iterator]?: boolean; readonly [Symbol.unscopables]?: boolean; }` | Yes | Is an object whose properties have the value 'true' when they will be absent when used in a 'with' statement. |
+
+## SurfaceDefinition
+
+A parsed surface definition (ADR-0108, ADR-0101; issue #440).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes | The surface's name-key, the `<name>` of `/p/s/<name>`: lower-case kebab, 1–64 characters. |
+| `agent` | `string` | Yes | The agent the surface talks to, by name — the bound of `AgentDefinitionAgentSchema.name` (1–`AGENT_NAME_MAX_LENGTH` characters, so names such as "Support triage" fit), on one line with no control or invisible character and no space at either end. |
+| `title` | `undefined \| string` | No | The title the widget shows, in the surface-title grammar. It is not in ADR-0108's slice-1 list or in plan contract C4; it exists because S1-01's merged setup question `embedder.surfaceTitle` writes `surfaces/main.ts`, and without this key that answer would be accepted and ignored. ADR-0108's rung ① ("look") is read as covering it; the deviation is recorded in this package's CHANGELOG and the unit's PR so ADR-0108 and C4 can name it. |
+| `theme` | `undefined \| SurfaceTheme` | No |  |
+| `layout` | `undefined \| "dock" \| "side" \| "page" \| "inline"` | No |  |
+| `parts` | `undefined \| SurfaceParts` | No |  |
+| `toolResults` | `undefined \| Readonly<Record<string, "text" \| "card" \| "table">>` | No |  |
+| `allowedOrigins` | `undefined \| readonly string[]` | No |  |
+| `limits` | `undefined \| SurfaceLimits` | No |  |
+
+## SurfaceDefinitionInput
+
+What `SurfaceDefinitionSchema` accepts; equal to its output, since nothing transforms.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes | The surface's name-key, the `<name>` of `/p/s/<name>`: lower-case kebab, 1–64 characters. |
+| `agent` | `string` | Yes | The agent the surface talks to, by name — the bound of `AgentDefinitionAgentSchema.name` (1–`AGENT_NAME_MAX_LENGTH` characters, so names such as "Support triage" fit), on one line with no control or invisible character and no space at either end. |
+| `title` | `undefined \| string` | No | The title the widget shows, in the surface-title grammar. It is not in ADR-0108's slice-1 list or in plan contract C4; it exists because S1-01's merged setup question `embedder.surfaceTitle` writes `surfaces/main.ts`, and without this key that answer would be accepted and ignored. ADR-0108's rung ① ("look") is read as covering it; the deviation is recorded in this package's CHANGELOG and the unit's PR so ADR-0108 and C4 can name it. |
+| `theme` | `undefined \| SurfaceTheme` | No |  |
+| `layout` | `undefined \| "dock" \| "side" \| "page" \| "inline"` | No |  |
+| `parts` | `undefined \| SurfaceParts` | No |  |
+| `toolResults` | `undefined \| Readonly<Record<string, "text" \| "card" \| "table">>` | No |  |
+| `allowedOrigins` | `undefined \| readonly string[]` | No |  |
+| `limits` | `undefined \| SurfaceLimits` | No |  |
+
+## SurfaceDefinitionSchema
+
+One surface as code: what `defineSurface()` returns (C3) and what each entry of a version's
+`surfaces` holds (ADR-0101). It accepts ADR-0108's rungs ① and ②, rung ② complete with
+`toolResults` (SD10; issue #537), and the embedding keys `allowedOrigins` and `limits` (issue
+#622); `audience` and any other key are refused by the strict object (issues #440, #537).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes | The surface's name-key, the `<name>` of `/p/s/<name>`: lower-case kebab, 1–64 characters. |
+| `agent` | `string` | Yes | The agent the surface talks to, by name — the bound of `AgentDefinitionAgentSchema.name` (1–`AGENT_NAME_MAX_LENGTH` characters, so names such as "Support triage" fit), on one line with no control or invisible character and no space at either end. |
+| `title` | `undefined \| string` | No | The title the widget shows, in the surface-title grammar. It is not in ADR-0108's slice-1 list or in plan contract C4; it exists because S1-01's merged setup question `embedder.surfaceTitle` writes `surfaces/main.ts`, and without this key that answer would be accepted and ignored. ADR-0108's rung ① ("look") is read as covering it; the deviation is recorded in this package's CHANGELOG and the unit's PR so ADR-0108 and C4 can name it. |
+| `theme` | `undefined \| SurfaceTheme` | No |  |
+| `layout` | `undefined \| "dock" \| "side" \| "page" \| "inline"` | No |  |
+| `parts` | `undefined \| SurfaceParts` | No |  |
+| `toolResults` | `undefined \| Readonly<Record<string, "text" \| "card" \| "table">>` | No |  |
+| `allowedOrigins` | `undefined \| readonly string[]` | No |  |
+| `limits` | `undefined \| SurfaceLimits` | No |  |
+
+## SurfaceDensity
+
+- `"compact"`
+- `"comfortable"`
+
+## SurfaceDensitySchema
+
+`SURFACE_DENSITIES` as a schema (ADR-0108; issue #440).
+
+- `"compact"`
+- `"comfortable"`
+
+## SurfaceLayout
+
+- `"dock"`
+- `"side"`
+- `"page"`
+- `"inline"`
+
+## SurfaceLayoutSchema
+
+Where a surface sits on the page (ADR-0108 rung ②; issue #440).
+
+- `"dock"`
+- `"side"`
+- `"page"`
+- `"inline"`
+
+## SurfaceLimitProblemCode
+
+A key of `SURFACE_LIMIT_PROBLEM_CODES` (issue #622).
+
+- `"surface_rate_limited"`
+- `"surface_turn_limit_reached"`
+
+## SurfaceLimits
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `turnsPerConversation` | `undefined \| number` | No |  |
+
+## SurfaceLimitsSchema
+
+A surface's abuse limits (issue #622). `turnsPerConversation` caps the turns one visitor session
+may send; a surface with `allowedOrigins` and no cap of its own gets the control plane's default.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `turnsPerConversation` | `undefined \| number` | No |  |
+
+## SurfaceLocale
+
+- `"en"`
+- `"ja"`
+
+## SurfaceLocaleSchema
+
+`SURFACE_LOCALES` as a schema (ADR-0108; issue #440).
+
+- `"en"`
+- `"ja"`
+
+## SurfaceLogo
+
+- `Readonly<{ text: string; }>`
+- `Readonly<{ url: string; }>`
+
+## SurfaceLogoSchema
+
+A surface's logo: either a short text mark in the surface-title grammar or an `https://` image
+URL — never both, so a logo carrying both keys is refused by each strict arm (ADR-0108 rung ①;
+issue #440).
+
+- `Readonly<{ text: string; }>`
+- `Readonly<{ url: string; }>`
+
+## SurfaceParts
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `greeting` | `undefined \| string` | No |  |
+| `suggestedPrompts` | `undefined \| readonly string[]` | No |  |
+| `disclaimer` | `undefined \| string` | No |  |
+| `toolTrace` | `undefined \| "hidden" \| "collapsed" \| "full"` | No |  |
+| `history` | `undefined \| false \| true` | No | Whether the surface lists the visitor's earlier conversations (ADR-0108 SD10; #537). |
+| `feedback` | `undefined \| false \| true` | No | Whether the surface asks for a thumbs-up or -down on each answer (ADR-0108 SD10; #537). |
+| `agentSwitcher` | `undefined \| Readonly<{ agents: readonly string[]; }>` | No | The agents a visitor may switch between, by name, 1–`SURFACE_AGENT_SWITCHER_MAX` with no repeat. Whether each is the surface owner's is a runtime check, not this schema's (ADR-0108 SD10; issue #537). |
+
+## SurfacePartsSchema
+
+The parts a surface shows — ADR-0108's rung ②, complete since issue #537 (SD10): history,
+feedback and the agent switcher join the slice-1 parts. Attachments are a later unit, so a
+strict object refuses them (ADR-0108, ADR-0101; issues #440, #537).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `greeting` | `undefined \| string` | No |  |
+| `suggestedPrompts` | `undefined \| readonly string[]` | No |  |
+| `disclaimer` | `undefined \| string` | No |  |
+| `toolTrace` | `undefined \| "hidden" \| "collapsed" \| "full"` | No |  |
+| `history` | `undefined \| false \| true` | No | Whether the surface lists the visitor's earlier conversations (ADR-0108 SD10; #537). |
+| `feedback` | `undefined \| false \| true` | No | Whether the surface asks for a thumbs-up or -down on each answer (ADR-0108 SD10; #537). |
+| `agentSwitcher` | `undefined \| Readonly<{ agents: readonly string[]; }>` | No | The agents a visitor may switch between, by name, 1–`SURFACE_AGENT_SWITCHER_MAX` with no repeat. Whether each is the surface owner's is a runtime check, not this schema's (ADR-0108 SD10; issue #537). |
+
+## SurfaceSessionProblemCode
+
+A key of `SURFACE_SESSION_PROBLEM_CODES` (ADR-0105; S1-17, issue #455).
+
+- `"invalid_body"`
+- `"policy_cannot_widen"`
+- `"agent_runtime_profile_missing"`
+- `"model_connection_unresolved"`
+- `"model_connection_failed"`
+- `"model_unavailable"`
+- `"model_credential_rejected"`
+- `"network_policy_unenforceable"`
+- `"run_deadline_exceeds_host"`
+- `"runtime_connection_missing"`
+- `"runtime_connection_credential_unavailable"`
+- `"runtime_not_verified"`
+- `"surface_rate_limited"`
+- `"surface_sessions_unavailable"`
+- `"surface_origin_not_allowed"`
+- `"surface_not_found"`
+- `"surface_sessions_not_configured"`
+- `"surface_session_not_resumable"`
+- `"surface_agent_not_offered"`
+
+## SurfaceSessionRequest
+
+A parsed `SurfaceSessionRequestSchema` (C18; issue #537).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `resume` | `undefined \| Readonly<{ sessionId: string; resumeKey: string; }>` | No |  |
+| `agent` | `undefined \| string` | No |  |
+| `environment` | `undefined \| "local"` | No |  |
+
+## SurfaceSessionRequestSchema
+
+The body of `POST /p/s/<name>/sessions` (C18; issue #537): optionally the session to resume and
+the key it was opened with, and optionally which offered agent to talk to. An absent body is the
+server's concern (S2-05b); `{}` parses. A wrong key, another agent's session and an unknown
+session all answer `surface_session_not_resumable`. `environment: 'local'` is sent by the try
+page (`/p/s/<name>/try`), which always serves the `local` working draft; without it a session
+serves `production`, or `local` until the agent is promoted (issue #612).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `resume` | `undefined \| Readonly<{ sessionId: string; resumeKey: string; }>` | No |  |
+| `agent` | `undefined \| string` | No |  |
+| `environment` | `undefined \| "local"` | No |  |
+
+## SurfaceSessionResponse
+
+A parsed `SurfaceSessionResponseSchema` (ADR-0105; S1-17, issue #455).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `token` | `string` | Yes |  |
+| `sessionId` | `string` | Yes |  |
+| `agentId` | `string` | Yes |  |
+| `expiresAt` | `string` | Yes |  |
+| `resumeKey` | `undefined \| string` | No |  |
+
+## SurfaceSessionResponseSchema
+
+The `201` of `POST /p/s/<name>/sessions`, the hosted surface page's local session bootstrap
+(ADR-0105 slice 1; S1-17, issue #455): a browser token scoped to one new session of the agent
+that serves the surface, that session's id, the agent's id and when the token expires. The
+token is accepted only by the routes a session-scoped browser token already reaches.
+`resumeKey` is carried once, when a session opens, so it is optional (C18; issue #537).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `token` | `string` | Yes |  |
+| `sessionId` | `string` | Yes |  |
+| `agentId` | `string` | Yes |  |
+| `expiresAt` | `string` | Yes |  |
+| `resumeKey` | `undefined \| string` | No |  |
+
+## SurfaceTheme
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `colour` | `undefined \| string` | No | The brand colour, `#rrggbb` — the grammar of S1-01's `embedder.brandColour` answer. |
+| `radius` | `undefined \| number` | No | The corner radius in CSS pixels, a whole number from 0 to `SURFACE_RADIUS_MAX`. |
+| `mode` | `undefined \| "light" \| "dark" \| "system"` | No |  |
+| `density` | `undefined \| "compact" \| "comfortable"` | No |  |
+| `locale` | `undefined \| "en" \| "ja"` | No |  |
+| `logo` | `undefined \| Readonly<{ text: string; }> \| Readonly<{ url: string; }>` | No |  |
+
+## SurfaceThemeMode
+
+- `"light"`
+- `"dark"`
+- `"system"`
+
+## SurfaceThemeModeSchema
+
+`SURFACE_THEME_MODES` as a schema (ADR-0108; issue #440).
+
+- `"light"`
+- `"dark"`
+- `"system"`
+
+## SurfaceThemeSchema
+
+A surface's look — ADR-0108's rung ①. Every key is optional; an unset key takes the widget's
+own default when it renders, not here, so the parsed value is exactly what was written
+(ADR-0108, ADR-0101; issue #440).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `colour` | `undefined \| string` | No | The brand colour, `#rrggbb` — the grammar of S1-01's `embedder.brandColour` answer. |
+| `radius` | `undefined \| number` | No | The corner radius in CSS pixels, a whole number from 0 to `SURFACE_RADIUS_MAX`. |
+| `mode` | `undefined \| "light" \| "dark" \| "system"` | No |  |
+| `density` | `undefined \| "compact" \| "comfortable"` | No |  |
+| `locale` | `undefined \| "en" \| "ja"` | No |  |
+| `logo` | `undefined \| Readonly<{ text: string; }> \| Readonly<{ url: string; }>` | No |  |
+
+## SurfaceToolResultComponent
+
+- `"text"`
+- `"card"`
+- `"table"`
+
+## SurfaceToolResultComponentSchema
+
+`SURFACE_TOOL_RESULT_COMPONENTS` as a schema (ADR-0108 SD10; issue #537).
+
+- `"text"`
+- `"card"`
+- `"table"`
+
+## SurfaceToolResultsSchema
+
+Which built-in component each named tool's result renders as: tool names in
+`SURFACE_TOOL_NAME_PATTERN`, at most `SURFACE_TOOL_RESULTS_MAX_ENTRIES` entries
+(ADR-0108 SD10; issue #537).
+
+`Readonly<Record<string, "text" | "card" | "table">>`
+
+## SurfaceToolTraceMode
+
+- `"hidden"`
+- `"collapsed"`
+- `"full"`
+
+## SurfaceToolTraceModeSchema
+
+`SURFACE_TOOL_TRACE_MODES` as a schema (ADR-0108; issue #440).
+
+- `"hidden"`
+- `"collapsed"`
+- `"full"`

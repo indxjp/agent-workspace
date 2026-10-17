@@ -1,0 +1,107 @@
+#!/bin/bash
+set -euo pipefail
+exec 9>/run/lock/agent-workspace-bootstrap.lock
+flock 9
+export DEBIAN_FRONTEND=noninteractive
+
+install_packages() {
+  apt-get update
+  apt-get install -y ca-certificates curl gnupg jq rsync
+  install -m 0755 -d /etc/apt/keyrings
+  if [ ! -f /etc/apt/keyrings/docker.asc ]; then
+    curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+    chmod a+r /etc/apt/keyrings/docker.asc
+  fi
+  . /etc/os-release
+  printf 'deb [arch=%s signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian %s stable\n' "$(dpkg --print-architecture)" "$VERSION_CODENAME" >/etc/apt/sources.list.d/docker.list
+  if [ ! -f /etc/apt/keyrings/cloud.google.gpg ]; then
+    curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /etc/apt/keyrings/cloud.google.gpg
+  fi
+  printf 'deb [signed-by=/etc/apt/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main\n' >/etc/apt/sources.list.d/google-cloud-sdk.list
+  apt-get update
+  apt-get install -y \
+    docker-ce='${docker_ce_version}' \
+    docker-ce-cli='${docker_ce_version}' \
+    containerd.io \
+    docker-buildx-plugin \
+    docker-compose-plugin='${docker_compose_version}' \
+    google-cloud-cli
+  apt-mark hold docker-ce docker-ce-cli docker-compose-plugin
+}
+
+if ! command -v docker >/dev/null 2>&1 || [ "$(docker --version | awk '{print $3}' | tr -d ',')" != "$(printf '%s' '${docker_ce_version}' | sed -E 's/^[0-9]+:([0-9]+\.[0-9]+\.[0-9]+).*/\1/')" ]; then
+  install_packages
+fi
+
+install -d -m 0755 /etc/docker
+cat >/etc/docker/daemon.json <<'EOF'
+{
+  "icc": false,
+  "live-restore": true,
+  "log-driver": "local",
+  "log-opts": { "max-size": "20m", "max-file": "5" },
+  "no-new-privileges": true,
+  "userland-proxy": false
+}
+EOF
+systemctl enable --now docker
+systemctl restart docker
+
+device=/dev/disk/by-id/google-agent-workspace-data
+for attempt in $(seq 1 60); do [ -b "$device" ] && break; sleep 1; done
+[ -b "$device" ] || { echo "data disk did not appear: $device" >&2; exit 1; }
+if ! blkid "$device" >/dev/null 2>&1; then mkfs.ext4 -F -m 0 -L agent-workspace-data "$device"; fi
+uuid="$(blkid -s UUID -o value "$device")"
+grep -q "UUID=$uuid " /etc/fstab || printf 'UUID=%s /var/lib/agent-workspace ext4 defaults,nofail,nodev,nosuid 0 2\n' "$uuid" >>/etc/fstab
+install -d -m 0755 /var/lib/agent-workspace
+mountpoint -q /var/lib/agent-workspace || mount /var/lib/agent-workspace
+
+install -d -m 0750 /etc/agent-workspace /usr/local/libexec/agent-workspace
+install -d -m 0700 /var/lib/agent-workspace/backups /var/lib/agent-workspace/releases
+install -d -m 0750 /var/lib/agent-workspace/postgres
+install -d -m 0750 -o 1000 -g 1000 \
+  /var/lib/agent-workspace/workspace \
+  /var/lib/agent-workspace/workspace/files \
+  /var/lib/agent-workspace/workspace/skills \
+  /var/lib/agent-workspace/workspace/sessions \
+  /var/lib/agent-workspace/runtime-workspaces \
+  /var/lib/agent-workspace/caddy/data \
+  /var/lib/agent-workspace/caddy/config
+chown 999:999 /var/lib/agent-workspace/postgres
+
+install_b64() {
+  destination="$1"; mode="$2"; content="$3"
+  printf '%s' "$content" | base64 --decode >"$destination.tmp"
+  chmod "$mode" "$destination.tmp"
+  chown root:root "$destination.tmp"
+  mv "$destination.tmp" "$destination"
+}
+install_b64 /etc/agent-workspace/compose.yaml 0644 '${files.compose}'
+install_b64 /etc/agent-workspace/Caddyfile 0644 '${files.caddy}'
+install_b64 /usr/local/libexec/agent-workspace/fetch-secrets 0750 '${files.fetch}'
+install_b64 /usr/local/libexec/agent-workspace/backup 0750 '${files.backup}'
+install_b64 /usr/local/libexec/agent-workspace/restore 0750 '${files.restore}'
+install_b64 /usr/local/libexec/agent-workspace/upgrade 0750 '${files.upgrade}'
+install_b64 /usr/local/libexec/agent-workspace/rollback 0750 '${files.rollback}'
+install_b64 /usr/local/libexec/agent-workspace/validate 0750 '${files.validate}'
+install_b64 /etc/systemd/system/agent-workspace.service 0644 '${files.service}'
+install_b64 /etc/systemd/system/agent-workspace-backup.service 0644 '${files.backup_service}'
+install_b64 /etc/systemd/system/agent-workspace-backup.timer 0644 '${files.backup_timer}'
+
+docker_gid="$(stat -c %g /var/run/docker.sock)"
+cat >/etc/agent-workspace/images.env <<EOF
+WEB_IMAGE=${web_image}
+GATEWAY_IMAGE=${gateway_image}
+RUNNER_IMAGE=${runner_image}
+RUNTIME_IMAGE=${runtime_image}
+POSTGRES_IMAGE=${postgres_image}
+PROXY_IMAGE=${proxy_image}
+DOCKER_GID=$docker_gid
+EOF
+chmod 0600 /etc/agent-workspace/images.env
+chown root:root /etc/agent-workspace/images.env
+
+systemctl daemon-reload
+systemctl enable agent-workspace.service agent-workspace-backup.timer
+systemctl restart agent-workspace.service
+systemctl start agent-workspace-backup.timer

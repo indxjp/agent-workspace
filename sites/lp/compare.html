@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Compare — Agent Workspace</title>
+<meta name="description" content="How Agent Workspace compares with Claude Managed Agents, Amazon Bedrock AgentCore, Gemini Enterprise Agent Platform, Microsoft Foundry Agent Service, OpenAI's Agents API, LangSmith Deployment, Dify and n8n.">
+<link rel="canonical" href="https://lp.agentworkspace.indx.jp/compare">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://lp.agentworkspace.indx.jp/compare">
+<meta property="og:title" content="Compare — Agent Workspace">
+<meta property="og:description" content="Agent Workspace next to managed agent clouds, agent deployment platforms and visual builders: what each is good at, and where each one runs.">
+<!-- chrome:head -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23171614'/%3E%3Cpath d='M9 24 13.9 8h4.2L23 24h-3.3l-1.1-3.6h-5.2L12.3 24zm5.3-6.4h3.4L16 11.9z' fill='%23fff' fill-rule='evenodd'/%3E%3C/svg%3E">
+<meta property="og:site_name" content="Agent Workspace">
+<meta property="og:image" content="https://lp.agentworkspace.indx.jp/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Agent Workspace — deploy Claude agents your company can actually run.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://lp.agentworkspace.indx.jp/og.png">
+<meta name="theme-color" content="#08080a">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="assets/site.css">
+<script>
+/* Applied before first paint: without it the page paints visible and the reveal rules
+   would hide it again. A deep link (#section) opts out of the reveal altogether. */
+document.documentElement.className += location.hash ? " js no-reveal" : " js";
+</script>
+<script src="assets/site.js" defer></script>
+<!-- /chrome:head -->
+</head>
+<body>
+<!-- chrome:header -->
+<a class="skip" href="#top">Skip to content</a>
+<header class="hdr" id="site-header">
+  <div class="shell hdr-in">
+    <a class="wordmark" href="index.html"><span class="mk" aria-hidden="true"><svg viewBox="0 0 32 32" width="16" height="16" aria-hidden="true"><path d="M9 24 13.9 8h4.2L23 24h-3.3l-1.1-3.6h-5.2L12.3 24zm5.3-6.4h3.4L16 11.9z" fill="currentColor" fill-rule="evenodd"/></svg></span><span class="wm-t">Agent Workspace</span></a>
+    <nav class="hdr-nav-wrap" aria-label="Primary"><ul class="hdr-nav">
+      <li class="has-menu">
+        <button class="nav-btn" type="button" aria-expanded="false" aria-controls="menu-product">Product</button>
+        <div class="menu" id="menu-product">
+          <a href="product.html"><b>Platform overview</b><span>Everything an Agent SDK deployment needs, and nothing else.</span></a>
+          <a href="product.html#how"><b>How it works</b><span>Five screens from an empty deployment to a running agent.</span></a>
+          <a href="product.html#runtimes"><b>Runtimes</b><span>Local, sandboxed process, Docker, Kubernetes and what is next.</span></a>
+          <a href="product.html#honesty"><b>Models &amp; compatibility</b><span>Claude, Azure OpenAI, OpenAI, and what does not carry over.</span></a>
+          <a href="security.html"><b>Security &amp; governance</b><span>Isolation, secrets, roles, SSO and the audit log.</span></a>
+          <a href="examples.html"><b>For developers</b><span>Agents as code, the aw CLI, evals and embedding.</span></a>
+          <div class="menu-foot"><span>New here?</span><a href="index.html#start">Start on a laptop</a><a href="https://docs.agentworkspace.indx.jp">Read the docs</a></div>
+        </div>
+      </li>
+      <li><a href="use-cases.html">Use cases</a></li>
+      <li><a href="examples.html">Examples</a></li>
+      <li><a href="security.html">Security</a></li>
+      <li><a href="compare.html" aria-current="page">Compare</a></li>
+    </ul></nav>
+    <span class="sp"></span>
+    <div class="hdr-cta">
+      <a class="docs" href="https://docs.agentworkspace.indx.jp">Docs</a>
+      <a class="btn btn-action" href="https://indx.jp/en/contact">Book a demo</a>
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="mnav" aria-label="Open menu"><span></span></button>
+    </div>
+  </div>
+  <nav class="mnav" id="mnav" aria-label="Mobile">
+    <div class="shell">
+      <ul>
+        <li><a href="product.html">Product <span>platform overview</span></a></li>
+        <li><a href="use-cases.html">Use cases <span>by team</span></a></li>
+        <li><a href="examples.html">Examples <span>agents as code</span></a></li>
+        <li><a href="security.html">Security <span>and governance</span></a></li>
+        <li><a href="compare.html" aria-current="page">Compare <span>the alternatives</span></a></li>
+        <li><a href="https://docs.agentworkspace.indx.jp">Docs <span>docs.agentworkspace.indx.jp</span></a></li>
+      </ul>
+      <div class="btn-row"><a class="btn btn-action" href="https://indx.jp/en/contact">Book a demo</a><a class="btn btn-quiet" href="index.html#start">Start on a laptop</a></div>
+    </div>
+  </nav>
+</header>
+<!-- /chrome:header -->
+
+<main id="top" tabindex="-1">
+
+<section class="sec page-hero sec--paper" id="overview">
+  <div class="shell">
+    <ol class="crumbs"><li><a href="index.html">Home</a></li><li>Compare</li></ol>
+    <span class="eyebrow reveal">Compare</span>
+    <h1 class="reveal" data-d="1">The alternatives are good. They answer a different question.</h1>
+    <p class="lead reveal" data-d="2">
+      Managed agent clouds, agent deployment platforms and visual builders all run agents well. The
+      question Agent Workspace answers is narrower: how do we run the <em>Claude Agent SDK, unchanged</em>,
+      with the whole control plane inside our own infrastructure? This page shows where each option
+      fits, with a source for every statement about another product.
+    </p>
+    <p class="small reveal" data-d="3" style="margin-top:16px">
+      <span class="badge badge-caveat">as of 2026-10-06</span>&nbsp; Described from each vendor's public
+      documentation on that date. Products in this market change monthly; follow the source links before
+      you decide.
+    </p>
+    <ul class="toc reveal" aria-label="On this page">
+      <li><a href="#short">The short version</a></li><li><a href="#choose">When to choose what</a></li>
+      <li><a href="#products">Product by product</a></li><li><a href="#table">Side-by-side table</a></li>
+      <li><a href="#behind">Where we are behind</a></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============================ SHORT VERSION ============================ -->
+<section class="sec sec--surface" id="short">
+  <div class="shell">
+    <div class="sec-head measure">
+      <span class="eyebrow reveal">The short version</span>
+      <h2 class="h2 reveal" data-d="1">Four ways to run Claude agents in an enterprise.</h2>
+      <p class="lead reveal" data-d="2">Sandboxing and MCP are no longer differentiators: almost every option below offers both. What differs is who runs the control plane, which agent loop runs, and under what licence.</p>
+    </div>
+    <div class="scroll-x reveal">
+      <table class="matrix cmp">
+        <thead><tr><th scope="col">&nbsp;</th><th scope="col" class="me">Agent Workspace</th><th scope="col">Build it in-house</th><th scope="col">Managed agent cloud</th><th scope="col">Visual builder</th></tr></thead>
+        <tbody>
+          <tr><td class="k">Examples</td><td class="me">—</td><td>the Claude Agent SDK plus your own platform code</td><td>Claude Managed Agents, Bedrock AgentCore, Gemini Enterprise Agent Platform, Foundry Agent Service, OpenAI Agents API</td><td>Dify, n8n</td></tr>
+          <tr><td class="k">Agent loop</td><td class="me">Claude Agent SDK, unchanged</td><td>Claude Agent SDK, unchanged</td><td>the vendor's harness, or your framework in a container</td><td>the product's own agent node</td></tr>
+          <tr><td class="k">Control plane</td><td class="me">in your infrastructure</td><td>in your infrastructure</td><td>at the vendor</td><td>yours if self-hosted, under its licence</td></tr>
+          <tr><td class="k">Where tools execute</td><td class="me">a sandbox driver you choose per agent</td><td>whatever you build</td><td>the vendor's sandbox; some also yours</td><td>the product's runtime</td></tr>
+          <tr><td class="k">Admin UI</td><td class="me">✓ browser, plus CLI and SDK</td><td>whatever you build</td><td>varies by vendor</td><td>✓ visual canvas</td></tr>
+          <tr><td class="k">Licence</td><td class="me">Apache-2.0</td><td>yours</td><td>commercial service</td><td>source-available with conditions</td></tr>
+          <tr><td class="k">Effort to operate</td><td class="me">5 services, or 1 process on a laptop</td><td>grows over time</td><td>none, and nothing is yours</td><td>the product's stack</td></tr>
+          <tr><td class="k">Move an agent there</td><td class="me">export to Claude Managed Agents, Copilot Studio, Microsoft 365, Foundry, Gemini Enterprise and AgentCore, with a report of what is dropped</td><td>—</td><td>rebuild it</td><td>rebuild it</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <a class="more" style="display:inline-block;margin-top:18px" href="https://docs.agentworkspace.indx.jp/features/your-stack">Learn more: your stack, layer by layer</a>
+  </div>
+</section>
+
+<!-- ============================ CHOOSE ============================ -->
+<section class="sec sec--paper" id="choose">
+  <div class="shell">
+    <div class="sec-head measure">
+      <span class="eyebrow reveal">When to choose what</span>
+      <h2 class="h2 reveal" data-d="1">Pick by the constraint you cannot move.</h2>
+    </div>
+    <div class="grid grid-2">
+      <article class="card reveal" style="border-color:var(--action-line); background:var(--action-soft)">
+        <h3 class="h3">Choose Agent Workspace when</h3>
+        <ul class="ticks">
+          <li>the agents are, or will be, built on the Claude Agent SDK</li>
+          <li>the control plane, data and sandboxes must stay in your account or data centre</li>
+          <li>admins need a browser UI and developers need TypeScript, CLI and CI</li>
+          <li>procurement may move you to Azure OpenAI or another cloud later</li>
+          <li>you want a plain Apache-2.0 licence and nothing proprietary to migrate off</li>
+        </ul>
+      </article>
+      <article class="card reveal" data-d="1">
+        <h3 class="h3">Choose a managed agent cloud when</h3>
+        <ul class="ticks plain">
+          <li>you would rather not operate anything at all</li>
+          <li>the vendor's region, data terms and retention fit your policy</li>
+          <li>you are already standardised on that cloud's identity and networking</li>
+          <li>you want the vendor's own long-running, managed sessions</li>
+        </ul>
+      </article>
+      <article class="card reveal">
+        <h3 class="h3">Choose a visual builder when</h3>
+        <ul class="ticks plain">
+          <li>the people building agents prefer a canvas to code</li>
+          <li>the agent is one step in a wider business automation or RAG app</li>
+          <li>their licence terms fit how you will deploy it</li>
+        </ul>
+      </article>
+      <article class="card reveal" data-d="1">
+        <h3 class="h3">Build it in-house when</h3>
+        <ul class="ticks plain">
+          <li>you have a platform team with time to own it for years</li>
+          <li>your requirements are unusual enough that no product fits</li>
+          <li>you accept that sandboxing, secrets, sessions and audit are now yours</li>
+        </ul>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ PRODUCTS ============================ -->
+<section class="sec sec--surface" id="products">
+  <div class="shell">
+    <div class="sec-head split">
+      <div>
+        <span class="eyebrow reveal">Product by product</span>
+        <h2 class="h2 reveal" data-d="1">What each one is good at, and how it differs.</h2>
+        <p class="lead reveal" data-d="2">Strengths first. Each card cites the vendor pages it is based on.</p>
+      </div>
+    </div>
+
+    <div class="filters" data-filter-for="#vs-grid" aria-label="Filter alternatives">
+      <button type="button" data-filter="all" aria-pressed="true">All</button>
+      <button type="button" data-filter="managed" aria-pressed="false">Managed agent clouds</button>
+      <button type="button" data-filter="platform" aria-pressed="false">Deployment platforms</button>
+      <button type="button" data-filter="builder" aria-pressed="false">Visual builders</button>
+    </div>
+
+    <div class="vs" id="vs-grid">
+      <article class="card" id="claude-managed-agents" data-filter-item="managed">
+        <span class="k">Managed agent cloud · beta</span>
+        <h3 class="h3">Claude Managed Agents</h3>
+        <p>Anthropic's pre-built agent harness running on managed infrastructure, for long-running and asynchronous work. Sandboxes can be Anthropic-managed or self-hosted.</p>
+        <div class="two">
+          <div><h4>Where it is strong</h4><p>Managed, stateful long-running sessions with server-side history, built-in caching and compaction, and scheduled deployments, from the model vendor itself.</p></div>
+          <div><h4>How Agent Workspace differs</h4><p>Orchestration stays on Anthropic's side even with self-hosted sandboxes; Agent Workspace runs the whole control plane in your infrastructure and can use non-Claude models through its gateway.</p></div>
+        </div>
+        <dl class="kv"><dt>Models</dt><dd>Claude only</dd><dt>Config</dt><dd>API, SDKs in 7 languages, ant CLI, Console</dd><dt>Note</dt><dd>not currently eligible for ZDR or HIPAA BAA</dd></dl>
+        <p class="src">Sources: <a href="https://platform.claude.com/docs/en/managed-agents/overview">overview</a> · <a href="https://platform.claude.com/docs/en/managed-agents/self-hosted-sandboxes">self-hosted sandboxes</a> · <a href="https://platform.claude.com/docs/en/managed-agents/quickstart">quickstart</a></p>
+      </article>
+
+      <article class="card" id="bedrock-agentcore" data-filter-item="managed">
+        <span class="k">Managed agent cloud · AWS</span>
+        <h3 class="h3">Amazon Bedrock AgentCore</h3>
+        <p>An AWS platform to build, connect and run agents built with any framework and any model, with runtime, memory, gateway, identity and observability services.</p>
+        <div class="two">
+          <div><h4>Where it is strong</h4><p>A dedicated microVM per session, sessions of up to 8 hours (14 days on Instances), consumption pricing and built-in identity integration at AWS scale.</p></div>
+          <div><h4>How Agent Workspace differs</h4><p>AgentCore runs on AWS only. Agent Workspace runs on any cloud or none and adds a browser admin UI around the Claude Agent SDK; its AgentCore driver is on the roadmap.</p></div>
+        </div>
+        <dl class="kv"><dt>Models</dt><dd>multi-provider</dd><dt>Agent loop</dt><dd>bring your own framework</dd><dt>Isolation</dt><dd>microVM per session</dd></dl>
+        <p class="src">Sources: <a href="https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/agents-tools-runtime.html">runtime guide</a> · <a href="https://aws.amazon.com/bedrock/agentcore/faqs/">FAQ</a></p>
+      </article>
+
+      <article class="card" id="gemini-enterprise-agent-platform" data-filter-item="managed">
+        <span class="k">Managed agent cloud · Google Cloud</span>
+        <h3 class="h3">Gemini Enterprise Agent Platform</h3>
+        <p>Google Cloud's agent platform, the April 2026 successor to Vertex AI, with Agent Runtime (formerly Agent Engine), low-code Agent Studio and the open-source ADK.</p>
+        <div class="two">
+          <div><h4>Where it is strong</h4><p>Broad governance tooling (agent identity, registry, gateway, evaluation) and enterprise controls such as VPC-SC, CMEK and data residency; 200+ models including Claude.</p></div>
+          <div><h4>How Agent Workspace differs</h4><p>A Google Cloud managed service whose first-party framework is ADK. Agent Workspace keeps the Claude Agent SDK as the loop and runs outside any one cloud.</p></div>
+        </div>
+        <dl class="kv"><dt>Models</dt><dd>multi-provider via Model Garden</dd><dt>Config</dt><dd>Agent Studio (UI) and ADK (code)</dd><dt>ADK languages</dt><dd>Python, TypeScript, Go, Java, Kotlin</dd></dl>
+        <p class="src">Sources: <a href="https://cloud.google.com/blog/products/ai-machine-learning/introducing-gemini-enterprise-agent-platform">launch post</a> · <a href="https://docs.cloud.google.com/agent-builder/agent-engine/overview">Agent Runtime</a> · <a href="https://adk.dev/">ADK</a></p>
+      </article>
+
+      <article class="card" id="foundry-agent-service" data-filter-item="managed">
+        <span class="k">Managed agent cloud · Azure</span>
+        <h3 class="h3">Microsoft Foundry Agent Service</h3>
+        <p>A managed Azure platform with prompt agents run by Foundry and hosted agents that run your own framework, including the Anthropic Agent SDK, in a container.</p>
+        <div class="two">
+          <div><h4>Where it is strong</h4><p>Deep Microsoft integration: per-agent Entra identity, RBAC, content safety, private networking, and publishing to Teams and Microsoft 365 Copilot.</p></div>
+          <div><h4>How Agent Workspace differs</h4><p>Foundry hosts the agent on Azure. Agent Workspace gives the same Claude Agent SDK a self-hosted control plane, and can still use Azure OpenAI as its model.</p></div>
+        </div>
+        <dl class="kv"><dt>Models</dt><dd>Foundry model catalog</dd><dt>Isolation</dt><dd>VM-isolated sandbox per session (hosted agents)</dd><dt>Config</dt><dd>portal, SDKs, REST, containers</dd></dl>
+        <p class="src">Sources: <a href="https://learn.microsoft.com/en-us/azure/foundry/agents/overview">overview</a> · <a href="https://learn.microsoft.com/en-us/azure/foundry/agents/concepts/hosted-agents">hosted agents</a></p>
+      </article>
+
+      <article class="card" id="openai-agents-api" data-filter-item="managed">
+        <span class="k">Managed agent cloud · beta</span>
+        <h3 class="h3">OpenAI Agents API</h3>
+        <p>The Codex harness offered as an OpenAI-managed API, with OpenAI-hosted or self-hosted execution environments. The open-source Agents SDK (MIT) is separate; the visual Agent Builder shuts down on 2026-11-30.</p>
+        <div class="two">
+          <div><h4>Where it is strong</h4><p>The same harness that runs OpenAI's Codex, with managed durable sessions and compaction, and an open-source SDK in Python and TypeScript.</p></div>
+          <div><h4>How Agent Workspace differs</h4><p>OpenAI runs the orchestration, with US data residency only today. Agent Workspace runs the Claude Agent SDK loop inside your infrastructure.</p></div>
+        </div>
+        <dl class="kv"><dt>Models</dt><dd>OpenAI</dd><dt>Agent loop</dt><dd>Codex harness</dd><dt>Note</dt><dd>no ZDR at present</dd></dl>
+        <p class="src">Sources: <a href="https://developers.openai.com/api/docs/guides/agents-api/overview">Agents API</a> · <a href="https://developers.openai.com/api/docs/guides/agents/sdk">Agents SDK</a> · <a href="https://developers.openai.com/api/docs/guides/agent-builder">Agent Builder</a></p>
+      </article>
+
+      <article class="card" id="langsmith-deployment" data-filter-item="platform">
+        <span class="k">Deployment platform</span>
+        <h3 class="h3">LangSmith Deployment</h3>
+        <p>Formerly LangGraph Platform: an orchestration runtime for agent workloads, deployable as cloud, BYOC, hybrid or self-hosted, which also deploys Claude Agent SDK agents.</p>
+        <div class="two">
+          <div><h4>Where it is strong</h4><p>A mature open-source orchestration library with integrated tracing and evaluation, and flexible topologies including self-hosted Kubernetes.</p></div>
+          <div><h4>How Agent Workspace differs</h4><p>Self-hosting and BYOC need the Enterprise plan and a licence key. Agent Workspace is Apache-2.0 end to end and adds a non-developer admin UI.</p></div>
+        </div>
+        <dl class="kv"><dt>Models</dt><dd>multi-provider via LangChain</dd><dt>Languages</dt><dd>Python, JavaScript</dd><dt>Sandboxes</dt><dd>LangSmith Sandboxes, GA</dd></dl>
+        <p class="src">Sources: <a href="https://docs.langchain.com/langgraph-platform/deployment-options">deployment options</a> · <a href="https://docs.langchain.com/langsmith/deployments">deployments</a> · <a href="https://docs.langchain.com/langsmith/deploy-standalone-server">standalone server</a></p>
+      </article>
+
+      <article class="card" id="dify" data-filter-item="builder">
+        <span class="k">Visual builder</span>
+        <h3 class="h3">Dify</h3>
+        <p>An open platform for building agents, workflows and chatbots on your own data, published as web apps or APIs, as Dify Cloud or a self-hosted Community Edition.</p>
+        <div class="two">
+          <div><h4>Where it is strong</h4><p>Fast visual building of agents, workflows and RAG apps for non-developers, with a plugin marketplace and a free cloud plan.</p></div>
+          <div><h4>How Agent Workspace differs</h4><p>Dify runs its own agent node, not the Claude Agent SDK, under a modified Apache 2.0 licence with multi-tenant and branding conditions. Agent Workspace has no canvas or RAG by design.</p></div>
+        </div>
+        <dl class="kv"><dt>Models</dt><dd>multi-provider via plugins</dd><dt>Agent loop</dt><dd>Function Calling or ReAct</dd><dt>Licence</dt><dd>Modified Apache License 2.0</dd></dl>
+        <p class="src">Sources: <a href="https://docs.dify.ai/en/introduction">introduction</a> · <a href="https://raw.githubusercontent.com/langgenius/dify/main/LICENSE">licence</a> · <a href="https://docs.dify.ai/en/cloud/use-dify/nodes/agent">agent node</a></p>
+      </article>
+
+      <article class="card" id="n8n" data-filter-item="builder">
+        <span class="k">Visual builder</span>
+        <h3 class="h3">n8n</h3>
+        <p>A workflow automation platform whose AI Agent node connects a chat model to tools inside wider workflows, on n8n Cloud or self-hosted.</p>
+        <div class="two">
+          <div><h4>Where it is strong</h4><p>A very large catalogue of app integrations and a visual workflow editor, so agents slot into existing business automations.</p></div>
+          <div><h4>How Agent Workspace differs</h4><p>n8n's agent is a node in a workflow, licensed under the Sustainable Use License. Agent Workspace manages Claude Agent SDK agents as the primary object, under Apache-2.0.</p></div>
+        </div>
+        <dl class="kv"><dt>Models</dt><dd>multi-provider via chat-model nodes</dd><dt>Code</dt><dd>JavaScript, Python in task runners</dd><dt>Licence</dt><dd>Sustainable Use License</dd></dl>
+        <p class="src">Sources: <a href="https://docs.n8n.io/integrations/builtin/cluster-nodes/root-nodes/n8n-nodes-langchain.agent/">AI Agent node</a> · <a href="https://raw.githubusercontent.com/n8n-io/n8n/master/LICENSE.md">licence</a> · <a href="https://docs.n8n.io/deploy/host-n8n/configure-n8n/set-up-task-runners">task runners</a></p>
+      </article>
+    </div>
+    <p class="filter-empty" hidden>No alternatives in this group.</p>
+  </div>
+</section>
+
+<!-- ============================ TABLE ============================ -->
+<section class="sec sec--paper" id="table">
+  <div class="shell">
+    <div class="sec-head measure">
+      <span class="eyebrow reveal">Side by side</span>
+      <h2 class="h2 reveal" data-d="1">The facts in one table.</h2>
+      <p class="lead reveal" data-d="2">Where a vendor's public documentation did not state something on 2026-10-06, it is left out rather than guessed.</p>
+    </div>
+    <div class="scroll-x reveal">
+      <table class="matrix" style="min-width:1040px">
+        <thead><tr><th scope="col">Product</th><th scope="col">Control plane</th><th scope="col">Agent loop</th><th scope="col">Models</th><th scope="col">Tool execution</th><th scope="col">Configure in</th><th scope="col">Licence</th></tr></thead>
+        <tbody>
+          <tr class="me"><td class="k">Agent Workspace</td><td>self-hosted, any cloud or none</td><td>Claude Agent SDK (default); openai-agents, pi, mastra engines</td><td>Anthropic, Azure OpenAI, OpenAI, compatible endpoints</td><td>local, sandbox-runtime, docker, kubernetes; 2 managed drivers unverified</td><td>browser, TypeScript, CLI</td><td>Apache-2.0</td></tr>
+          <tr><td class="k">Claude Managed Agents</td><td>Anthropic</td><td>Anthropic harness</td><td>Claude</td><td>Anthropic sandboxes or self-hosted</td><td>API, SDKs, CLI, Console</td><td>commercial service</td></tr>
+          <tr><td class="k">Bedrock AgentCore</td><td>AWS</td><td>any framework</td><td>multi-provider</td><td>microVM per session</td><td>code, API</td><td>commercial service</td></tr>
+          <tr><td class="k">Gemini Enterprise Agent Platform</td><td>Google Cloud</td><td>ADK or other frameworks</td><td>200+ via Model Garden</td><td>managed sandbox</td><td>Agent Studio, ADK</td><td>commercial service; ADK open source</td></tr>
+          <tr><td class="k">Foundry Agent Service</td><td>Azure</td><td>Foundry prompt agents, or your framework</td><td>Foundry catalog</td><td>VM-isolated per session</td><td>portal, SDKs, REST</td><td>commercial service</td></tr>
+          <tr><td class="k">OpenAI Agents API</td><td>OpenAI</td><td>Codex harness</td><td>OpenAI</td><td>OpenAI-hosted or self-hosted</td><td>code, API</td><td>commercial service; Agents SDK MIT</td></tr>
+          <tr><td class="k">LangSmith Deployment</td><td>cloud, BYOC, hybrid, self-hosted (Enterprise)</td><td>LangGraph and others, incl. Claude Agent SDK</td><td>multi-provider</td><td>LangSmith Sandboxes</td><td>UI, CLI, containers</td><td>commercial; LangGraph MIT</td></tr>
+          <tr><td class="k">Dify</td><td>Dify Cloud or self-hosted</td><td>Dify agent node</td><td>multi-provider</td><td>sandboxed New Agent node (beta)</td><td>visual builder, API</td><td>Modified Apache 2.0</td></tr>
+          <tr><td class="k">n8n</td><td>n8n Cloud or self-hosted</td><td>n8n AI Agent node</td><td>multi-provider</td><td>task runners, optional sidecar</td><td>visual workflows</td><td>Sustainable Use License</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="small reveal" style="margin-top:14px">Every one of these supports MCP in some form, so it is not listed as a difference. Sources are on each card above.</p>
+  </div>
+</section>
+
+<!-- ============================ BEHIND ============================ -->
+<section class="sec sec--surface" id="behind">
+  <div class="shell">
+    <div class="sec-head measure">
+      <span class="eyebrow reveal">Honestly</span>
+      <h2 class="h2 reveal" data-d="1">Where Agent Workspace is behind.</h2>
+      <p class="lead reveal" data-d="2">A comparison that only lists wins is an advertisement. These are the gaps you should weigh.</p>
+    </div>
+    <div class="grid grid-2">
+      <div class="notice reveal"><span class="sym">⚠</span><span><b>No managed-cloud sandbox has a live isolation proof yet.</b><br>The hyperscalers ship microVM or VM isolation per session today; here, Docker is the verified default and Kubernetes is partially verified.</span></div>
+      <div class="notice reveal" data-d="1"><span class="sym">⚠</span><span><b>You operate it.</b><br>Five services in production, with upgrades and backups that a managed cloud would do for you.</span></div>
+      <div class="notice reveal"><span class="sym">⚠</span><span><b>TypeScript only.</b><br>The SDK and CLI are TypeScript; several alternatives ship SDKs in five or more languages.</span></div>
+      <div class="notice reveal" data-d="1"><span class="sym">⚠</span><span><b>No canvas, no RAG, by design.</b><br>Teams who want visual workflows or a vector store will find them in Dify or n8n, not here.</span></div>
+      <div class="notice reveal"><span class="sym">⚠</span><span><b>Non-Claude models run in compatibility mode.</b><br>Not every provider declares prompt caching or thinking, and the agent editor warns when the chosen model lacks prompt caching.</span></div>
+      <div class="notice reveal" data-d="1"><span class="sym">⚠</span><span><b>Young.</b><br>No published customer references yet, and some features, such as public runnable agent links and stdio connectors, are switched off until they are ready.</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="sec sec--paper" style="padding:56px 0">
+  <div class="shell">
+    <div class="band reveal">
+      <div><h2>Comparing for a real decision?</h2><p>We will map your constraints to the options on this page, including the ones that are not us.</p></div>
+      <div class="btn-row"><a class="btn btn-action" href="https://indx.jp/en/contact">Talk to us</a><a class="btn btn-quiet" href="security.html">Security notes</a></div>
+    </div>
+  </div>
+</section>
+
+<section class="sec final" id="demo">
+  <div class="shell">
+    <div class="measure">
+      <h2 class="h2 reveal">Keep the Claude Agent SDK. Own everything around it.</h2>
+      <p class="lead reveal" data-d="1">See Agent Workspace on your cloud, with your model and your sandbox.</p>
+      <div class="btn-row reveal" data-d="2">
+        <a class="btn btn-convert btn-xl" href="https://indx.jp/en/contact">Book a demo</a>
+        <a class="btn btn-quiet btn-xl" href="https://docs.agentworkspace.indx.jp/getting-started/quickstart">Read the quickstart</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- chrome:footer -->
+<footer class="ftr" id="site-footer">
+  <div class="shell">
+    <div class="ftr-grid ftr-grid-5">
+      <div>
+        <a class="wordmark" href="index.html"><span class="mk" aria-hidden="true"><svg viewBox="0 0 32 32" width="16" height="16" aria-hidden="true"><path d="M9 24 13.9 8h4.2L23 24h-3.3l-1.1-3.6h-5.2L12.3 24zm5.3-6.4h3.4L16 11.9z" fill="currentColor" fill-rule="evenodd"/></svg></span>Agent Workspace</a>
+        <p class="small" style="margin-top:14px; max-width:30em">The smallest practical enterprise deployment layer for the Claude Agent SDK.</p>
+        <p class="small" style="margin-top:10px"><a href="https://indx.jp/en/contact">Contact INDX</a></p>
+      </div>
+      <div>
+        <h4>Product</h4>
+        <ul>
+          <li><a href="product.html">Platform overview</a></li>
+          <li><a href="product.html#how">How it works</a></li>
+          <li><a href="product.html#runtimes">Runtimes</a></li>
+          <li><a href="product.html#honesty">Compatibility</a></li>
+          <li><a href="security.html">Security</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Solutions</h4>
+        <ul>
+          <li><a href="use-cases.html">Use cases</a></li>
+          <li><a href="examples.html">Examples</a></li>
+          <li><a href="compare.html">Compare</a></li>
+          <li><a href="index.html#faq">FAQ</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Deploy</h4>
+        <ul>
+          <li><a href="https://docs.agentworkspace.indx.jp/getting-started/quickstart">Quickstart</a></li>
+          <li><a href="https://docs.agentworkspace.indx.jp/building/self-hosting">Self-host</a></li>
+          <li><a href="https://docs.agentworkspace.indx.jp/guides/deploy">Deploy guide</a></li>
+          <li><a href="https://docs.agentworkspace.indx.jp/building/embedding">Embedding</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Reference</h4>
+        <ul>
+          <li><a href="https://docs.agentworkspace.indx.jp">Documentation</a></li>
+          <li><a href="https://docs.agentworkspace.indx.jp/reference/cli/commands">CLI reference</a></li>
+          <li><a href="https://docs.agentworkspace.indx.jp/tutorials/index">Tutorials</a></li>
+          <li><a href="https://platform.claude.com/docs/en/agent-sdk/overview">Claude Agent SDK</a></li>
+        </ul>
+      </div>
+    </div>
+    <p class="ftr-note">
+      Screens are illustrative of the product UI. Capabilities, runtime driver standing and the
+      compatibility matrix are described as they stand in the <a href="https://docs.agentworkspace.indx.jp/building/models-and-runtimes">docs</a>.
+      Third-party products are described from their public documentation as of the date shown on each page.
+      <br>
+      Claude and Claude Agent SDK are products of Anthropic. This site is unofficial material for the
+      Agent Workspace project and is not affiliated with or endorsed by Anthropic.
+    </p>
+  </div>
+</footer>
+<!-- /chrome:footer -->
+</body>
+</html>

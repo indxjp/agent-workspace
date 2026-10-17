@@ -1,0 +1,361 @@
+---
+title: "Runtimes"
+description: "Define where an agent executes — the driver, its sizing, and its network and filesystem policy."
+---
+
+<Info>
+
+- **Read this when:** you decide where an agent's code runs (local, Docker, Kubernetes, a cloud sandbox), size it, or limit its network and filesystem.
+- **You will learn:** what a runtime profile and a runtime connection hold, which drivers exist, and why the server refuses a network policy a driver cannot enforce.
+- **Used in:** [Chapter 2 · Build your agent](/path/build) (step-by-step: [Models and runtimes](/building/models-and-runtimes)) and [Chapter 5 · Ship it to your servers](/path/ship).
+
+</Info>
+
+What you can do with runtimes:
+
+- [Create](#profiles-create), [list](#profiles-list), [get](#profiles-get), [update](#profiles-update) and [remove](#profiles-remove) runtime profiles: driver, sizing, network policy and filesystem mode.
+- [Create](#connections-create) and [list](#connections-list) runtime connections: a driver's endpoint plus a sealed credential.
+- Point an agent at a profile with `runtimeProfileId` on [the agent record](/resources/agents#update).
+
+`aw.runtimes` manages **runtime profiles** (a named bundle of driver, sizing and policy an agent
+can reference) and **runtime connections** (an endpoint plus a credential for a driver that needs
+one, such as a Kubernetes cluster or a Docker host). It wraps `/api/runtime-profiles/**`
+(API specification §5.4, §15.1) and `/api/runtime-connections` (§14.9). Source:
+`packages/sdk/src/resources/runtimes.ts`, contract: `packages/contracts/src/runtimes.ts`.
+
+A profile is a `RuntimeProfileResource`:
+
+```ts title="illustrative" claim="illustrative"
+interface RuntimeProfileResource {
+  id: string;
+  workspaceId: string;
+  name: string;
+  driver: RuntimeDriver;
+  runtimeConnectionId: string | null;
+  cpu: number | null; // cores, may be fractional; null = driver default
+  memoryMb: number | null;
+  diskMb: number | null;
+  networkPolicy: 'none' | 'restricted' | 'open';
+  allowedDomains: readonly string[] | null;
+  filesystem: 'read-only' | 'read-write';
+  persistPaths: readonly string[] | null;
+  timeoutSeconds: number | null;
+  idleTimeoutSeconds: number | null;
+  driverConfig: Readonly<Record<string, unknown>> | null; // per-driver escape hatch
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+`RUNTIME_DRIVERS` (`packages/contracts/src/runtimes.ts`) is the control plane's driver catalogue,
+in the specification's order:
+
+| Driver              | What it is                                        |
+| ------------------- | ------------------------------------------------- |
+| `local`             | This machine, no isolation — development only.    |
+| `sandbox-runtime`   | Reserved id, not implemented: runs on `local`.    |
+| `docker`            | A Docker container.                               |
+| `kubernetes`        | A Kubernetes pod.                                 |
+| `gke-agent-sandbox` | Google Kubernetes Engine's managed agent sandbox. |
+| `aca-sessions`      | Azure Container Apps dynamic sessions.            |
+| `aws-agentcore`     | Amazon Bedrock AgentCore Runtime.                 |
+| `aws-ecs`           | Amazon ECS on Fargate.                            |
+| `cloud-run-sandbox` | Google Cloud Run sandboxes.                       |
+| `cloud-run-service` | Google Cloud Run, one service per session.        |
+| `external`          | A provider outside this list.                     |
+
+For what each driver can actually enforce (network policy, filesystem mode, session lifetime) see
+[Which runtime drivers are real today](/building/self-hosting#which-runtime-drivers-are-real-today) — that detail is deliberately not restated here,
+because the server is authoritative about it (`422 network_policy_not_enforceable` below), not
+this documentation.
+
+`driverConfig` must not carry a credential. A Builder can read every profile, so `create` and
+`update` refuse a key, at any depth, whose name looks like one. The key is split into words at
+camelCase, `_`, `-` and digits. It is refused when a word is `secret`, `secrets`, `token`, `sas`,
+`authorization`, `bearer` or `connectionstring`, or ends in `token` or `secret` (`githubtoken`).
+It is also refused when a word contains `password` (but not the word `passwordless`), `passwd`,
+`passphrase`, `apikey`, `apitoken`, `accesskey`, `secretkey`, `privatekey`, `clientsecret`,
+`authtoken`, `credential` or `cookie` (`dbpassword`), or when two adjacent words are `api key`,
+`api token`, `access key`, `access token`, `refresh token`, `secret key`, `private key`,
+`auth token`, `client secret` or `connection string`, singular or plural (`apiKeys`).
+A key ending in `ref`, `refs`, `name` or `names` (`secretRef`), and `imagePullSecrets`, names a
+reference and passes. `maxTokens` and `tokenizer` pass. Put the credential on a runtime
+connection and reference it with `runtimeConnectionId`.
+
+`RUNTIME_NETWORK_POLICIES` is `['none', 'restricted', 'open']` — nothing, the gateway plus
+`allowedDomains`, or everything; `RUNTIME_FILESYSTEM_MODES` is `['read-only', 'read-write']`.
+`RUNTIME_PROFILE_BOUNDS` gives the sizing limits every `create`/`update` enforces — the field
+names carry their own units:
+
+```ts title="illustrative" claim="illustrative"
+RUNTIME_PROFILE_BOUNDS = {
+  cpu: { exclusiveMin: 0 }, // cores, fractional allowed
+  memoryMb: { min: 1, max: Number.MAX_SAFE_INTEGER }, // megabytes
+  diskMb: { min: 1, max: Number.MAX_SAFE_INTEGER }, // megabytes
+  timeoutSeconds: { min: 1, max: Number.MAX_SAFE_INTEGER }, // seconds
+  idleTimeoutSeconds: { min: 1, max: Number.MAX_SAFE_INTEGER }, // seconds
+};
+```
+
+<Note>
+  A profile is a **reference** an agent points at, never a copy. Switching an agent's runtime is
+  `aw.agents.update(id, {runtimeProfileId})`, documented in [Agents](/resources/agents) — not a
+  method here.
+</Note>
+
+## Complete example
+
+```ts title="runtimes-example.ts" claim="compile"
+import { createClient } from '@indx-workspace/sdk';
+
+const baseUrl = process.env.AGENT_WORKSPACE_URL;
+const apiKey = process.env.AGENT_WORKSPACE_API_KEY;
+if (baseUrl === undefined || apiKey === undefined) {
+  throw new Error('Set AGENT_WORKSPACE_URL and AGENT_WORKSPACE_API_KEY');
+}
+const aw = createClient({
+  baseUrl,
+  auth: { kind: 'api-key', apiKey },
+});
+
+async function main(): Promise<void> {
+  const profile = await aw.runtimes.profiles.create({
+    name: 'standard-docker',
+    driver: 'docker',
+    memoryMb: 2048,
+    diskMb: 4096,
+    networkPolicy: 'restricted',
+    allowedDomains: ['api.github.com'],
+    filesystem: 'read-write',
+    timeoutSeconds: 1800,
+    idleTimeoutSeconds: 300,
+  });
+  console.log(`${profile.name} (${profile.id}) on ${profile.driver}`);
+
+  const profiles = await aw.runtimes.profiles.list();
+  console.log(profiles.map((p) => p.name));
+
+  const connections = await aw.runtimes.connections.list();
+  console.log(connections.map((c) => `${c.name} (${c.driver})`));
+}
+
+main();
+```
+
+## `profiles.list`
+
+Every runtime profile of the caller's workspace.
+
+**Route:** `GET /api/runtime-profiles`
+
+```ts title="illustrative" claim="illustrative"
+const profiles = await aw.runtimes.profiles.list();
+```
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw runtimes profiles list
+```
+
+</CodeGroup>
+
+See [`runtimes.profiles.list`](/reference/sdk/runtimes#profiles-list).
+
+## `profiles.get`
+
+Read one profile.
+
+**Route:** `GET /api/runtime-profiles/:id`
+
+```ts title="illustrative" claim="illustrative"
+const profile = await aw.runtimes.profiles.get(profileId);
+```
+
+| Code                         | Status | Meaning                                    |
+| ---------------------------- | ------ | ------------------------------------------ |
+| `invalid_runtime_profile_id` | 400    | The `:id` in the path is not a UUID.       |
+| `runtime_profile_not_found`  | 404    | No profile with that id in this workspace. |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw runtimes profiles get <id>
+```
+
+</CodeGroup>
+
+See [`runtimes.profiles.get`](/reference/sdk/runtimes#profiles-get).
+
+## `profiles.create`
+
+Create a profile. The server refuses a `networkPolicy` the named driver cannot enforce in this
+deployment rather than silently storing an unenforceable promise.
+
+**Route:** `POST /api/runtime-profiles`
+
+```ts title="illustrative" claim="illustrative"
+const profile = await aw.runtimes.profiles.create({
+  name: 'standard-docker',
+  driver: 'docker',
+  networkPolicy: 'restricted',
+  allowedDomains: ['api.github.com'],
+  filesystem: 'read-write',
+});
+```
+
+| Code                             | Status | Meaning                                                                                                                                                                                                                                                                                                                                  |
+| -------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `invalid_body`                   | 400    | A field the route refuses, out of `RUNTIME_PROFILE_BOUNDS` or otherwise malformed, or a `driverConfig` key, at any depth, whose name looks like a credential under the rule above (`password`, `secret`, `token`, `apiKey`, `dbpassword`, `githubtoken`…), or a `driverConfig` nested deeper than 32 levels. `details` names each field. |
+| `unknown_runtime_connection`     | 400    | `runtimeConnectionId` does not name a connection in this workspace.                                                                                                                                                                                                                                                                      |
+| `runtime_profile_name_conflict`  | 409    | The workspace already has a profile with this name.                                                                                                                                                                                                                                                                                      |
+| `network_policy_not_enforceable` | 422    | This deployment's `driver` cannot enforce the requested `networkPolicy`; the message names what it does accept.                                                                                                                                                                                                                          |
+| `runtime_provider_unsupported`   | 422    | `driver` is `external` and `driverConfig.provider` is not `e2b` (or not a string); the message names the providers it does accept. Omit `provider` for `e2b`.                                                                                                                                                                            |
+
+Source: verified against `apps/web/server/runtimes/handlers.ts`.
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw runtimes profiles create --file profile.json
+aw runtimes profiles create --file profile.json --name standard-docker
+```
+
+</CodeGroup>
+
+See
+[`runtimes.profiles.create`](/reference/sdk/runtimes#profiles-create) and
+[`CreateRuntimeProfileInput`](/reference/contracts/runtimes#createruntimeprofileinput).
+
+## `profiles.update`
+
+Change a profile. Omitted fields are left unchanged; the route does **not** accept `null` for a
+nullable sizing field, so a field that was once set cannot be cleared by a patch today (a pending
+server change tracked in the API specification §8, [S-19](/concepts/roadmap#s-19-nullable-runtime-profile-fields)).
+
+**Route:** `PATCH /api/runtime-profiles/:id`
+
+```ts title="illustrative" claim="illustrative"
+const updated = await aw.runtimes.profiles.update(profileId, { memoryMb: 4096 });
+```
+
+| Code                             | Status | Meaning                                                                                       |
+| -------------------------------- | ------ | --------------------------------------------------------------------------------------------- |
+| `invalid_runtime_profile_id`     | 400    | The `:id` in the path is not a UUID.                                                          |
+| `invalid_body`                   | 400    | Same validation as `create`.                                                                  |
+| `unknown_runtime_connection`     | 400    | `runtimeConnectionId` does not name a connection in this workspace.                           |
+| `runtime_profile_not_found`      | 404    | No profile with that id in this workspace.                                                    |
+| `runtime_profile_name_conflict`  | 409    | Another profile already has this name.                                                        |
+| `network_policy_not_enforceable` | 422    | The driver and policy that would end up stored (patched or existing) cannot be enforced here. |
+| `runtime_provider_unsupported`   | 422    | The `external` driver and `driverConfig.provider` that would end up stored name an unknown provider.|
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw runtimes profiles update <id> --name standard-docker-v2
+aw runtimes profiles update <id> --file patch.json
+```
+
+</CodeGroup>
+
+See
+[`runtimes.profiles.update`](/reference/sdk/runtimes#profiles-update).
+
+## `profiles.remove`
+
+Delete a profile. Deleting never conflicts: an agent's `runtimeProfileId` is cleared
+(`ON DELETE SET NULL`) rather than the deletion being refused, so it falls back to no profile.
+
+**Route:** `DELETE /api/runtime-profiles/:id`
+
+```ts title="illustrative" claim="illustrative"
+await aw.runtimes.profiles.remove(profileId);
+```
+
+| Code                         | Status | Meaning                                    |
+| ---------------------------- | ------ | ------------------------------------------ |
+| `invalid_runtime_profile_id` | 400    | The `:id` in the path is not a UUID.       |
+| `runtime_profile_not_found`  | 404    | No profile with that id in this workspace. |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw runtimes profiles remove <id>
+```
+
+</CodeGroup>
+
+See [`runtimes.profiles.remove`](/reference/sdk/runtimes#profiles-remove).
+
+## `connections.list`
+
+Every runtime connection of the caller's workspace. The endpoint and credential are write-only —
+this answers only existence, the stored name and the driver.
+
+**Route:** `GET /api/runtime-connections`
+
+```ts title="illustrative" claim="illustrative"
+const connections = await aw.runtimes.connections.list();
+```
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw runtimes connections list
+```
+
+</CodeGroup>
+
+See [`runtimes.connections.list`](/reference/sdk/runtimes#connections-list).
+
+## `connections.create`
+
+Create a connection: an endpoint plus a credential, sealed at creation. Every field is a
+non-empty string. The stored `name` is the caller's `name` upper-cased with every other character
+folded to `_` (e.g. `Primary Docker host` → `PRIMARY_DOCKER_HOST`) — the value a later `list()`
+returns, not the caller's original text.
+
+**Route:** `POST /api/runtime-connections`
+
+```ts title="illustrative" claim="illustrative"
+const clientCert = process.env.DOCKER_TLS_CLIENT_CERT;
+if (clientCert === undefined) throw new Error('Set DOCKER_TLS_CLIENT_CERT');
+const connection = await aw.runtimes.connections.create({
+  name: 'Primary Docker host',
+  driver: 'docker',
+  endpoint: 'tcp://docker.internal:2376',
+  credential: clientCert,
+});
+```
+
+| Code                               | Status | Meaning                                                                                                                                   |
+| ---------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `invalid_body`                     | 400    | `name`, `driver`, `endpoint` or `credential` missing or malformed; `driver` must be one of `RUNTIME_DRIVERS`. `details` names each field. |
+| `runtime_connection_name_conflict` | 409    | The workspace already has a connection with this encoded name for that driver, or the name cannot be stored.                              |
+
+Source: verified against `apps/web/server/runtimes/connections.ts`.
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+printf '%s' "$DOCKER_CERT" | aw runtimes connections create --file connection.json --value-stdin
+```
+
+</CodeGroup>
+
+See
+[`runtimes.connections.create`](/reference/sdk/runtimes#connections-create) and
+[`CreateRuntimeConnectionInput`](/reference/contracts/runtimes#createruntimeconnectioninput).
+
+## See also
+
+- [RuntimesClient](/reference/sdk/runtimes) — full method signatures.
+- [runtimes](/reference/contracts/runtimes) — every schema and constant,
+  including `RUNTIME_DRIVERS`, `RUNTIME_NETWORK_POLICIES`, `RUNTIME_FILESYSTEM_MODES`,
+  `RUNTIME_PROFILE_BOUNDS`.
+- [Which runtime drivers are real today](/building/self-hosting#which-runtime-drivers-are-real-today) — what each driver can actually enforce.
+- [Agents](/resources/agents) — `agents.update(id, { runtimeProfileId })`, how a
+  profile is put to use.
+- Detecting what a deployment can actually run (`detect()`) and testing a driver directly
+  (`test(driver, echo?)`) are planned but not built yet — pending server changes tracked in the
+  API specification §8 ([S-9](/concepts/roadmap#s-9-runtime-detection-outside-setup), [S-4](/concepts/roadmap#s-4-runtime-test-envelope)).

@@ -1,0 +1,49 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Refinement.ContractsEngines.session_backfill_pins_exactly_the_identified",
+    "AgentWorkspace.Theorems.Refinement.ContractsEngines.session_backfill_preserves_the_identity",
+    "AgentWorkspace.Theorems.Refinement.ContractsEngines.session_backfill_establishes_the_pairing"],
+   "input": {"engineSessionId": "se1", "engine": null},
+   "id": "session/identified-unpinned",
+   "expected": {"paired": true, "engineSessionId": "se1", "engine": "claude-agent-sdk"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Refinement.ContractsEngines.session_backfill_pins_exactly_the_identified",
+    "AgentWorkspace.Theorems.Refinement.ContractsEngines.session_backfill_preserves_the_identity",
+    "AgentWorkspace.Theorems.Refinement.ContractsEngines.session_backfill_establishes_the_pairing"],
+   "input": {"engineSessionId": "se1", "engine": "claude-agent-sdk"},
+   "id": "session/identified-pinned",
+   "expected": {"paired": true, "engineSessionId": "se1", "engine": "claude-agent-sdk"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Refinement.ContractsEngines.session_backfill_pins_exactly_the_identified",
+    "AgentWorkspace.Theorems.Refinement.ContractsEngines.session_backfill_preserves_the_identity",
+    "AgentWorkspace.Theorems.Refinement.ContractsEngines.session_backfill_establishes_the_pairing"],
+   "input": {"engineSessionId": null, "engine": null},
+   "id": "session/anonymous",
+   "expected": {"paired": true, "engineSessionId": null, "engine": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Refinement.ContractsEngines.policy_rewrite_renames_the_discriminant",
+    "AgentWorkspace.Theorems.Refinement.ContractsEngines.policy_rewrite_leaves_no_provider",
+    "AgentWorkspace.Theorems.Refinement.ContractsEngines.policy_rewrite_is_idempotent"],
+   "input":
+   {"rest": [["tools", "claude_code_preset"]], "discriminantValue": "claude-agent-sdk", "discriminantKey": "provider"},
+   "id": "policy/legacy",
+   "expected":
+   {"rest": [["tools", "claude_code_preset"]], "discriminantValue": "claude-agent-sdk", "discriminantKey": "engine"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Refinement.ContractsEngines.policy_rewrite_renames_the_discriminant",
+    "AgentWorkspace.Theorems.Refinement.ContractsEngines.policy_rewrite_leaves_no_provider",
+    "AgentWorkspace.Theorems.Refinement.ContractsEngines.policy_rewrite_is_idempotent"],
+   "input":
+   {"rest": [["tools", "claude_code_preset"]], "discriminantValue": "claude-agent-sdk", "discriminantKey": "engine"},
+   "id": "policy/already-migrated",
+   "expected":
+   {"rest": [["tools", "claude_code_preset"]], "discriminantValue": "claude-agent-sdk", "discriminantKey": "engine"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Refinement.ContractsEngines.policy_rewrite_renames_the_discriminant",
+    "AgentWorkspace.Theorems.Refinement.ContractsEngines.policy_rewrite_leaves_no_provider",
+    "AgentWorkspace.Theorems.Refinement.ContractsEngines.policy_rewrite_is_idempotent"],
+   "input": {"rest": [], "discriminantValue": null, "discriminantKey": null},
+   "id": "policy/null-column",
+   "expected": {"rest": [], "discriminantValue": null, "discriminantKey": null}}],
+ "family": "engines",
+ "description": "Migration 0025's per-row rewrite of sessions.engine and agents.policy"}

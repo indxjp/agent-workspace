@@ -1,0 +1,11 @@
+{"vectors":
+ [{"witnesses": ["AgentWorkspace.Theorems.WellFormed.EventsSse.control_frame_omits_id"],
+   "input": {"name": "run.status", "id": 1, "data": {"status": "running", "error": null}},
+   "id": "event/1",
+   "expected": {"frame": "event: run.status\nid: 1\ndata: {\"status\":\"running\",\"error\":null}\n\n"}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.EventsSse.control_frame_omits_id"],
+   "input": {"name": "system", "id": 2, "data": {"kind": "sdk-event"}},
+   "id": "event/2",
+   "expected": {"frame": "event: system\nid: 2\ndata: {\"kind\":\"sdk-event\"}\n\n"}}],
+ "family": "events-sse",
+ "description": "Server durable frames"}

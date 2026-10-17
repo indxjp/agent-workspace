@@ -1,0 +1,45 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.CliRuns.commands_are_exact",
+    "AgentWorkspace.Theorems.Normative.CliRuns.every_command_routes_to_sdk"],
+   "input": {"command": "start"},
+   "id": "start",
+   "expected": {"sdkCall": "start"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.CliRuns.commands_are_exact",
+    "AgentWorkspace.Theorems.Normative.CliRuns.every_command_routes_to_sdk"],
+   "input": {"command": "get"},
+   "id": "get",
+   "expected": {"sdkCall": "get"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.CliRuns.commands_are_exact",
+    "AgentWorkspace.Theorems.Normative.CliRuns.every_command_routes_to_sdk"],
+   "input": {"command": "list"},
+   "id": "list",
+   "expected": {"sdkCall": "list"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.CliRuns.commands_are_exact",
+    "AgentWorkspace.Theorems.Normative.CliRuns.every_command_routes_to_sdk"],
+   "input": {"command": "events"},
+   "id": "events",
+   "expected": {"sdkCall": "events"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.CliRuns.commands_are_exact",
+    "AgentWorkspace.Theorems.Normative.CliRuns.every_command_routes_to_sdk"],
+   "input": {"command": "follow"},
+   "id": "follow",
+   "expected": {"sdkCall": "follow"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.CliRuns.commands_are_exact",
+    "AgentWorkspace.Theorems.Normative.CliRuns.every_command_routes_to_sdk"],
+   "input": {"command": "interrupt"},
+   "id": "interrupt",
+   "expected": {"sdkCall": "interrupt"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.CliRuns.commands_are_exact",
+    "AgentWorkspace.Theorems.Normative.CliRuns.every_command_routes_to_sdk"],
+   "input": {"command": "wait"},
+   "id": "wait",
+   "expected": {"sdkCall": "waitForOutcome"}}],
+ "family": "cli-runs",
+ "description": "Run command dispatch"}

@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Models — Agent Workspace</title>
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<script>window.PAGE = { nav: "models", crumbs: [["Administration"], ["Models"]] };</script>
+
+<div class="app">
+  <div class="main">
+    <div class="page">
+
+      <div class="page-head">
+        <div>
+          <h1>Models</h1>
+          <div class="sub">Providers behind the internal gateway. Agents select a model; they never see provider credentials.</div>
+        </div>
+        <div class="actions">
+          <a class="btn primary" href="model-add.html">+ Add Provider</a>
+        </div>
+      </div>
+
+      <div class="tabs" data-tabs>
+        <button data-tab="providers" class="active">Providers</button>
+        <button data-tab="compat">Compatibility</button>
+        <button data-tab="gateway">Gateway</button>
+      </div>
+
+      <section class="tabpanel active" data-panel="providers">
+        <div class="rows">
+          <div class="row">
+            <div class="grow">
+              <div class="title">Claude Sonnet 5 <span class="badge ok"><span class="dot"></span>Connected</span></div>
+              <div class="meta">Anthropic · <span class="mono">claude-sonnet-5</span> · full Claude Agent SDK support</div>
+            </div>
+            <div class="right"><span>Used by 3 agents</span><button class="btn sm" data-toast="Connection OK · 180 ms">Test</button></div>
+          </div>
+          <div class="row">
+            <div class="grow">
+              <div class="title">Claude Haiku 4.5 <span class="badge ok"><span class="dot"></span>Connected</span></div>
+              <div class="meta">Anthropic · <span class="mono">claude-haiku-4-5-20251001</span></div>
+            </div>
+            <div class="right"><span>Used by 1 agent</span><button class="btn sm" data-toast="Connection OK · 140 ms">Test</button></div>
+          </div>
+          <div class="row">
+            <div class="grow">
+              <div class="title">Claude Opus 5 <span class="badge ok"><span class="dot"></span>Connected</span></div>
+              <div class="meta">Anthropic · <span class="mono">claude-opus-5</span></div>
+            </div>
+            <div class="right"><span>Used by 1 agent</span><button class="btn sm" data-toast="Connection OK · 220 ms">Test</button></div>
+          </div>
+          <div class="row">
+            <div class="grow">
+              <div class="title">GPT‑4.1 <span class="badge ok"><span class="dot"></span>Connected</span> <span class="badge warn">Compatibility mode</span></div>
+              <div class="meta">Azure OpenAI · <span class="mono">https://meridian.openai.azure.com</span> · deployment <span class="mono">gpt-41-japaneast</span> · API version 2025-04-01-preview</div>
+            </div>
+            <div class="right"><span>Used by 1 agent</span><button class="btn sm" data-toast="Connection OK · 310 ms">Test</button></div>
+          </div>
+          <div class="row">
+            <div class="grow">
+              <div class="title">Internal Llama <span class="badge danger"><span class="dot"></span>Connection failed</span></div>
+              <div class="meta">OpenAI-compatible · <span class="mono">http://vllm.meridian.internal:8000/v1</span> · last error: ECONNREFUSED, 2 hours ago</div>
+            </div>
+            <div class="right"><span>Unused</span><button class="btn sm" data-toast="Still failing: ECONNREFUSED">Test</button></div>
+          </div>
+        </div>
+
+        <div class="callout warn mt24">
+          <span class="ico">⚠</span>
+          <div class="grow">
+            <b>Contract Review runs on GPT‑4.1.</b> Prompt caching is unsupported and thinking is approximated
+            on that provider, so cost and behaviour differ from Claude. The agent still runs.
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------- compatibility matrix (§12, §41) ---------- -->
+      <section class="tabpanel" data-panel="compat">
+        <div class="section-head mt0"><h2>Provider compatibility</h2>
+          <div class="hint">Produced by the compatibility test suite, re-run on every deployment.</div>
+          <div class="actions"><button class="btn sm" data-toast="Running 10 scenarios against 3 providers…">Re-run tests</button></div>
+        </div>
+
+        <div class="card">
+          <div class="table-wrap">
+          <table class="tbl matrix">
+            <thead><tr><th>Feature</th><th>Claude<div class="cell-sub">Anthropic</div></th><th>GPT‑4.1<div class="cell-sub">Azure OpenAI</div></th><th>GPT‑4.1<div class="cell-sub">OpenAI</div></th><th>Internal Llama<div class="cell-sub">OpenAI-compatible</div></th></tr></thead>
+            <tbody>
+              <tr><td>Basic response</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="n">—</td></tr>
+              <tr><td>Streaming</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="n">—</td></tr>
+              <tr><td>System prompt</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="n">—</td></tr>
+              <tr><td>Multi-turn</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="n">—</td></tr>
+              <tr><td>Tool call</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="n">—</td></tr>
+              <tr><td>Multiple tool calls</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="n">—</td></tr>
+              <tr><td>Tool result</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="n">—</td></tr>
+              <tr><td>Errors</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="n">—</td></tr>
+              <tr><td>Usage reporting</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="n">—</td></tr>
+              <tr><td>Cancellation</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="n">—</td></tr>
+              <tr><td>Thinking</td><td class="y">✓</td><td class="a">~</td><td class="a">~</td><td class="n">—</td></tr>
+              <tr><td>Prompt caching</td><td class="y">✓</td><td class="n">—</td><td class="n">—</td><td class="n">—</td></tr>
+              <tr><td>Structured output</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="n">—</td></tr>
+              <tr><td>Context management</td><td class="y">✓</td><td class="a">~</td><td class="a">~</td><td class="n">—</td></tr>
+              <tr><td>Token counting</td><td class="y">✓</td><td class="a">~</td><td class="a">~</td><td class="n">—</td></tr>
+              <tr><td>Web search</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">—</td></tr>
+            </tbody>
+          </table>
+          </div>
+          <div class="card-foot small muted">
+            <span class="y" style="color:var(--ok);font-weight:700">✓</span> native or compatible ·
+            <span class="a" style="color:var(--warn);font-weight:700">~</span> approximated by the gateway ·
+            <span class="n" style="color:var(--muted);font-weight:700">—</span> unsupported ·
+            Internal Llama could not be tested (connection failed).
+          </div>
+        </div>
+
+        <div class="callout mt16">
+          <span class="ico">ℹ</span>
+          <div class="grow">
+            A non-Claude model behind an Anthropic-compatible proxy is a <b>compatibility mode</b>, never an
+            equivalent. This table is the same data the agent editor uses to warn about a model choice.
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------- gateway ---------- -->
+      <section class="tabpanel" data-panel="gateway">
+        <div class="card">
+          <div class="card-head"><h3>Model gateway</h3><div class="actions"><span class="badge ok"><span class="dot"></span>Healthy</span></div></div>
+          <div class="card-body">
+            <dl class="kv">
+              <dt>Internal URL</dt><dd class="mono">http://gateway:4000</dd>
+              <dt>Exposed to sandboxes as</dt><dd class="mono">ANTHROPIC_BASE_URL</dd>
+              <dt>Sandbox auth</dt><dd>Short-lived per-run token <span class="muted small">· provider keys never leave the gateway</span></dd>
+              <dt>Endpoints</dt><dd class="mono">POST /v1/messages · POST /v1/messages/count_tokens · GET /v1/models · GET /health</dd>
+              <dt>Requests (24 h)</dt><dd>4 812 <span class="muted small">· 0.4% errors</span></dd>
+              <dt>Median latency</dt><dd>640 ms <span class="muted small">· p95 2.1 s</span></dd>
+            </dl>
+          </div>
+        </div>
+
+        <div class="section-head"><h2>Usage by provider (7 days)</h2></div>
+        <div class="card">
+          <table class="tbl">
+            <thead><tr><th>Provider</th><th class="num">Requests</th><th class="num">Input tokens</th><th class="num">Output tokens</th><th class="num">Cost</th></tr></thead>
+            <tbody>
+              <tr><td>Anthropic</td><td class="num">21 402</td><td class="num">12.9M</td><td class="num">2.1M</td><td class="num">$37.20</td></tr>
+              <tr><td>Azure OpenAI</td><td class="num">3 118</td><td class="num">3.1M</td><td class="num">0.3M</td><td class="num">$14.60</td></tr>
+              <tr><td>OpenAI-compatible</td><td class="num">0</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="small muted mt16">Accounting exists so an administrator can see where the money goes. There is no
+          billing system, no invoicing and no quota marketplace in this product.</p>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

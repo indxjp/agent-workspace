@@ -1,0 +1,287 @@
+{
+  "$comment": "Generated from the shipped sdk.d.ts of @anthropic-ai/claude-agent-sdk. Source of truth for tests/sdk-surface.test.ts (R-01).",
+  "package": "@anthropic-ai/claude-agent-sdk",
+  "version": "0.3.296",
+  "claudeCodeVersion": "2.1.296",
+  "retrieved": "2026-09-26",
+  "querySignature": "function query(_params: { prompt: string | AsyncIterable<SDKUserMessage>; options?: Options; }): Query",
+  "optionCount": 69,
+  "options": {
+    "abortController": {
+      "optional": true,
+      "type": "AbortController"
+    },
+    "additionalDirectories": {
+      "optional": true,
+      "type": "string[]"
+    },
+    "projectConfigRoot": {
+      "optional": true,
+      "type": "string"
+    },
+    "agent": {
+      "optional": true,
+      "type": "string"
+    },
+    "agents": {
+      "optional": true,
+      "type": "Record<string, AgentDefinition>"
+    },
+    "allowedTools": {
+      "optional": true,
+      "type": "string[]"
+    },
+    "canUseTool": {
+      "optional": true,
+      "type": "CanUseTool"
+    },
+    "continue": {
+      "optional": true,
+      "type": "boolean"
+    },
+    "cwd": {
+      "optional": true,
+      "type": "string"
+    },
+    "disallowedTools": {
+      "optional": true,
+      "type": "string[]"
+    },
+    "toolAliases": {
+      "optional": true,
+      "type": "Record<string, string>"
+    },
+    "tools": {
+      "optional": true,
+      "type": "string[] | { type: 'preset'; preset: 'claude_code'; }"
+    },
+    "env": {
+      "optional": true,
+      "type": "{ [envVar: string]: string | undefined; }"
+    },
+    "executable": {
+      "optional": true,
+      "type": "'bun' | 'deno' | 'node'"
+    },
+    "executableArgs": {
+      "optional": true,
+      "type": "string[]"
+    },
+    "extraArgs": {
+      "optional": true,
+      "type": "Record<string, string | null>"
+    },
+    "fallbackModel": {
+      "optional": true,
+      "type": "string"
+    },
+    "enableFileCheckpointing": {
+      "optional": true,
+      "type": "boolean"
+    },
+    "toolConfig": {
+      "optional": true,
+      "type": "ToolConfig"
+    },
+    "forkSession": {
+      "optional": true,
+      "type": "boolean"
+    },
+    "betas": {
+      "optional": true,
+      "type": "SdkBeta[]"
+    },
+    "hooks": {
+      "optional": true,
+      "type": "Partial<Record<HookEvent, HookCallbackMatcher[]>>"
+    },
+    "onElicitation": {
+      "optional": true,
+      "type": "OnElicitation"
+    },
+    "onUserDialog": {
+      "optional": true,
+      "type": "OnUserDialog"
+    },
+    "supportedDialogKinds": {
+      "optional": true,
+      "type": "string[]"
+    },
+    "perTaskStopAffordance": {
+      "optional": true,
+      "type": "boolean"
+    },
+    "persistSession": {
+      "optional": true,
+      "type": "boolean"
+    },
+    "sessionStore": {
+      "optional": true,
+      "type": "SessionStore"
+    },
+    "sessionStoreFlush": {
+      "optional": true,
+      "type": "SessionStoreFlush"
+    },
+    "loadTimeoutMs": {
+      "optional": true,
+      "type": "number"
+    },
+    "includeHookEvents": {
+      "optional": true,
+      "type": "boolean"
+    },
+    "includePartialMessages": {
+      "optional": true,
+      "type": "boolean"
+    },
+    "forwardSubagentText": {
+      "optional": true,
+      "type": "boolean"
+    },
+    "verbatimPrompts": {
+      "optional": true,
+      "type": "boolean"
+    },
+    "thinking": {
+      "optional": true,
+      "type": "ThinkingConfig"
+    },
+    "effort": {
+      "optional": true,
+      "type": "EffortLevel"
+    },
+    "maxThinkingTokens": {
+      "optional": true,
+      "type": "number"
+    },
+    "maxTurns": {
+      "optional": true,
+      "type": "number"
+    },
+    "maxBudgetUsd": {
+      "optional": true,
+      "type": "number"
+    },
+    "taskBudget": {
+      "optional": true,
+      "type": "{ total: number; }"
+    },
+    "mcpServers": {
+      "optional": true,
+      "type": "Record<string, McpServerConfig>"
+    },
+    "model": {
+      "optional": true,
+      "type": "string"
+    },
+    "outputFormat": {
+      "optional": true,
+      "type": "OutputFormat"
+    },
+    "pathToClaudeCodeExecutable": {
+      "optional": true,
+      "type": "string"
+    },
+    "permissionMode": {
+      "optional": true,
+      "type": "PermissionMode"
+    },
+    "planModeInstructions": {
+      "optional": true,
+      "type": "string"
+    },
+    "allowDangerouslySkipPermissions": {
+      "optional": true,
+      "type": "boolean"
+    },
+    "permissionPromptToolName": {
+      "optional": true,
+      "type": "string"
+    },
+    "permissionPrompts": {
+      "optional": true,
+      "type": "'host' | 'none'"
+    },
+    "plugins": {
+      "optional": true,
+      "type": "SdkPluginConfig[]"
+    },
+    "pluginDelivery": {
+      "optional": true,
+      "type": "'argv' | 'initialize'"
+    },
+    "promptSuggestions": {
+      "optional": true,
+      "type": "boolean"
+    },
+    "agentProgressSummaries": {
+      "optional": true,
+      "type": "boolean"
+    },
+    "resume": {
+      "optional": true,
+      "type": "string"
+    },
+    "sessionId": {
+      "optional": true,
+      "type": "string"
+    },
+    "resumeSessionAt": {
+      "optional": true,
+      "type": "string"
+    },
+    "resumeDropsTurn": {
+      "optional": true,
+      "type": "string"
+    },
+    "sandbox": {
+      "optional": true,
+      "type": "SandboxSettings"
+    },
+    "settings": {
+      "optional": true,
+      "type": "string | Settings"
+    },
+    "managedSettings": {
+      "optional": true,
+      "type": "Settings"
+    },
+    "settingSources": {
+      "optional": true,
+      "type": "SettingSource[]"
+    },
+    "skills": {
+      "optional": true,
+      "type": "string[] | 'all'"
+    },
+    "debug": {
+      "optional": true,
+      "type": "boolean"
+    },
+    "debugFile": {
+      "optional": true,
+      "type": "string"
+    },
+    "stderr": {
+      "optional": true,
+      "type": "(data: string) => void"
+    },
+    "strictMcpConfig": {
+      "optional": true,
+      "type": "boolean"
+    },
+    "systemPrompt": {
+      "optional": true,
+      "type": "string | string[] | { type: 'custom'; prompt: string | string[]; snapshot?: boolean; } | { type: 'preset'; preset: 'claude_code'; append?: string; excludeDynamicSections?: boolean; snapshot?: boolean; }"
+    },
+    "title": {
+      "optional": true,
+      "type": "string"
+    },
+    "spawnClaudeCodeProcess": {
+      "optional": true,
+      "type": "(options: SpawnOptions) => SpawnedProcess"
+    }
+  }
+}

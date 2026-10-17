@@ -1,0 +1,12 @@
+{"vectors":
+ [{"witnesses": ["AgentWorkspace.Theorems.Normative.CliRuns.resume_and_list_flags"],
+   "input": {"after": "7"},
+   "id": "resume",
+   "expected": [["accept", "text/event-stream"], ["last-event-id", "7"]]},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.CliRuns.resume_and_list_flags"],
+   "input": {"status": "completed", "project": "project", "limit": 2, "cursor": "next", "agent": "agent"},
+   "id": "list",
+   "expected":
+   [["status", "completed"], ["agent", "agent"], ["project", "project"], ["limit", "2"], ["cursor", "next"]]}],
+ "family": "cli-runs",
+ "description": "Resume and list flags"}

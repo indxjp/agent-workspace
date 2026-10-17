@@ -1,0 +1,22 @@
+{
+  "$schema": "https://schema.agentcore.aws.dev/v1/agentcore.json",
+  "name": "SupportTriage",
+  "version": 1,
+  "managedBy": "CDK",
+  "credentials": [
+    {
+      "authorizerType": "ApiKeyCredentialProvider",
+      "name": "ZENDESK_TOKEN"
+    },
+    {
+      "authorizerType": "ApiKeyCredentialProvider",
+      "name": "ACME_TOOL_ENDPOINT_TOKEN"
+    }
+  ],
+  "harnesses": [
+    {
+      "name": "support_triage",
+      "path": "app/support_triage"
+    }
+  ]
+}

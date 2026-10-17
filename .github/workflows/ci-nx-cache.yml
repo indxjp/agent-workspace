@@ -1,0 +1,122 @@
+# This repository's Nx remote cache (infra/nx-cache, docs/adr/0110). Install-free: the server is
+# zero-dependency Node. The config guard (scripts/ci/check-nx-cache-config.mjs) is not here — it
+# runs in ci.yml's fast-checks on every pull request, and its tests run with the `tests` project.
+#
+#   server      the cache server's contract / race / streaming / storage-failure / OIDC suite,
+#               and the container image build
+#   live-trust  against the DEPLOYED server: exchanges this job's real GitHub OIDC token through
+#               .github/actions/nx-remote-cache and proves the role the SERVER granted — a
+#               pull_request run must come back `read` and its PUT must get 403; a push to `main`
+#               must come back `write`, a duplicate PUT must get 409 and the bytes must round-trip.
+#               This is the acceptance test for "a pull request cannot populate the trusted cache".
+#
+# Not required by ci-success on purpose: it is path-filtered, and an unreachable cache must never
+# turn CI red (the live check then warns and proves nothing). The guarantee it measures is enforced
+# by the server, not by this workflow. See docs/operations/ci.md "Nx remote cache".
+name: CI Nx remote cache
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infra/nx-cache/**'
+      - '.github/actions/nx-remote-cache/**'
+      - '.github/workflows/ci-nx-cache.yml'
+      - 'scripts/ci/**'
+      - 'nx.json'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'infra/nx-cache/**'
+      - '.github/actions/nx-remote-cache/**'
+      - '.github/workflows/ci-nx-cache.yml'
+      - 'scripts/ci/**'
+      - 'nx.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || format('{0}-{1}', github.ref, github.event_name) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Same plan, same expression, as ci.yml.
+  NX_REMOTE_CACHE_KIND: ${{ (vars.INDX_NX_REMOTE_CACHE_ENABLED != 'true' || vars.NX_SELF_HOSTED_REMOTE_CACHE_SERVER == '') && 'off' || (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'write' || 'read' }}
+
+jobs:
+  server:
+    name: cache server tests · image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+
+      # --expose-gc: the streaming test samples retained memory after GC to prove a 256 MiB
+      # artifact never sits in the server's memory. gcs.integration.test.mjs skips itself here:
+      # no bucket credentials in CI (it is run by hand, infra/nx-cache/README.md "Testing").
+      - name: Contract, race, streaming, storage-failure and OIDC tests
+        run: node --expose-gc --test 'infra/nx-cache/test/*.test.mjs'
+
+      - name: Container image builds
+        run: docker build -t nx-cache:ci infra/nx-cache
+
+  live-trust:
+    name: live trust check (deployed cache)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Assert pull_request runs cannot select remote-cache write
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ "$NX_REMOTE_CACHE_KIND" = "write" ]; then
+            echo "::error::pull_request event resolved to remote-cache kind 'write'"
+            exit 1
+          fi
+
+      - name: Connect to the remote cache
+        uses: ./.github/actions/nx-remote-cache
+        with:
+          kind: ${{ env.NX_REMOTE_CACHE_KIND }}
+          server: ${{ vars.NX_SELF_HOSTED_REMOTE_CACHE_SERVER }}
+
+      # Probes with a key Nx can never produce (Nx hashes are digits only), so nothing here can
+      # collide with or shadow a real artifact.
+      - name: Prove the granted role server-side
+        if: env.NX_REMOTE_CACHE_KIND != 'off'
+        run: |
+          set -euo pipefail
+          if [ -z "${NX_SELF_HOSTED_REMOTE_CACHE_ACCESS_TOKEN:-}" ]; then
+            echo "::warning::no remote-cache token (cache unreachable or OIDC unavailable) — nothing to prove"
+            exit 0
+          fi
+          S="$NX_SELF_HOSTED_REMOTE_CACHE_SERVER"
+          auth="Authorization: Bearer $NX_SELF_HOSTED_REMOTE_CACHE_ACCESS_TOKEN"
+          key="selftest-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          missing=$(curl -s -o /dev/null -w '%{http_code}' -H "$auth" "$S/v1/cache/${key}-missing")
+          [ "$missing" = "404" ] || { echo "::error::GET of a missing key returned $missing, expected 404"; exit 1; }
+          head -c 1048576 /dev/urandom > "$RUNNER_TEMP/body.bin"
+          put=$(curl -s -o /dev/null -w '%{http_code}' -X PUT -H "$auth" -H 'Content-Type: application/octet-stream' --data-binary @"$RUNNER_TEMP/body.bin" "$S/v1/cache/$key")
+          if [ "$NX_REMOTE_CACHE_KIND" = "read" ]; then
+            [ "$put" = "403" ] || { echo "::error::a READ-role run could PUT (HTTP $put) — the server let an untrusted run write"; exit 1; }
+            echo "::notice title=Live trust check::event=${{ github.event_name }} got a read token; PUT → 403 as required"
+          else
+            [ "$put" = "200" ] || { echo "::error::trusted write PUT returned $put"; exit 1; }
+            again=$(curl -s -o /dev/null -w '%{http_code}' -X PUT -H "$auth" --data-binary @"$RUNNER_TEMP/body.bin" "$S/v1/cache/$key")
+            [ "$again" = "409" ] || { echo "::error::second PUT of the same key returned $again, expected 409 (immutability)"; exit 1; }
+            curl -fsS -H "$auth" "$S/v1/cache/$key" -o "$RUNNER_TEMP/back.bin"
+            cmp "$RUNNER_TEMP/body.bin" "$RUNNER_TEMP/back.bin"
+            echo "::notice title=Live trust check::trusted run wrote; duplicate → 409; round-trip byte-exact"
+          fi

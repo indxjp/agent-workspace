@@ -1,0 +1,33 @@
+{
+  "model": "claude-opus-5",
+  "max_tokens": 1024,
+  "tools": [
+    {
+      "name": "get_weather",
+      "description": "Get the current weather in a given location",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "location": { "type": "string", "description": "The city and state, e.g. San Francisco, CA" }
+        },
+        "required": ["location"]
+      }
+    }
+  ],
+  "messages": [
+    { "role": "user", "content": "What is the weather like in San Francisco?" },
+    {
+      "role": "assistant",
+      "content": [
+        { "type": "text", "text": "Okay, let's check the weather for San Francisco, CA:" },
+        { "type": "tool_use", "id": "toolu_01T1x1fJ34qAmk2tNTrN7Up6", "name": "get_weather", "input": { "location": "San Francisco, CA" } }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        { "type": "tool_result", "tool_use_id": "toolu_01T1x1fJ34qAmk2tNTrN7Up6", "content": "15 degrees C, foggy", "is_error": false }
+      ]
+    }
+  ]
+}

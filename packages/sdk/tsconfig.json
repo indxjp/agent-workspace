@@ -1,0 +1,14 @@
+{
+  // The type-checking view: the whole of `src`, tests included, emitting nothing. `DOM` is in `lib`
+  // because this package is isomorphic: `fetch`, `Response`, `ReadableStream` and `AbortSignal` are
+  // the Web platform globals both a browser and Node 24 provide, and no `@types/node` is wanted.
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "noEmit": true
+  },
+  // `src/project/starters` is a set of project files with their own tsconfig.json: Node types and
+  // `.ts` specifiers, which this isomorphic package must not have.
+  "include": ["src"],
+  "exclude": ["src/project/starters"]
+}

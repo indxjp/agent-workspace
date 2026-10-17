@@ -1,0 +1,1 @@
+DROP INDEX "run_events_run_sequence_idx";

@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Gallery Verification Workflow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+JP:wght@400;500;700&display=swap">
+<style>
+/* Layout: a single-column engineering plan. Pipeline strip → evidence tiers → orchestration → status board → findings.
+   Same tokens as the Enterprise Agent Gallery (sites/lp/assets/site.css palette). */
+:root {
+  --action: #2f5fd0; --action-soft: #eaf0ff;
+  --ok: #1a7f4b; --ok-soft: #e6f4ec; --caveat: #8f5208; --caveat-soft: #fdf1e0; --gap: #a3361d; --gap-soft: #fbe9e4;
+  --ink: #171614; --ink-2: #45433d; --ink-3: #6b6860; --rule: #e3e0da; --rule-strong: #cfcbc2;
+  --paper: #faf9f7; --paper-2: #f4f3f0; --paper-3: #eceae5; --surface: #ffffff; --code-bg: #f4f3f0;
+  --sans: "Inter", "Noto Sans JP", system-ui, -apple-system, "Segoe UI", "Hiragino Sans", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Consolas, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --action: #7ea2f5; --action-soft: #1d2740; --ok: #5cc98d; --ok-soft: #14291e; --caveat: #e7a54d; --caveat-soft: #2e2212; --gap: #f08a70; --gap-soft: #321a14;
+  --ink: #f2f0ec; --ink-2: #cfccc4; --ink-3: #a29e95; --rule: #2e2d29; --rule-strong: #45433d;
+  --paper: #141412; --paper-2: #1b1a18; --paper-3: #23221f; --surface: #1d1c1a; --code-bg: #10100f; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --action: #7ea2f5; --action-soft: #1d2740; --ok: #5cc98d; --ok-soft: #14291e; --caveat: #e7a54d; --caveat-soft: #2e2212; --gap: #f08a70; --gap-soft: #321a14;
+  --ink: #f2f0ec; --ink-2: #cfccc4; --ink-3: #a29e95; --rule: #2e2d29; --rule-strong: #45433d;
+  --paper: #141412; --paper-2: #1b1a18; --paper-3: #23221f; --surface: #1d1c1a; --code-bg: #10100f; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--paper); color: var(--ink-2); font: 400 15px/1.7 var(--sans); margin: 0; }
+a { color: var(--action); }
+h1, h2, h3 { color: var(--ink); text-wrap: balance; margin: 0; }
+code { font-family: var(--mono); font-size: .88em; background: var(--paper-3); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+.wrap { max-width: 1040px; margin: 0 auto; padding-inline: 24px; }
+@media (max-width: 600px) { .wrap { padding-inline: 16px; } }
+.eyebrow { font: 600 12px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--action); margin-bottom: 14px; }
+header.top { padding-block: 56px 32px; }
+header.top h1 { font-size: clamp(28px, 3.8vw, 44px); line-height: 1.12; letter-spacing: -.025em; font-weight: 650; max-width: 24ch; }
+.lead { font-size: 16.5px; max-width: 70ch; margin: 18px 0 0; }
+section { padding-block: 44px; border-top: 1px solid var(--rule); }
+section h2 { font-size: clamp(22px, 2.6vw, 28px); letter-spacing: -.015em; font-weight: 650; margin-bottom: 8px; }
+section > .wrap > p.intro { max-width: 70ch; margin: 0 0 22px; }
+
+/* pipeline */
+.pipe { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border: 1px solid var(--rule-strong); background: var(--surface); }
+.stage { padding: 14px 12px; border-right: 1px solid var(--rule); display: grid; gap: 6px; align-content: start; position: relative; }
+.stage:last-child { border-right: 0; }
+.stage .n { font: 600 11px var(--mono); color: var(--action); }
+.stage h3 { font-size: 14px; font-weight: 650; }
+.stage p { margin: 0; font-size: 12.5px; line-height: 1.55; }
+.stage .out { font: 500 11px/1.4 var(--mono); color: var(--ink-3); overflow-wrap: anywhere; }
+.stage.live { background: repeating-linear-gradient(-45deg, transparent 0 8px, var(--paper-2) 8px 9px); }
+@media (max-width: 900px) { .pipe { grid-template-columns: minmax(0, 1fr); } .stage { border-right: 0; border-bottom: 1px solid var(--rule); } .stage:last-child { border-bottom: 0; } }
+
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+th, td { text-align: left; padding: 10px 10px 10px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font: 600 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+td b { color: var(--ink); }
+.scroll { overflow-x: auto; }
+.tag { display: inline-block; font: 600 11px/1 var(--mono); padding: 5px 8px; border-radius: 6px; white-space: nowrap; }
+.tag.ok { background: var(--ok-soft); color: var(--ok); }
+.tag.work { background: var(--caveat-soft); color: var(--caveat); }
+.tag.gap { background: var(--gap-soft); color: var(--gap); }
+.tag.plan { background: var(--paper-3); color: var(--ink-3); }
+.tag.run { background: var(--action-soft); color: var(--action); }
+
+.lanes { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.lane { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 16px; display: grid; gap: 8px; align-content: start; }
+.lane h3 { font-size: 15px; }
+.lane ul { margin: 0; padding-left: 18px; font-size: 13.5px; display: grid; gap: 4px; }
+pre { background: var(--code-bg); border: 1px solid var(--rule); padding: 14px 16px; overflow-x: auto; font: 400 12.5px/1.6 var(--mono); color: var(--ink); margin: 0; }
+.finding { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--rule); }
+.finding .n { font: 600 12px var(--mono); color: var(--action); padding-top: 3px; }
+.finding h3 { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+.finding p { margin: 0; font-size: 13.5px; max-width: 75ch; }
+footer { padding-block: 32px 56px; border-top: 1px solid var(--rule); font-size: 12.5px; color: var(--ink-3); }
+</style>
+</head>
+<body>
+
+<header class="top"><div class="wrap">
+  <div class="eyebrow">Phase 3 · Agent Workspace gallery</div>
+  <h1>How each use case is implemented, run, and turned into a benchmark</h1>
+  <p class="lead">Every one of the ten gallery use cases goes through the same seven stages. The output is code under <code>tests/gallery/&lt;use case&gt;/</code> that runs in CI with no API key, a tutorial page under <code>docs/sdk/site/tutorials/</code>, and a benchmark whose every verdict is backed by a test. A verdict can only change when a test changes, so the gallery cannot silently overstate what the SDK does.</p>
+</div></header>
+
+<section><div class="wrap">
+  <h2>The pipeline, per use case</h2>
+  <p class="intro">Stages 1 to 5 and 7 run offline in <code>pnpm test</code>. Stage 6 needs a workspace and a model, so it is opt-in and is never reported as passed when it did not run.</p>
+  <div class="pipe">
+    <div class="stage"><span class="n">1</span><h3>Define</h3><p>A v2 project: <code>defineAgent</code>, skills, <code>defineSurface</code>, <code>evals/*.yaml</code>, policy ceiling.</p><span class="out">agents/ surfaces/ skills/ evals/</span></div>
+    <div class="stage"><span class="n">2</span><h3>Build tools</h3><p>The use case's own MCP servers and skill scripts, dependency-free Node, with Japanese fixture data.</p><span class="out">mcp/*.mjs skills/*/scripts</span></div>
+    <div class="stage"><span class="n">3</span><h3>Contract tier</h3><p>Load the project through the same contract <code>aw check</code> applies (<code>toAgentVersionBody</code>, project and eval readers).</p><span class="out">harness/project.ts</span></div>
+    <div class="stage"><span class="n">4</span><h3>Flow tier</h3><p>Real SDK client and real tool servers; only the model's decisions are scripted. The backend code runs unmodified.</p><span class="out">harness/scripted-workspace.ts</span></div>
+    <div class="stage"><span class="n">5</span><h3>Probe tier</h3><p>Each gap is an executable probe of the published contracts. It fails the day the capability arrives.</p><span class="out">harness/probes.ts</span></div>
+    <div class="stage live"><span class="n">6</span><h3>Live tier</h3><p>A real workspace. Run once for use case 1 on the embedded control plane and the Claude Agent SDK engine with a scripted model: grounded answer, <code>aw eval</code> 3/3. A real model is yours to run.</p><span class="out">AW_GALLERY_LIVE=1</span></div>
+    <div class="stage"><span class="n">7</span><h3>Record</h3><p><code>benchmark.ts</code> declares a verdict and evidence per capability; the tutorial table is generated from it and checked.</p><span class="out">benchmark.test.ts</span></div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <h2>Evidence: what backs a verdict</h2>
+  <p class="intro">Each cell of a benchmark names one kind of evidence, and <code>tests/gallery/benchmark.test.ts</code> checks that the evidence exists: a test with that exact title, a probe with that id, a source file at that path.</p>
+  <div class="scroll"><table>
+    <thead><tr><th>Evidence</th><th>What runs</th><th>Proves</th><th>Does not prove</th></tr></thead>
+    <tbody>
+      <tr><td><span class="tag ok">contract</span></td><td>The use case's tests: the project loads through the server contract; the MCP servers and scripts run for real; the backend runs against the scripted workspace.</td><td>The definition is valid, the tools work on Japanese data, and the backend handles a run.</td><td>That a model makes the right calls.</td></tr>
+      <tr><td><span class="tag gap">probe</span></td><td>A probe asks <code>@indx-workspace/contracts</code> and the SDK whether a capability exists.</td><td>The capability is missing today.</td><td>How hard the workaround is; the tutorial says that.</td></tr>
+      <tr><td><span class="tag work">source</span></td><td>Nothing; the cell cites a platform file.</td><td>What the code says, where no offline test reaches.</td><td>Behaviour at run time.</td></tr>
+      <tr><td><span class="tag run">live</span></td><td><code>aw eval</code> on a real workspace.</td><td>Model behaviour on the eval cases.</td><td>Anything in CI: it is run by you.</td></tr>
+    </tbody>
+  </table></div>
+</div></section>
+
+<section><div class="wrap">
+  <h2>How the work is split</h2>
+  <p class="intro">One reference use case first, so the harness is proven before anything is copied from it; then nine in parallel, each owning only its own directory and page so no two workers touch the same file; then one integration step that owns every shared file.</p>
+  <div class="lanes">
+    <div class="lane"><h3><span class="tag ok">done</span>&nbsp; Reference: harness + use case 1</h3><ul>
+      <li>Shared: MCP server kit (stdio and Streamable HTTP), Japanese bigram index, <code>runAndRead</code>, citation parser</li>
+      <li>Harness: project loader, MCP client, scripted workspace, probes, benchmark model, registry</li>
+      <li>Manual search: 6 tests, tutorial, generated table</li>
+    </ul></div>
+    <div class="lane"><h3><span class="tag ok">done</span>&nbsp; Nine parallel workers</h3><ul>
+      <li>Each owns <code>tests/gallery/&lt;id&gt;/</code> and <code>tutorials/&lt;id&gt;.mdx</code>, nothing else</li>
+      <li>Same pipeline, same harness; shared code changes go back to the integrator</li>
+      <li>Done means: its tests pass, tsc, eslint and prettier are clean, and the table is generated</li>
+    </ul></div>
+    <div class="lane"><h3><span class="tag ok">done</span>&nbsp; Integration</h3><ul>
+      <li><code>docs.json</code> navigation, <code>llms.txt</code> via <code>pnpm docs:generate</code></li>
+      <li><code>pnpm check:fast</code>, <code>pnpm test</code>, <code>pnpm build</code></li>
+      <li>Update the gallery artifact with the verified verdicts</li>
+    </ul></div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <h2>Status board</h2>
+  <p class="intro">All ten implemented and green: 130 tests in <code>tests/gallery</code> (10 use cases, 12 probes, 22 bookkeeping checks, 4 for the shared Office reader), about 16 seconds, no API key. Use case 1 also ran on a live workspace.</p>
+  <div class="scroll"><table>
+    <thead><tr><th>#</th><th>Use case</th><th>Own tools (real, offline)</th><th>Probes cited</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td><b>Manual search</b></td><td>manual-index MCP: bigram BM25, page/section citations</td><td>run-output-schema</td><td><span class="tag ok">verified · 6 tests · score 69 · live ✓</span></td></tr>
+      <tr><td>2</td><td><b>CAD drawing</b></td><td>drawing-index MCP over DXF title blocks; dxf-draft skill script (ASCII DXF read/write)</td><td>run-output-schema, run-approval, surface-attachments</td><td><span class="tag ok">verified · 8 tests · score 45</span></td></tr>
+      <tr><td>3</td><td><b>Quotation</b></td><td>openapiTool over an ERP OpenAPI doc; cost-model skill script</td><td>run-output-schema, run-approval, openapi-write</td><td><span class="tag ok">verified · 10 tests · score 55</span></td></tr>
+      <tr><td>4</td><td><b>Ringi review</b></td><td>ringi-archive MCP; authority-matrix check; review-sheet parser</td><td>inbound-trigger, run-start-idempotency, run-output-schema</td><td><span class="tag ok">verified · 10 tests · score 50</span></td></tr>
+      <tr><td>5</td><td><b>Customer inquiry</b></td><td>crm-history MCP with per-customer filter and PII masking</td><td>run-handoff, inbound-trigger</td><td><span class="tag ok">verified · 11 tests · score 56</span></td></tr>
+      <tr><td>6</td><td><b>Excel consolidation</b></td><td>office-reader skill: xlsx unzip + merged cells + 和暦 + 千円; consolidation with source-cell refs</td><td>run-output-schema, inbound-trigger</td><td><span class="tag ok">verified · 9 tests · score 50</span></td></tr>
+      <tr><td>7</td><td><b>Contract review</b></td><td>playbook clause checker</td><td>run-output-schema</td><td><span class="tag ok">verified · 8 tests · score 50</span></td></tr>
+      <tr><td>8</td><td><b>Meeting minutes</b></td><td>tasks MCP (write); two-run confirm flow</td><td>run-approval, run-attachments, inbound-trigger</td><td><span class="tag ok">verified · 10 tests · score 45</span></td></tr>
+      <tr><td>9</td><td><b>Maintenance troubleshooting</b></td><td>trouble-log MCP; one-step session flow</td><td>surface-attachments</td><td><span class="tag ok">verified · 8 tests · score 50</span></td></tr>
+      <tr><td>10</td><td><b>Quality defects</b></td><td>defect-db MCP similar-case search; 8D section parser</td><td>run-output-schema</td><td><span class="tag ok">verified · 12 tests · score 61</span></td></tr>
+    </tbody>
+  </table></div>
+</div></section>
+
+<section><div class="wrap">
+  <h2>Run it</h2>
+  <pre>pnpm vitest run --project tests tests/gallery            # every use case, offline
+pnpm vitest run --project tests tests/gallery/manual-search
+GALLERY_WRITE=1 pnpm vitest run --project tests tests/gallery   # regenerate the tutorial tables</pre>
+</div></section>
+
+<section><div class="wrap">
+  <h2>What the reference use case already found</h2>
+  <p class="intro">Building the ten for real surfaced facts that reading the code in Phase 1 did not.</p>
+  <div class="finding"><span class="n">01</span><div><h3>An eval cannot portably pin an MCP tool call</h3><p>A Claude run names an MCP tool <code>mcp__connector-&lt;uuid&gt;__search_manual</code>, with the connector's id in that workspace (<code>apps/web/server/compose/resource-loader.ts</code>), and an eval's <code>tool:</code> is an exact match (<code>apps/web/server/evaluations/score.ts</code>). A committed <code>tool:</code> expectation is wrong in every other workspace. The gallery pins behaviour with <code>contains</code> instead.</p></div></div>
+  <div class="finding"><span class="n">02</span><div><h3>A project file cannot declare a stdio MCP server</h3><p><code>agent-workspace.yaml</code> accepts only <code>http</code>/<code>sse</code> connectors (probe <code>project-file-stdio</code>). The gallery's server kit therefore speaks Streamable HTTP as well as stdio.</p></div></div>
+  <div class="finding"><span class="n">03</span><div><h3>Bigram search needs a coverage floor to say "not found"</h3><p>The first test run showed 「社員食堂の営業時間」 matching a maintenance interval through 「時間」 alone. The index now requires a third of the query's bigrams. Without the test, the agent's honest no-answer rule would never have fired.</p></div></div>
+  <div class="finding"><span class="n">04</span><div><h3>Every backend rebuilds the answer from events</h3><p><code>RunResource</code> has no answer field, so the shared <code>runAndRead</code> follows the stream and keeps the last <code>agent.message</code>. Every use case needs it; it is the strongest argument for the structured-output gap.</p></div></div>
+  <div class="finding"><span class="n">05</span><div><h3>Files an agent writes never come back</h3><p>Verified with a live run: <code>persistPaths</code> collects the runner's <code>/workspace</code>, not the run's working directory (<code>apps/web/server/runs/launcher.ts</code>), so it promotes the stale hydrated copy. Filed as a separate fix task.</p></div></div>
+  <div class="finding"><span class="n">06</span><div><h3>Agents as code cannot pre-approve the tools they are granted</h3><p><code>defineAgent</code> with <code>writeFiles</code> or <code>runCommands</code> compiles to <code>permissionMode: 'default'</code> with no auto-approval, and has no setting for either. An unattended run then refuses Write and shell commands. Six use cases need <code>aw.agents.replacePolicy</code> (probe <code>define-tool-approval</code>).</p></div></div>
+  <div class="finding"><span class="n">07</span><div><h3>A surface cannot render an MCP tool's result</h3><p><code>toolResults</code> is matched exactly against the run's tool name, <code>mcp__&lt;connector-name&gt;__…</code> (or <code>mcp__connector-&lt;uuid&gt;__…</code> when the name is not a usable slug), which can differ per workspace and in the UUID form is over the 64-character key limit (probe <code>surface-mcp-tool-results</code>). The embedded widget also cannot carry who is signed in.</p></div></div>
+  <div class="finding"><span class="n">08</span><div><h3><code>writeFiles: false</code> does not stop shell redirection</h3><p>Only the Write and Edit tools are denied (<code>packages/contracts/src/agents.test.ts</code>). With <code>runCommands</code> granted, a policy alone does not prevent file writes.</p></div></div>
+</div></section>
+
+<footer><div class="wrap">Branch <code>claude/dreamy-darwin-y65qsm</code> · companion to the Enterprise Agent Gallery artifact.</div></footer>
+
+</body>
+</html>

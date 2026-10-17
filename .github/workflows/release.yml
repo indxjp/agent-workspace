@@ -1,0 +1,77 @@
+name: Verified release
+
+# Prerequisites. This workflow verifies and publishes nothing but the release notes. Before a
+# `v<version>` tag:
+# - the images in docs/release/evidence-manifest.json are published and signed by
+#   `.github/workflows/images.yml` from an `images-v<version>` tag (ADR-0086), and are public;
+# - the npm packages are published by publish-packages.yml from a `packages-v<version>` tag;
+# - the evidence, approvals and residual-risk dispositions are recorded (docs/release/README.md);
+# - the protected `release` environment exists with its required reviewers.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+concurrency:
+  group: verified-release
+  cancel-in-progress: false
+
+# Only `gh release create` needs the token: the images are public and verified, not pushed, and
+# nothing here signs or attests.
+permissions:
+  contents: write
+
+jobs:
+  verify-and-publish:
+    runs-on: ubuntu-latest
+    environment: release
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      - name: Require structural and evidence readiness at this exact commit
+        run: |
+          pnpm release:check
+          pnpm release:ready
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Verify every immutable release image and its attestation
+        env:
+          COSIGN_EXPERIMENTAL: '1'
+          # The identity images.yml signs and verifies with: that workflow, from an images-v* tag.
+          SIGNER: ^${{ github.server_url }}/${{ github.repository }}/\.github/workflows/images\.yml@refs/tags/images-v
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE' > /tmp/images
+          import { readFileSync } from 'node:fs';
+          const manifest = JSON.parse(readFileSync('docs/release/evidence-manifest.json', 'utf8'));
+          for (const image of manifest.artifacts.images) console.log(image.reference);
+          NODE
+          while IFS= read -r image; do
+            docker buildx imagetools inspect "$image"
+            cosign verify "$image" --certificate-identity-regexp "$SIGNER" --certificate-oidc-issuer https://token.actions.githubusercontent.com
+            cosign verify-attestation "$image" --type spdxjson --certificate-identity-regexp "$SIGNER" --certificate-oidc-issuer https://token.actions.githubusercontent.com
+            cosign verify-attestation "$image" --type slsaprovenance --certificate-identity-regexp "$SIGNER" --certificate-oidc-issuer https://token.actions.githubusercontent.com
+          done < /tmp/images
+      - name: Verify owner-controlled npm identity
+        run: |
+          set -euo pipefail
+          package="$(node -p "require('./packages/cli/package.json').name")"
+          declared="$(node -p "require('./docs/release/evidence-manifest.json').artifacts.package.name")"
+          test "$package" = "$declared"
+          npm access get status "$package"
+      # The CLI is not published here: `@indx-workspace/cli` is published, in lock-step with the
+      # other @indx-workspace packages, by publish-packages.yml from a `packages-v*` tag (#364,
+      # ADR-0082). The identity check above still holds this release to the package it names.
+      - name: Publish immutable release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "v$(node -p "require('./package.json').version")" --verify-tag --notes-file "docs/release/notes/$(node -p "require('./package.json').version").md"

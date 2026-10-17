@@ -1,0 +1,255 @@
+---
+title: "runtimes"
+description: "The @indx-workspace/contracts/runtimes exports, sorted alphabetically."
+---
+
+<Note>This page is generated from `packages/contracts/src/runtimes.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## CreateRuntimeConnectionInput
+
+The body of `POST /api/runtime-connections`. Every field is a non-empty string; `endpoint` and
+`credential` are stored sealed and cannot be read back.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `driver` | `"local" \| "sandbox-runtime" \| "docker" \| "kubernetes" \| "gke-agent-sandbox" \| "aca-sessions" \| "aws-agentcore" \| "aws-ecs" \| "cloud-run-sandbox" \| "cloud-run-service" \| "external" \| "vercel-sandbox" \| "cloudflare-sandbox"` | Yes |  |
+| `endpoint` | `string` | Yes |  |
+| `credential` | `string` | Yes |  |
+
+## CreateRuntimeProfileInput
+
+The body of `POST /api/runtime-profiles`. An omitted sizing field is stored as `null` and left
+to the driver. `driverConfig.image`, when present, must pin an image by `sha256` digest, and a
+`driverConfig` key whose words name a credential (`password`, `secret`, `token`, `apiKey`…), at
+any depth, is refused with `400 invalid_body`: put the credential on a runtime connection.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `driver` | `"local" \| "sandbox-runtime" \| "docker" \| "kubernetes" \| "gke-agent-sandbox" \| "aca-sessions" \| "aws-agentcore" \| "aws-ecs" \| "cloud-run-sandbox" \| "cloud-run-service" \| "external" \| "vercel-sandbox" \| "cloudflare-sandbox"` | Yes |  |
+| `runtimeConnectionId` | `undefined \| string` | No |  |
+| `cpu` | `undefined \| number` | No |  |
+| `memoryMb` | `undefined \| number` | No |  |
+| `diskMb` | `undefined \| number` | No |  |
+| `networkPolicy` | `"none" \| "restricted" \| "open"` | Yes |  |
+| `allowedDomains` | `undefined \| null \| readonly string[]` | No | `null`, as a profile reads back, means none. |
+| `filesystem` | `"read-write" \| "read-only"` | Yes |  |
+| `persistPaths` | `undefined \| readonly string[]` | No |  |
+| `timeoutSeconds` | `undefined \| number` | No |  |
+| `idleTimeoutSeconds` | `undefined \| number` | No |  |
+| `driverConfig` | `undefined \| Readonly<Record<string, unknown>>` | No |  |
+
+## EXTERNAL_RUNTIME_PROVIDERS
+
+The sandbox providers the `external` driver reaches. A deployment profile names one as
+`runtime.provider` and a runtime profile as `driverConfig.provider`; absent means `e2b`, which is
+what `external` has always meant. Anything else is refused at validation, not at the first run.
+
+- `'e2b'`
+
+## ExternalRuntimeProvider
+
+`"e2b"`
+
+## RUNTIME_DRIVERS
+
+The runtime drivers a profile or connection can name — the control plane's catalogue, in the
+order the specification lists them. `runtime_profiles.driver` carries the same list as a
+database `CHECK`, so a value outside it can never be stored.
+
+- `'local'`
+- `'sandbox-runtime'`
+- `'docker'`
+- `'kubernetes'`
+- `'gke-agent-sandbox'`
+- `'aca-sessions'`
+- `'aws-agentcore'`
+- `'aws-ecs'`
+- `'cloud-run-sandbox'`
+- `'cloud-run-service'`
+- `'external'`
+- `'vercel-sandbox'`
+- `'cloudflare-sandbox'`
+
+## RUNTIME_FILESYSTEM_MODES
+
+Whether the runtime's working tree may be written to; `persistPaths` survive either way.
+
+- `'read-only'`
+- `'read-write'`
+
+## RUNTIME_NETWORK_POLICIES
+
+What a runtime may reach over the network: nothing, the gateway plus `allowedDomains`, or
+everything. The server is authoritative about which of these a driver can enforce in a given
+deployment and refuses the rest with `network_policy_not_enforceable`.
+
+- `'none'`
+- `'restricted'`
+- `'open'`
+
+## RUNTIME_PROFILE_BOUNDS
+
+The bounds `POST`/`PATCH /api/runtime-profiles` enforce on the sizing fields. `cpu` is a count
+of cores and may be fractional (`0.5`); every other field is a whole number of megabytes or
+seconds. The upper bound is the largest integer JavaScript represents exactly — the server
+imposes no smaller ceiling.
+
+| Key | Value |
+| --- | --- |
+| `cpu` | `{ exclusiveMin: 0 }` |
+| `memoryMb` | `{ min: 1, max: Number.MAX_SAFE_INTEGER }` |
+| `diskMb` | `{ min: 1, max: Number.MAX_SAFE_INTEGER }` |
+| `timeoutSeconds` | `{ min: 1, max: Number.MAX_SAFE_INTEGER }` |
+| `idleTimeoutSeconds` | `{ min: 1, max: Number.MAX_SAFE_INTEGER }` |
+
+## RuntimeConnectionListResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `runtimeConnections` | `readonly RuntimeConnectionResource[]` | Yes |  |
+
+## RuntimeConnectionListResponseSchema
+
+The body of `GET /api/runtime-connections`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `runtimeConnections` | `readonly RuntimeConnectionResource[]` | Yes |  |
+
+## RuntimeConnectionResource
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `name` | `string` | Yes |  |
+| `driver` | `"local" \| "sandbox-runtime" \| "docker" \| "kubernetes" \| "gke-agent-sandbox" \| "aca-sessions" \| "aws-agentcore" \| "aws-ecs" \| "cloud-run-sandbox" \| "cloud-run-service" \| "external" \| "vercel-sandbox" \| "cloudflare-sandbox"` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+
+## RuntimeConnectionResourceSchema
+
+One runtime connection as the `201` of `POST /api/runtime-connections` and every item of
+`GET /api/runtime-connections` render it — a **bare** item. The endpoint and the credential are
+write-only: they are sealed at creation and never appear in a response. `name` is the stored
+form — upper-cased, with every other character folded to `_` — not the caller's display text.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `name` | `string` | Yes |  |
+| `driver` | `"local" \| "sandbox-runtime" \| "docker" \| "kubernetes" \| "gke-agent-sandbox" \| "aca-sessions" \| "aws-agentcore" \| "aws-ecs" \| "cloud-run-sandbox" \| "cloud-run-service" \| "external" \| "vercel-sandbox" \| "cloudflare-sandbox"` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+
+## RuntimeDriver
+
+- `"local"`
+- `"sandbox-runtime"`
+- `"docker"`
+- `"kubernetes"`
+- `"gke-agent-sandbox"`
+- `"aca-sessions"`
+- `"aws-agentcore"`
+- `"aws-ecs"`
+- `"cloud-run-sandbox"`
+- `"cloud-run-service"`
+- `"external"`
+- `"vercel-sandbox"`
+- `"cloudflare-sandbox"`
+
+## RuntimeFilesystemMode
+
+- `"read-write"`
+- `"read-only"`
+
+## RuntimeNetworkPolicy
+
+- `"none"`
+- `"restricted"`
+- `"open"`
+
+## RuntimeProfileListResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `runtimeProfiles` | `readonly RuntimeProfileResource[]` | Yes |  |
+
+## RuntimeProfileListResponseSchema
+
+The body of `GET /api/runtime-profiles`: the caller's workspace's profiles, oldest first.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `runtimeProfiles` | `readonly RuntimeProfileResource[]` | Yes |  |
+
+## RuntimeProfileResource
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `workspaceId` | `string` | Yes |  |
+| `name` | `string` | Yes |  |
+| `driver` | `"local" \| "sandbox-runtime" \| "docker" \| "kubernetes" \| "gke-agent-sandbox" \| "aca-sessions" \| "aws-agentcore" \| "aws-ecs" \| "cloud-run-sandbox" \| "cloud-run-service" \| "external" \| "vercel-sandbox" \| "cloudflare-sandbox"` | Yes |  |
+| `runtimeConnectionId` | `null \| string` | Yes | The stored runtime connection (cluster, pool, image registry…) the driver uses, if any. |
+| `cpu` | `null \| number` | Yes |  |
+| `memoryMb` | `null \| number` | Yes |  |
+| `diskMb` | `null \| number` | Yes |  |
+| `networkPolicy` | `"none" \| "restricted" \| "open"` | Yes |  |
+| `allowedDomains` | `null \| readonly string[]` | Yes |  |
+| `filesystem` | `"read-write" \| "read-only"` | Yes |  |
+| `persistPaths` | `null \| readonly string[]` | Yes |  |
+| `timeoutSeconds` | `null \| number` | Yes |  |
+| `idleTimeoutSeconds` | `null \| number` | Yes |  |
+| `driverConfig` | `null \| Readonly<Record<string, unknown>>` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+| `updatedAt` | `string` | Yes |  |
+
+## RuntimeProfileResourceSchema
+
+One runtime profile as `GET /api/runtime-profiles/:id`, the `201` of `POST /api/runtime-profiles`,
+the `200` of `PATCH /api/runtime-profiles/:id` and every list item render it — a **bare** item,
+never wrapped. A sizing field is `null` when the profile leaves it to the driver's default.
+`driverConfig` is the per-driver escape hatch, validated as an object. On create and update the
+control plane also refuses a key that names a credential (credentials belong on a runtime
+connection, ADR-0088); the rule applies on write only, so a row stored before it still reads.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `workspaceId` | `string` | Yes |  |
+| `name` | `string` | Yes |  |
+| `driver` | `"local" \| "sandbox-runtime" \| "docker" \| "kubernetes" \| "gke-agent-sandbox" \| "aca-sessions" \| "aws-agentcore" \| "aws-ecs" \| "cloud-run-sandbox" \| "cloud-run-service" \| "external" \| "vercel-sandbox" \| "cloudflare-sandbox"` | Yes |  |
+| `runtimeConnectionId` | `null \| string` | Yes | The stored runtime connection (cluster, pool, image registry…) the driver uses, if any. |
+| `cpu` | `null \| number` | Yes |  |
+| `memoryMb` | `null \| number` | Yes |  |
+| `diskMb` | `null \| number` | Yes |  |
+| `networkPolicy` | `"none" \| "restricted" \| "open"` | Yes |  |
+| `allowedDomains` | `null \| readonly string[]` | Yes |  |
+| `filesystem` | `"read-write" \| "read-only"` | Yes |  |
+| `persistPaths` | `null \| readonly string[]` | Yes |  |
+| `timeoutSeconds` | `null \| number` | Yes |  |
+| `idleTimeoutSeconds` | `null \| number` | Yes |  |
+| `driverConfig` | `null \| Readonly<Record<string, unknown>>` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+| `updatedAt` | `string` | Yes |  |
+
+## UpdateRuntimeProfilePatch
+
+The body of `PATCH /api/runtime-profiles/:id`; an omitted field remains unchanged. The route
+does not accept `null`, so a sizing field that was once set cannot be cleared by a patch.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `undefined \| string` | No |  |
+| `driver` | `undefined \| "local" \| "sandbox-runtime" \| "docker" \| "kubernetes" \| "gke-agent-sandbox" \| "aca-sessions" \| "aws-agentcore" \| "aws-ecs" \| "cloud-run-sandbox" \| "cloud-run-service" \| "external" \| "vercel-sandbox" \| "cloudflare-sandbox"` | No |  |
+| `runtimeConnectionId` | `undefined \| string` | No |  |
+| `cpu` | `undefined \| number` | No |  |
+| `memoryMb` | `undefined \| number` | No |  |
+| `diskMb` | `undefined \| number` | No |  |
+| `networkPolicy` | `undefined \| "none" \| "restricted" \| "open"` | No |  |
+| `allowedDomains` | `undefined \| null \| readonly string[]` | No | `null`, as a profile reads back, means none. |
+| `filesystem` | `undefined \| "read-write" \| "read-only"` | No |  |
+| `persistPaths` | `undefined \| readonly string[]` | No |  |
+| `timeoutSeconds` | `undefined \| number` | No |  |
+| `idleTimeoutSeconds` | `undefined \| number` | No |  |
+| `driverConfig` | `undefined \| Readonly<Record<string, unknown>>` | No |  |

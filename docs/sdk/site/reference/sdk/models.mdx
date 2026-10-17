@@ -1,0 +1,144 @@
+---
+title: "ModelsClient"
+description: "Every method of ModelsClient, its parameters, return type, and route."
+---
+
+<Note>This page is generated from `packages/sdk/src/resources/models.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+`aw.models` — model connections and the models they offer (spec §5.3).
+
+## discover
+
+Every model every ready connection offers (`GET /api/models`), one row per
+`(connectionId, providerModelId)`, plus `unavailable` when a discovery call failed.
+
+```ts
+discover(options?: RequestOptions): Promise<DiscoveredModelsResponse>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<DiscoveredModelsResponse>`
+
+**Route:** `GET /api/models`
+
+## connections.list
+
+```ts
+async list(options?: RequestOptions): Promise<readonly ModelConnectionResource[]>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<readonly ModelConnectionResource[]>`
+
+**Route:** `GET /api/model-connections`
+
+## connections.get
+
+```ts
+async get(connectionId: string, options?: RequestOptions): Promise<ModelConnectionResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `connectionId` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<ModelConnectionResource>`
+
+**Route:** `GET /api/model-connections/:connectionId`
+
+## connections.create
+
+Store a connection and its credential in one step; the answer never echoes the key.
+
+```ts
+create(input: CreateModelConnectionInput, options?: RequestOptions): Promise<ModelConnectionResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `input` | `CreateModelConnectionInput` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<ModelConnectionResource>`
+
+**Route:** `POST /api/model-connections`
+
+## connections.update
+
+Rename or reconfigure; the provider is immutable and the credential has its own route.
+
+```ts
+async update(connectionId: string, patch: UpdateModelConnectionPatch, options?: RequestOptions): Promise<ModelConnectionResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `connectionId` | `string` | Yes |
+| `patch` | `UpdateModelConnectionPatch` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<ModelConnectionResource>`
+
+**Route:** `PATCH /api/model-connections/:connectionId`
+
+## connections.remove
+
+Delete the connection. The server does not refuse while agents reference it: their
+reference is cleared and they are named in `referencedBy`, so a caller can warn or reassign.
+
+```ts
+async remove(connectionId: string, options?: RequestOptions): Promise<DeleteModelConnectionResponse>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `connectionId` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<DeleteModelConnectionResponse>`
+
+**Route:** `DELETE /api/model-connections/:connectionId`
+
+## connections.rotateCredential
+
+Replace the stored credential (`204`, no body): the one write path to it after creation.
+
+```ts
+async rotateCredential(connectionId: string, apiKey: string, options?: RequestOptions): Promise<void>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `connectionId` | `string` | Yes |
+| `apiKey` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<void>`
+
+**Route:** `POST /api/model-connections/:connectionId/credential`
+
+## connections.test
+
+Probe the provider with the stored credential. A failed probe is a `502` that carries the
+same outcome shape (`ok: false`), so it resolves rather than throws; only a missing
+connection or a refused request is an `ApiProblemError`.
+
+```ts
+async test(connectionId: string, options?: RequestOptions): Promise<ModelConnectionTestOutcome>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `connectionId` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<ModelConnectionTestOutcome>`
+
+**Route:** `POST /api/model-connections/:connectionId/test`

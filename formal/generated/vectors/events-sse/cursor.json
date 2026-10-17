@@ -1,0 +1,75 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.EventsSse.resume_header_wins",
+    "AgentWorkspace.Theorems.WellFormed.EventsSse.resume_cursor_range_boundary"],
+   "input": {"query": null, "header": null},
+   "id": "null/null",
+   "expected": {"kind": "absent"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.EventsSse.resume_header_wins",
+    "AgentWorkspace.Theorems.WellFormed.EventsSse.resume_cursor_range_boundary"],
+   "input": {"query": null, "header": "0"},
+   "id": "\"0\"/null",
+   "expected": {"source": "header", "kind": "after", "id": "0"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.EventsSse.resume_header_wins",
+    "AgentWorkspace.Theorems.WellFormed.EventsSse.resume_cursor_range_boundary"],
+   "input": {"query": "7", "header": null},
+   "id": "null/\"7\"",
+   "expected": {"source": "query", "kind": "after", "id": "7"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.EventsSse.resume_header_wins",
+    "AgentWorkspace.Theorems.WellFormed.EventsSse.resume_cursor_range_boundary"],
+   "input": {"query": "9", "header": " 0007 "},
+   "id": "\" 0007 \"/\"9\"",
+   "expected": {"source": "header", "kind": "after", "id": "7"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.EventsSse.resume_header_wins",
+    "AgentWorkspace.Theorems.WellFormed.EventsSse.resume_cursor_range_boundary"],
+   "input": {"query": "9", "header": ""},
+   "id": "\"\"/\"9\"",
+   "expected": {"source": "header", "kind": "invalid"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.EventsSse.resume_header_wins",
+    "AgentWorkspace.Theorems.WellFormed.EventsSse.resume_cursor_range_boundary"],
+   "input": {"query": "9", "header": "garbage"},
+   "id": "\"garbage\"/\"9\"",
+   "expected": {"source": "header", "kind": "invalid"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.EventsSse.resume_header_wins",
+    "AgentWorkspace.Theorems.WellFormed.EventsSse.resume_cursor_range_boundary"],
+   "input": {"query": null, "header": "9223372036854775807"},
+   "id": "\"9223372036854775807\"/null",
+   "expected": {"source": "header", "kind": "after", "id": "9223372036854775807"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.EventsSse.resume_header_wins",
+    "AgentWorkspace.Theorems.WellFormed.EventsSse.resume_cursor_range_boundary"],
+   "input": {"query": null, "header": "9223372036854775808"},
+   "id": "\"9223372036854775808\"/null",
+   "expected": {"source": "header", "kind": "invalid"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.EventsSse.resume_header_wins",
+    "AgentWorkspace.Theorems.WellFormed.EventsSse.resume_cursor_range_boundary"],
+   "input": {"query": "-1", "header": null},
+   "id": "null/\"-1\"",
+   "expected": {"source": "query", "kind": "invalid"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.EventsSse.resume_header_wins",
+    "AgentWorkspace.Theorems.WellFormed.EventsSse.resume_cursor_range_boundary"],
+   "input": {"query": "12345678901234567890", "header": null},
+   "id": "null/\"12345678901234567890\"",
+   "expected": {"source": "query", "kind": "invalid"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.EventsSse.resume_header_wins",
+    "AgentWorkspace.Theorems.WellFormed.EventsSse.resume_cursor_range_boundary"],
+   "input": {"query": "１２", "header": null},
+   "id": "null/\"１２\"",
+   "expected": {"source": "query", "kind": "invalid"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.EventsSse.resume_header_wins",
+    "AgentWorkspace.Theorems.WellFormed.EventsSse.resume_cursor_range_boundary"],
+   "input": {"query": null, "header": "7\n"},
+   "id": "\"7\\n\"/null",
+   "expected": {"source": "header", "kind": "after", "id": "7"}}],
+ "family": "events-sse",
+ "description": "Resume cursor precedence and bounds"}

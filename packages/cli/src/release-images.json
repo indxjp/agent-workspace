@@ -1,0 +1,10 @@
+{
+  "registry": "ghcr.io/indxdev",
+  "version": "0.6.9",
+  "images": {
+    "web": "web",
+    "gateway": "gateway",
+    "runner": "runner",
+    "runtime": "runtime-claude-agent-sdk"
+  }
+}

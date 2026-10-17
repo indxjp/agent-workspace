@@ -1,0 +1,278 @@
+---
+title: "Workspaces"
+description: "The tenant boundary itself: list, read, create and rename/archive/restore workspaces, and read or set the sharing policy."
+---
+
+<Info>
+**Chapter 6 · Run it for your team — step 2 of 4** · [the chapter map](/path/operate)
+
+- **You will:** create, rename, archive and switch workspaces, and set whether public sharing is allowed.
+- **You will learn:** that a workspace is the tenant boundary, that only a signed-in person administers workspaces, and how the sharing policy gates public shares.
+- **You need:** to be signed in as a person (`aw login` or a browser session); [Team](/resources/team) for roles.
+
+</Info>
+
+**What you can do**
+
+- [List your workspaces](#list) and [read one](#get), with your role in each
+- [Create a workspace](#create), for example one for staging beside production
+- [Rename, archive or restore one](#update) (Owner only)
+- [Switch the workspace you act in](#select)
+- [Read](#sharingpolicy-get) or [set](#sharingpolicy-set) the sharing policy, with a key or a session
+
+`aw.workspaces` is the client family for `/api/workspaces/**` and `/api/sharing-policies`
+(`packages/sdk/src/resources/workspaces.ts`, contract `@indx-workspace/contracts/workspaces`). A
+**workspace** is the tenant boundary every other resource on this SDK is scoped inside.
+
+import ApiKeyOnlyRoutes from '/snippets/api-key-only-routes.mdx';
+
+<ApiKeyOnlyRoutes />
+
+`list`, `get`, `create` and `update` need `auth: { kind: 'session' }` — see
+[Authentication](/getting-started/authentication) for the two credential kinds.
+`sharingPolicy.get`/`.set` are the exception: they serve either credential, because they act on the
+caller's _current_ workspace rather than administering workspace membership.
+
+```ts title="workspaces.ts" claim="compile"
+import { createClient } from '@indx-workspace/sdk';
+
+// Session auth — this only works from a browser page on the control plane's own origin.
+const aw = createClient({
+  baseUrl: window.location.origin,
+  auth: { kind: 'session' },
+});
+
+// Every workspace the caller currently belongs to, with the role held in each.
+const memberships = await aw.workspaces.list();
+const mine = memberships[0];
+if (mine === undefined) throw new Error('caller belongs to no workspace');
+
+// Read one back.
+const workspace = await aw.workspaces.get(mine.id);
+console.log(workspace.name, workspace.role);
+
+// Create a new workspace; the caller becomes its sole Owner.
+const created = await aw.workspaces.create({ name: 'New team', slug: 'new-team' });
+
+// Rename, archive, or restore.
+const renamed = await aw.workspaces.update(created.id, { name: 'New team (renamed)' });
+await aw.workspaces.update(created.id, { archived: true });
+await aw.workspaces.update(created.id, { archived: false });
+
+// The sharing policy works with an API key too.
+const baseUrl = process.env.AGENT_WORKSPACE_URL;
+const apiKey = process.env.AGENT_WORKSPACE_API_KEY;
+if (baseUrl === undefined || apiKey === undefined) {
+  throw new Error('Set AGENT_WORKSPACE_URL and AGENT_WORKSPACE_API_KEY');
+}
+const withApiKey = createClient({
+  baseUrl,
+  auth: { kind: 'api-key', apiKey },
+});
+const policy = await withApiKey.workspaces.sharingPolicy.get();
+console.log('public sharing enabled:', policy.publicSharing);
+```
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw workspaces sharing-policy get
+aw workspaces sharing-policy set true
+```
+
+</CodeGroup>
+
+`aw workspaces list|get|create|update|select` works only after `aw login` — every one of those
+routes refuses an API key (see below), so with a key alone each would exit 1.
+
+<Note>
+  An API-key caller reads its own workspace, role and principal id from [`aw.me()`](/reference/sdk/client#me). A session caller switches its current workspace with [`select`](#select) below, or with `createClient({ auth: { kind: 'session' }, workspace })`.
+</Note>
+
+## list
+
+`GET /api/workspaces`
+
+Every workspace the caller currently belongs to, joined to the role held in each
+(`WorkspaceMembershipView`). Unwraps to the bare array.
+
+```ts title="illustrative" claim="illustrative"
+const memberships = await aw.workspaces.list();
+for (const m of memberships) console.log(m.slug, m.role);
+```
+
+| Code                                | Status | Meaning                                                                    |
+| ----------------------------------- | ------ | -------------------------------------------------------------------------- |
+| `api_key_not_permitted`             | 403    | The caller authenticated with an API key. Use `auth: { kind: 'session' }`. |
+| `workspaces_runtime_not_configured` | 503    | This deployment has no workspaces API configured.                          |
+| `authorisation_undecidable`         | 500    | The caller's own membership could not be resolved for this request.        |
+
+Reference: [`workspaces.list`](/reference/sdk/workspaces#list), [`WorkspaceMembershipViewSchema`](/reference/contracts/workspaces#workspacemembershipviewschema).
+
+## get
+
+`GET /api/workspaces/:id`
+
+One workspace, with the caller's role in it. Readable by any current member — archived or not.
+
+```ts title="illustrative" claim="illustrative"
+const workspace = await aw.workspaces.get(workspaceId);
+```
+
+| Code                                | Status | Meaning                                                                                                                                                                                                                 |
+| ----------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `api_key_not_permitted`             | 403    | The caller authenticated with an API key.                                                                                                                                                                               |
+| `workspaces_runtime_not_configured` | 503    | This deployment has no workspaces API configured.                                                                                                                                                                       |
+| `workspace_not_found`               | 404    | No workspace with that id, or it is not one of the caller's current memberships — the same answer for both, so a caller cannot distinguish "does not exist" from "you're not a member" (issue #117's concealment rule). |
+
+<CodeGroup>
+```sh title="aw (illustrative)" claim="illustrative"
+aw workspaces get <id>   # after aw login
+```
+</CodeGroup>
+
+Reference: [`workspaces.get`](/reference/sdk/workspaces#get), [`WorkspaceMembershipViewSchema`](/reference/contracts/workspaces#workspacemembershipviewschema).
+
+## create
+
+`POST /api/workspaces`
+
+Create a workspace; the caller becomes its sole Owner in the same transaction.
+
+```ts title="illustrative" claim="illustrative"
+import type { CreateWorkspaceInput } from '@indx-workspace/contracts/workspaces';
+
+const input: CreateWorkspaceInput = { name: 'New team', slug: 'new-team' };
+const workspace = await aw.workspaces.create(input);
+```
+
+`slug` is lower-case letters, digits and hyphens, starting and ending with a letter or digit, at
+most `WORKSPACE_SLUG_MAX_LENGTH` (64) characters; `name` at most `WORKSPACE_NAME_MAX_LENGTH` (200).
+
+| Code                                | Status | Meaning                                                      |
+| ----------------------------------- | ------ | ------------------------------------------------------------ |
+| `api_key_not_permitted`             | 403    | The caller authenticated with an API key.                    |
+| `workspaces_runtime_not_configured` | 503    | This deployment has no workspaces API configured.            |
+| `slug_taken`                        | 409    | Another workspace already uses that slug.                    |
+| `invalid_field`                     | 400    | `name` is blank, or `slug` does not match the allowed shape. |
+
+Reference: [`workspaces.create`](/reference/sdk/workspaces#create), [`CreateWorkspaceInput`](/reference/contracts/workspaces#createworkspaceinput).
+
+## update
+
+`PATCH /api/workspaces/:id`
+
+Rename and/or archive/restore. Owner only — any other role gets a genuine `403`, while a caller
+with no membership at all (or a random id) gets the same `404 workspace_not_found` `get` gives them.
+
+```ts title="illustrative" claim="illustrative"
+import type { UpdateWorkspacePatch } from '@indx-workspace/contracts/workspaces';
+
+const patch: UpdateWorkspacePatch = { name: 'Renamed', archived: false };
+const updated = await aw.workspaces.update(workspaceId, patch);
+```
+
+There is no `DELETE` — archive is the whole lifecycle this API builds; a permanent purge is out of
+scope by design.
+
+| Code                                | Status | Meaning                                                                                              |
+| ----------------------------------- | ------ | ---------------------------------------------------------------------------------------------------- |
+| `api_key_not_permitted`             | 403    | The caller authenticated with an API key.                                                            |
+| `workspaces_runtime_not_configured` | 503    | This deployment has no workspaces API configured.                                                    |
+| `invalid_field`                     | 400    | An unknown field was sent (only `name` and `archived` are accepted), or `archived` is not a boolean. |
+| `empty_patch`                       | 400    | Neither `name` nor `archived` was provided.                                                          |
+| `workspace_not_found`               | 404    | No workspace with that id, or the caller is not its Owner.                                           |
+
+Reference: [`workspaces.update`](/reference/sdk/workspaces#update), [`WorkspaceResourceSchema`](/reference/contracts/workspaces#workspaceresourceschema).
+
+## select
+
+`POST /api/auth/workspace` (issue #236, SDK-04, S-2)
+
+Switch the session's current workspace to one of the caller's other current memberships. The
+same route a browser form posts to, reached instead with `Content-Type: application/json`, which
+answers `200 { workspace }` and a new session cookie instead of the form path's `303` redirect —
+the form path is unchanged, and stays available until the next major release.
+
+```ts title="illustrative" claim="illustrative"
+const workspace = await aw.workspaces.select('acme'); // an id or a slug
+```
+
+`createClient({ auth: { kind: 'session' }, workspace })` calls this once, memoised, before the
+client's first request, so the two are equivalent for a client built with that option.
+
+| Code                      | Status | Meaning                                                                                                                                                                |
+| ------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cross_origin`            | 403    | The request's `Origin` does not match this deployment's own.                                                                                                           |
+| `server_not_configured`   | 503    | The session secret or the RBAC/workspaces runtime is not configured.                                                                                                   |
+| `malformed_request`       | 400    | The body is not `{ workspace: string }`.                                                                                                                               |
+| `session_expired`         | 401    | Neither a valid session nor a valid post-callback selection cookie was presented.                                                                                      |
+| `workspace_not_available` | 404    | `workspace` does not name one of the caller's _current_ memberships — the same answer whether the workspace does not exist or the caller simply does not belong to it. |
+
+Every failure is the standard `{ error: { code, message } }` envelope (with `detail`, a deprecated
+duplicate of `message`, until the next major release); the form-encoded path keeps
+its own bare `{ error: '<code>' }` codes and its `303` redirects, byte for byte.
+
+In the CLI, `aw workspaces select <id|slug>` (after `aw login`) moves the stored sign-in to that workspace; an API key cannot reach this route.
+
+Reference: [`workspaces.select`](/reference/sdk/workspaces#select), [`WorkspaceSwitchResponseSchema`](/reference/contracts/workspaces#workspaceswitchresponseschema).
+
+## sharingPolicy.get
+
+`GET /api/sharing-policies`
+
+Whether a member may publish a _public_ share (`/p/<token>`) in the caller's current workspace.
+Every role may read it, with either credential.
+
+```ts title="illustrative" claim="illustrative"
+const policy = await aw.workspaces.sharingPolicy.get();
+console.log(policy.publicSharing);
+```
+
+| Code        | Status | Meaning                                                                                         |
+| ----------- | ------ | ----------------------------------------------------------------------------------------------- |
+| `forbidden` | 403    | The authorisation identity resolved a different workspace than the one the caller is scoped to. |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw workspaces sharing-policy get
+```
+
+</CodeGroup>
+
+Reference: [`workspaces.sharingPolicy.get`](/reference/sdk/workspaces#sharingpolicy-get), [`SharingPolicySchema`](/reference/contracts/workspaces#sharingpolicyschema).
+
+## sharingPolicy.set
+
+`PATCH /api/sharing-policies`
+
+Turn public sharing on or off. Owner only — any other role gets `403 forbidden`.
+
+```ts title="illustrative" claim="illustrative"
+import type { UpdateSharingPolicyInput } from '@indx-workspace/contracts/workspaces';
+
+const input: UpdateSharingPolicyInput = { publicSharing: true };
+const policy = await aw.workspaces.sharingPolicy.set(input);
+```
+
+| Code             | Status | Meaning                                                                      |
+| ---------------- | ------ | ---------------------------------------------------------------------------- |
+| `forbidden`      | 403    | The caller is not this workspace's Owner, or resolved a different workspace. |
+| `invalid_policy` | 400    | `publicSharing` is missing or not a boolean.                                 |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw workspaces sharing-policy set true
+aw workspaces sharing-policy set false
+```
+
+</CodeGroup>
+
+Reference: [`workspaces.sharingPolicy.set`](/reference/sdk/workspaces#sharingpolicy-set), [`UpdateSharingPolicyInput`](/reference/contracts/workspaces#updatesharingpolicyinput).
+
+## Open questions
+
+- None. Which workspace and role a session or key resolved to is answered by
+  [`aw.me()`](/reference/sdk/client#me) (API specification §5.2).

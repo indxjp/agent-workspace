@@ -1,0 +1,959 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Workspace — Self-hosted control plane for the Claude Agent SDK</title>
+<meta name="description" content="Configure, deploy, sandbox and observe Claude Agent SDK agents from a browser, the aw CLI or a TypeScript SDK. Self-hosted, Apache-2.0, runs on any cloud or none.">
+<link rel="canonical" href="https://lp.agentworkspace.indx.jp/">
+<!-- chrome:head -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23171614'/%3E%3Cpath d='M9 24 13.9 8h4.2L23 24h-3.3l-1.1-3.6h-5.2L12.3 24zm5.3-6.4h3.4L16 11.9z' fill='%23fff' fill-rule='evenodd'/%3E%3C/svg%3E">
+<meta property="og:site_name" content="Agent Workspace">
+<meta property="og:image" content="https://lp.agentworkspace.indx.jp/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Agent Workspace — deploy Claude agents your company can actually run.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://lp.agentworkspace.indx.jp/og.png">
+<meta name="theme-color" content="#08080a">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="assets/site.css">
+<script>
+/* Applied before first paint: without it the page paints visible and the reveal rules
+   would hide it again. A deep link (#section) opts out of the reveal altogether. */
+document.documentElement.className += location.hash ? " js no-reveal" : " js";
+</script>
+<script src="assets/site.js" defer></script>
+<!-- /chrome:head -->
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://lp.agentworkspace.indx.jp/">
+<meta property="og:title" content="Agent Workspace — Self-hosted control plane for the Claude Agent SDK">
+<meta property="og:description" content="Configure, deploy, sandbox and observe Claude Agent SDK agents from a browser, the aw CLI or a TypeScript SDK. Self-hosted, Apache-2.0, runs on any cloud or none.">
+</head>
+<body>
+<!-- chrome:header -->
+<a class="skip" href="#top">Skip to content</a>
+<header class="hdr" id="site-header">
+  <div class="shell hdr-in">
+    <a class="wordmark" href="index.html" aria-current="page"><span class="mk" aria-hidden="true"><svg viewBox="0 0 32 32" width="16" height="16" aria-hidden="true"><path d="M9 24 13.9 8h4.2L23 24h-3.3l-1.1-3.6h-5.2L12.3 24zm5.3-6.4h3.4L16 11.9z" fill="currentColor" fill-rule="evenodd"/></svg></span><span class="wm-t">Agent Workspace</span></a>
+    <nav class="hdr-nav-wrap" aria-label="Primary"><ul class="hdr-nav">
+      <li class="has-menu">
+        <button class="nav-btn" type="button" aria-expanded="false" aria-controls="menu-product">Product</button>
+        <div class="menu" id="menu-product">
+          <a href="product.html"><b>Platform overview</b><span>Everything an Agent SDK deployment needs, and nothing else.</span></a>
+          <a href="product.html#how"><b>How it works</b><span>Five screens from an empty deployment to a running agent.</span></a>
+          <a href="product.html#runtimes"><b>Runtimes</b><span>Local, sandboxed process, Docker, Kubernetes and what is next.</span></a>
+          <a href="product.html#honesty"><b>Models &amp; compatibility</b><span>Claude, Azure OpenAI, OpenAI, and what does not carry over.</span></a>
+          <a href="security.html"><b>Security &amp; governance</b><span>Isolation, secrets, roles, SSO and the audit log.</span></a>
+          <a href="examples.html"><b>For developers</b><span>Agents as code, the aw CLI, evals and embedding.</span></a>
+          <div class="menu-foot"><span>New here?</span><a href="index.html#start">Start on a laptop</a><a href="https://docs.agentworkspace.indx.jp">Read the docs</a></div>
+        </div>
+      </li>
+      <li><a href="use-cases.html">Use cases</a></li>
+      <li><a href="examples.html">Examples</a></li>
+      <li><a href="security.html">Security</a></li>
+      <li><a href="compare.html">Compare</a></li>
+    </ul></nav>
+    <span class="sp"></span>
+    <div class="hdr-cta">
+      <a class="docs" href="https://docs.agentworkspace.indx.jp">Docs</a>
+      <a class="btn btn-action" href="https://indx.jp/en/contact">Book a demo</a>
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="mnav" aria-label="Open menu"><span></span></button>
+    </div>
+  </div>
+  <nav class="mnav" id="mnav" aria-label="Mobile">
+    <div class="shell">
+      <ul>
+        <li><a href="product.html">Product <span>platform overview</span></a></li>
+        <li><a href="use-cases.html">Use cases <span>by team</span></a></li>
+        <li><a href="examples.html">Examples <span>agents as code</span></a></li>
+        <li><a href="security.html">Security <span>and governance</span></a></li>
+        <li><a href="compare.html">Compare <span>the alternatives</span></a></li>
+        <li><a href="https://docs.agentworkspace.indx.jp">Docs <span>docs.agentworkspace.indx.jp</span></a></li>
+      </ul>
+      <div class="btn-row"><a class="btn btn-action" href="https://indx.jp/en/contact">Book a demo</a><a class="btn btn-quiet" href="index.html#start">Start on a laptop</a></div>
+    </div>
+  </nav>
+</header>
+<!-- /chrome:header -->
+
+<main id="top" tabindex="-1">
+
+<!-- ============================ HERO ============================ -->
+<section class="sec hero" id="hero">
+  <canvas id="field" aria-hidden="true"></canvas>
+  <div class="shell">
+    <div class="hero-grid">
+      <div>
+        <a class="announce reveal" href="https://docs.agentworkspace.indx.jp/tutorials"><b>NEW</b> Ten enterprise agents, built end to end, with their code →</a>
+        <h1 class="reveal" data-d="1">Your agent, your stack, <span class="dim">on your own servers.</span></h1>
+        <p class="lead reveal" data-d="2">
+          Choose every layer: the engine (Claude Agent SDK, Mastra, OpenAI Agents SDK or pi), the
+          model, the skills, the tools, the frontend and where it runs, from a laptop to your
+          on-prem VM, your Kubernetes or your cloud. Each choice becomes a command and files you
+          commit. Your data, files and keys stay on your servers; with a
+          self-hosted model, so do the model calls.
+        </p>
+        <div class="btn-row reveal" data-d="3" style="margin-top:34px">
+          <a class="btn btn-action btn-lg" href="#stack-cmd">Build mine</a>
+          <a class="btn btn-quiet btn-lg" href="https://docs.agentworkspace.indx.jp/tutorials/your-stack">Tutorial: your stack</a>
+        </div>
+        <p class="small reveal" data-d="4" style="margin-top:18px">One Node process, embedded PostgreSQL. Node 24+, no Docker. Self-hosted, Apache-2.0.</p>
+      </div>
+
+      <div class="reveal" data-d="3">
+        <form class="stack trace" data-stack onsubmit="return false" aria-label="Build your agent stack">
+          <div class="trace-head"><span>build</span><b>your agent</b><span class="sp"></span><span class="live">pick a chip</span></div>
+          <div class="stack-form">
+            <fieldset><legend>Engine</legend><div class="opts">
+              <label class="opt"><input type="radio" name="engine" value="claude-agent-sdk" checked><span>Claude Agent SDK</span></label>
+              <label class="opt"><input type="radio" name="engine" value="mastra"><span>Mastra</span></label>
+              <label class="opt"><input type="radio" name="engine" value="openai-agents"><span>OpenAI Agents</span></label>
+              <label class="opt"><input type="radio" name="engine" value="pi"><span>pi</span></label>
+            </div></fieldset>
+            <fieldset><legend>Model</legend><div class="opts">
+              <label class="opt"><input type="radio" name="provider" value="anthropic" checked><span>Anthropic</span></label>
+              <label class="opt"><input type="radio" name="provider" value="openai"><span>OpenAI</span></label>
+              <label class="opt"><input type="radio" name="provider" value="azure-openai"><span>Azure OpenAI</span></label>
+              <label class="opt"><input type="radio" name="provider" value="openai-compatible"><span>Self-hosted LLM</span></label>
+            </div></fieldset>
+            <fieldset><legend>Skills</legend><div class="opts">
+              <label class="opt"><input type="radio" name="theme" value="support" checked><span>Support</span></label>
+              <label class="opt"><input type="radio" name="theme" value="knowledge"><span>Knowledge</span></label>
+              <label class="opt"><input type="radio" name="theme" value="automation"><span>Automation</span></label>
+              <label class="opt"><input type="radio" name="theme" value="review"><span>Review</span></label>
+              <label class="opt"><input type="radio" name="theme" value="copilot"><span>Copilot</span></label>
+            </div></fieldset>
+            <fieldset><legend>Tools</legend><div class="opts">
+              <label class="opt"><input type="checkbox" name="tools" value="openapi"><span>REST API (OpenAPI)</span></label>
+              <label class="opt"><input type="checkbox" name="tools" value="postgres"><span>PostgreSQL</span></label>
+            </div></fieldset>
+            <fieldset><legend>Frontend</legend><div class="opts">
+              <label class="opt"><input type="radio" name="frontend" value="page" checked><span>Chat page</span></label>
+              <label class="opt"><input type="radio" name="frontend" value="widget"><span>Site widget</span></label>
+              <label class="opt"><input type="radio" name="frontend" value="react"><span>React &lt;Chat/&gt;</span></label>
+              <label class="opt"><input type="radio" name="frontend" value="api"><span>API only</span></label>
+            </div></fieldset>
+            <fieldset><legend>Runs on</legend><div class="opts">
+              <label class="opt"><input type="radio" name="infra" value="laptop" checked><span>Laptop</span></label>
+              <label class="opt"><input type="radio" name="infra" value="single-vm"><span>On-prem VM</span></label>
+              <label class="opt"><input type="radio" name="infra" value="gcp-cloudrun"><span>Google Cloud Run</span></label>
+              <label class="opt"><input type="radio" name="infra" value="kubernetes"><span>Kubernetes</span></label>
+              <label class="opt"><input type="radio" name="infra" value="agentcore"><span>AWS AgentCore <em class="rm">roadmap</em></span></label>
+            </div></fieldset>
+          </div>
+          <div class="stack-out">
+            <div class="stack-tabs" role="tablist" aria-label="Generated output">
+              <button type="button" role="tab" aria-selected="true" data-stack-tab="cmd">commands</button>
+              <button type="button" role="tab" aria-selected="false" data-stack-tab="yaml">agent-workspace.yaml</button>
+              <button type="button" role="tab" aria-selected="false" data-stack-tab="agent" data-stack-agent-file>agents/assistant.ts</button>
+              <span class="sp"></span>
+              <button class="copy" type="button" data-copy="#stack-cmd">Copy</button>
+            </div>
+            <pre data-claim="run" class="stack-pre" id="stack-cmd" aria-live="polite"><span class="cm"># 1 · create the project</span>
+<span class="p">$ </span>npm create @indx-workspace@latest my-agent -- --yes
+<span class="cm"># 2 · run it: chat, admin and API on http://127.0.0.1:3000</span>
+<span class="p">$ </span>export ANTHROPIC_API_KEY=sk-ant-...
+<span class="p">$ </span>cd my-agent &amp;&amp; npm run dev</pre>
+            <pre class="stack-pre" id="stack-yaml" hidden></pre>
+            <pre class="stack-pre" id="stack-agent" hidden></pre>
+            <div class="stack-note" aria-live="polite"></div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ WORKS WITH ============================ -->
+<section class="sec" id="works-with" style="padding:34px 0 40px">
+  <div class="shell">
+    <p class="small center" style="margin-bottom:16px; font-family:var(--mono); letter-spacing:.08em; text-transform:uppercase">Works with what you already run</p>
+    <div class="marquee">
+      <ul>
+        <li>Claude Agent SDK <i>engine</i></li><li>Mastra <i>engine</i></li><li>OpenAI Agents SDK <i>engine</i></li><li>pi <i>engine</i></li><li>Google Cloud Run <i>deploy</i></li><li>Anthropic <i>model</i></li><li>Azure OpenAI <i>model</i></li><li>OpenAI <i>model</i></li><li>OpenAI-compatible <i>model</i></li><li>MCP · HTTP / SSE <i>tools</i></li><li>OpenAPI tools <i>tools</i></li><li>Docker <i>runtime</i></li><li>Kubernetes <i>runtime</i></li><li>gVisor RuntimeClass <i>runtime</i></li><li>bubblewrap <i>runtime</i></li><li>PostgreSQL 17 <i>store</i></li><li>S3 <i>store</i></li><li>GCS <i>store</i></li><li>Azure Blob <i>store</i></li><li>SeaweedFS <i>store</i></li><li>OpenTelemetry <i>ops</i></li><li>OIDC SSO <i>identity</i></li><li>Entra ID <i>identity</i></li><li>Okta <i>identity</i></li><li>Google <i>identity</i></li><li>React 19 <i>embed</i></li><li>Node 24 <i>runtime</i></li><li>EKS · GKE · AKS · OpenShift <i>deploy</i></li><li aria-hidden="true">Claude Agent SDK <i>engine</i></li><li aria-hidden="true">Mastra <i>engine</i></li><li aria-hidden="true">OpenAI Agents SDK <i>engine</i></li><li aria-hidden="true">pi <i>engine</i></li><li aria-hidden="true">Google Cloud Run <i>deploy</i></li><li aria-hidden="true">Anthropic <i>model</i></li><li aria-hidden="true">Azure OpenAI <i>model</i></li><li aria-hidden="true">OpenAI <i>model</i></li><li aria-hidden="true">OpenAI-compatible <i>model</i></li><li aria-hidden="true">MCP · HTTP / SSE <i>tools</i></li><li aria-hidden="true">OpenAPI tools <i>tools</i></li><li aria-hidden="true">Docker <i>runtime</i></li><li aria-hidden="true">Kubernetes <i>runtime</i></li><li aria-hidden="true">gVisor RuntimeClass <i>runtime</i></li><li aria-hidden="true">bubblewrap <i>runtime</i></li><li aria-hidden="true">PostgreSQL 17 <i>store</i></li><li aria-hidden="true">S3 <i>store</i></li><li aria-hidden="true">GCS <i>store</i></li><li aria-hidden="true">Azure Blob <i>store</i></li><li aria-hidden="true">SeaweedFS <i>store</i></li><li aria-hidden="true">OpenTelemetry <i>ops</i></li><li aria-hidden="true">OIDC SSO <i>identity</i></li><li aria-hidden="true">Entra ID <i>identity</i></li><li aria-hidden="true">Okta <i>identity</i></li><li aria-hidden="true">Google <i>identity</i></li><li aria-hidden="true">React 19 <i>embed</i></li><li aria-hidden="true">Node 24 <i>runtime</i></li><li aria-hidden="true">EKS · GKE · AKS · OpenShift <i>deploy</i></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ STATEMENT + PROBLEM ============================ -->
+<section class="sec" id="problem">
+  <div class="shell">
+    <div class="statement sec-head">
+      <h2 class="reveal">The SDK is the easy part. <span class="dim">Who can change the agent, where it executes, whose keys it holds and what happens when the model changes are what stall the rollout.</span></h2>
+    </div>
+    <div class="pain">
+      <article class="card reveal">
+        <div class="pain-art" aria-hidden="true"><div class="u">.claude/ &nbsp; .env &nbsp; mcp.json<br>settingSources &nbsp; Dockerfile<br><span class="bad">↳ on someone's laptop</span></div></div>
+        <span class="pain-n">01</span>
+        <h3 class="h3">The configuration lives on someone's laptop</h3>
+        <p>An administrator cannot see what is running, change it, or prove what it was allowed to do.</p>
+      </article>
+      <article class="card reveal" data-d="1">
+        <div class="pain-art" aria-hidden="true"><div class="u">browser → API route<br><span class="bad">→ exec(agentCommand)</span><br>✕ never do this</div></div>
+        <span class="pain-n">02</span>
+        <h3 class="h3">Agents write files and run shell commands</h3>
+        <p>Where that executes is an operator's decision. Most implementations compile it into the code.</p>
+      </article>
+      <article class="card reveal" data-d="2">
+        <div class="pain-art" aria-hidden="true"><div class="u">Claude &nbsp;→&nbsp; <span class="bad">?</span> &nbsp;→&nbsp; Azure OpenAI<br>rewrite the agent?</div></div>
+        <span class="pain-n">03</span>
+        <h3 class="h3">The model or the cloud will change</h3>
+        <p>Procurement picks Azure. A regulator picks a region. Rewriting agents turns that into a "no".</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ STAGE ============================ -->
+<section class="sec sec--surface" id="platform">
+  <div class="shell">
+    <div class="statement sec-head">
+      <h2 class="reveal">Agents. Skills. Connectors. Runtimes. <span class="dim">Everything around the SDK, as files you commit and screens an admin can use.</span></h2>
+    </div>
+
+    <div class="stage reveal" data-stage data-tabs>
+      <ul class="stage-tabs" role="tablist" aria-label="Platform">
+        <li role="presentation"><button role="tab" id="sg1" aria-controls="sp1" aria-selected="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="6" r="3"/><path d="M2.5 14c.8-2.6 3-4 5.5-4s4.7 1.4 5.5 4"/></svg>Agents</button></li>
+        <li role="presentation"><button role="tab" id="sg2" aria-controls="sp2" aria-selected="false" tabindex="-1"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M3 2h7l3 3v9H3z"/><path d="M10 2v3h3M5.5 8.5h5M5.5 11h5"/></svg>Skills</button></li>
+        <li role="presentation"><button role="tab" id="sg3" aria-controls="sp3" aria-selected="false" tabindex="-1"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M6 3v3M10 3v3M4.5 6h7v2.5a3.5 3.5 0 0 1-7 0zM8 12v2"/></svg>Connectors</button></li>
+        <li role="presentation"><button role="tab" id="sg4" aria-controls="sp4" aria-selected="false" tabindex="-1"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="2" y="2.5" width="12" height="4" rx="1"/><rect x="2" y="9.5" width="12" height="4" rx="1"/><path d="M4.5 4.5h.01M4.5 11.5h.01"/></svg>Runtimes</button></li>
+        <li role="presentation"><button role="tab" id="sg5" aria-controls="sp5" aria-selected="false" tabindex="-1"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M2 13h12M4 10l3-3 2 2 4-5"/></svg>Runs</button></li>
+        <li role="presentation"><button role="tab" id="sg6" aria-controls="sp6" aria-selected="false" tabindex="-1"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M6 7 4.5 8.5 6 10M10 7l1.5 1.5L10 10"/></svg>Embed</button></li>
+      </ul>
+
+      <div class="stage-panel on" id="sp1" role="tabpanel" aria-labelledby="sg1">
+        <div class="overlap">
+          <div class="mock" role="img" aria-label="Design mockup: the manual-search agent's configuration with its model, files, skill and connector">
+            <div class="mock-bar"><i></i><i></i><i></i><span>Agents → manual-search</span></div>
+            <div class="mock-page">
+              <div class="mock-h"><h4>manual-search</h4><span class="sp"></span><span class="badge badge-ok">production · v3</span><span class="mock-btn pri">Run</span></div>
+              <div class="mock-tabs"><span class="on">Configuration</span><span>Versions</span></div>
+              <dl class="mock-dl">
+                <dt>Model</dt><dd>default · claude-sonnet-4-5</dd>
+                <dt>Engine</dt><dd>claude-agent-sdk</dd>
+                <dt>Permissions</dt><dd>read files</dd>
+                <dt>Files</dt><dd>manuals · read-only</dd>
+                <dt>Skills</dt><dd>cite-answer</dd>
+                <dt>Connectors</dt><dd>manual-index (http)</dd>
+                <dt>Limits</dt><dd>12 turns · $0.50</dd>
+              </dl>
+            </div>
+          </div>
+          <div class="codecard"><span class="fn-tab">agents/manual-search.ts</span><pre data-file="tests/gallery/manual-search/agents/manual-search.ts"><span class="kw">import</span> { defineAgent, files, mcp, skill } <span class="kw">from</span> <span class="str">'@indx-workspace/sdk/define'</span>;
+
+<span class="kw">export</span> <span class="kw">default</span> <span class="fn">defineAgent</span>({
+  name: <span class="str">'manual-search'</span>,
+  instructions: { file: <span class="str">'./manual-search.md'</span> },
+  model: <span class="str">'default'</span>,
+  engine: <span class="str">'claude-agent-sdk'</span>,
+  <span class="cm">// Read-only by construction: it can read the manuals and call the index, nothing else.</span>
+  permissions: { readFiles: <span class="kw">true</span> },
+  tools: [<span class="fn">mcp</span>(<span class="str">'manual-index'</span>)],
+  skills: [<span class="fn">skill</span>(<span class="str">'cite-answer'</span>)],
+  files: [<span class="fn">files</span>(<span class="str">'manuals'</span>, <span class="str">'read'</span>)],
+  limits: { maxTurns: 12, maxBudgetUsd: 0.5 },
+});</pre></div>
+        </div>
+        <div class="stage-cap"><b>Agents as code, or in the browser</b><span>One definition. <code>aw push --yes</code> saves a version; admins see and change the same agent in the UI.</span></div>
+      </div>
+
+      <div class="stage-panel" id="sp2" role="tabpanel" aria-labelledby="sg2">
+        <div class="overlap">
+          <div class="mock" role="img" aria-label="Design mockup: the skills list with cite-answer enabled">
+            <div class="mock-bar"><i></i><i></i><i></i><span>Skills</span></div>
+            <div class="mock-page">
+              <div class="mock-h"><h4>Skills</h4><span class="sp"></span><span class="mock-btn">Create skill</span></div>
+              <table class="matrix" style="min-width:0">
+                <thead><tr><th scope="col">Skill</th><th scope="col">Used by</th><th scope="col">State</th></tr></thead>
+                <tbody>
+                  <tr><td class="k">cite-answer</td><td>manual-search</td><td><span class="badge badge-ok">enabled</span></td></tr>
+                  <tr><td class="k">contract-playbook</td><td>contract-review</td><td><span class="badge badge-ok">enabled</span></td></tr>
+                  <tr><td class="k">keigo-reply</td><td>customer-inquiry</td><td><span class="badge badge-ok">enabled</span></td></tr>
+                  <tr><td class="k">eight-d</td><td>quality-defect</td><td><span class="badge badge-ok">enabled</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="codecard"><span class="fn-tab">skills/cite-answer/SKILL.md</span><pre data-file="tests/gallery/manual-search/skills/cite-answer/SKILL.md#excerpt">---
+<span class="fn">name</span>: cite-answer
+<span class="fn">description</span>: 社内マニュアルに基づく回答の書き方。出典の書式と「該当なし」の基準を定める。
+---
+- 回答は結論を1〜2文で先に書き、続けて根拠を箇条書きにする。
+- 各根拠の末尾に出典を〔文書名 p.ページ §節〕で書く。
+  - ページと節は `read_section` が返す `citation` をそのまま使う。言い換えない。
+- 根拠が見つからないときは次の文で答える:
+  「該当する記載が見つかりませんでした。設備保全課（内線 4410）にお問い合わせください。」</pre></div>
+        </div>
+        <div class="stage-cap"><b>Skills stay SKILL.md folders</b><span>Claude's native format, created in the browser or imported and exported as-is from the CLI: <code>aw skills import ./cite-answer</code>.</span></div>
+      </div>
+
+      <div class="stage-panel" id="sp3" role="tabpanel" aria-labelledby="sg3">
+        <div class="overlap">
+          <div class="mock" role="img" aria-label="Design mockup: adding an HTTP MCP connector with bearer authentication">
+            <div class="mock-bar"><i></i><i></i><i></i><span>Connectors → Add connector</span></div>
+            <div class="mock-page">
+              <div class="f-row"><span class="f-lbl">Name</span><div class="f-in">manual-index</div></div>
+              <div class="f-row"><span class="f-lbl">Transport</span>
+                <div class="f-opt on"><span class="rd"></span>HTTP (streamable)</div>
+                <div class="f-opt"><span class="rd"></span>SSE</div>
+                <div class="f-opt dim"><span class="rd"></span>Local command (stdio)<span class="note">stored, cannot run today</span></div>
+              </div>
+              <div class="f-row"><span class="f-lbl">URL</span><div class="f-in">http://127.0.0.1:8787/mcp</div></div>
+              <div class="mock-h" style="margin:0"><span class="mock-btn">Test connection</span><span class="mock-btn pri">Save</span></div>
+            </div>
+          </div>
+          <div class="codecard"><span class="fn-tab">agent-workspace.yaml</span><pre data-claim="illustrative"><span class="fn">connectors</span>:
+<span class="fn">  manual-index</span>:
+<span class="fn">    url</span>: http://127.0.0.1:8787/mcp
+<span class="fn">    transport</span>: http
+<span class="fn">policy</span>:
+<span class="fn">  permissions</span>: { writeFiles: false, runCommands: false, unrestrictedNetwork: false }
+<span class="fn">  limits</span>: { maxBudgetUsd: 1 }
+<span class="fn">  promotion</span>: { minEvalScore: 0.9 }</pre></div>
+        </div>
+        <div class="stage-cap"><b>Connectors and a policy ceiling, per project</b><span>MCP servers you host, over HTTP or SSE. The policy caps what any agent in the project may do.</span></div>
+      </div>
+
+      <div class="stage-panel" id="sp4" role="tabpanel" aria-labelledby="sg4">
+        <div class="overlap">
+          <div class="mock" role="img" aria-label="Design mockup: runtime picker with unavailable runtimes disabled and the reason shown">
+            <div class="mock-bar"><i></i><i></i><i></i><span>manual-search → Runtime</span></div>
+            <div class="mock-page">
+              <div class="f-opt"><span class="rd"></span>This machine<span class="note">development only, no isolation</span></div>
+              <div class="f-opt"><span class="rd"></span>Sandboxed process<span class="note">host OS sandbox</span></div>
+              <div class="f-opt on"><span class="rd"></span>Docker<span class="note">a container per session · fixture-verified</span></div>
+              <div class="f-opt"><span class="rd"></span>Kubernetes<span class="note">a Pod per session · partially verified</span></div>
+              <div class="f-opt dim"><span class="rd"></span>Managed sandbox<span class="note">not configured · Unverified until Test runtime passes</span></div>
+              <div class="mock-h" style="margin:12px 0 0"><span class="mock-btn">Test runtime</span><span class="mock-btn pri">Save</span></div>
+            </div>
+          </div>
+          <div class="codecard"><span class="fn-tab">compiled for every run</span><pre data-claim="illustrative"><span class="kw">const</span> options = {
+  cwd: <span class="str">"/workspace"</span>,          <span class="cm">// hydrated per session</span>
+  disallowedTools: [<span class="str">"Bash"</span>, <span class="str">"WebFetch"</span>, …],
+  allowedTools: [<span class="str">"mcp__&lt;connector-name&gt;__*"</span>], <span class="cm">// manual-index</span>
+  settingSources: ["project"],        <span class="cm">// the session's own project only, never host user state</span>
+  strictMcpConfig: <span class="kw">true</span>,
+  env,                       <span class="cm">// a run token, never a key</span>
+};</pre></div>
+        </div>
+        <div class="stage-cap"><b>Where it runs is a setting</b><span>Switch runtime without touching the agent. Unconfigured or unreachable runtimes are disabled with the reason, never hidden.</span></div>
+      </div>
+
+      <div class="stage-panel" id="sp5" role="tabpanel" aria-labelledby="sg5">
+        <div class="overlap">
+          <div class="mock" role="img" aria-label="Design mockup: runs list with status, duration and cost per run">
+            <div class="mock-bar"><i></i><i></i><i></i><span>Runs</span></div>
+            <div class="mock-page">
+              <table class="matrix" style="min-width:0">
+                <thead><tr><th scope="col">Agent</th><th scope="col">Status</th><th scope="col" class="c">Time</th><th scope="col" class="c">Cost</th></tr></thead>
+                <tbody>
+                  <tr><td class="k">manual-search</td><td><span class="badge badge-ok">completed</span></td><td class="c">6.8s</td><td class="c">$0.02</td></tr>
+                  <tr><td class="k">contract-review</td><td><span class="badge badge-ok">completed</span></td><td class="c">41s</td><td class="c">$0.31</td></tr>
+                  <tr><td class="k">customer-inquiry</td><td><span class="badge badge-ok">completed</span></td><td class="c">5.2s</td><td class="c">$0.01</td></tr>
+                  <tr><td class="k">quotation</td><td><span class="badge badge-caveat">failed</span></td><td class="c">3.9s</td><td class="c sym-no">−</td></tr>
+                </tbody>
+              </table>
+              <p class="small" style="margin-top:12px">Illustrative values.</p>
+            </div>
+          </div>
+          <div class="codecard"><span class="fn-tab">backend/ask.ts</span><pre data-claim="illustrative"><span class="cm">// runAndRead and parseCitations are the manual-search tutorial's own helpers, not SDK exports</span>
+<span class="kw">export</span> <span class="kw">async</span> <span class="kw">function</span> <span class="fn">askManual</span>(aw, agentId, question, sessionId?) {
+  <span class="kw">const</span> reading = <span class="kw">await</span> <span class="fn">runAndRead</span>(aw, agentId, { prompt: question, sessionId: sessionId ?? <span class="kw">null</span> });
+  <span class="kw">const</span> read = <span class="kw">new</span> <span class="fn">Set</span>(
+    reading.toolCalls
+      .<span class="fn">filter</span>((call) =&gt; <span class="fn">toolIs</span>(call.name, <span class="str">'read_section'</span>) &amp;&amp; !call.isError)
+      .<span class="fn">flatMap</span>((call) =&gt; <span class="fn">parseCitations</span>(call.output ?? <span class="str">''</span>).<span class="fn">map</span>((citation) =&gt; citation.raw)),
+  );
+  <span class="kw">const</span> citations = <span class="fn">parseCitations</span>(reading.answer);
+  <span class="kw">const</span> unverified = citations.<span class="fn">filter</span>((citation) =&gt; !read.<span class="fn">has</span>(citation.raw));
+  <span class="kw">return</span> { answer: reading.answer, citations, unverified,
+           grounded: citations.length &gt; 0 &amp;&amp; unverified.length === 0, … };
+}</pre></div>
+        </div>
+        <div class="stage-cap"><b>Every run is a durable event stream</b><span>Follow it from your backend, resume it after a disconnect, and export each run as an OpenTelemetry <code>agent.run</code> span.</span></div>
+      </div>
+
+      <div class="stage-panel" id="sp6" role="tabpanel" aria-labelledby="sg6">
+        <div class="overlap">
+          <div class="mock" role="img" aria-label="Design mockup: a side-panel chat surface answering with a citation">
+            <div class="mock-bar"><i></i><i></i><i></i><span>portal.acme.example · マニュアル検索</span></div>
+            <div class="stream">
+              <div class="msg"><span class="who">User</span><div class="body">油圧ユニットの定期点検の周期は？</div></div>
+              <div class="msg"><span class="who">Agent</span><div class="body">定期点検は 6か月 ごとです。〔油圧ユニット保守マニュアル p.12 §3.2〕
+                <ul class="steps"><li><span class="tick">✓</span><span class="tool">search_manual</span></li><li><span class="tick">✓</span><span class="tool">read_section</span></li></ul></div></div>
+            </div>
+          </div>
+          <div class="codecard"><span class="fn-tab">surfaces/manual-desk.ts</span><pre data-file="tests/gallery/manual-search/surfaces/manual-desk.ts#excerpt"><span class="kw">export</span> <span class="kw">default</span> <span class="fn">defineSurface</span>({
+  name: <span class="str">'manual-desk'</span>,
+  agent: <span class="str">'manual-search'</span>,
+  title: <span class="str">'マニュアル検索'</span>,
+  layout: <span class="str">'side'</span>,
+  parts: {
+    greeting: <span class="str">'設備マニュアルについて質問してください。出典つきで答えます。'</span>,
+    suggestedPrompts: [<span class="str">'油圧ユニットの定期点検の周期は？'</span>, <span class="str">'作動油の交換基準を教えて'</span>],
+    disclaimer: <span class="str">'回答はマニュアルの記載に基づきます。作業前に原本を確認してください。'</span>,
+    toolTrace: <span class="str">'collapsed'</span>,
+    feedback: <span class="kw">true</span>,
+  },
+});</pre></div>
+        </div>
+        <div class="stage-cap"><b>One tag, or a React component</b><span>A surface is served at <code>/p/s/&lt;name&gt;</code> with a <code>widget.js</code>, limited to the origins you allow. <a href="https://docs.agentworkspace.indx.jp/features/embed-in-your-product">Learn more: embed in your product</a></span></div>
+      </div>
+    </div>
+    <a class="more" style="display:inline-block;margin-top:18px" href="https://docs.agentworkspace.indx.jp/features/agents-skills-tools-as-code">Learn more: agents, skills and tools as code</a>
+  </div>
+</section>
+
+<!-- ============================ SCROLLY: LAPTOP TO PRODUCTION ============================ -->
+<section class="sec" id="lifecycle">
+  <div class="shell">
+    <div class="sec-head measure">
+      <span class="eyebrow reveal">From laptop to production</span>
+      <h2 class="h2 reveal" data-d="1">Five commands. <span class="dim">The same agent all the way through.</span></h2>
+    </div>
+    <div class="scrolly" data-scrolly>
+      <ol class="scrolly-steps">
+        <li><h3><span>Scaffold and run</span></h3><p>A starter project with an agent and a surface, running in one Node process with embedded PostgreSQL. No Docker.</p></li>
+        <li><h3><span>Talk to it</span></h3><p>Interactive <code>aw chat</code> streams the answer with a line per tool call, so you see what the agent did, not just what it said. <code>-p</code> prints only the answer.</p></li>
+        <li><h3><span>Score it</span></h3><p><code>aw eval</code> runs <code>evals/&lt;agent&gt;.yaml</code> and stores the score. A thumbs-down from a real user becomes a new case with <code>aw eval add-case</code>.</p></li>
+        <li><h3><span>Version and promote</span></h3><p><code>aw push --yes</code> saves a version. On <code>aw dev</code>, <code>aw promote</code> moves production to it only if the score clears <code>minEvalScore</code>; <code>aw rollback</code> moves it back.</p></li>
+        <li><h3><span>Deploy</span></h3><p><code>aw deploy production --plan</code> shows what will change; <code>--yes</code> applies it to a single VM or Cloud Run.</p></li>
+      </ol>
+      <div class="scrolly-vis">
+        <div data-step-vis class="on"><pre data-claim="run" class="term"><span class="p">$</span> <span class="c">npm create @indx-workspace@latest my-agent -- --yes</span>
+<span class="p">$</span> <span class="c">cd my-agent &amp;&amp; npm run dev</span>
+
+<span class="ok">→</span> localhost:3000/p/s/main/try
+<span class="cm"># one process · embedded PostgreSQL · Node 24+</span></pre></div>
+        <div data-step-vis><pre data-claim="illustrative" class="term"><span class="cm"># in the manual-search example project; a new project has one agent, assistant</span>
+<span class="p">$</span> <span class="c">npx aw chat manual-search -p "油圧ユニットの定期点検の周期は？"</span>
+
+定期点検は 6か月 ごとです。〔油圧ユニット保守マニュアル p.12 §3.2〕
+<span class="cm"># interactive aw chat also prints a line per tool call</span></pre></div>
+        <div data-step-vis><div class="codecard"><span class="fn-tab">evals/cad-drafting.yaml</span><pre data-file="tests/gallery/cad-drafting/evals/cad-drafting.yaml#excerpt"><span class="fn">cases</span>:
+<span class="fn">  - name</span>: 似た過去図面を差分つきで3件示す
+<span class="fn">    input</span>: ブラケット 140×90、SUS304 t2.0、φ9 の取付穴4か所（…）、新図番 BRK-1101。似た図面を探して。
+<span class="fn">    expect</span>:
+<span class="fn">      contains</span>: [<span class="str">'BRK-1003'</span>, <span class="str">'高さ 80 → 90'</span>]
+<span class="fn">  - name</span>: 寸法が足りなければ推測せず確認する
+<span class="fn">    input</span>: ブラケットを新しく作図して。材質は SS400。
+<span class="fn">    expect</span>:
+<span class="fn">      notContains</span>: [<span class="str">'"drawingNo"'</span>]
+<span class="fn">      judge</span>: &gt;
+        回答が外形の幅・高さや取付穴などの不足している寸法を推測で補わず、設計者に確認していること。</pre></div></div>
+        <div data-step-vis><pre data-claim="illustrative" class="term"><span class="cm"># in the manual-search example project</span>
+<span class="p">$</span> <span class="c">npx aw push --yes</span>
+<span class="p">$</span> <span class="c">npx aw eval manual-search</span>
+<span class="p">$</span> <span class="c">npx aw promote manual-search --yes</span>
+<span class="cm"># under aw dev: refused unless the score clears policy.promotion.minEvalScore</span>
+<span class="p">$</span> <span class="c">npx aw rollback manual-search --yes</span></pre></div>
+        <div data-step-vis><pre data-claim="illustrative" class="term"><span class="p">$</span> <span class="c">npx aw deploy production --plan</span>
+<span class="p">$</span> <span class="c">npx aw deploy production --yes</span>
+<span class="p">$</span> <span class="c">export AGENT_WORKSPACE_URL=https://agents.example.com</span>
+<span class="p">$</span> <span class="c">export AGENT_WORKSPACE_API_KEY=…</span>  <span class="cm"># Administration → API Keys</span>
+<span class="p">$</span> <span class="c">npx aw push --yes &amp;&amp; npx aw promote --yes</span>
+<span class="cm"># targets: single-vm · gcp-cloudrun</span></pre></div>
+      </div>
+    </div>
+    <a class="more" style="display:inline-block;margin-top:18px" href="https://docs.agentworkspace.indx.jp/features/run-observe-evaluate">Learn more: run, observe and evaluate</a>
+  </div>
+</section>
+
+<!-- ============================ CONFIGURATOR ============================ -->
+<section class="sec sec--paper" id="configurator">
+  <div class="shell">
+    <div class="sec-head measure">
+      <span class="eyebrow reveal">Try it here</span>
+      <h2 class="h2 reveal" data-d="1">Click a setting. Watch it compile into SDK options.</h2>
+      <p class="lead reveal" data-d="2">
+        There is no proprietary agent model in between. What you choose in the browser becomes the
+        options object the Claude Agent SDK's <code>query()</code> receives. A runtime refuses a network
+        policy it cannot enforce, and the editor warns when the model lacks prompt caching.
+      </p>
+    </div>
+
+    <form class="cfg reveal" data-configurator onsubmit="return false" aria-label="Agent configurator">
+      <div class="cfg-form">
+        <fieldset>
+          <legend>Model connection</legend>
+          <div class="opts">
+            <label class="opt"><input type="radio" name="model" value="claude" checked><span>Anthropic · Claude</span></label>
+            <label class="opt"><input type="radio" name="model" value="azure"><span>Azure OpenAI</span></label>
+            <label class="opt"><input type="radio" name="model" value="openai"><span>OpenAI</span></label>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Skills</legend>
+          <div class="opts">
+            <label class="opt"><input type="checkbox" name="skill" value="contract-review" checked><span>contract-review</span></label>
+            <label class="opt"><input type="checkbox" name="skill" value="security-review"><span>security-review</span></label>
+            <label class="opt"><input type="checkbox" name="skill" value="financial-analysis"><span>financial-analysis</span></label>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Connectors (MCP)</legend>
+          <div class="opts">
+            <label class="opt"><input type="checkbox" name="connector" value="contracts" checked><span>Contract Search</span></label>
+            <label class="opt"><input type="checkbox" name="connector" value="ticketing"><span>Ticketing</span></label>
+            <label class="opt"><input type="checkbox" name="connector" value="github"><span>GitHub</span></label>
+            <label class="opt"><input type="checkbox" name="connector" value="filesystem"><span>Filesystem (stdio)</span></label>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Permissions</legend>
+          <div class="opts">
+            <label class="opt"><input type="checkbox" name="perm" value="read" checked><span>Read files</span></label>
+            <label class="opt"><input type="checkbox" name="perm" value="write" checked><span>Write files</span></label>
+            <label class="opt"><input type="checkbox" name="perm" value="shell"><span>Run commands</span></label>
+            <label class="opt"><input type="checkbox" name="perm" value="net"><span>Unrestricted internet</span></label>
+          </div>
+        </fieldset>
+        <fieldset style="margin-bottom:0">
+          <legend>Runtime</legend>
+          <div class="opts">
+            <label class="opt"><input type="radio" name="runtime" value="local"><span>local</span></label>
+            <label class="opt"><input type="radio" name="runtime" value="sandbox-runtime"><span>sandbox-runtime</span></label>
+            <label class="opt"><input type="radio" name="runtime" value="docker" checked><span>docker</span></label>
+            <label class="opt"><input type="radio" name="runtime" value="kubernetes"><span>kubernetes</span></label>
+            <label class="opt"><input type="radio" name="runtime" value="aca-sessions"><span>aca-sessions</span></label>
+          </div>
+        </fieldset>
+      </div>
+      <div class="cfg-out">
+        <div class="bar"><span>compiled options</span><span class="sp"></span><span data-cfg-file>Anthropic · docker</span></div>
+        <pre data-claim="illustrative" aria-live="polite"><span class="cm">// compiled for every run of this agent — you never write this by hand</span>
+<span class="kw">const</span> options = {
+  <span class="k">model</span>: <span class="str">"claude-sonnet-4-5"</span>,
+  <span class="k">cwd</span>: <span class="str">"/workspace"</span>,
+  <span class="k">tools</span>: { type: <span class="str">"preset"</span>, preset: <span class="str">"claude_code"</span> },
+  <span class="k">allowedTools</span>: [<span class="str">"mcp__file-finder__*"</span>],
+  <span class="k">disallowedTools</span>: [<span class="str">"Bash"</span>, <span class="str">"BashOutput"</span>, <span class="str">"KillShell"</span>, <span class="str">"WebFetch"</span>, <span class="str">"WebSearch"</span>],
+  <span class="k">skills</span>: [<span class="str">"contract-review"</span>],
+  <span class="k">mcpServers</span>: {
+    <span class="str">"file-finder"</span>: { type: <span class="str">"http"</span>, url: <span class="str">"https://intranet.acme.example/mcp"</span> },
+  },
+  <span class="k">settingSources</span>: [<span class="str">"project"</span>],      <span class="cm">// session project only, never host user state</span>
+  <span class="k">strictMcpConfig</span>: <span class="kw">true</span>,
+  <span class="k">env</span>,                     <span class="cm">// this run's gateway token, never a provider key</span>
+};</pre>
+        <div class="cfg-checks" aria-live="polite"><p class="ok-line">✓ No capability gaps for this combination.</p></div>
+      </div>
+    </form>
+    <p class="small reveal" style="margin-top:14px">
+      Simplified from the Claude engine adapter: a switch that is off removes its tools through
+      <code>disallowedTools</code>, and each assigned connector is auto-approved as <code>mcp__&lt;connector-name&gt;__*</code>, keyed by the connector name (sample name shown).
+      The real compile also sets the session, system prompt and limits.
+    </p>
+    <a class="more" style="display:inline-block;margin-top:8px" href="https://docs.agentworkspace.indx.jp/features/your-stack">Learn more: your stack, layer by layer</a>
+  </div>
+</section>
+
+<!-- ============================ USE CASES WITH CODE ============================ -->
+<section class="sec sec--surface" id="use-cases">
+  <div class="shell">
+    <div class="statement sec-head">
+      <h2 class="reveal">Real agents, with the code. <span class="dim">Ten enterprise use cases from the docs, each built end to end and kept as a benchmark.</span></h2>
+    </div>
+    <span class="tab-label">Use cases</span>
+    <div class="stage" style="padding:16px">
+      <div class="ucards">
+        <a class="ucard reveal" data-d="0" href="use-cases.html#code-manual-search">
+          <div class="top"><span class="who">Maintenance</span><h3>Manual search agent</h3><p>A field engineer asks 「油圧ユニットの定期点検の周期は？」 in the portal&#x27;s side panel.</p></div>
+          <pre data-file="tests/gallery/manual-search/agents/manual-search.ts" aria-label="agents/manual-search.ts"><span class="kw">import</span> { defineAgent, files, mcp, skill } <span class="kw">from</span> <span class="str">'@indx-workspace/sdk/define'</span>;
+
+<span class="kw">export</span> <span class="kw">default</span> <span class="fn">defineAgent</span>({
+  name: <span class="str">'manual-search'</span>,
+  instructions: { file: <span class="str">'./manual-search.md'</span> },
+  model: <span class="str">'default'</span>,
+  engine: <span class="str">'claude-agent-sdk'</span>,
+  <span class="cm">// Read-only by construction: it can read the manuals and call the index, nothing else.</span>
+  permissions: { readFiles: <span class="kw">true</span> },
+  tools: [<span class="fn">mcp</span>(<span class="str">'manual-index'</span>)],
+  skills: [<span class="fn">skill</span>(<span class="str">'cite-answer'</span>)],
+  files: [<span class="fn">files</span>(<span class="str">'manuals'</span>, <span class="str">'read'</span>)],
+  limits: { maxTurns: 12, maxBudgetUsd: 0.5 },
+});</pre>
+        </a>
+        <a class="ucard reveal" data-d="1" href="use-cases.html#code-contract-review">
+          <div class="top"><span class="who">Legal</span><h3>Contract review agent</h3><p>Legal uploads a counterparty&#x27;s Word draft; the agent splits it into 第N条 clauses, compares each with the playbook and standard clauses, and…</p></div>
+          <pre data-file="tests/gallery/contract-review/agents/contract-review.ts" aria-label="agents/contract-review.ts"><span class="kw">import</span> { defineAgent, files, skill } <span class="kw">from</span> <span class="str">'@indx-workspace/sdk/define'</span>;
+
+<span class="kw">export</span> <span class="kw">default</span> <span class="fn">defineAgent</span>({
+  name: <span class="str">'contract-review'</span>,
+  instructions: { file: <span class="str">'./contract-review.md'</span> },
+  model: <span class="str">'default'</span>,
+  <span class="cm">// A run is unattended: without autoApprove the SDK stops the skill script's call on an approval prompt.</span>
+  engine: { id: <span class="str">'claude-agent-sdk'</span>, autoApprove: [<span class="str">'mcp__agent-workspace__run_skill_script'</span>] },
+  <span class="cm">// It reads the playbook and runs the skill script, which reads the draft itself; it writes</span>
+  <span class="cm">// nothing and reaches no network. `runCommands` is what offers `run_skill_script`, which runs `clauses.mjs`.</span>
+  permissions: { readFiles: <span class="kw">true</span>, runCommands: <span class="kw">true</span> },
+  skills: [<span class="fn">skill</span>(<span class="str">'contract-playbook'</span>)],
+  files: [<span class="fn">files</span>(<span class="str">'contracts'</span>, <span class="str">'read'</span>), <span class="fn">files</span>(<span class="str">'playbook'</span>, <span class="str">'read'</span>)],
+  limits: { maxTurns: 20, maxBudgetUsd: 1 },
+});</pre>
+        </a>
+        <a class="ucard reveal" data-d="2" href="use-cases.html#code-customer-inquiry">
+          <div class="top"><span class="who">Contact centres</span><h3>Customer inquiry agent</h3><p>A customer writes in the chat widget on the company site; the agent searches that customer&#x27;s whole history, answers in polite Japanese, and…</p></div>
+          <pre data-file="tests/gallery/customer-inquiry/agents/customer-inquiry.ts#excerpt" aria-label="agents/customer-inquiry.ts"><span class="kw">export</span> <span class="kw">default</span> <span class="fn">defineAgent</span>({
+  name: <span class="str">'customer-inquiry'</span>,
+  instructions: { file: <span class="str">'./customer-inquiry.md'</span> },
+  model: <span class="str">'default'</span>,
+  engine: <span class="str">'claude-agent-sdk'</span>,
+  <span class="cm">// Nothing but the CRM server: no files, no commands, no network.</span>
+  permissions: {},
+  tools: [<span class="fn">mcp</span>(<span class="str">'crm-history'</span>)],
+  skills: [<span class="fn">skill</span>(<span class="str">'keigo-reply'</span>)],
+  limits: { maxTurns: 10, maxBudgetUsd: 0.3 },
+});</pre>
+        </a>
+        <a class="ucard reveal" data-d="0" href="use-cases.html#code-ringi-review">
+          <div class="top"><span class="who">Requesting departments; approvers in planning</span><h3>Ringi review agent</h3><p>When a department files a ringi in the existing workflow system, your backend starts the agent, which checks it against the authority…</p></div>
+          <pre data-file="tests/gallery/ringi-review/agents/ringi-review.ts#excerpt" aria-label="agents/ringi-review.ts"><span class="kw">import</span> { defineAgent, files, mcp, skill } <span class="kw">from</span> <span class="str">'@indx-workspace/sdk/define'</span>;
+
+<span class="kw">export</span> <span class="kw">default</span> <span class="fn">defineAgent</span>({
+  name: <span class="str">'ringi-review'</span>,
+  instructions: { file: <span class="str">'./ringi-review.md'</span> },
+  model: <span class="str">'default'</span>,
+  engine: <span class="str">'claude-agent-sdk'</span>,
+  <span class="cm">// Read-only by construction: it reads the rules and the archive and writes nothing.</span>
+  permissions: { readFiles: <span class="kw">true</span> },
+  tools: [<span class="fn">mcp</span>(<span class="str">'ringi-archive'</span>)],
+  skills: [<span class="fn">skill</span>(<span class="str">'ringi-checklist'</span>)],
+  files: [<span class="fn">files</span>(<span class="str">'rules'</span>, <span class="str">'read'</span>)],
+  limits: { maxTurns: 16, maxBudgetUsd: 0.5 },
+});</pre>
+        </a>
+        <a class="ucard reveal" data-d="1" href="use-cases.html#code-quality-defect">
+          <div class="top"><span class="who">Quality assurance</span><h3>Quality defect and past-trouble analysis agent</h3><p>A QA engineer enters a new defect; the agent searches past troubles (過去トラ), takes 4M counts from the database instead of counting itself…</p></div>
+          <pre data-file="tests/gallery/quality-defect/agents/quality-defect.ts#excerpt" aria-label="agents/quality-defect.ts"><span class="kw">export</span> <span class="kw">default</span> <span class="fn">defineAgent</span>({
+  name: <span class="str">'quality-defect'</span>,
+  instructions: { file: <span class="str">'./quality-defect.md'</span> },
+  model: <span class="str">'default'</span>,
+  <span class="cm">// A run is unattended: without autoApprove the SDK stops the skill script's call on an approval prompt.</span>
+  engine: { id: <span class="str">'claude-agent-sdk'</span>, autoApprove: [<span class="str">'mcp__agent-workspace__run_skill_script'</span>] },
+  <span class="cm">// Reads the FMEA and runs the eight-d check script; no writes, no network (the project</span>
+  <span class="cm">// ceiling forbids both whatever this file says).</span>
+  permissions: { readFiles: <span class="kw">true</span>, runCommands: <span class="kw">true</span>, unrestrictedNetwork: <span class="kw">false</span> },
+  tools: [<span class="fn">mcp</span>(<span class="str">'defect-db'</span>)],
+  skills: [<span class="fn">skill</span>(<span class="str">'eight-d'</span>)],
+  files: [<span class="fn">files</span>(<span class="str">'fmea'</span>, <span class="str">'read'</span>)],
+  limits: { maxTurns: 16, maxBudgetUsd: 1 },
+});</pre>
+        </a>
+        <a class="ucard reveal" data-d="2" href="use-cases.html#code-quotation">
+          <div class="top"><span class="who">Sales estimating at job shops</span><h3>Quotation agent</h3><p>Sales pastes a part summary into the quote desk; the agent looks up similar parts and actual past prices in the ERP, reads the current rate…</p></div>
+          <pre data-file="tests/gallery/quotation/agents/quotation.ts" aria-label="agents/quotation.ts"><span class="kw">import</span> { defineAgent, skill } <span class="kw">from</span> <span class="str">'@indx-workspace/sdk/define'</span>;
+
+<span class="kw">import</span> { erp } <span class="kw">from</span> <span class="str">'../tools/erp.ts'</span>;
+
+<span class="kw">export</span> <span class="kw">default</span> <span class="fn">defineAgent</span>({
+  name: <span class="str">'quotation'</span>,
+  instructions: { file: <span class="str">'./quotation.md'</span> },
+  model: <span class="str">'default'</span>,
+  <span class="cm">// A run is unattended: without autoApprove the SDK stops the skill script's call on an approval</span>
+  <span class="cm">// prompt, whether the model runs it through run_skill_script or through Bash.</span>
+  engine: {
+    id: <span class="str">'claude-agent-sdk'</span>,
+    autoApprove: [<span class="str">'Bash'</span>, <span class="str">'mcp__agent-workspace__run_skill_script'</span>],
+  },
+  <span class="cm">// runCommands runs the cost-model script; nothing is written, and the ERP is read-only.</span>
+  permissions: { readFiles: <span class="kw">true</span>, runCommands: <span class="kw">true</span> },
+  tools: [erp],
+  skills: [<span class="fn">skill</span>(<span class="str">'cost-model'</span>)],
+  limits: { maxTurns: 16, maxBudgetUsd: 0.5 },
+});</pre>
+        </a>
+      </div>
+      <p class="small center" style="margin:18px 0 6px">Example configurations from the tutorials, not customer stories. <a href="use-cases.html">All sixteen use cases, with every file →</a></p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ RUNTIMES ============================ -->
+<section class="sec sec--surface" id="runtimes">
+  <div class="shell">
+    <div class="sec-head split">
+      <div>
+        <span class="eyebrow reveal">Runtimes</span>
+        <h2 class="h2 reveal" data-d="1">Same agent. Your choice of sandbox.</h2>
+        <p class="lead reveal" data-d="2">A laptop, one Docker host or your Kubernetes cluster, without changing the agent. Each driver is labelled with exactly what has been verified.</p>
+      </div>
+      <a class="more reveal" href="product.html#runtimes">All eleven driver ids</a>
+    </div>
+
+    <div class="rtp reveal" data-runtime-picker>
+      <ul class="rtp-list">
+        <li><button type="button" aria-pressed="false" aria-controls="rt-local"><span class="id">local</span><span class="sp"></span><span class="badge badge-caveat">dev only</span></button></li>
+        <li><button type="button" aria-pressed="false" aria-controls="rt-srt"><span class="id">sandbox-runtime</span><span class="sp"></span><span class="badge badge-ok">implemented</span></button></li>
+        <li><button type="button" aria-pressed="true" aria-controls="rt-docker"><span class="id">docker</span><span class="sp"></span><span class="badge badge-ok">verified</span></button></li>
+        <li><button type="button" aria-pressed="false" aria-controls="rt-k8s"><span class="id">kubernetes</span><span class="sp"></span><span class="badge badge-ok">implemented</span></button></li>
+        <li><button type="button" aria-pressed="false" aria-controls="rt-managed"><span class="id">aca-sessions · cloud-run-service</span><span class="sp"></span><span class="badge badge-caveat">not live-verified</span></button></li>
+        <li><button type="button" aria-pressed="false" aria-controls="rt-roadmap"><span class="id">agentcore · ecs · gke · external</span><span class="sp"></span><span class="badge badge-caveat">roadmap</span></button></li>
+      </ul>
+      <div>
+        <article class="card rtp-card" id="rt-local">
+          <h3>This machine</h3><span class="id">local</span>
+          <dl><dt>Isolation</dt><dd>None: same process and user as the control plane</dd><dt>Runs on</dt><dd>The control-plane host</dd><dt>Use it for</dt><dd>Development and evaluation on a laptop</dd></dl>
+          <div class="notice"><span class="sym">⚠</span><span><b>No tenant isolation.</b><br>Never point real users at it.</span></div>
+        </article>
+        <article class="card rtp-card" id="rt-srt">
+          <h3>Sandboxed process</h3><span class="id">sandbox-runtime</span>
+          <dl><dt>Isolation</dt><dd>The host OS sandbox (on Linux: bubblewrap, with socat and ripgrep)</dd><dt>Runs on</dt><dd>The control-plane host, no container per session</dd><dt>Use it for</dt><dd>A single host where Docker is not available</dd></dl>
+          <p class="small"><span class="badge badge-ok">implemented</span></p>
+        </article>
+        <article class="card rtp-card" id="rt-docker">
+          <h3>Docker</h3><span class="id">docker</span>
+          <dl><dt>Isolation</dt><dd>A container per session; the Docker socket is mounted into the runner only</dd><dt>Runs on</dt><dd>A Docker host</dd><dt>Use it for</dt><dd>Self-hosting on one VM: the recommended default</dd></dl>
+          <p class="small"><span class="badge badge-ok">verified</span> fixture-verified. Network policy <code>none</code> or <code>open</code>; it refuses <code>restricted</code> and <code>allowedDomains</code>.</p>
+        </article>
+        <article class="card rtp-card" id="rt-k8s">
+          <h3>Kubernetes</h3><span class="id">kubernetes</span>
+          <dl><dt>Isolation</dt><dd>A Pod per session, optionally with a gVisor RuntimeClass</dd><dt>Runs on</dt><dd>Your cluster: EKS, GKE, AKS, OpenShift</dd><dt>Use it for</dt><dd>Many teams, NetworkPolicy and resource limits</dd></dl>
+          <p class="small"><span class="badge badge-ok">implemented</span> lifecycle and isolation partially verified; no live-cluster proof yet. Refuses <code>allowedDomains</code>.</p>
+        </article>
+        <article class="card rtp-card" id="rt-managed">
+          <h3>Managed cloud sandboxes</h3><span class="id">aca-sessions · cloud-run-service</span>
+          <dl><dt>Isolation</dt><dd>A Hyper-V microVM per session (Azure Container Apps dynamic sessions); a Cloud Run service container</dd><dt>Runs on</dt><dd>Azure; Google Cloud</dd><dt>Use it for</dt><dd>Teams that want no sandbox hosts of their own</dd></dl>
+          <div class="notice"><span class="sym">⚠</span><span><b>Implemented, not yet live-verified.</b><br>Disabled until configured; then marked Unverified until Test runtime passes.</span></div>
+        </article>
+        <article class="card rtp-card" id="rt-roadmap">
+          <h3>On the roadmap</h3><span class="id">aws-agentcore · aws-ecs · gke-agent-sandbox · cloud-run-sandbox · external</span>
+          <dl><dt>Isolation</dt><dd>Firecracker microVMs, Fargate tasks, GKE-managed gVisor, vendor-defined</dd><dt>Status</dt><dd>Driver ids reserved behind the same interface; no implementation yet</dd></dl>
+          <p class="small"><span class="badge badge-caveat">roadmap</span> Listed so nobody has to guess.</p>
+        </article>
+      </div>
+    </div>
+
+    <h3 class="h3 reveal" style="font-size:19px; margin:48px 0 0">What survives a runtime switch</h3>
+    <div class="survives reveal" data-d="1">
+      <div><span class="s yes">✓</span><p>Workspace files: object storage is the source of truth</p></div>
+      <div><span class="s yes">✓</span><p>Skills and connectors: materialized at launch</p></div>
+      <div><span class="s yes">✓</span><p>The session, when its run was durable: stored, then resumed</p></div>
+      <div><span class="s no">✕</span><p>Anything else in the old sandbox: disposable by design</p></div>
+    </div>
+    <a class="more" style="display:inline-block;margin-top:18px" href="https://docs.agentworkspace.indx.jp/features/self-host-securely">Learn more: self-host securely</a>
+  </div>
+</section>
+
+<!-- ============================ NUMBERS ============================ -->
+<section class="sec sec--surface" id="facts">
+  <div class="shell">
+    <div class="statement sec-head">
+      <h2 class="reveal">Small on purpose. <span class="dim">These are properties of the software, not customer counts. You can check every one.</span></h2>
+    </div>
+    <div class="stats reveal">
+      <div><b class="count" data-to="1">1</b><span>Node process on a laptop, embedded PostgreSQL</span></div>
+      <div><b class="count" data-to="5">5</b><span>services in production: web, runner, gateway, Postgres, storage</span></div>
+      <div><b class="count" data-to="11">11</b><span>runtime driver ids behind one interface; 4 you can run today</span></div>
+      <div><b class="count" data-to="21">21</b><span>audited actions, from permissions to runtime switches</span></div>
+      <div><b class="count" data-to="0">0</b><span>proprietary agent formats: skills stay <code>SKILL.md</code></span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ COMPARE ============================ -->
+<section class="sec sec--surface" id="compare">
+  <div class="shell">
+    <div class="sec-head split">
+      <div>
+        <span class="eyebrow reveal">Positioning</span>
+        <h2 class="h2 reveal" data-d="1">Four ways to run Claude agents in an enterprise. This is the small one.</h2>
+        <p class="lead reveal" data-d="2">The alternatives are not wrong; they answer a different question.</p>
+      </div>
+      <a class="more reveal" href="compare.html">Detailed comparison</a>
+    </div>
+    <div class="scroll-x reveal">
+      <table class="matrix cmp">
+        <thead><tr><th scope="col">&nbsp;</th><th scope="col" class="me">Agent Workspace</th><th scope="col">Build it in-house</th><th scope="col">General AI platform</th><th scope="col">Managed agent cloud</th></tr></thead>
+        <tbody>
+          <tr><td class="k">Agent runtime</td><td class="me">Claude Agent SDK, unchanged</td><td>Claude Agent SDK, unchanged</td><td>the product's own runtime</td><td>the vendor's runtime</td></tr>
+          <tr><td class="k">Control plane in your infrastructure</td><td class="me"><span class="sym-ok">✓</span> by default</td><td><span class="sym-ok">✓</span></td><td>varies; often licence-limited</td><td><span class="sym-no">✕</span> the agent loop runs at the vendor</td></tr>
+          <tr><td class="k">Where agents execute</td><td class="me">a sandbox driver you choose, per agent</td><td>whatever you build</td><td>the product's default</td><td>the vendor's sandbox, some also yours</td></tr>
+          <tr><td class="k">Model switching</td><td class="me">a dropdown; code unchanged</td><td>whatever you build</td><td><span class="sym-ok">✓</span></td><td>limited</td></tr>
+          <tr><td class="k">Capability gaps</td><td class="me">declared per provider; prompt-caching gap flagged in the editor</td><td>up to you</td><td>hard to see</td><td>hard to see</td></tr>
+          <tr><td class="k">Time to maintain</td><td class="me">5 services, no queue or broker</td><td>grows over time</td><td>many services</td><td>none, and nothing is yours</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ SECURITY ============================ -->
+<section class="sec sec--paper" id="security">
+  <div class="shell">
+    <div class="sec-head split">
+      <div>
+        <span class="eyebrow reveal">Security</span>
+        <h2 class="h2 reveal" data-d="1">Built for the review your security team will do.</h2>
+      </div>
+      <a class="more reveal" href="security.html">Security and governance</a>
+    </div>
+    <div class="cap reveal">
+      <div><h3>Your network, your data</h3><p>Self-hosted. Files, sessions and logs live in your PostgreSQL and object storage.</p><span class="k">self-hosted</span></div>
+      <div><h3>Keys stay out of agents</h3><p>Provider credentials never enter a sandbox. A run gets a gateway token, nothing more.</p><span class="k">gateway</span></div>
+      <div><h3>Isolation you choose</h3><p>A host OS sandbox, a container, or a Pod per session with optional gVisor, and a network policy per runtime.</p><span class="k">RuntimeDriver</span></div>
+      <div><h3>Least privilege by default</h3><p>Permissions that are off remove tools from the model. They are not just unapproved.</p><span class="k">disallowedTools</span></div>
+      <div><h3>No host state leaks in</h3><p>Runs never inherit a host <code>.claude</code> directory or stray MCP config.</p><span class="k">settingSources: ["project"]</span></div>
+      <div><h3>An audit trail</h3><p>Permission, credential, agent and runtime changes are recorded, with no secrets in the log.</p><span class="k">audit_events</span></div>
+    </div>
+    <a class="more" style="display:inline-block;margin-top:18px" href="https://docs.agentworkspace.indx.jp/features/self-host-securely">Learn more: self-host securely</a>
+  </div>
+</section>
+
+<!-- ============================ GET STARTED ============================ -->
+<section class="sec sec--surface" id="start">
+  <div class="shell">
+    <div class="sec-head measure">
+      <span class="eyebrow reveal">Get started</span>
+      <h2 class="h2 reveal" data-d="1">Three commands on a laptop. The same images in production.</h2>
+    </div>
+    <div class="start-grid">
+      <div class="reveal">
+        <pre data-claim="run" class="term" id="qs"><span class="p">$ </span><span class="c">export ANTHROPIC_API_KEY=sk-ant-...</span>
+<span class="p">$ </span><span class="c">npm create @indx-workspace@latest my-agent -- --yes</span>
+<span class="p">$ </span><span class="c">cd my-agent &amp;&amp; npm run dev</span></pre>
+        <div class="codecap" style="border:1px solid var(--rule); border-top:0"><span><span class="ok-line" style="color:var(--ok)">→</span> open localhost:3000/p/s/main/try</span><span class="sp"></span><button class="copy" type="button" data-copy="#qs">Copy</button></div>
+        <p class="small" style="margin-top:12px">One Node process, embedded PostgreSQL. Node 24+, no Docker.</p>
+      </div>
+      <div class="reveal" data-d="1">
+        <h3 class="h3" style="margin-bottom:12px">The self-hosted web wizard asks five questions</h3>
+        <ol class="setup">
+          <li>Which model provider do you want to use?</li>
+          <li>Enter the credentials.</li>
+          <li>Which sandbox or runtime should agents use?</li>
+          <li>Create the first administrator.</li>
+          <li>Create your first agent.</li>
+        </ol>
+      </div>
+    </div>
+    <div class="deploy">
+      <article class="card reveal">
+        <span class="tag">Laptop</span>
+        <h3 class="h3">Evaluate in minutes</h3>
+        <p><code>aw dev</code>: one Node process with embedded PostgreSQL.</p>
+        <div data-claim="illustrative" class="cmd">npm run dev</div>
+        <ul class="chip-list"><li class="chip">Node 24+</li><li class="chip">no Docker</li></ul>
+      </article>
+      <article class="card reveal" data-d="1">
+        <span class="tag">Simple mode</span>
+        <h3 class="h3">One VM, one tenant</h3>
+        <p>Docker Compose: web, runner, gateway, PostgreSQL and object storage.</p>
+        <div data-claim="illustrative" class="cmd">docker compose up -d <span class="cm"># in a clone of the repository</span></div>
+        <ul class="chip-list"><li class="chip">EC2</li><li class="chip">GCE</li><li class="chip">Azure VM</li><li class="chip">on-prem</li></ul>
+      </article>
+      <article class="card reveal" data-d="2">
+        <span class="tag">Cluster mode</span>
+        <h3 class="h3">Many teams, real isolation</h3>
+        <p>The same images, plus a sandbox Pod per session with NetworkPolicy and limits. The Helm chart comes with delivery.</p>
+        <div class="cmd"><a href="https://docs.agentworkspace.indx.jp/building/self-hosting">Self-hosting guide →</a></div>
+        <ul class="chip-list"><li class="chip">EKS</li><li class="chip">GKE</li><li class="chip">AKS</li><li class="chip">OpenShift</li></ul>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ FAQ ============================ -->
+<section class="sec sec--paper" id="faq">
+  <div class="shell faq-grid">
+    <div class="sec-head" style="margin:0">
+      <span class="eyebrow reveal">FAQ</span>
+      <h2 class="h2 reveal" data-d="1">Questions buyers ask first.</h2>
+      <p class="small reveal" data-d="2" style="margin-top:14px">Something else? <a href="https://indx.jp/en/contact">Ask us</a>.</p>
+    </div>
+    <div class="faq reveal">
+      <details open><summary>Is this another agent framework?</summary><div class="a"><p>No. The Claude Agent SDK runs the agent loop, unchanged. Agent Workspace stores what an agent is, secures its credentials, launches it in the sandbox you chose and streams what it did. Every setting in the UI is an SDK option.</p></div></details>
+      <details><summary>Does any data leave our infrastructure?</summary><div class="a"><p>The control plane, runner, sandboxes, database and object storage all run where you deploy them. The only outbound traffic an agent needs is to the model provider you configure, through the gateway, and the network policy of each runtime decides the rest.</p></div></details>
+      <details><summary>Can we use Azure OpenAI or OpenAI instead of Claude?</summary><div class="a"><p>Yes, through the Anthropic-compatible gateway. It is a compatibility mode, not an equivalent: each provider adapter declares what it supports (Azure OpenAI declares neither prompt caching nor thinking), and the agent editor warns when the chosen model lacks prompt caching. See <a href="product.html#honesty">compatibility</a>.</p></div></details>
+      <details><summary>Which sandboxes are production-ready today?</summary><div class="a"><p>Docker is the recommended runtime for self-hosting and is fixture-verified. The sandboxed-process and Kubernetes drivers are implemented; Kubernetes lifecycle is partially verified. Azure Container Apps sessions and Cloud Run are implemented but not live-verified, and the rest are on the roadmap. The product disables what is not ready and says why.</p></div></details>
+      <details><summary>Do we need Kubernetes?</summary><div class="a"><p>No. A laptop needs one Node process. A single VM runs five components from one Compose file. Kubernetes is there when many teams need stronger isolation.</p></div></details>
+      <details><summary>What happens if we stop using it?</summary><div class="a"><p>You keep everything. Skills are <code>SKILL.md</code> folders, agents are TypeScript files or SDK options, connectors are MCP servers. Nothing is stored in a proprietary format.</p></div></details>
+      <details><summary>Is there RAG or a vector database?</summary><div class="a"><p>Deliberately not. Agents read workspace files with the SDK's own file tools and reach your systems through MCP connectors. Fewer moving parts to operate.</p></div></details>
+      <details><summary>How do we buy it?</summary><div class="a"><p>The SDK and CLI packages are published on npm. For a deployment, the Helm chart and support, <a href="https://indx.jp/en/contact">book a demo</a> with INDX.</p></div></details>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ FINAL CTA ============================ -->
+<section class="sec final" id="demo">
+  <div class="shell">
+    <div class="measure">
+      <h2 class="h2 reveal">Start building with Agent Workspace today.</h2>
+      <p class="lead reveal" data-d="1">Run it on a laptop in a minute, or see it on your cloud with your model and your sandbox.</p>
+      <div class="btn-row reveal" data-d="2">
+        <a class="btn btn-convert btn-xl" href="https://indx.jp/en/contact">Book a demo</a>
+        <a class="btn btn-quiet btn-xl" href="https://docs.agentworkspace.indx.jp/getting-started/quickstart">Read the quickstart</a>
+      </div>
+      <div class="reveal" data-d="3" style="margin-top:22px">
+        <span class="cmdpill"><span class="p">$</span><code data-claim="illustrative" id="cmd-final">npm create @indx-workspace@latest my-agent</code><button class="copy" type="button" data-copy="#cmd-final">Copy</button></span>
+      </div>
+      <p class="small reveal" data-d="3">Self-hosted · Apache-2.0 · TypeScript SDK and CLI · Claude Agent SDK as the default engine</p>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- chrome:footer -->
+<footer class="ftr" id="site-footer">
+  <div class="shell">
+    <div class="ftr-grid ftr-grid-5">
+      <div>
+        <a class="wordmark" href="index.html"><span class="mk" aria-hidden="true"><svg viewBox="0 0 32 32" width="16" height="16" aria-hidden="true"><path d="M9 24 13.9 8h4.2L23 24h-3.3l-1.1-3.6h-5.2L12.3 24zm5.3-6.4h3.4L16 11.9z" fill="currentColor" fill-rule="evenodd"/></svg></span>Agent Workspace</a>
+        <p class="small" style="margin-top:14px; max-width:30em">The smallest practical enterprise deployment layer for the Claude Agent SDK.</p>
+        <p class="small" style="margin-top:10px"><a href="https://indx.jp/en/contact">Contact INDX</a></p>
+      </div>
+      <div>
+        <h4>Product</h4>
+        <ul>
+          <li><a href="product.html">Platform overview</a></li>
+          <li><a href="product.html#how">How it works</a></li>
+          <li><a href="product.html#runtimes">Runtimes</a></li>
+          <li><a href="product.html#honesty">Compatibility</a></li>
+          <li><a href="security.html">Security</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Solutions</h4>
+        <ul>
+          <li><a href="use-cases.html">Use cases</a></li>
+          <li><a href="examples.html">Examples</a></li>
+          <li><a href="compare.html">Compare</a></li>
+          <li><a href="index.html#faq">FAQ</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Deploy</h4>
+        <ul>
+          <li><a href="https://docs.agentworkspace.indx.jp/getting-started/quickstart">Quickstart</a></li>
+          <li><a href="https://docs.agentworkspace.indx.jp/building/self-hosting">Self-host</a></li>
+          <li><a href="https://docs.agentworkspace.indx.jp/guides/deploy">Deploy guide</a></li>
+          <li><a href="https://docs.agentworkspace.indx.jp/building/embedding">Embedding</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Reference</h4>
+        <ul>
+          <li><a href="https://docs.agentworkspace.indx.jp">Documentation</a></li>
+          <li><a href="https://docs.agentworkspace.indx.jp/reference/cli/commands">CLI reference</a></li>
+          <li><a href="https://docs.agentworkspace.indx.jp/tutorials/index">Tutorials</a></li>
+          <li><a href="https://platform.claude.com/docs/en/agent-sdk/overview">Claude Agent SDK</a></li>
+        </ul>
+      </div>
+    </div>
+    <p class="ftr-note">
+      Screens are illustrative of the product UI. Capabilities, runtime driver standing and the
+      compatibility matrix are described as they stand in the <a href="https://docs.agentworkspace.indx.jp/building/models-and-runtimes">docs</a>.
+      Third-party products are described from their public documentation as of the date shown on each page.
+      <br>
+      Claude and Claude Agent SDK are products of Anthropic. This site is unofficial material for the
+      Agent Workspace project and is not affiliated with or endorsed by Anthropic.
+    </p>
+  </div>
+</footer>
+<!-- /chrome:footer -->
+</body>
+</html>

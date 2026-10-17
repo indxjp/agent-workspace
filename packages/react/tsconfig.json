@@ -1,0 +1,11 @@
+{
+  // The type-checking view: the whole of `src`, tests included, emitting nothing. `DOM` is in `lib`
+  // because the chat runs in a browser: `window`, `localStorage`, `KeyboardEvent` and `fetch`.
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "noEmit": true
+  },
+  "include": ["src"]
+}

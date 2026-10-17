@@ -1,0 +1,135 @@
+---
+title: "Output and exit codes"
+description: "How aw renders a result for a person or a script, the stderr error format, and what each exit code means."
+---
+
+<Info>
+
+- **Read this when:** you script `aw`, pipe its output into another tool, or need to know why a
+  command exited non-zero.
+- **You will learn:** what the default, `--json`, `--jsonl`, `--raw` and `--quiet` outputs print,
+  the stderr error format, and what each exit code means.
+- **Used in:** [Chapter 3: Test and improve it](/path/test) and [Chapter 5: Ship it to your
+  servers](/path/ship).
+
+</Info>
+
+`aw`'s output is designed to be read by a person by default and by a script on request. Everything below covers both results and event streams.
+
+## Default rendering: table or record
+
+With no output flag, `aw` renders the value a command returns for a human:
+
+- **A listing** (an array of objects) renders as an aligned table — a fixed, useful set of columns per resource (`renderTable`). The last column is never padded, so long values do not leave trailing whitespace.
+- **One resource** (a single object) renders as a `field  value` listing, one field per line, in the object's own key order (`renderRecord`).
+- **A list of scalars** (for example, file paths from `skills export`) renders one value per line.
+- **A delete or an action with nothing to show** (`undefined`) prints nothing at all — no "OK", no blank line.
+
+```text title="Example output (illustrative)" claim="illustrative"
+$ aw agents list
+id        name          model              modelConnectionId  runtimeProfileId  updatedAt
+--------  ------------  -----------------  ------------------  ----------------  --------------------
+agent_1   Release notes claude-sonnet-4-5  conn_abc            profile_x         2026-09-01T12:00:00Z
+
+$ aw agents get agent_1
+id                 agent_1
+name               Release notes
+model              claude-sonnet-4-5
+modelConnectionId  conn_abc
+```
+
+## `--json`
+
+Prints **exactly the value the SDK method returned**, as pretty-printed JSON (`JSON.stringify(value, null, 2)`) — nothing added, nothing unwrapped further than the SDK already unwraps it. For most listings that is the plain array (the envelope's `{ agents: [...] }` shape is already unwrapped by the SDK method itself); `aw agents list --json` prints a JSON array of `AgentResource`.
+
+Three commands print the **whole envelope**, because their SDK response carries more than the rows:
+
+| Command           | Envelope fields beyond the rows                                                        |
+| ----------------- | -------------------------------------------------------------------------------------- |
+| `runs list`       | `nextCursor` (only `runs.list` is cursor-paged — see [Pagination](/guides/pagination)) |
+| `sessions list`   | `projectKey`                                                                           |
+| `models discover` | `unavailable` (connections that could not be probed, with a reason)                    |
+
+Every `--json` value round-trips through the corresponding `@indx-workspace/contracts` schema — each command's test suite proves this by parsing the CLI's stdout back through that schema (for example `RunListResponseSchema.parse(stdoutJson(result))`).
+
+## `--jsonl`
+
+One JSON object per line, compact (no pretty-printing):
+
+- A plain array prints one line per item.
+- An envelope command (`runs list`, `sessions list`, `models discover`) prints **one line per row**, like every other listing; what the envelope carries beyond the rows goes to stderr as for a human (`next page: --cursor …`, `unavailable: …`). Use `--json` for the whole envelope.
+- `aw --version --json` (or `--jsonl`) prints `{"aw":"<version>","contracts":"<version>"}`.
+- A stream (`runs events`/`follow`, `runs start --follow`) prints one line per event.
+
+```sh title="illustrative" claim="illustrative"
+aw agents list --jsonl | jq -c '{id, name}'
+```
+
+## `--raw` (streams only)
+
+For `runs events`, `runs follow`, and `runs start --follow|--wait`: prints each event's **engine-native payload** — the `raw` an `agent.*` frame carries — instead of the neutral `AgentEvent` `toAgentEvent` parses from it. A platform frame (`run-status`, `run-failed`, `stream-reset`, `done`) has no engine behind it and always prints as itself, told apart by its `kind`. `--raw` wins over `--json`/`--jsonl`, which print the neutral event as JSON.
+
+## `--quiet`
+
+Suppresses informational notices written to **stderr** — things like `run <id> started` (before `runs start --wait` goes silent while it follows) or `next page: --cursor …` (`runs list`, when more results exist and `--json` was not used). These notices never mix into stdout, so piping stdout is always safe without `--quiet`; the flag only quiets stderr for a script that also wants that silent.
+
+There are no interactive prompts anywhere in `aw`, and it never prompts for a credential — output flags are the only thing that changes what you see.
+
+## Errors on stderr
+
+A failure always writes to stderr, never stdout, in one line plus optional detail lines:
+
+```text
+error: <code>: <message>
+  <detail>
+```
+
+`<code>` and `<message>` come straight from the failure — see the table below for which failure produces which code. A `UsageError`, or an `InvalidArgumentError` the SDK raised before any request, instead prints `error: <message>` followed by a hint to run `aw --help`.
+
+## Exit codes
+
+| Code  | Meaning                                                                                                                                                                 | SDK error class                                                                                                |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `0`   | success                                                                                                                                                                 | —                                                                                                              |
+| `1`   | the server answered and refused the request                                                                                                                             | `ApiProblemError` (`error: <problem code>: <message>`, plus one line per `details` entry)                      |
+| `2`   | usage: unknown command/flag, missing argument, a body outside the contract, configuration that could not be resolved, or an argument the SDK refused before any request | `InvalidArgumentError` (an id such as `..`; the message names the refused value), or `UsageError` (`aw`'s own) |
+| `3`   | a 2xx response did not match the contract this build was made against — never retry this                                                                                | `ContractViolationError`                                                                                       |
+| `4`   | no response at all: network failure, or `--timeout` elapsed before response headers arrived                                                                             | `TransportError`                                                                                               |
+| `5`   | `--strict` and `aw platforms export` dropped at least one field; `PLATFORM_REPORT.md` says which                                                                         | —                                                                                                              |
+| `130` | interrupted (SIGINT) before completion                                                                                                                                  | —                                                                                                              |
+
+See [Errors](/guides/errors) for what each SDK error class carries and how to branch on it in your own code; the CLI's exit codes are a direct, mechanical mapping of that same classification (`reportFailure` in `output.ts`) onto a process exit status. Anything unexpected — an error that is none of the SDK classes in the table and not a `UsageError` — also exits `1`, printed as `error: unexpected: <message>`, because it is neither a contract violation nor a transport fault.
+
+## SIGINT
+
+`Ctrl-C` aborts the `AbortSignal` every request and stream in flight was given, prints `interrupted` on stderr, and exits `130` — this takes priority over any other failure: if a request happens to fail for another reason at the same moment SIGINT arrived, the exit code is still `130`, not the failure's own code.
+
+## Scripting recipes
+
+Pick the failing runs out of a page of history:
+
+```sh title="illustrative" claim="illustrative"
+aw runs list --status failed --limit 20 --json | jq -r '.runs[].id'
+```
+
+Start a run, capture its id, then wait for the outcome separately:
+
+```sh title="illustrative" claim="illustrative"
+run_id=$(aw runs start "$AGENT_ID" --prompt "Nightly check" --json | jq -r '.id')
+aw runs wait "$run_id" --json | jq '{status, cost, usage}'
+```
+
+Stream events as compact JSON and pull out only the assistant's text:
+
+```sh title="illustrative" claim="illustrative"
+aw runs follow "$run_id" --jsonl | jq -r 'select(.frame == "agent.message" and .role == "assistant") | .blocks[] | select(.type == "text") | .text'
+```
+
+Fail a CI job on a non-zero exit while still capturing the error detail:
+
+```sh title="illustrative" claim="illustrative"
+if ! out=$(aw runs wait "$run_id" --json 2>err.log); then
+  echo "aw failed (exit $?): $(cat err.log)" >&2
+  exit 1
+fi
+```

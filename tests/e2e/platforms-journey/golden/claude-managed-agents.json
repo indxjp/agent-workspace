@@ -1,0 +1,55 @@
+[
+  {
+    "path": "assistant.codeTools.0.allowedDomains",
+    "verdict": "dropped",
+    "code": "field_unsupported"
+  },
+  {
+    "path": "assistant.codeTools.0.secrets",
+    "verdict": "dropped",
+    "code": "field_unsupported"
+  },
+  {
+    "path": "assistant.engine",
+    "verdict": "dropped",
+    "code": "field_unsupported"
+  },
+  {
+    "path": "assistant.instructions",
+    "verdict": "native"
+  },
+  {
+    "path": "assistant.model",
+    "verdict": "native"
+  },
+  {
+    "path": "assistant.permissions.readFiles",
+    "verdict": "mapped"
+  },
+  {
+    "path": "assistant.permissions.runCommands",
+    "verdict": "mapped"
+  },
+  {
+    "path": "assistant.permissions.unrestrictedNetwork",
+    "verdict": "mapped"
+  },
+  {
+    "path": "assistant.permissions.writeFiles",
+    "verdict": "mapped"
+  },
+  {
+    "path": "assistant.skills.0",
+    "verdict": "native"
+  },
+  {
+    "path": "assistant.surfaces.0",
+    "verdict": "dropped",
+    "code": "field_unsupported"
+  },
+  {
+    "path": "assistant.tools.0",
+    "verdict": "dropped",
+    "code": "code_tool_needs_public_mcp"
+  }
+]

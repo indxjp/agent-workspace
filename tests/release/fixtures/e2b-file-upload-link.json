@@ -1,0 +1,8 @@
+{
+  "present": false,
+  "url": "https://upload.example/ctx?X-Amz-Signature=fake",
+  "headers": {
+    "Content-Type": "application/octet-stream",
+    "Content-Length": "1"
+  }
+}

@@ -1,0 +1,184 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "販売管理 ERP 参照 API",
+    "version": "1.0.0",
+    "description": "見積エージェントが読む、過去品番・受注実績・材料別レート。参照専用。"
+  },
+  "servers": [{ "url": "https://erp.example.co.jp/api/v1" }],
+  "security": [{ "bearer": [] }],
+  "components": {
+    "securitySchemes": { "bearer": { "type": "http", "scheme": "bearer" } },
+    "schemas": {
+      "Material": { "type": "string", "enum": ["SS400", "SUS304", "A5052"] },
+      "PartHit": {
+        "type": "object",
+        "required": ["partNo", "name", "material", "orderNos"],
+        "properties": {
+          "partNo": { "type": "string" },
+          "name": { "type": "string" },
+          "kind": { "type": "string" },
+          "material": { "$ref": "#/components/schemas/Material" },
+          "lengthMm": { "type": "number" },
+          "widthMm": { "type": "number" },
+          "thicknessMm": { "type": "number" },
+          "holeCount": { "type": "integer" },
+          "bendCount": { "type": "integer" },
+          "customer": { "type": "string" },
+          "orderNos": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "Order": {
+        "type": "object",
+        "required": ["orderNo", "partNo", "material", "quantity", "unitPrice", "orderedOn"],
+        "properties": {
+          "orderNo": { "type": "string" },
+          "partNo": { "type": "string" },
+          "partName": { "type": "string" },
+          "customer": { "type": "string" },
+          "material": { "$ref": "#/components/schemas/Material" },
+          "orderedOn": { "type": "string", "format": "date" },
+          "quantity": { "type": "integer" },
+          "unitPrice": { "type": "integer", "description": "税抜単価（円）" },
+          "amount": { "type": "integer", "description": "税抜金額（円）" },
+          "note": { "type": "string" }
+        }
+      },
+      "Rate": {
+        "type": "object",
+        "required": [
+          "material",
+          "densityGPerCm3",
+          "pricePerKg",
+          "yield",
+          "cuttingPerMeter",
+          "bendPerHit",
+          "setupPerLot",
+          "marginRate"
+        ],
+        "properties": {
+          "material": { "$ref": "#/components/schemas/Material" },
+          "name": { "type": "string" },
+          "densityGPerCm3": { "type": "number" },
+          "pricePerKg": { "type": "number", "description": "材料単価（円/kg）" },
+          "yield": { "type": "number", "description": "歩留まり（0〜1）" },
+          "cuttingPerMeter": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["maxThicknessMm", "yenPerMeter"],
+              "properties": {
+                "maxThicknessMm": { "type": "number" },
+                "yenPerMeter": { "type": "number" }
+              }
+            }
+          },
+          "bendPerHit": { "type": "number" },
+          "setupPerLot": { "type": "number" },
+          "marginRate": { "type": "number" },
+          "effectiveFrom": { "type": "string", "format": "date" }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["error"],
+        "properties": { "error": { "type": "string" } }
+      }
+    }
+  },
+  "paths": {
+    "/parts/search": {
+      "get": {
+        "operationId": "searchParts",
+        "summary": "過去品番を品名・種別と材質で探す",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "description": "品名または種別（例: ブラケット、カバー）",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "material",
+            "in": "query",
+            "required": false,
+            "schema": { "$ref": "#/components/schemas/Material" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "一致した品番。なければ空配列。",
+            "content": {
+              "application/json": {
+                "schema": { "type": "array", "items": { "$ref": "#/components/schemas/PartHit" } }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orders/{orderNo}": {
+      "get": {
+        "operationId": "getOrder",
+        "summary": "受注実績を受注番号で読む（単価・数量・受注日）",
+        "parameters": [
+          { "name": "orderNo", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "受注実績",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Order" } }
+            }
+          },
+          "404": {
+            "description": "その受注番号はない",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Error" } }
+            }
+          }
+        }
+      }
+    },
+    "/rates/{material}": {
+      "get": {
+        "operationId": "getRate",
+        "summary": "材質別の原価レート（材料単価・加工レート・段取り・利益率）",
+        "parameters": [
+          {
+            "name": "material",
+            "in": "path",
+            "required": true,
+            "schema": { "$ref": "#/components/schemas/Material" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "現在有効なレート",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Rate" } }
+            }
+          },
+          "404": {
+            "description": "その材質のレートはない",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Error" } }
+            }
+          }
+        }
+      }
+    },
+    "/quotes": {
+      "post": {
+        "operationId": "createQuote",
+        "summary": "見積を登録する（エージェントには許可しない）",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object" } } }
+        },
+        "responses": { "201": { "description": "登録した" } }
+      }
+    }
+  }
+}

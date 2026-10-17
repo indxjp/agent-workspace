@@ -1,0 +1,266 @@
+---
+title: "Configuration"
+description: "Point aw at a control plane, switch between several with profiles, pass a key safely in scripts and CI, set a timeout, and send aw dev's model calls through your own gateway, with the exact precedence and every flag."
+---
+
+<Info>
+
+- **Read this when:** `aw` cannot find a URL or credential, you switch between control planes, or
+  you run `aw` in a script or CI.
+- **You will learn:** how `aw` resolves its URL and credential and in which order, how profiles and
+  `--api-key-stdin` keep keys out of files and history, and every global flag.
+- **Used in:** [Chapter 1: Run your first agent](/path/first-agent) and [Chapter 5: Ship it to your
+  servers](/path/ship).
+
+</Info>
+
+Every `aw` command needs a control-plane URL and a credential: an API key or, when no key resolves,
+the sign-in `aw login` stored for that URL (`aw login` and `aw logout` need only the URL). Set them
+once and every command picks them up.
+
+**What you can do**
+
+- [Point aw at a control plane](#point-aw-at-a-control-plane) with two environment variables
+- [Switch between control planes](#switch-between-control-planes-with-profiles) with named profiles
+- [Pass a key safely in a script or CI](#pass-a-key-safely-in-a-script-or-ci)
+- [Set a timeout](#set-a-timeout)
+- [Send model calls through your own gateway](#send-model-calls-through-your-own-gateway) with `aw dev`
+- [Know which setting wins](#precedence)
+- [Look up any flag](#every-flag)
+
+## Point aw at a control plane
+
+Export `AGENT_WORKSPACE_URL` and `AGENT_WORKSPACE_API_KEY`, or run `aw login` to sign in as yourself
+([Authentication](/getting-started/authentication)). Inside a project directory, `aw` reads the URL
+of the project's local runtime from `agent-workspace.yaml`, so after `aw dev` there is nothing to set.
+When the URL or the credential is not resolved, the command exits `2` (usage) with a message naming
+what is missing.
+
+## Switch between control planes with profiles
+
+A profile in `~/.config/agent-workspace/profiles.json` names a control plane and **the environment
+variable that holds its key** — the key itself is never written to the file:
+
+```json title="~/.config/agent-workspace/profiles.json (illustrative)" claim="illustrative"
+{
+  "default": { "url": "https://aw.example.com", "apiKeyRef": "AW_PROD_KEY" },
+  "staging": { "url": "https://staging.example.com", "apiKeyRef": "AW_STAGING_KEY" }
+}
+```
+
+`aw agents list` uses `default`; `aw --profile staging agents list` uses `staging`. A profile named
+with `--profile` outranks the environment variables, so a production key still exported in your
+shell is never sent to the staging host.
+
+<Tip>
+  `apiKeyRef` is an environment variable name today; an OS keychain reference is a documented
+  follow-up, not something to build a workaround for.
+</Tip>
+
+<Accordion title="The profiles file in detail">
+
+`~` is `os.homedir()` (`homedir()` from `node:os`, read once at process start). This build resolves
+the path with a plain `path.join(homeDir, '.config', 'agent-workspace', 'profiles.json')` — it does
+not consult `XDG_CONFIG_HOME` or any other override.
+
+Each entry is validated with Zod (`ProfileSchema`, `.strict()`):
+
+| Field       | Type               | Meaning                                                                    |
+| ----------- | ------------------ | -------------------------------------------------------------------------- |
+| `url`       | non-empty `string` | the control plane's base URL                                               |
+| `apiKeyRef` | non-empty `string` | the **name** of an environment variable that holds the key — never the key |
+
+An extra key, a missing field, or invalid JSON is a usage error naming the file:
+
+```text
+<path> is malformed: expected { "<name>": { "url": string, "apiKeyRef": string } }
+```
+
+A file that does not exist at all is treated as "no profiles" rather than an error — only naming a
+profile with `--profile <name>` that the (possibly absent) file does not define is an error:
+
+```text
+profile "<name>" is not defined in <path>
+```
+
+</Accordion>
+
+## Pass a key safely in a script or CI
+
+Pipe the key in with `--api-key-stdin`. `--api-key <value>` is refused outright, because a flag value
+lands in shell history and in every process listing on the machine.
+
+```sh title="illustrative" claim="illustrative"
+export AGENT_WORKSPACE_URL=https://aw.example.com
+printf '%s' "$AGENT_WORKSPACE_API_KEY_SECRET" | aw --api-key-stdin --timeout 30000 runs start "$AGENT_ID" \
+  --prompt "Nightly regression summary" \
+  --wait --json
+```
+
+No profile file is needed in CI: `--url` plus `--api-key-stdin` (or
+`AGENT_WORKSPACE_URL`/`AGENT_WORKSPACE_API_KEY` set directly from the CI provider's secret store) is
+enough, and nothing here ever touches disk.
+
+Standard input is read at most once: `--api-key-stdin`, `--value-stdin` (used by secret- and
+credential-bearing commands — see [aw overview](/cli/overview)) and `--file -` all read the whole of
+stdin, so one invocation can use only one of them. When a command needs a credential from stdin
+_and_ a JSON body, put the body in a file.
+
+<Accordion title="The exact refusal messages">
+
+`--api-key` never reaches the parser's value flags, so it cannot be typo'd into working. The parser
+raises this exact message (`API_KEY_FLAG_REFUSED` in `args.ts`):
+
+```text
+--api-key is not accepted: pass the key with --api-key-stdin, AGENT_WORKSPACE_API_KEY, or a profile whose apiKeyRef names an environment variable
+```
+
+A second read of stdin throws:
+
+```text
+standard input can be read only once per invocation (--api-key-stdin, --value-stdin and --file - compete for it)
+```
+
+</Accordion>
+
+## Set a timeout
+
+`--timeout <ms>` must be a positive integer; it becomes `timeoutMs` on the `ClientOptions` passed to
+`createClient`. Exactly as in the SDK, this deadline covers **only the wait for response headers** —
+once `fetch` resolves, the deadline is disarmed, so a streamed run body can stay open indefinitely
+regardless of `--timeout`. A request that times out surfaces as a `TransportError` (exit `4`; see
+[Output and exit codes](/cli/output-and-exit-codes)). See
+[Timeouts and cancellation](/guides/timeouts-and-cancellation) for the full mechanics, including how
+`follow()` treats a timeout like any dropped connection and reconnects on its own.
+
+## Send model calls through your own gateway
+
+`aw dev` reads two variables from its own environment when the project file declares no `models`:
+`ANTHROPIC_API_KEY`, and the optional `ANTHROPIC_BASE_URL`. With the base URL set, the workspace's
+`default` model connection sends every model call there instead of to `https://api.anthropic.com`,
+with that key. Use it for an enterprise LLM gateway or proxy that speaks the Anthropic Messages API:
+
+```sh title="illustrative" claim="illustrative"
+export ANTHROPIC_BASE_URL=https://llm-gateway.example.internal
+export ANTHROPIC_API_KEY=<the key your gateway expects>
+npm run dev
+```
+
+- **Checked before start.** A value that is not an absolute `http(s)` URL stops `aw dev` with
+  `ANTHROPIC_BASE_URL is not an absolute http(s) URL`; the value itself is never printed, since a
+  proxy URL can carry a credential.
+- **Applied on every start.** Changing or unsetting the variable updates the `default` connection
+  the next time `aw dev` starts. Neither variable is written to a file.
+- **Only the local connection.** It sets the connection's endpoint; the agent's sandbox still talks
+  to the workspace's own model gateway, never to yours. A project that declares `models` in
+  `agent-workspace.yaml` sets each connection's `baseUrl` there instead (the `anthropic-compatible`
+  and `openai-compatible` providers, see [Your agent, your stack](/features/your-stack#choose-the-model)).
+- **No model at all.** For tests and CI, a scripted model replays fixed turns with no key and no
+  network: see [Run an agent against a scripted model](/guides/testing#run-an-agent-against-a-scripted-model).
+
+## Precedence
+
+`aw` resolves the URL and the credential in a fixed order, documented here exactly as the code
+implements it:
+
+1. **Flags** — `--url <url>`, `--api-key-stdin`, `--profile <name>`, `--timeout <ms>`. A profile named with `--profile` is a flag, so its URL and key rank here.
+2. **Environment** — `AGENT_WORKSPACE_URL`, `AGENT_WORKSPACE_API_KEY`.
+3. **The project file** — `agent-workspace.yaml` in the current directory, for the URL only.
+4. **The `default` profile** in the profiles file — read field by field, so a profile may supply the URL while the environment (or `--api-key-stdin`) supplies the key. Its key is sent only to its own URL, never to another `--url` or `AGENT_WORKSPACE_URL`.
+5. **The stored sign-in** — the token `aw login` (or `aw dev`) saved for the resolved URL, used only when no API key resolves.
+
+<Note>
+  A profile named with `--profile` is a flag, so its URL and its key outrank
+  `AGENT_WORKSPACE_URL`/`AGENT_WORKSPACE_API_KEY` — otherwise `aw --profile staging …` in a shell
+  that still exports a production key would send that key to the staging host. Only the *implicit*
+  `default` profile (no `--profile` given) sits below the environment and the project file.
+</Note>
+
+When the URL came from the project file, only `--api-key-stdin` or the stored sign-in counts:
+`AGENT_WORKSPACE_API_KEY` and profile keys were configured for some other control plane, often a
+shared or production one, and are never sent to the project's local port. When
+`AGENT_WORKSPACE_API_KEY` is set but left unused for this reason, `aw` says so on stderr
+(`note: AGENT_WORKSPACE_API_KEY is not sent to this project's local runtime …`); set
+`AGENT_WORKSPACE_URL` too, or pass `--url`, to use it. A configured key always
+wins over the stored sign-in, so signing in never changes what an automation on the same machine
+acts as.
+
+<AccordionGroup>
+  <Accordion title="How the URL and the credential are resolved, source by source">
+
+The URL and the credential are resolved independently:
+
+- **URL**: `--url`, else (if `--profile <name>` was given) that profile's `url`, else `AGENT_WORKSPACE_URL`, else the project file, else the `default` profile's `url`. The project file is read only when every earlier source is empty: a v2 `agent-workspace.yaml` names its local runtime, `http://127.0.0.1:<environments.local.port>` (port `3000` when it names none); a v1 file lifted to v2 names nothing, so resolution moves on to the `default` profile; a file the schema refuses is a usage error naming its line and column.
+- **API key**: if `--api-key-stdin` is present, the key is read from stdin and no other key source is consulted. Otherwise: (if `--profile <name>` was given) that profile's key, else `AGENT_WORKSPACE_API_KEY`, else the `default` profile's key. With no key from those (including a blank stdin), the stored sign-in for the resolved URL is the credential. When the URL came from the project file, only `--api-key-stdin` or the stored sign-in counts: `AGENT_WORKSPACE_API_KEY` and profile keys were configured for some other control plane, often a shared or production one, and are never sent to the project's local port.
+- **Stored sign-in** (the fallback): when no API key resolves, the unexpired token `aw login` (or `aw dev`) stored for the URL in `~/.config/agent-workspace/credentials.json` (see [Authentication](/getting-started/authentication)). A configured key always wins, so signing in never changes what an automation on the same machine acts as. An expired sign-in is ignored; run `aw login` again.
+
+</Accordion>
+<Accordion title="The messages when something is missing">
+
+```text
+no control plane URL: pass --url, set AGENT_WORKSPACE_URL, run in a project (agent-workspace.yaml), or define a profile
+no credential: run `aw login`, pass --api-key-stdin, set AGENT_WORKSPACE_API_KEY, or define a profile whose apiKeyRef names a set environment variable
+```
+
+When the URL came from the project file, a missing credential names the project's local runtime instead:
+
+```text
+no credential for this project's local runtime (http://127.0.0.1:3000): run `aw dev`, or pass --api-key-stdin; AGENT_WORKSPACE_API_KEY and profile keys are not sent to it
+```
+
+</Accordion>
+</AccordionGroup>
+
+## Every flag
+
+All flags are global — the parser accepts them anywhere on the command line, and a command uses
+only the ones it documents in its own usage line (`aw <family> <command> --help` /
+[CLI commands](/reference/cli/commands)). An unrecognized `--flag` is refused before any command runs
+(exit `2`). See [Output and exit codes](/cli/output-and-exit-codes) for what `--json`, `--jsonl`,
+`--raw` and `--quiet` change.
+
+<AccordionGroup>
+  <Accordion title="Value flags (--name value or --name=value)">
+
+| Flag            | Used by                                                                                                                                                                                                                                                                          |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--url`         | global configuration                                                                                                                                                                                                                                                             |
+| `--profile`     | global configuration                                                                                                                                                                                                                                                             |
+| `--timeout`     | global configuration                                                                                                                                                                                                                                                             |
+| `--file`        | every `create`/`update` and `agents assignments set`, `skills update`                                                                                                                                                                                                            |
+| `--name`        | `agents create`/`update`, `models connections create`/`update`, `runtimes profiles create`/`update`, `runtimes connections create`, `secrets create`, `skills import`, `connectors create`/`test-draft`, `projects create`/`update`, `team users create`, `team api-keys create` |
+| `--role`        | `team members add`, `team users create`, `team api-keys create`                                                                                                                                                                                                                  |
+| `--email`       | `team members add`, `team users create`                                                                                                                                                                                                                                          |
+| `--prompt`      | `runs start`                                                                                                                                                                                                                                                                     |
+| `--prompt-file` | `runs start`                                                                                                                                                                                                                                                                     |
+| `--session`     | `runs start`                                                                                                                                                                                                                                                                     |
+| `--model`       | `runs start` (`<connection-id>:<model>`)                                                                                                                                                                                                                                         |
+| `--limit`       | `runs list`, `audit list`                                                                                                                                                                                                                                                        |
+| `--cursor`      | `runs list`                                                                                                                                                                                                                                                                      |
+| `--path`        | `files list` (a folder to list)                                                                                                                                                                                                                                                  |
+| `--status`      | `runs list`, `sessions list`                                                                                                                                                                                                                                                     |
+| `--archived`    | `projects list` (`active`\|`archived`\|`all`)                                                                                                                                                                                                                                    |
+| `--agent`       | `runs list`                                                                                                                                                                                                                                                                      |
+| `--project`     | `runs list`                                                                                                                                                                                                                                                                      |
+| `--after`       | `runs events`, `runs follow` (an event id to resume from)                                                                                                                                                                                                                        |
+| `--project-key` | `sessions transcript`, `sessions subkeys`                                                                                                                                                                                                                                        |
+| `--subpath`     | `sessions transcript`                                                                                                                                                                                                                                                            |
+
+  </Accordion>
+  <Accordion title="Switches (no value)">
+
+| Switch               | Used by                                                                                                                                                          |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--api-key-stdin`    | global configuration                                                                                                                                             |
+| `--value-stdin`      | `secrets create`/`replace`, `models connections create`/`rotate-credential`, `runtimes connections create`, `connectors create`/`test-draft`/`rotate-credential` |
+| `--json`             | global output                                                                                                                                                    |
+| `--jsonl`            | global output                                                                                                                                                    |
+| `--raw`              | global output (streaming commands only)                                                                                                                          |
+| `--quiet`            | global output                                                                                                                                                    |
+| `--help` (also `-h`) | global                                                                                                                                                           |
+| `--recursive`        | `files remove`                                                                                                                                                   |
+| `--wait`             | `runs start`                                                                                                                                                     |
+| `--follow`           | `runs start`                                                                                                                                                     |
+
+  </Accordion>
+</AccordionGroup>

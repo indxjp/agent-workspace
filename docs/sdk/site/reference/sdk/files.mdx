@@ -1,0 +1,143 @@
+---
+title: "FilesClient"
+description: "Every method of FilesClient, its parameters, return type, and route."
+---
+
+<Note>This page is generated from `packages/sdk/src/resources/files.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+`/api/files/**` — spec §16. A file is addressed by its workspace-relative path everywhere in
+this client; the route's `:id` is derived from it (`fileRouteId`), and a resource's `id` field
+is opaque.
+
+## list
+
+```ts
+async list(query?: ListFilesQuery, options?: RequestOptions): Promise<readonly FileResource[]>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `query` | `ListFilesQuery` | No |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<readonly FileResource[]>`
+
+**Route:** `GET /api/files`
+
+## upload
+
+Write (or overwrite) one file. The bytes are sent as-is; the path travels as a header.
+
+```ts
+async upload(path: string, body: UploadBody, options?: UploadFileOptions): Promise<FileResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `path` | `string` | Yes |
+| `body` | `UploadBody` | Yes |
+| `options` | `UploadFileOptions` | No |
+
+**Returns:** `Promise<FileResource>`
+
+**Route:** `POST /api/files`
+
+## createFolder
+
+Create an explicitly empty folder. A path that already exists is a `409 name_conflict`.
+
+```ts
+async createFolder(path: string, options?: RequestOptions): Promise<FileResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `path` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<FileResource>`
+
+**Route:** `POST /api/files`
+
+## download
+
+```ts
+async download(path: string, options?: RequestOptions): Promise<FileDownload>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `path` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<FileDownload>`
+
+## move
+
+Rename or move. A file answers `{ file }`; a folder answers a subtree outcome, and a
+`partial` one is a declared state to retry, not a failure.
+
+```ts
+async move(path: string, newPath: string, options?: RequestOptions): Promise<MoveFileResponse>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `path` | `string` | Yes |
+| `newPath` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<MoveFileResponse>`
+
+## remove
+
+Delete a file or folder. `null` is the `204` — a file, or nothing there to begin with; a
+folder (even one created empty) answers what was deleted and, if `partial`, what remains.
+
+```ts
+async remove(path: string, options?: RemoveFileOptions): Promise<RemoveFileResponse>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `path` | `string` | Yes |
+| `options` | `RemoveFileOptions` | No |
+
+**Returns:** `Promise<RemoveFileResponse>`
+
+## FileDownload
+
+What `GET /api/files/:id` answers. A path that names bytes is served as an attachment; a path
+that names a folder is answered with the folder's metadata instead, and a caller that wants
+bytes must branch on `kind`.
+
+- `{ readonly kind: "file"; readonly bytes: Uint8Array; readonly contentType: string; readonly filename: string; }`
+- `{ readonly kind: "folder"; readonly file: FileResource; }`
+
+## ListFilesQuery
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | `undefined \| string` | No | A workspace-relative folder; omit for the root. One level only. |
+
+## RemoveFileOptions
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `recursive` | `undefined \| false \| true` | No | Required to delete a folder that has contents (`409 folder_not_empty` otherwise). |
+| `signal` | `undefined \| AbortSignal` | No |  |
+
+## UploadBody
+
+What `FilesClient.upload` accepts as the file's content.
+
+- `Uint8Array<ArrayBufferLike>`
+- `Blob`
+- `ReadableStream<Uint8Array<ArrayBufferLike>>`
+
+## UploadFileOptions
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `contentType` | `undefined \| string` | No | Stored with the file and reported back as `contentType`. Omit to store `null` (a `Blob` with a `type` of its own still declares it). Downloads never echo it as active content: the server serves only a closed table of inert types, everything else as `application/octet-stream`. |
+| `signal` | `undefined \| AbortSignal` | No |  |

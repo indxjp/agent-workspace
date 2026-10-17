@@ -1,0 +1,333 @@
+node=v24.19.0 platform=win32
+DEST (live, answers 200)          = http://127.0.0.1:55936
+DEAD PROXY A (no listener)        = http://127.0.0.1:55988
+DEAD PROXY B (no listener)        = http://127.0.0.1:55995
+Mapping: ECONNREFUSED => the request was sent to the proxy. 200 from DEST => it was not.
+
+### D1  BASELINE — fetch, NODE_USE_ENV_PROXY=1, HTTP_PROXY=DEAD ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=fetch url=http://127.0.0.1:55936/d1
+boot env: NODE_USE_ENV_PROXY="1" NODE_OPTIONS=null HTTP_PROXY="http://127.0.0.1:55988" http_proxy="http://127.0.0.1:55988" HTTPS_PROXY=null ALL_PROXY=null NO_PROXY=null
+RESULT: fetch threw TypeError: fetch failed [ECONNREFUSED]
+VERDICT: PROXY USED — dialled the configured proxy address, which has no listener (ECONNREFUSED)
+
+### D2  CONTROL — fetch, HTTP_PROXY=DEAD, no enabling mechanism ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=fetch url=http://127.0.0.1:55936/d2
+boot env: NODE_USE_ENV_PROXY=null NODE_OPTIONS=null HTTP_PROXY="http://127.0.0.1:55988" http_proxy="http://127.0.0.1:55988" HTTPS_PROXY=null ALL_PROXY=null NO_PROXY=null
+RESULT: fetch resolved status=200 body="hello from DEST"
+VERDICT: PROXY NOT USED — went DIRECT to DEST (200 from DEST itself)
+
+### D3  BASELINE — http.get, NODE_USE_ENV_PROXY=1, HTTP_PROXY=DEAD ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=http url=http://127.0.0.1:55936/d3
+boot env: NODE_USE_ENV_PROXY="1" NODE_OPTIONS=null HTTP_PROXY="http://127.0.0.1:55988" http_proxy="http://127.0.0.1:55988" HTTPS_PROXY=null ALL_PROXY=null NO_PROXY=null
+RESULT: request errored connect ECONNREFUSED 127.0.0.1:55988 [ECONNREFUSED]
+VERDICT: PROXY USED — dialled the configured proxy address, which has no listener (ECONNREFUSED)
+
+### D4  CONTROL — http.get, HTTP_PROXY=DEAD, no enabling mechanism ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=http url=http://127.0.0.1:55936/d4
+boot env: NODE_USE_ENV_PROXY=null NODE_OPTIONS=null HTTP_PROXY="http://127.0.0.1:55988" http_proxy="http://127.0.0.1:55988" HTTPS_PROXY=null ALL_PROXY=null NO_PROXY=null
+RESULT: http.get resolved status=200 body="hello from DEST"
+VERDICT: PROXY NOT USED — went DIRECT to DEST (200 from DEST itself)
+
+### D5  NODE_OPTIONS=--use-env-proxy, fetch  (F4: this is the probe the note claimed and never ran) ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=fetch url=http://127.0.0.1:55936/d5
+boot env: NODE_USE_ENV_PROXY=null NODE_OPTIONS="--use-env-proxy" HTTP_PROXY="http://127.0.0.1:55988" http_proxy="http://127.0.0.1:55988" HTTPS_PROXY=null ALL_PROXY=null NO_PROXY=null
+RESULT: fetch threw TypeError: fetch failed [ECONNREFUSED]
+VERDICT: PROXY USED — dialled the configured proxy address, which has no listener (ECONNREFUSED)
+
+### D6  NODE_OPTIONS=--use-env-proxy, http.get ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=http url=http://127.0.0.1:55936/d6
+boot env: NODE_USE_ENV_PROXY=null NODE_OPTIONS="--use-env-proxy" HTTP_PROXY="http://127.0.0.1:55988" http_proxy="http://127.0.0.1:55988" HTTPS_PROXY=null ALL_PROXY=null NO_PROXY=null
+RESULT: request errored connect ECONNREFUSED 127.0.0.1:55988 [ECONNREFUSED]
+VERDICT: PROXY USED — dialled the configured proxy address, which has no listener (ECONNREFUSED)
+
+### D7  --use-env-proxy CLI flag, fetch ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=["--use-env-proxy"]
+client=fetch url=http://127.0.0.1:55936/d7
+boot env: NODE_USE_ENV_PROXY=null NODE_OPTIONS=null HTTP_PROXY="http://127.0.0.1:55988" http_proxy="http://127.0.0.1:55988" HTTPS_PROXY=null ALL_PROXY=null NO_PROXY=null
+RESULT: fetch threw TypeError: fetch failed [ECONNREFUSED]
+VERDICT: PROXY USED — dialled the configured proxy address, which has no listener (ECONNREFUSED)
+
+### D8  --use-env-proxy CLI flag, http.get ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=["--use-env-proxy"]
+client=http url=http://127.0.0.1:55936/d8
+boot env: NODE_USE_ENV_PROXY=null NODE_OPTIONS=null HTTP_PROXY="http://127.0.0.1:55988" http_proxy="http://127.0.0.1:55988" HTTPS_PROXY=null ALL_PROXY=null NO_PROXY=null
+RESULT: request errored connect ECONNREFUSED 127.0.0.1:55988 [ECONNREFUSED]
+VERDICT: PROXY USED — dialled the configured proxy address, which has no listener (ECONNREFUSED)
+
+### D9  POST-LAUNCH API — http.setGlobalProxyFromEnv({HTTP_PROXY}) with NO boot mechanism, fetch ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=fetch url=http://127.0.0.1:55936/d9
+boot env: NODE_USE_ENV_PROXY=null NODE_OPTIONS=null HTTP_PROXY=null http_proxy=null HTTPS_PROXY=null ALL_PROXY=null NO_PROXY=null
+mutation: http.setGlobalProxyFromEnv({"HTTP_PROXY":"http://127.0.0.1:55988"})  -> typeof return = function
+RESULT: fetch threw TypeError: fetch failed [ECONNREFUSED]
+VERDICT: PROXY USED — dialled the configured proxy address, which has no listener (ECONNREFUSED)
+
+### D10 POST-LAUNCH API — http.setGlobalProxyFromEnv({HTTP_PROXY}) with NO boot mechanism, http.get ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=http url=http://127.0.0.1:55936/d10
+boot env: NODE_USE_ENV_PROXY=null NODE_OPTIONS=null HTTP_PROXY=null http_proxy=null HTTPS_PROXY=null ALL_PROXY=null NO_PROXY=null
+mutation: http.setGlobalProxyFromEnv({"HTTP_PROXY":"http://127.0.0.1:55988"})  -> typeof return = function
+RESULT: request errored connect ECONNREFUSED 127.0.0.1:55988 [ECONNREFUSED]
+VERDICT: PROXY USED — dialled the configured proxy address, which has no listener (ECONNREFUSED)
+
+### D11 POST-LAUNCH API — set process.env.HTTP_PROXY late, THEN setGlobalProxyFromEnv() with no argument ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=fetch url=http://127.0.0.1:55936/d11
+boot env: NODE_USE_ENV_PROXY=null NODE_OPTIONS=null HTTP_PROXY=null http_proxy=null HTTPS_PROXY=null ALL_PROXY=null NO_PROXY=null
+mutation: process.env.HTTP_PROXY = "http://127.0.0.1:55988"
+mutation: http.setGlobalProxyFromEnv()  -> typeof return = function
+RESULT: fetch threw TypeError: fetch failed [ECONNREFUSED]
+VERDICT: PROXY USED — dialled the configured proxy address, which has no listener (ECONNREFUSED)
+
+### D12 POST-LAUNCH API — the returned restore function puts it back ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=fetch url=http://127.0.0.1:55936/d12
+boot env: NODE_USE_ENV_PROXY=null NODE_OPTIONS=null HTTP_PROXY=null http_proxy=null HTTPS_PROXY=null ALL_PROXY=null NO_PROXY=null
+mutation: http.setGlobalProxyFromEnv({"HTTP_PROXY":"http://127.0.0.1:55988"})  -> typeof return = function
+mutation: called the restore function returned by setGlobalProxyFromEnv()
+RESULT: fetch resolved status=200 body="hello from DEST"
+VERDICT: PROXY NOT USED — went DIRECT to DEST (200 from DEST itself)
+
+### D13 POST-LAUNCH AGENT — new http.Agent({ proxyEnv }), global agent untouched ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=http url=http://127.0.0.1:55936/d13
+boot env: NODE_USE_ENV_PROXY=null NODE_OPTIONS=null HTTP_PROXY=null http_proxy=null HTTPS_PROXY=null ALL_PROXY=null NO_PROXY=null
+mutation: new Agent({ proxyEnv: {"HTTP_PROXY":"http://127.0.0.1:55988"} })
+RESULT: request errored connect ECONNREFUSED 127.0.0.1:55988 [ECONNREFUSED]
+VERDICT: PROXY USED — dialled the configured proxy address, which has no listener (ECONNREFUSED)
+
+### D14 NEGATIVE — late process.env.HTTP_PROXY mutation, booted with NODE_USE_ENV_PROXY=1, fetch ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=fetch url=http://127.0.0.1:55936/d14
+boot env: NODE_USE_ENV_PROXY="1" NODE_OPTIONS=null HTTP_PROXY=null http_proxy=null HTTPS_PROXY=null ALL_PROXY=null NO_PROXY=null
+mutation: process.env.HTTP_PROXY = "http://127.0.0.1:55988"
+RESULT: fetch resolved status=200 body="hello from DEST"
+VERDICT: PROXY NOT USED — went DIRECT to DEST (200 from DEST itself)
+
+### D15 NEGATIVE — late process.env.HTTP_PROXY mutation, booted with NODE_USE_ENV_PROXY=1, http.get ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=http url=http://127.0.0.1:55936/d15
+boot env: NODE_USE_ENV_PROXY="1" NODE_OPTIONS=null HTTP_PROXY=null http_proxy=null HTTPS_PROXY=null ALL_PROXY=null NO_PROXY=null
+mutation: process.env.HTTP_PROXY = "http://127.0.0.1:55988"
+RESULT: http.get resolved status=200 body="hello from DEST"
+VERDICT: PROXY NOT USED — went DIRECT to DEST (200 from DEST itself)
+
+### D16 NO_PROXY LIVENESS, fetch — NO_PROXY unset at boot, set from inside the process afterwards ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=fetch url=http://127.0.0.1:55936/d16
+boot env: NODE_USE_ENV_PROXY="1" NODE_OPTIONS=null HTTP_PROXY="http://127.0.0.1:55988" http_proxy="http://127.0.0.1:55988" HTTPS_PROXY=null ALL_PROXY=null NO_PROXY=null
+mutation: process.env.NO_PROXY = "127.0.0.1"
+RESULT: fetch resolved status=200 body="hello from DEST"
+VERDICT: PROXY NOT USED — went DIRECT to DEST (200 from DEST itself)
+
+### D17 NO_PROXY LIVENESS, http.get — same mutation, same moment, DIFFERENT ANSWER ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=http url=http://127.0.0.1:55936/d17
+boot env: NODE_USE_ENV_PROXY="1" NODE_OPTIONS=null HTTP_PROXY="http://127.0.0.1:55988" http_proxy="http://127.0.0.1:55988" HTTPS_PROXY=null ALL_PROXY=null NO_PROXY=null
+mutation: process.env.NO_PROXY = "127.0.0.1"
+RESULT: request errored connect ECONNREFUSED 127.0.0.1:55988 [ECONNREFUSED]
+VERDICT: PROXY USED — dialled the configured proxy address, which has no listener (ECONNREFUSED)
+
+### D18 CONTROL for D16 — NO_PROXY=127.0.0.1 present at boot, fetch ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=fetch url=http://127.0.0.1:55936/d18
+boot env: NODE_USE_ENV_PROXY="1" NODE_OPTIONS=null HTTP_PROXY="http://127.0.0.1:55988" http_proxy="http://127.0.0.1:55988" HTTPS_PROXY=null ALL_PROXY=null NO_PROXY="127.0.0.1"
+RESULT: fetch resolved status=200 body="hello from DEST"
+VERDICT: PROXY NOT USED — went DIRECT to DEST (200 from DEST itself)
+
+### D19 CONTROL for D17 — NO_PROXY=127.0.0.1 present at boot, http.get ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=http url=http://127.0.0.1:55936/d19
+boot env: NODE_USE_ENV_PROXY="1" NODE_OPTIONS=null HTTP_PROXY="http://127.0.0.1:55988" http_proxy="http://127.0.0.1:55988" HTTPS_PROXY=null ALL_PROXY=null NO_PROXY="127.0.0.1"
+RESULT: http.get resolved status=200 body="hello from DEST"
+VERDICT: PROXY NOT USED — went DIRECT to DEST (200 from DEST itself)
+
+### D20 NO_PROXY=* — fetch ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=fetch url=http://127.0.0.1:55936/d20
+boot env: NODE_USE_ENV_PROXY="1" NODE_OPTIONS=null HTTP_PROXY="http://127.0.0.1:55988" http_proxy="http://127.0.0.1:55988" HTTPS_PROXY=null ALL_PROXY=null NO_PROXY="*"
+RESULT: fetch resolved status=200 body="hello from DEST"
+VERDICT: PROXY NOT USED — went DIRECT to DEST (200 from DEST itself)
+
+### D21 NO_PROXY=* — http.get ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=http url=http://127.0.0.1:55936/d21
+boot env: NODE_USE_ENV_PROXY="1" NODE_OPTIONS=null HTTP_PROXY="http://127.0.0.1:55988" http_proxy="http://127.0.0.1:55988" HTTPS_PROXY=null ALL_PROXY=null NO_PROXY="*"
+RESULT: http.get resolved status=200 body="hello from DEST"
+VERDICT: PROXY NOT USED — went DIRECT to DEST (200 from DEST itself)
+
+### D22 NO_PROXY port qualifier MATCHING the destination port — fetch ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=fetch url=http://127.0.0.1:55936/d22
+boot env: NODE_USE_ENV_PROXY="1" NODE_OPTIONS=null HTTP_PROXY="http://127.0.0.1:55988" http_proxy="http://127.0.0.1:55988" HTTPS_PROXY=null ALL_PROXY=null NO_PROXY="127.0.0.1:55936"
+RESULT: fetch resolved status=200 body="hello from DEST"
+VERDICT: PROXY NOT USED — went DIRECT to DEST (200 from DEST itself)
+
+### D23 NO_PROXY port qualifier NOT matching the destination port — fetch ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=fetch url=http://127.0.0.1:55936/d23
+boot env: NODE_USE_ENV_PROXY="1" NODE_OPTIONS=null HTTP_PROXY="http://127.0.0.1:55988" http_proxy="http://127.0.0.1:55988" HTTPS_PROXY=null ALL_PROXY=null NO_PROXY="127.0.0.1:1"
+RESULT: fetch threw TypeError: fetch failed [ECONNREFUSED]
+VERDICT: PROXY USED — dialled the configured proxy address, which has no listener (ECONNREFUSED)
+
+### D24 NO_PROXY port qualifier MATCHING the destination port — http.get ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=http url=http://127.0.0.1:55936/d24
+boot env: NODE_USE_ENV_PROXY="1" NODE_OPTIONS=null HTTP_PROXY="http://127.0.0.1:55988" http_proxy="http://127.0.0.1:55988" HTTPS_PROXY=null ALL_PROXY=null NO_PROXY="127.0.0.1:55936"
+RESULT: http.get resolved status=200 body="hello from DEST"
+VERDICT: PROXY NOT USED — went DIRECT to DEST (200 from DEST itself)
+
+### D25 NO_PROXY port qualifier NOT matching — http.get ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=http url=http://127.0.0.1:55936/d25
+boot env: NODE_USE_ENV_PROXY="1" NODE_OPTIONS=null HTTP_PROXY="http://127.0.0.1:55988" http_proxy="http://127.0.0.1:55988" HTTPS_PROXY=null ALL_PROXY=null NO_PROXY="127.0.0.1:1"
+RESULT: request errored connect ECONNREFUSED 127.0.0.1:55988 [ECONNREFUSED]
+VERDICT: PROXY USED — dialled the configured proxy address, which has no listener (ECONNREFUSED)
+
+### D26 SUBDOMAIN CONTROL — no NO_PROXY, host under .invalid, fetch ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=fetch url=http://sub.r14-probe.invalid/d26
+boot env: NODE_USE_ENV_PROXY="1" NODE_OPTIONS=null HTTP_PROXY="http://127.0.0.1:55988" http_proxy="http://127.0.0.1:55988" HTTPS_PROXY=null ALL_PROXY=null NO_PROXY=null
+RESULT: fetch threw TypeError: fetch failed [ECONNREFUSED]
+VERDICT: PROXY USED — dialled the configured proxy address, which has no listener (ECONNREFUSED)
+
+### D27 NO_PROXY=.r14-probe.invalid (leading dot) vs sub.r14-probe.invalid, fetch ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=fetch url=http://sub.r14-probe.invalid/d27
+boot env: NODE_USE_ENV_PROXY="1" NODE_OPTIONS=null HTTP_PROXY="http://127.0.0.1:55988" http_proxy="http://127.0.0.1:55988" HTTPS_PROXY=null ALL_PROXY=null NO_PROXY=".r14-probe.invalid"
+RESULT: fetch threw TypeError: fetch failed [ENOTFOUND]
+VERDICT: PROXY NOT USED — resolved the target hostname itself and DNS failed (name is .invalid)
+
+### D28 NO_PROXY=r14-probe.invalid (no dot) vs sub.r14-probe.invalid, fetch ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=fetch url=http://sub.r14-probe.invalid/d28
+boot env: NODE_USE_ENV_PROXY="1" NODE_OPTIONS=null HTTP_PROXY="http://127.0.0.1:55988" http_proxy="http://127.0.0.1:55988" HTTPS_PROXY=null ALL_PROXY=null NO_PROXY="r14-probe.invalid"
+RESULT: fetch threw TypeError: fetch failed [ENOTFOUND]
+VERDICT: PROXY NOT USED — resolved the target hostname itself and DNS failed (name is .invalid)
+
+### D29 NO_PROXY=*.r14-probe.invalid (wildcard) vs sub.r14-probe.invalid, fetch ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=fetch url=http://sub.r14-probe.invalid/d29
+boot env: NODE_USE_ENV_PROXY="1" NODE_OPTIONS=null HTTP_PROXY="http://127.0.0.1:55988" http_proxy="http://127.0.0.1:55988" HTTPS_PROXY=null ALL_PROXY=null NO_PROXY="*.r14-probe.invalid"
+RESULT: fetch threw TypeError: fetch failed [ENOTFOUND]
+VERDICT: PROXY NOT USED — resolved the target hostname itself and DNS failed (name is .invalid)
+
+### D30 NO_PROXY=other.invalid (no match) vs sub.r14-probe.invalid, fetch ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=fetch url=http://sub.r14-probe.invalid/d30
+boot env: NODE_USE_ENV_PROXY="1" NODE_OPTIONS=null HTTP_PROXY="http://127.0.0.1:55988" http_proxy="http://127.0.0.1:55988" HTTPS_PROXY=null ALL_PROXY=null NO_PROXY="other.invalid"
+RESULT: fetch threw TypeError: fetch failed [ECONNREFUSED]
+VERDICT: PROXY USED — dialled the configured proxy address, which has no listener (ECONNREFUSED)
+
+### D31 NO_PROXY=.r14-probe.invalid vs sub.r14-probe.invalid, http.get ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=http url=http://sub.r14-probe.invalid/d31
+boot env: NODE_USE_ENV_PROXY="1" NODE_OPTIONS=null HTTP_PROXY="http://127.0.0.1:55988" http_proxy="http://127.0.0.1:55988" HTTPS_PROXY=null ALL_PROXY=null NO_PROXY=".r14-probe.invalid"
+RESULT: request errored getaddrinfo ENOTFOUND sub.r14-probe.invalid [ENOTFOUND]
+VERDICT: PROXY NOT USED — resolved the target hostname itself and DNS failed (name is .invalid)
+
+### D32 NO_PROXY exact-host case-insensitivity — NO_PROXY=SUB.R14-PROBE.INVALID, fetch ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=fetch url=http://sub.r14-probe.invalid/d32
+boot env: NODE_USE_ENV_PROXY="1" NODE_OPTIONS=null HTTP_PROXY="http://127.0.0.1:55988" http_proxy="http://127.0.0.1:55988" HTTPS_PROXY=null ALL_PROXY=null NO_PROXY="SUB.R14-PROBE.INVALID"
+RESULT: fetch threw TypeError: fetch failed [ENOTFOUND]
+VERDICT: PROXY NOT USED — resolved the target hostname itself and DNS failed (name is .invalid)
+
+### D33 ALL_PROXY only (no HTTP_PROXY), NODE_USE_ENV_PROXY=1, fetch ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=fetch url=http://127.0.0.1:55936/d33
+boot env: NODE_USE_ENV_PROXY="1" NODE_OPTIONS=null HTTP_PROXY=null http_proxy=null HTTPS_PROXY=null ALL_PROXY="http://127.0.0.1:55988" NO_PROXY=null
+RESULT: fetch resolved status=200 body="hello from DEST"
+VERDICT: PROXY NOT USED — went DIRECT to DEST (200 from DEST itself)
+
+### D34 ALL_PROXY only (no HTTP_PROXY), NODE_USE_ENV_PROXY=1, http.get ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=http url=http://127.0.0.1:55936/d34
+boot env: NODE_USE_ENV_PROXY="1" NODE_OPTIONS=null HTTP_PROXY=null http_proxy=null HTTPS_PROXY=null ALL_PROXY="http://127.0.0.1:55988" NO_PROXY=null
+RESULT: http.get resolved status=200 body="hello from DEST"
+VERDICT: PROXY NOT USED — went DIRECT to DEST (200 from DEST itself)
+
+### D35 LOWERCASE PRECEDENCE — http_proxy=DEAD-A, HTTP_PROXY=DEAD-B (disagreeing), http.get names the port it dialled ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=http url=http://127.0.0.1:55936/d35
+boot env: NODE_USE_ENV_PROXY="1" NODE_OPTIONS=null HTTP_PROXY="http://127.0.0.1:55995" http_proxy="http://127.0.0.1:55995" HTTPS_PROXY=null ALL_PROXY=null NO_PROXY=null
+RESULT: request errored connect ECONNREFUSED 127.0.0.1:55995 [ECONNREFUSED]
+VERDICT: PROXY USED — dialled the configured proxy address, which has no listener (ECONNREFUSED)
+
+### D36 LOWERCASE PRECEDENCE, fetch — decided through no_proxy instead, since fetch does not name the port ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=fetch url=http://127.0.0.1:55936/d36
+boot env: NODE_USE_ENV_PROXY="1" NODE_OPTIONS=null HTTP_PROXY="http://127.0.0.1:55988" http_proxy="http://127.0.0.1:55988" HTTPS_PROXY=null ALL_PROXY=null NO_PROXY="example.com"
+RESULT: fetch threw TypeError: fetch failed [ECONNREFUSED]
+VERDICT: PROXY USED — dialled the configured proxy address, which has no listener (ECONNREFUSED)
+
+### D37 LOWERCASE PRECEDENCE, http.get — same no_proxy/NO_PROXY disagreement ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=http url=http://127.0.0.1:55936/d37
+boot env: NODE_USE_ENV_PROXY="1" NODE_OPTIONS=null HTTP_PROXY="http://127.0.0.1:55988" http_proxy="http://127.0.0.1:55988" HTTPS_PROXY=null ALL_PROXY=null NO_PROXY="example.com"
+RESULT: request errored connect ECONNREFUSED 127.0.0.1:55988 [ECONNREFUSED]
+VERDICT: PROXY USED — dialled the configured proxy address, which has no listener (ECONNREFUSED)
+
+### D38 LOWERCASE ONLY — http_proxy=DEAD-A set, HTTP_PROXY unset, fetch ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=fetch url=http://127.0.0.1:55936/d38
+boot env: NODE_USE_ENV_PROXY="1" NODE_OPTIONS=null HTTP_PROXY="http://127.0.0.1:55988" http_proxy="http://127.0.0.1:55988" HTTPS_PROXY=null ALL_PROXY=null NO_PROXY=null
+RESULT: fetch threw TypeError: fetch failed [ECONNREFUSED]
+VERDICT: PROXY USED — dialled the configured proxy address, which has no listener (ECONNREFUSED)
+
+### D39 LOWERCASE ONLY — http_proxy=DEAD-A set, HTTP_PROXY unset, http.get ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=http url=http://127.0.0.1:55936/d39
+boot env: NODE_USE_ENV_PROXY="1" NODE_OPTIONS=null HTTP_PROXY="http://127.0.0.1:55988" http_proxy="http://127.0.0.1:55988" HTTPS_PROXY=null ALL_PROXY=null NO_PROXY=null
+RESULT: request errored connect ECONNREFUSED 127.0.0.1:55988 [ECONNREFUSED]
+VERDICT: PROXY USED — dialled the configured proxy address, which has no listener (ECONNREFUSED)
+
+### D40 BARE SUFFIX — NO_PROXY=r14-probe.invalid (no dot) vs sub.r14-probe.invalid, http.get (compare D28, fetch) ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=http url=http://sub.r14-probe.invalid/d40
+boot env: NODE_USE_ENV_PROXY="1" NODE_OPTIONS=null HTTP_PROXY="http://127.0.0.1:55988" http_proxy="http://127.0.0.1:55988" HTTPS_PROXY=null ALL_PROXY=null NO_PROXY="r14-probe.invalid"
+RESULT: request errored connect ECONNREFUSED 127.0.0.1:55988 [ECONNREFUSED]
+VERDICT: PROXY USED — dialled the configured proxy address, which has no listener (ECONNREFUSED)
+
+### D41 WILDCARD — NO_PROXY=*.r14-probe.invalid vs sub.r14-probe.invalid, http.get (compare D29, fetch) ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=http url=http://sub.r14-probe.invalid/d41
+boot env: NODE_USE_ENV_PROXY="1" NODE_OPTIONS=null HTTP_PROXY="http://127.0.0.1:55988" http_proxy="http://127.0.0.1:55988" HTTPS_PROXY=null ALL_PROXY=null NO_PROXY="*.r14-probe.invalid"
+RESULT: request errored getaddrinfo ENOTFOUND sub.r14-probe.invalid [ENOTFOUND]
+VERDICT: PROXY NOT USED — resolved the target hostname itself and DNS failed (name is .invalid)
+
+### D42 IP RANGE — NO_PROXY=127.0.0.0-127.0.0.255 vs 127.0.0.1, fetch ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=fetch url=http://127.0.0.1:55936/d42
+boot env: NODE_USE_ENV_PROXY="1" NODE_OPTIONS=null HTTP_PROXY="http://127.0.0.1:55988" http_proxy="http://127.0.0.1:55988" HTTPS_PROXY=null ALL_PROXY=null NO_PROXY="127.0.0.0-127.0.0.255"
+RESULT: fetch threw TypeError: fetch failed [ECONNREFUSED]
+VERDICT: PROXY USED — dialled the configured proxy address, which has no listener (ECONNREFUSED)
+
+### D43 IP RANGE — NO_PROXY=127.0.0.0-127.0.0.255 vs 127.0.0.1, http.get ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=http url=http://127.0.0.1:55936/d43
+boot env: NODE_USE_ENV_PROXY="1" NODE_OPTIONS=null HTTP_PROXY="http://127.0.0.1:55988" http_proxy="http://127.0.0.1:55988" HTTPS_PROXY=null ALL_PROXY=null NO_PROXY="127.0.0.0-127.0.0.255"
+RESULT: http.get resolved status=200 body="hello from DEST"
+VERDICT: PROXY NOT USED — went DIRECT to DEST (200 from DEST itself)
+
+### D44 EMPTY STRING — http_proxy="" and HTTP_PROXY=DEAD-A, fetch ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=fetch url=http://127.0.0.1:55936/d44
+boot env: NODE_USE_ENV_PROXY="1" NODE_OPTIONS=null HTTP_PROXY="http://127.0.0.1:55988" http_proxy="http://127.0.0.1:55988" HTTPS_PROXY=null ALL_PROXY=null NO_PROXY=null
+RESULT: fetch threw TypeError: fetch failed [ECONNREFUSED]
+VERDICT: PROXY USED — dialled the configured proxy address, which has no listener (ECONNREFUSED)
+
+### D45 EMPTY STRING — http_proxy="" and HTTP_PROXY=DEAD-A, http.get ###
+node=v24.19.0 undici=7.29.0 platform=win32 execArgv=[]
+client=http url=http://127.0.0.1:55936/d45
+boot env: NODE_USE_ENV_PROXY="1" NODE_OPTIONS=null HTTP_PROXY="http://127.0.0.1:55988" http_proxy="http://127.0.0.1:55988" HTTPS_PROXY=null ALL_PROXY=null NO_PROXY=null
+RESULT: request errored connect ECONNREFUSED 127.0.0.1:55988 [ECONNREFUSED]
+VERDICT: PROXY USED — dialled the configured proxy address, which has no listener (ECONNREFUSED)
+
+=== route-suite complete ===

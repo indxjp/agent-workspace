@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Q3 Supplier Contracts — Agent Workspace</title>
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<script>window.PAGE = { nav: "projects", crumbs: [["Projects", "projects.html"], ["Q3 Supplier Contracts"]] };</script>
+
+<div class="app">
+  <div class="main">
+    <div class="page">
+
+      <div class="page-head">
+        <div>
+          <h1>Q3 Supplier Contracts</h1>
+          <div class="sub">Contract Review · 18 sessions · 34 files · created by Aya Ito on 12 Aug 2026</div>
+        </div>
+        <div class="actions">
+          <button class="btn" data-modal-open="m-share-project">Share</button>
+          <button class="btn" data-modal-open="m-project-settings">Settings</button>
+        </div>
+      </div>
+
+      <div class="composer mb16">
+        <textarea placeholder="Start a chat in this project…"></textarea>
+        <div class="tools">
+          <span class="chip">Agent: Contract Review</span>
+          <span class="chip">34 project files</span>
+          <span class="chip">Internal Search</span>
+          <span class="chip">Jira</span>
+          <span class="spacer"></span>
+          <a class="btn primary sm" href="agent-run.html">Send</a>
+        </div>
+      </div>
+
+      <div class="tabs" data-tabs>
+        <button data-tab="chats" class="active">Chats</button>
+        <button data-tab="pfiles">Files</button>
+        <button data-tab="pinstructions">Instructions</button>
+        <button data-tab="psharing">Sharing</button>
+      </div>
+
+      <section class="tabpanel active" data-panel="chats">
+        <div class="rows">
+          <a class="row" href="agent-run.html">
+            <div class="grow"><div class="title">Q3 contract summary <span class="badge info">Public link</span></div>
+              <div class="meta">Aya Ito · 2 minutes ago · 4 messages · 14 views on the shared page</div></div>
+            <div class="right"><span class="badge ok">Completed</span><span>$0.08</span></div>
+          </a>
+          <a class="row" href="agent-run.html">
+            <div class="grow"><div class="title">Nordwind payment terms — deviation check</div>
+              <div class="meta">Aya Ito · yesterday · 12 messages</div></div>
+            <div class="right"><span class="badge ok">Completed</span><span>$0.44</span></div>
+          </a>
+          <a class="row" href="agent-run.html">
+            <div class="grow"><div class="title">Termination clause comparison</div>
+              <div class="meta">Kenji Sato · 3 days ago · 7 messages</div></div>
+            <div class="right"><span class="badge ok">Completed</span><span>$0.21</span></div>
+          </a>
+          <a class="row" href="agent-run.html">
+            <div class="grow"><div class="title">Tanaka renewal — first pass</div>
+              <div class="meta">Marie Dupont · 5 days ago · 3 messages</div></div>
+            <div class="right"><span class="badge warn">Interrupted</span><span>$0.05</span></div>
+          </a>
+        </div>
+      </section>
+
+      <section class="tabpanel" data-panel="pfiles">
+        <div class="section-head mt0"><h2>Project files</h2>
+          <div class="hint">Ordinary workspace files referenced by this project — not a second filesystem.</div>
+          <div class="actions"><button class="btn sm" data-toast="File picker opened">Add files</button></div>
+        </div>
+        <div class="rows">
+          <div class="row"><div class="grow"><div class="title">contracts/2026-q3/</div><div class="meta">3 files · 2.9 MB</div></div>
+            <div class="right"><span class="badge outline">Read only</span><button class="btn sm ghost" data-toast="Removed from project">Remove</button></div></div>
+          <div class="row"><div class="grow"><div class="title">contracts/standard-clauses.md</div><div class="meta">28 KB · updated 2 weeks ago</div></div>
+            <div class="right"><span class="badge outline">Read only</span><button class="btn sm ghost" data-toast="Removed from project">Remove</button></div></div>
+          <div class="row"><div class="grow"><div class="title">output/</div><div class="meta">17 files written by agents in this project</div></div>
+            <div class="right"><span class="badge outline">Read and write</span><button class="btn sm ghost" data-toast="Removed from project">Remove</button></div></div>
+        </div>
+      </section>
+
+      <section class="tabpanel" data-panel="pinstructions">
+        <div class="card"><div class="card-body">
+          <div class="field mb0">
+            <label>Project instructions</label>
+            <textarea rows="7">These contracts are Q3 2026 supplier agreements for the Nagoya plant.
+
+Our standard payment terms are net 30. Flag any deviation, and always name the clause number you relied on. Use the comparison table format in output/ for every summary.</textarea>
+            <div class="help">Appended after the agent’s own instructions. It cannot grant tools, files or permissions.</div>
+          </div>
+        </div></div>
+        <div class="callout mt16">
+          <span class="ico">ℹ</span>
+          <div class="grow">Effective prompt = agent instructions (Contract Review) + these project instructions.
+            <a href="agent.html">See the agent’s instructions</a></div>
+        </div>
+      </section>
+
+      <section class="tabpanel" data-panel="psharing">
+        <div class="card">
+          <div class="card-head"><h3>Who can see this project</h3></div>
+          <div class="card-body">
+            <div class="choices">
+              <div class="choice"><div class="mark"></div><div class="grow"><div class="t">Only me</div><div class="d">Aya Ito</div></div></div>
+              <div class="choice selected"><div class="mark"></div><div class="grow"><div class="t">Everyone in Meridian Manufacturing</div><div class="d">All 14 workspace members with a role that allows viewing</div></div></div>
+              <div class="choice"><div class="mark"></div><div class="grow"><div class="t">Anyone with the link</div><div class="d">Read-only page listing the project’s instructions and shared chats. Files are never included.</div></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-head"><h2>Chats shared from this project</h2></div>
+        <div class="rows">
+          <div class="row">
+            <div class="grow"><div class="title">Q3 contract summary</div>
+              <div class="meta mono">https://agents.meridian.example/p/pub_7Yk2mQ</div></div>
+            <div class="right"><span class="badge info">Public link</span><span>14 views</span>
+              <button class="btn sm" data-toast="Link copied">Copy</button>
+              <button class="btn sm danger" data-toast="Link revoked">Revoke</button></div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<!-- share project -->
+<div class="scrim" id="m-share-project" hidden>
+  <div class="modal">
+    <div class="m-head"><h3>Share “Q3 Supplier Contracts”</h3><div class="sub">Project instructions and the chats you have shared. Files are never included.</div></div>
+    <div class="m-body">
+      <div class="choices mb16">
+        <div class="choice"><div class="mark"></div><div class="grow"><div class="t">Only me</div></div></div>
+        <div class="choice selected"><div class="mark"></div><div class="grow"><div class="t">Everyone in Meridian Manufacturing</div></div></div>
+        <div class="choice"><div class="mark"></div><div class="grow"><div class="t">Anyone with the link</div><div class="d">Read only, revocable</div></div></div>
+      </div>
+      <div class="secret"><span class="grow">https://agents.meridian.example/p/prj_4Qb8Nz</span><button class="btn sm" data-toast="Link copied">Copy</button></div>
+    </div>
+    <div class="m-foot"><button class="btn" data-modal-close>Close</button><button class="btn primary" data-modal-close data-toast="Sharing updated">Save</button></div>
+  </div>
+</div>
+
+<!-- project settings -->
+<div class="scrim" id="m-project-settings" hidden>
+  <div class="modal">
+    <div class="m-head"><h3>Project settings</h3></div>
+    <div class="m-body">
+      <div class="field"><label>Name</label><input type="text" value="Q3 Supplier Contracts"></div>
+      <div class="field">
+        <label>Default agent</label>
+        <select><option selected>Contract Review</option><option>General</option><option>Document Writer</option></select>
+      </div>
+      <div class="field mb0">
+        <label>Connectors selected by default</label>
+        <div class="checks">
+          <label class="check on"><span class="box"></span><span class="grow"><span class="t">Internal Search</span></span></label>
+          <label class="check on"><span class="box"></span><span class="grow"><span class="t">Jira</span></span></label>
+          <label class="check"><span class="box"></span><span class="grow"><span class="t">GitHub</span></span></label>
+        </div>
+      </div>
+    </div>
+    <div class="m-foot"><button class="btn danger" data-toast="Type the project name to confirm">Delete project</button><span style="flex:1"></span><button class="btn" data-modal-close>Cancel</button><button class="btn primary" data-modal-close data-toast="Project updated">Save</button></div>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

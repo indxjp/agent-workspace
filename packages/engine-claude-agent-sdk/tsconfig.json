@@ -1,0 +1,8 @@
+{
+  // The type-checking view: the whole of `src`, tests included, emitting nothing.
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": ["src"]
+}

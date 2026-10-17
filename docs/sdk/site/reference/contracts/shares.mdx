@@ -1,0 +1,237 @@
+---
+title: "shares"
+description: "The @indx-workspace/contracts/shares exports, sorted alphabetically."
+---
+
+<Note>This page is generated from `packages/contracts/src/shares.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## PublishShareCommand
+
+The body of `POST /api/shares`.
+
+`mode` and `budgetCapUsd` are for an agent share only (`budgetCapUsd` further requires
+`runnable` mode); `include` is for a session share only. The route refuses any other pairing
+as `400 invalid_share`, so the SDK sends the command as given rather than guessing.
+
+`subjectLabel` is client-authored until RF-103, when the server derives it from the subject:
+the route requires it today and stores it verbatim. The share's content (`snapshot`) is
+likewise server-owned; this command never carries a transcript, a definition or a snapshot.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `subjectType` | `"agent" \| "skill" \| "project" \| "session"` | Yes |  |
+| `subjectId` | `string` | Yes |  |
+| `subjectLabel` | `string` | Yes |  |
+| `visibility` | `"workspace" \| "private" \| "public"` | Yes |  |
+| `mode` | `undefined \| "definition" \| "runnable"` | No |  |
+| `include` | `undefined \| ShareInclude` | No |  |
+| `expiry` | `undefined \| "never" \| "24 h" \| "7 days" \| "30 days"` | No |  |
+| `passphrase` | `undefined \| string` | No | At most `SHARE_PASSPHRASE_MAX_LENGTH` code units; hashed at rest, never returned. |
+| `budgetCapUsd` | `undefined \| number` | No | A positive amount in USD; the server defaults a runnable share to 20. |
+
+## SHARE_EXPIRIES
+
+How long a share stays open, counted from publication. The server defaults to `never`.
+
+- `'24 h'`
+- `'7 days'`
+- `'30 days'`
+- `'never'`
+
+## SHARE_MODES
+
+How an agent share behaves for its visitor. Only an agent share has a mode; the server defaults
+it to `definition`. `runnable` is compiled off in this release and the server refuses it
+(`400 invalid_share`); it stays in the vocabulary because the wire already names it.
+
+- `'definition'`
+- `'runnable'`
+
+## SHARE_PASSPHRASE_MAX_LENGTH
+
+The longest passphrase `POST /api/shares` accepts, in string code units.
+
+Value: `1_024`
+
+## SHARE_SUBJECT_TYPES
+
+What a share publishes. Matches `shares.subject_type`.
+
+- `'agent'`
+- `'session'`
+- `'project'`
+- `'skill'`
+
+## SHARE_VISIBILITIES
+
+Who may open a share. `public` mints a `/p/<token>` link and is refused while the workspace's
+sharing policy has public sharing off (`400 invalid_share`).
+
+- `'private'`
+- `'workspace'`
+- `'public'`
+
+## ShareExpiry
+
+- `"never"`
+- `"24 h"`
+- `"7 days"`
+- `"30 days"`
+
+## ShareInclude
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `technicalDetails` | `undefined \| false \| true` | No |  |
+| `outputFiles` | `undefined \| false \| true` | No |  |
+
+## ShareIncludeSchema
+
+What a session share reveals beyond the conversation. Meaningful only for a session share; the
+server refuses it on any other subject and renders `{}` where none was given.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `technicalDetails` | `undefined \| false \| true` | No |  |
+| `outputFiles` | `undefined \| false \| true` | No |  |
+
+## ShareListItem
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `viewCount` | `number` | Yes |  |
+| `id` | `string` | Yes |  |
+| `subjectType` | `"agent" \| "skill" \| "project" \| "session"` | Yes |  |
+| `subjectId` | `string` | Yes |  |
+| `subjectLabel` | `string` | Yes |  |
+| `visibility` | `"workspace" \| "private" \| "public"` | Yes |  |
+| `mode` | `null \| "definition" \| "runnable"` | Yes | `null` for every subject but an agent. |
+| `snapshot` | `unknown` | Yes | The server-held document a visitor is shown; `null` when the share carries none. |
+| `include` | `ShareInclude` | Yes |  |
+| `budgetCapUsd` | `null \| string` | Yes | A decimal string; `null` unless the share is a runnable agent. |
+| `spentUsd` | `string` | Yes | A decimal string: what visitors of a runnable share have spent so far. |
+| `stopped` | `false \| true` | Yes | `true` once the budget was exhausted; the link no longer runs. |
+| `expiresAt` | `null \| string` | Yes |  |
+| `revokedAt` | `null \| string` | Yes |  |
+| `suspendedAt` | `null \| string` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+| `url` | `undefined \| string` | No | The public link, relative to the API origin (`/p/<token>`). Present exactly when `visibility` is `public`: the token of a private or workspace share never crosses the wire. |
+
+## ShareListItemSchema
+
+Every item of `GET /api/shares`: the share plus how many times it has been opened.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `viewCount` | `number` | Yes |  |
+| `id` | `string` | Yes |  |
+| `subjectType` | `"agent" \| "skill" \| "project" \| "session"` | Yes |  |
+| `subjectId` | `string` | Yes |  |
+| `subjectLabel` | `string` | Yes |  |
+| `visibility` | `"workspace" \| "private" \| "public"` | Yes |  |
+| `mode` | `null \| "definition" \| "runnable"` | Yes | `null` for every subject but an agent. |
+| `snapshot` | `unknown` | Yes | The server-held document a visitor is shown; `null` when the share carries none. |
+| `include` | `ShareInclude` | Yes |  |
+| `budgetCapUsd` | `null \| string` | Yes | A decimal string; `null` unless the share is a runnable agent. |
+| `spentUsd` | `string` | Yes | A decimal string: what visitors of a runnable share have spent so far. |
+| `stopped` | `false \| true` | Yes | `true` once the budget was exhausted; the link no longer runs. |
+| `expiresAt` | `null \| string` | Yes |  |
+| `revokedAt` | `null \| string` | Yes |  |
+| `suspendedAt` | `null \| string` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+| `url` | `undefined \| string` | No | The public link, relative to the API origin (`/p/<token>`). Present exactly when `visibility` is `public`: the token of a private or workspace share never crosses the wire. |
+
+## ShareListResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `shares` | `readonly ShareListItem[]` | Yes |  |
+
+## ShareListResponseSchema
+
+The body of `GET /api/shares`: the caller's own shares, or every share of the workspace for an
+Owner or Admin.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `shares` | `readonly ShareListItem[]` | Yes |  |
+
+## ShareMode
+
+- `"definition"`
+- `"runnable"`
+
+## ShareResource
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `subjectType` | `"agent" \| "skill" \| "project" \| "session"` | Yes |  |
+| `subjectId` | `string` | Yes |  |
+| `subjectLabel` | `string` | Yes |  |
+| `visibility` | `"workspace" \| "private" \| "public"` | Yes |  |
+| `mode` | `null \| "definition" \| "runnable"` | Yes | `null` for every subject but an agent. |
+| `snapshot` | `unknown` | Yes | The server-held document a visitor is shown; `null` when the share carries none. |
+| `include` | `ShareInclude` | Yes |  |
+| `budgetCapUsd` | `null \| string` | Yes | A decimal string; `null` unless the share is a runnable agent. |
+| `spentUsd` | `string` | Yes | A decimal string: what visitors of a runnable share have spent so far. |
+| `stopped` | `false \| true` | Yes | `true` once the budget was exhausted; the link no longer runs. |
+| `expiresAt` | `null \| string` | Yes |  |
+| `revokedAt` | `null \| string` | Yes |  |
+| `suspendedAt` | `null \| string` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+| `url` | `undefined \| string` | No | The public link, relative to the API origin (`/p/<token>`). Present exactly when `visibility` is `public`: the token of a private or workspace share never crosses the wire. |
+
+## ShareResourceSchema
+
+One share as the `201` of `POST /api/shares` renders it (bare, not wrapped). Dates are
+ISO-8601 strings; money is decimal strings.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `subjectType` | `"agent" \| "skill" \| "project" \| "session"` | Yes |  |
+| `subjectId` | `string` | Yes |  |
+| `subjectLabel` | `string` | Yes |  |
+| `visibility` | `"workspace" \| "private" \| "public"` | Yes |  |
+| `mode` | `null \| "definition" \| "runnable"` | Yes | `null` for every subject but an agent. |
+| `snapshot` | `unknown` | Yes | The server-held document a visitor is shown; `null` when the share carries none. |
+| `include` | `ShareInclude` | Yes |  |
+| `budgetCapUsd` | `null \| string` | Yes | A decimal string; `null` unless the share is a runnable agent. |
+| `spentUsd` | `string` | Yes | A decimal string: what visitors of a runnable share have spent so far. |
+| `stopped` | `false \| true` | Yes | `true` once the budget was exhausted; the link no longer runs. |
+| `expiresAt` | `null \| string` | Yes |  |
+| `revokedAt` | `null \| string` | Yes |  |
+| `suspendedAt` | `null \| string` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+| `url` | `undefined \| string` | No | The public link, relative to the API origin (`/p/<token>`). Present exactly when `visibility` is `public`: the token of a private or workspace share never crosses the wire. |
+
+## SHARES_PROBLEM_CODES
+
+Problem codes the shares routes own, with the status each one travels under. The common
+vocabulary (`unauthenticated`, `forbidden`, …) is `COMMON_PROBLEM_CODES` at the package root.
+
+| Key | Value |
+| --- | --- |
+| `invalid_share` | `400` |
+| `share_not_found` | `404` |
+| `shares_runtime_not_configured` | `503` |
+
+## SharesProblemCode
+
+- `"invalid_share"`
+- `"share_not_found"`
+- `"shares_runtime_not_configured"`
+
+## ShareSubjectType
+
+- `"agent"`
+- `"skill"`
+- `"project"`
+- `"session"`
+
+## ShareVisibility
+
+- `"workspace"`
+- `"private"`
+- `"public"`

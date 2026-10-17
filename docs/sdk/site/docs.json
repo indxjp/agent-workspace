@@ -1,0 +1,332 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "Agent Workspace",
+  "description": "Agent Workspace: a self-hosted control plane for AI agents, built around the Claude Agent SDK with other agent engines behind one port. Quickstart, guides and reference for the aw CLI, @indx-workspace/sdk, @indx-workspace/contracts and @indx-workspace/react.",
+  "colors": {
+    "primary": "#2f5fd0",
+    "light": "#6b93ff",
+    "dark": "#2249ab"
+  },
+  "appearance": {
+    "default": "dark"
+  },
+  "background": {
+    "color": {
+      "dark": "#08080a",
+      "light": "#ffffff"
+    },
+    "decoration": "grid"
+  },
+  "fonts": {
+    "family": "Geist"
+  },
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg",
+    "href": "https://lp.agentworkspace.indx.jp"
+  },
+  "favicon": "/favicon.svg",
+  "search": {
+    "prompt": "Search the Agent Workspace docs"
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "Product",
+        "href": "https://lp.agentworkspace.indx.jp"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Book a demo",
+      "href": "https://indx.jp/en/contact"
+    }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Start here",
+            "pages": ["index", "concepts/what-is-agent-workspace"]
+          },
+          {
+            "group": "1 · Run your first agent",
+            "pages": [
+              "path/first-agent",
+              "getting-started/installation",
+              "getting-started/quickstart",
+              "cli/chat"
+            ]
+          },
+          {
+            "group": "2 · Build your agent",
+            "pages": [
+              "path/build",
+              "guides/agents-as-code",
+              "building/agents",
+              "building/models-and-runtimes",
+              "building/skills",
+              "guides/tools-from-code",
+              "building/mcp-servers",
+              "resources/secrets"
+            ]
+          },
+          {
+            "group": "3 · Test and improve it",
+            "pages": [
+              "path/test",
+              "resources/observability",
+              "guides/evaluations",
+              "guides/testing"
+            ]
+          },
+          {
+            "group": "4 · Put it in your product",
+            "pages": [
+              "path/embed",
+              "building/overview",
+              "getting-started/authentication",
+              "building/frontend",
+              "building/embedding",
+              "building/react",
+              "building/backend",
+              "building/http-api",
+              "guides/streaming"
+            ]
+          },
+          {
+            "group": "5 · Ship it to your servers",
+            "pages": [
+              "path/ship",
+              "guides/deploy",
+              "guides/deploy-vercel",
+              "guides/deploy-cloudflare",
+              "building/moving-agents",
+              "building/self-hosting"
+            ]
+          },
+          {
+            "group": "6 · Run it for your team",
+            "pages": [
+              "path/operate",
+              "resources/team",
+              "resources/workspaces",
+              "resources/shares",
+              "building/extending-the-platform"
+            ]
+          },
+          {
+            "group": "7 · Run it on other platforms",
+            "pages": [
+              "path/platforms",
+              "platforms/overview",
+              "platforms/claude-managed-agents",
+              "platforms/copilot-studio",
+              "platforms/m365-declarative-agent",
+              "platforms/microsoft-foundry",
+              "platforms/gemini-enterprise",
+              "platforms/aws-agentcore",
+              "platforms/eject",
+              "platforms/switch-engine",
+              "platforms/matrix"
+            ]
+          },
+          {
+            "group": "Product tour",
+            "pages": [
+              "features/your-stack",
+              "features/agents-skills-tools-as-code",
+              "features/run-observe-evaluate",
+              "features/embed-in-your-product",
+              "features/self-host-securely"
+            ]
+          },
+          {
+            "group": "How it works",
+            "pages": [
+              "concepts/design-principles",
+              "concepts/architecture",
+              "concepts/data-plane",
+              "concepts/run-lifecycle",
+              "concepts/runtime-neutrality",
+              "concepts/workspaces-and-principals",
+              "concepts/ownership-and-sharing",
+              "concepts/public-surface"
+            ]
+          },
+          {
+            "group": "SDK client in depth",
+            "pages": [
+              "getting-started/configuration",
+              "guides/errors",
+              "guides/timeouts-and-cancellation",
+              "guides/pagination",
+              "guides/retries-and-idempotency"
+            ]
+          },
+          {
+            "group": "Resource guides",
+            "pages": [
+              "resources/agents",
+              "resources/runs",
+              "resources/sessions",
+              "resources/projects",
+              "resources/files",
+              "resources/skills",
+              "resources/connectors",
+              "resources/engines",
+              "resources/models",
+              "resources/runtimes"
+            ]
+          },
+          {
+            "group": "CLI",
+            "pages": [
+              "cli/overview",
+              "cli/configuration",
+              "cli/output-and-exit-codes",
+              "cli/cli-vs-sdk"
+            ]
+          },
+          {
+            "group": "Where it is going",
+            "pages": ["concepts/target-architecture", "concepts/roadmap"]
+          }
+        ]
+      },
+      {
+        "tab": "Reference",
+        "groups": [
+          {
+            "group": "SDK",
+            "pages": [
+              "reference/sdk/client",
+              "reference/sdk/auth",
+              "reference/sdk/events",
+              "reference/sdk/define",
+              "reference/sdk/project",
+              "reference/sdk/agents",
+              "reference/sdk/runs",
+              "reference/sdk/sessions",
+              "reference/sdk/projects",
+              "reference/sdk/workspaces",
+              "reference/sdk/tokens",
+              "reference/sdk/team",
+              "reference/sdk/endpointClients",
+              "reference/sdk/shares",
+              "reference/sdk/observability",
+              "reference/sdk/files",
+              "reference/sdk/skills",
+              "reference/sdk/toolBundles",
+              "reference/sdk/connectors",
+              "reference/sdk/engines",
+              "reference/sdk/platforms",
+              "reference/sdk/models",
+              "reference/sdk/runtimes",
+              "reference/sdk/secrets"
+            ]
+          },
+          {
+            "group": "Contracts",
+            "pages": [
+              "reference/contracts/index",
+              "reference/contracts/a2a",
+              "reference/contracts/agent-versions",
+              "reference/contracts/agents",
+              "reference/contracts/api-keys",
+              "reference/contracts/cli-auth",
+              "reference/contracts/connectors",
+              "reference/contracts/endpoint-clients",
+              "reference/contracts/engines",
+              "reference/contracts/evaluations",
+              "reference/contracts/feedback",
+              "reference/contracts/files",
+              "reference/contracts/invitations",
+              "reference/contracts/local-runtime",
+              "reference/contracts/models",
+              "reference/contracts/observability",
+              "reference/contracts/platforms",
+              "reference/contracts/policy-ceiling",
+              "reference/contracts/portable-agent",
+              "reference/contracts/project-file",
+              "reference/contracts/projects",
+              "reference/contracts/routes",
+              "reference/contracts/run-events",
+              "reference/contracts/runs",
+              "reference/contracts/runtimes",
+              "reference/contracts/secret-reference",
+              "reference/contracts/secrets",
+              "reference/contracts/sessions",
+              "reference/contracts/setup",
+              "reference/contracts/shares",
+              "reference/contracts/skills",
+              "reference/contracts/surfaces",
+              "reference/contracts/team",
+              "reference/contracts/tokens",
+              "reference/contracts/tool-connectors",
+              "reference/contracts/workspaces"
+            ]
+          },
+          {
+            "group": "aw commands",
+            "pages": ["reference/cli/commands"]
+          },
+          {
+            "group": "HTTP API",
+            "openapi": "openapi.json"
+          }
+        ]
+      },
+      {
+        "tab": "Use cases",
+        "groups": [
+          {
+            "group": "Use cases",
+            "pages": ["tutorials/index", "tutorials/your-stack", "concepts/use-cases"]
+          },
+          {
+            "group": "Enterprise use-case gallery",
+            "pages": [
+              "tutorials/manual-search",
+              "tutorials/cad-drafting",
+              "tutorials/quotation",
+              "tutorials/ringi-review",
+              "tutorials/customer-inquiry",
+              "tutorials/excel-consolidation",
+              "tutorials/contract-review",
+              "tutorials/meeting-minutes",
+              "tutorials/maintenance-troubleshooting",
+              "tutorials/quality-defect"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "footer": {
+    "links": [
+      {
+        "header": "Agent Workspace",
+        "items": [
+          {
+            "label": "Product",
+            "href": "https://lp.agentworkspace.indx.jp"
+          },
+          {
+            "label": "Book a demo",
+            "href": "https://indx.jp/en/contact"
+          }
+        ]
+      }
+    ]
+  },
+  "seo": {
+    "metatags": {
+      "og:image": "https://lp.agentworkspace.indx.jp/og.png",
+      "twitter:card": "summary_large_image"
+    }
+  }
+}

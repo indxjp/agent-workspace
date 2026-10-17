@@ -1,0 +1,304 @@
+---
+title: "The data plane"
+description: "Where the platform keeps state, bytes, secrets and sandboxes — a contract the operator configures once per cloud and the developer never sees — with the cells that are verified today."
+---
+
+<Info>
+
+- **Read this when:** you operate a deployment and need to know where files, skills, secrets, state
+  and sandboxes live on your cloud.
+- **You will learn:** what the developer sees versus what the operator configures, the per-cloud
+  contract and what is verified today, and how a file, a skill and a secret move through a run.
+- **Used in:** [Chapter 5: Ship it to your servers](/path/ship).
+
+</Info>
+
+An agent's documents, its skills, the credentials its tools need, and the sandbox it runs in all
+live somewhere. On Agent Workspace that "somewhere" is never a choice the developer makes: the
+SDK's vocabulary is files, skills, connectors and runtime profiles, never a bucket, a table, a
+key ring or a disk path ([design principle 1](/concepts/design-principles)). It is also never a
+choice a fork makes: an operator configures placement once, per deployment, as three profiles —
+storage, runtime, identity — and the same images and the same agent definitions run unchanged on
+a laptop or on any of the three big clouds ([design principle
+2](/concepts/design-principles)). And "managed on your cloud" means native: each store maps to
+that cloud's own service, not to an S3-compatible shim wearing a different logo, and a cell in
+the table below counts as done only once a live proof exists against the real service ([design
+principle 3](/concepts/design-principles)). This page states that contract — what exists today,
+cloud by cloud, honestly — and how a file, a skill and a secret actually move through it.
+
+## What the developer sees, and what the operator configures
+
+| The developer sees (`aw.<resource>.*`)                        | The operator configures (once, per deployment)                                    |
+| ------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `files` — documents an agent reads or writes                  | a _storage_ profile: relational database, object store, secret backend            |
+| `skills` — reusable instructions and helper files             | the same storage profile's object store                                           |
+| `connectors` — MCP servers and the credentials they need      | the same storage profile's secret backend                                         |
+| `agents`, `sessions`, `runs`, `people`                        | the platform's own relational store                                               |
+| a runtime profile naming a driver, sizing, and network policy | a _runtime_ profile: which sandbox driver is the default, and its connection      |
+| an agent's `engine`, and `installed` on `GET /api/engines`    | one runtime image per engine it offers (`AGENT_WORKSPACE_RUNTIME_IMAGE_<ENGINE>`) |
+
+Nothing in the left column names a cloud service. Nothing in the right column is visible to an
+agent or to the SDK's types. One rule follows directly and holds regardless of what a future
+driver or backend adds: **your own databases and document systems reach an agent only as an MCP
+connector or as uploaded files — never through the platform's stores.** The platform's PostgreSQL
+holds Agent Workspace's own rows (workspaces, agents, runs); its object store holds what you
+uploaded or a skill's files; neither is a general-purpose data store your product's other systems
+read or write directly.
+
+## The contract
+
+Four concerns, three clouds, one _Today_ column stating what is actually implemented and proven,
+never what is planned. A "✅" cell means the cloud's own managed service works today; "partial"
+means a workaround exists but is not the native service; "✗" means nothing exists for that cell
+yet. Every claim below is backed by the file named after it — see [the migration
+roadmap](/concepts/roadmap#the-data-plane) for the roadmap item that closes each gap.
+
+| Concern        | Resource the developer sees    | Store the operator configures | AWS                                                       | Google Cloud                                                         | Azure                                          | Today                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| -------------- | ------------------------------ | ----------------------------- | --------------------------------------------------------- | -------------------------------------------------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Platform state | agents, sessions, runs, people | PostgreSQL                    | RDS ✅                                                    | Cloud SQL ✅                                                         | Azure Database for PostgreSQL ✅               | Any `postgres://` connection string works — `DATABASE_URL` is validated and only the `postgres:`/`postgresql:` scheme is accepted (`packages/core/src/db/client.ts`).                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Bytes          | files, skills, transcripts     | object store                  | Native S3 implemented, live proof pending (partial)       | Native GCS implemented, live proof pending (partial)                 | Blob implemented, live proof pending (partial) | `OBJECT_STORAGE_BACKEND` selects a native adapter behind one `ObjectStore` contract. AWS has an opt-in real-bucket proof, GCP uses ADC with no HMAC key, and Azure uses a container-scoped managed identity. Fake contract suites pass; required live proofs remain pending.                                                                                                                                                                                                                                                                                                             |
+| Secrets        | credentials, write-only        | secret backend + key          | KMS-wrapped key implemented, live proof pending (partial) | Cloud KMS / Secret Manager implemented, live proof pending (partial) | Key Vault ✅                                   | Stored credentials remain envelope-encrypted in PostgreSQL. AWS decrypts a KMS-wrapped deployment key, GCP loads it from Secret Manager under a KMS CMEK, and Azure reads it from Key Vault through managed identity. No plaintext key is rendered into a profile.                                                                                                                                                                                                                                                                                                                       |
+| Execution      | runtime profile                | sandbox driver                | ECS / AgentCore ✗                                         | Cloud Run implemented, unverified (partial) / GKE ✗                  | ACA Sessions implemented, preview (partial)    | `local`, `docker` and `kubernetes` are implemented; `cloud-run-service` and `aca-sessions` are implemented and each has a Terraform module (`infra/terraform/gcp-cloudrun`, `infra/terraform/azure-container-apps`) but neither is exercised by the live driver suite (no managed driver is selected, so every managed cell is unverified); `sandbox-runtime`, `gke-agent-sandbox`, `aws-agentcore`, `aws-ecs` and `cloud-run-sandbox` are named in the contract with no implementation; `external` (E2B) is available and passed the provider live lane (run 37809484699). Tracked as [D-4](/concepts/roadmap#d-4-a-verified-managed-cloud-sandbox-per-cloud). |
+| Identity       | people, roles                  | OIDC issuer                   | any (Cognito, Okta…) ✅                                   | any (Google) ✅                                                      | Entra ID ✅                                    | Any OIDC issuer works — `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_REDIRECT_URI` (`apps/web/server/auth/oidc.ts`) — plus a bootstrap administrator authenticated by password (`BOOTSTRAP_ADMIN`, `BOOTSTRAP_ADMIN_PASSWORD`; `apps/web/server/auth/session.ts`).                                                                                                                                                                                                                                                                                                   |
+
+## The deployment profile
+
+One document names all three profiles. `create-agent-workspace <dir> --cloud aws|gcp|azure|local`
+writes `agent-workspace.yaml`, validates it before anything else exists, and renders the
+deployment's `.env`, its Compose file, its Helm values overlay and its Terraform variables from
+it — so a placement decision is stated once and never written twice.
+
+```yaml title="agent-workspace.yaml (illustrative)" claim="illustrative"
+apiVersion: agentworkspace.dev/v1
+kind: Deployment
+cloud: gcp
+storage:
+  relational: cloud-sql # a postgres:// URL, or that cloud's managed PostgreSQL by name
+  objects: gcs://acme-ai-files # s3://, gcs:// on GCP, or local-filesystem where supported
+  secrets: secret-manager # local-key, or secret-manager on GCP
+runtime:
+  default: cloud-run-service # local | docker | kubernetes | cloud-run-service | aca-sessions
+identity:
+  oidc: https://accounts.google.com
+  bootstrapAdmin: ops@acme.example
+```
+
+A placement the platform has not implemented is **refused where it is written**, not accepted and
+then ignored: `kms` outside AWS, `gcs://` and `secret-manager` outside GCP, and `azblob://` and
+`key-vault` outside Azure, plus driver ids the runtime contract lists with no code behind them.
+Every refusal names the offending field.
+
+"Validated" means two things. Always, before any file is written: the document is schema-valid,
+every URL scheme is one this release serves, and the cross-field rules hold. With `--validate`, and
+only for a store whose credential is present: a connectivity probe — `select 1`, a bucket head, an
+OIDC discovery fetch. Every probe is a read, so validation never changes the account it is pointed
+at: a bucket that does not exist yet is reported as `missing`, not created, which is what makes a
+typo in `storage.objects` visible instead of silently provisioned. `agent-workspace validate`
+re-runs both against an existing project. The profile schema is published at
+`https://unpkg.com/@indx-workspace/cli@latest/schema/agent-workspace.schema.json`, and
+`agent-workspace validate` checks a profile against it.
+
+The profile is what _writes_ the environment the platform reads — the variables themselves are
+unchanged, and an operator may still set them by hand (the generated `.env` is the same list; a value left blank there is a deployment that will not
+start):
+
+| Variable                                                                       | Read by                                                                                                                                                          | Required?                                                      | What it selects                                                                                                                                                                                                                         |
+| ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                                                                 | `packages/core/src/db/client.ts`                                                                                                                                 | Yes                                                            | The relational store — any `postgres://` or `postgresql://` connection string; any other scheme is refused.                                                                                                                             |
+| `OBJECT_STORAGE_BACKEND`                                                       | `apps/web/server/composition/storage.ts`                                                                                                                         | No (legacy bucket configuration selects `s3`)                  | `s3`, `gcs`, or `azure-blob`; an unknown value fails startup rather than falling through to another store. Clear this and `OBJECT_STORAGE_BUCKET` together to select the local-filesystem fallback; a partial configuration is refused. |
+| `OBJECT_STORAGE_ENDPOINT`                                                      | `apps/web/server/composition/storage.ts`                                                                                                                         | Required for `azure-blob`; optional for `s3`; unused for `gcs` | The Blob service URL or an S3-compatible endpoint such as SeaweedFS. Native GCS uses ADC and leaves it blank.                                                                                                                           |
+| `OBJECT_STORAGE_BUCKET`                                                        | `apps/web/server/composition/storage.ts` (`OBJECT_STORAGE_BUCKET_ENV`)                                                                                           | Yes, to enable the object store                                | The S3/GCS bucket or Azure Blob container files and skills are written under (`files/` and `skills/` key prefixes). Without it, every `/api/files*` and `/api/skills*` route answers `503`.                                             |
+| `OBJECT_STORAGE_ACCESS_KEY_ID`, `OBJECT_STORAGE_SECRET_ACCESS_KEY`             | `compose.yaml`, which passes them to the web service as `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` — the names `apps/web/server/composition/storage.ts` reads | S3 only                                                        | The credential for the S3-compatible endpoint. Native GCS and Blob use workload identity instead.                                                                                                                                       |
+| `AWS_REGION`                                                                   | `apps/web/server/composition/storage.ts`                                                                                                                         | No (defaults to `us-east-1`)                                   | The region the S3-compatible client signs requests for.                                                                                                                                                                                 |
+| `OBJECT_STORAGE_FORCE_PATH_STYLE`                                              | `apps/web/server/composition/storage.ts`                                                                                                                         | No                                                             | Path-style vs. virtual-hosted-style S3 addressing — `true` for SeaweedFS and most self-hosted endpoints.                                                                                                                                |
+| `MASTER_KEY_PROVIDER`                                                          | `packages/core/src/secrets/master-key-provider.ts`                                                                                                               | No (defaults to `local-key`)                                   | `local-key`, AWS `kms`, GCP `secret-manager`, or Azure `key-vault`.                                                                                                                                                                     |
+| `AWS_KMS_KEY_ID`, `AWS_KMS_ENCRYPTED_MASTER_KEY`                               | `packages/core/src/secrets/aws-kms-master-key-provider.ts`                                                                                                       | Yes for `kms`                                                  | The symmetric KMS key id and canonical-base64 ciphertext blob for the unchanged 32-byte deployment master key. Provider failures never expose either value.                                                                             |
+| `GCP_MASTER_KEY_SECRET`                                                        | `packages/core/src/secrets/google-secret-manager-master-key.ts`                                                                                                  | Yes for `secret-manager`                                       | The full Secret Manager version locator read through ADC.                                                                                                                                                                               |
+| `MASTER_ENCRYPTION_KEY`                                                        | `packages/core/src/secrets/master-key.ts`                                                                                                                        | Yes for `local-key`; unused for cloud providers                | The 32-byte AES-256 key every stored credential is encrypted under. Refused at start-up if missing, non-hex, or the wrong length.                                                                                                       |
+| `AZURE_KEY_VAULT_URL`, `AZURE_MASTER_KEY_SECRET_NAME`                          | `packages/core/src/secrets/azure-key-vault-master-key-provider.ts`                                                                                               | Yes for `key-vault`                                            | The vault and stable secret whose current version contains the deployment master key. Azure service rotation does not change the plaintext key; changing it requires rewrapping existing envelopes first.                               |
+| `SESSION_SECRET`                                                               | `apps/web/server/auth/session.ts`                                                                                                                                | Yes                                                            | The HMAC key that signs and verifies the session cookie; also the only way to revoke every issued session (rotate it).                                                                                                                  |
+| `RUNNER_MANAGER_TOKEN`                                                         | the runner manager (`.env.example`)                                                                                                                              | Yes                                                            | The bearer credential the control plane uses to reach the runner.                                                                                                                                                                       |
+| `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_REDIRECT_URI` | `apps/web/server/auth/oidc.ts`                                                                                                                                   | Together, or not at all                                        | The identity profile: which OIDC issuer signs people in. All four must be set together, or none.                                                                                                                                        |
+| `BOOTSTRAP_ADMIN`                                                              | `apps/web/server/auth/session.ts`, `packages/core/src/db/seed.ts`                                                                                                | Yes                                                            | The email address of the first workspace Owner the seed inserts and the only identity the bootstrap password path accepts.                                                                                                              |
+| `BOOTSTRAP_ADMIN_PASSWORD`                                                     | `apps/web/server/auth/session.ts`                                                                                                                                | Yes                                                            | The bootstrap administrator's password, compared in constant time and never written to the database.                                                                                                                                    |
+| `AW_TRUSTED_PROXY_HOPS`                                                        | `.env.example`                                                                                                                                                   | Yes for any deployment behind a reverse proxy                  | Exact count of trusted proxies prepending `X-Forwarded-For`; runnable public shares fail closed without it.                                                                                                                             |
+| `GATEWAY_PRICING_JSON`                                                         | `.env.example`                                                                                                                                                   | Yes                                                            | The provider/model price catalogue the gateway settles recorded usage against; the shipped sentinel matches no real model, so every run settles unpriced (cost zero, `accountingState: "unavailable"`) until an operator replaces it. Keys are `<connection provider>:<model>`, so an `anthropic-compatible` connection is priced under `anthropic-compatible:…`. |
+
+Which artefact each `--cloud` value renders besides `agent-workspace.yaml`, `.env` and
+`.gitignore`:
+
+| `--cloud` | Also rendered                                                   | Default sandbox driver |
+| --------- | --------------------------------------------------------------- | ---------------------- |
+| `local`   | the Compose project                                             | `docker`               |
+| `aws`     | a Helm values overlay, layered on `values-eks.yaml`             | `kubernetes`           |
+| `gcp`     | the same, plus `deploy/terraform/gcp-cloudrun.auto.tfvars.json` | `cloud-run-service`    |
+| `azure`   | `deploy/terraform/azure-container-apps.auto.tfvars.json` only   | `aca-sessions`         |
+
+Each rendered artefact carries only what the operator must supply. The Helm overlay is the four
+images the chart runs — one per Deployment, plus the sandbox image — because the chart defaults
+everything else and each flavour file already sets its cloud's storage class and load-balancer
+annotation; the Terraform artefact is the bootstrap administrator and the four digest-pinned
+images, the variables those modules declare with no default. There is no `infra/terraform` module
+for AWS, so `--cloud aws` renders none — an EKS cluster you already run is installed with the
+chart.
+
+A rendered `deploy/terraform/<module>.auto.tfvars.json` is applied by copying it into
+`infra/terraform/<module>/` and running Terraform there — Terraform auto-loads
+`*.auto.tfvars.json` only from the directory it runs in, and the generated `deploy/terraform/`
+holds no `.tf` file of its own:
+
+```sh title="illustrative" claim="illustrative"
+cp acme-ai/deploy/terraform/gcp-cloudrun.auto.tfvars.json infra/terraform/gcp-cloudrun/
+terraform -chdir=infra/terraform/gcp-cloudrun apply
+```
+
+`--cloud azure` renders no chart overlay, because the chart serves the S3 environment contract
+only, while the Azure profile defaults to an `azblob://` container. The Container Apps module
+supplies the native Blob endpoint and managed identity. Naming an `s3://` bucket in the profile
+brings the existing chart path back.
+
+## Per cloud today
+
+### AWS
+
+RDS for PostgreSQL and S3 are both native and work today through `DATABASE_URL` and the
+`OBJECT_STORAGE_*` variables above — no AWS-specific code path exists because none is needed.
+There is no `infra/terraform` module for AWS and no `values-eks.yaml`-paired Terraform for the
+database or object store; `infra/helm/agent-workspace/values-eks.yaml` sets only the storage
+class (`gp3`) and the load-balancer annotation for an EKS cluster the operator has already
+provisioned. Secrets: credentials stay envelope-encrypted in PostgreSQL as everywhere else;
+`MASTER_KEY_PROVIDER=kms` decrypts the deployment master key from a KMS-wrapped blob
+(`AWS_KMS_KEY_ID`, `AWS_KMS_ENCRYPTED_MASTER_KEY`) instead of reading `MASTER_ENCRYPTION_KEY`,
+with the live proof still pending; there is no Secrets Manager integration. Sandbox driver: `aws-ecs` and
+`aws-agentcore` are named in the runtime contract with no implementation in `packages/runtime`
+(both are out of scope: no managed driver is selected).
+
+### Google Cloud
+
+Cloud SQL for PostgreSQL is native (`DATABASE_URL`). The Cloud Run module grants the web service
+account `roles/storage.objectAdmin` on its object bucket; `OBJECT_STORAGE_BACKEND=gcs` selects the
+native Google client through ADC, under distinct `files/` and `skills/` prefixes, with no HMAC key.
+The module also stores the unchanged 32-byte platform master key in a regional Secret Manager
+secret protected by a dedicated Cloud KMS CMEK. `MASTER_KEY_PROVIDER=secret-manager` reads it before
+the database opens. Rotate the wrapping key by letting Cloud KMS create a new primary version (the
+module sets a 90-day rotation period), then add a new Secret Manager version with the same plaintext;
+new versions use the primary KMS version while the application fingerprint and stored envelopes
+remain valid. Do not disable or destroy a KMS version while any enabled secret version still needs
+it; changing the 32-byte plaintext is a separate envelope-key migration, not this procedure.
+
+Upgrading a Cloud Run deployment to the release that carries migrations `0024` and `0025` is a
+single-revision cutover: the previous release cannot run against the migrated database, and `web`
+migrates as it starts.
+Back up Cloud SQL, then scale the `web`, `gateway` and runner-manager services to zero (or route no
+traffic to their previous revisions and let the instances stop) before the new revisions are
+deployed. Rollback means restoring the backup together with the previous images.
+
+The release that carries migrations `0026` and `0027` (the engine-scoped session store) is a
+single-revision cutover too, for a different reason: `0027` copies every Claude transcript into the
+new store once, and a previous revision still serving during a rolling update would keep writing
+turns to the old tables that nothing copies.
+Take the same steps — back up Cloud SQL, scale the previous revisions to zero or route no traffic to
+them and let the instances stop, then deploy — and roll back the same way.
+
+Both adapters have deterministic fake suites, but this page deliberately keeps the two GCP cells
+partial: the required real-bucket and decrypt-after-rotation proof has not been recorded. Sandbox
+driver: `cloud-run-service` is implemented in
+`packages/runtime` and has a Terraform module (`infra/terraform/gcp-cloudrun`), but
+no managed driver is the selected default, so it has no live isolation proof; `gke-agent-sandbox` and `cloud-run-sandbox` are named only.
+
+The opt-in proof suites never create a bucket, secret, or key. Point them at resources the operator
+has already scoped, then run:
+
+```sh title="illustrative" claim="illustrative"
+TEST_GCS_BUCKET=<throwaway-bucket> TEST_GCP_PROJECT=<project> \
+  pnpm exec vitest run --project @agent-workspace/core packages/core/src/storage/gcs-store.live.test.ts
+
+TEST_GCP_MASTER_KEY_SECRET_BEFORE_ROTATION=projects/<project>/secrets/<secret>/versions/<old> \
+TEST_GCP_MASTER_KEY_SECRET_AFTER_ROTATION=projects/<project>/secrets/<secret>/versions/<new> \
+  pnpm exec vitest run --project @agent-workspace/core \
+    packages/core/src/secrets/google-secret-manager-master-key.live.test.ts
+```
+
+The bucket suite deletes only its random `agent-workspace-live-*` prefix. The key suite reads two
+numbered versions and proves an envelope sealed before the CMEK rotation still opens afterward; it
+does not print either payload.
+
+### Azure
+
+Azure Database for PostgreSQL Flexible Server is native
+(`infra/terraform/azure-container-apps/storage-database.tf`). Files and skills use Azure Blob
+Storage through the native SDK and a private container. The web app's managed identity has the
+container-scoped `Storage Blob Data Contributor` role; transcripts and runtime-verification state
+remain on the Azure Files mount because they are not `ObjectStore` consumers. The same identity
+loads the platform master key directly from Key Vault, so the key is absent from rendered profiles,
+Terraform inputs and Container App environment variables. Sandbox driver: `aca-sessions` is implemented in
+`packages/runtime` with a full Terraform module (`infra/terraform/azure-container-apps/sessions.tf`)
+providing one Hyper-V-isolated session per run, documented as a **preview**, not a production
+baseline; it stands the same way as Cloud Run — implemented, not
+yet live-verified.
+
+## How a file, a skill and a secret move through it
+
+```mermaid
+sequenceDiagram
+  participant Dev as Developer (SDK)
+  participant API as Control plane
+  participant Obj as Object store
+  participant DB as PostgreSQL
+  participant Run as Runner
+  participant SB as Sandbox
+  participant GW as Gateway
+  Dev->>API: files.upload(path, bytes)
+  API->>Obj: write under files/<key>
+  API->>DB: insert files row (path, storage_key, owner)
+  Dev->>API: skills.import({ name, files })
+  API->>Obj: write under skills/<key>
+  API->>DB: insert into the resource catalog
+  Dev->>API: runs.start(agentId, { prompt })
+  API->>Run: launch, with the agent's assignments
+  Run->>Obj: read assigned files and skills
+  Run->>SB: materialise assigned files (a read-only grant as 0o555 dirs / 0o444 files) and skills
+  Run->>GW: request a per-run token
+  SB->>GW: model call with the per-run token
+  GW->>GW: resolve the stored provider credential (never sent to SB)
+  Note over Run,Obj: after the run, only a runtime profile's persistPaths are collected back
+```
+
+Files an agent writes during a run do not come back to the object store today. A run works in
+`/workspace/<workspace>/<session>` inside the runtime; the collect step runs only when the runtime
+profile sets `persistPaths` (no profile does by default), and it reads those paths from the
+runtime's `/workspace` root rather than the run's directory, so a file written in the run's
+directory is not collected (`apps/web/server/runs/launcher.ts`, `apps/runner/src/server.ts`).
+
+Credentials are resolved only inside the gateway: a sandbox holds a short-lived, run-scoped token,
+never the stored provider key, and the gateway substitutes the real credential only when
+forwarding the request onward ([Choose models and runtimes](/building/models-and-runtimes)).
+
+## What never changes
+
+- **PostgreSQL is the only relational store.** Every durable row — workspaces, principals,
+  agents, runs, events — lives there; no cloud's own managed-service equivalent changes the
+  application's schema or query layer, only which server answers `DATABASE_URL`.
+- **Credentials are write-only.** A value goes in once, is never returned by any response
+  schema, and reaches a sandbox only as a short-lived, run-scoped substitute the gateway mints —
+  never the stored key itself.
+- **A sandbox reaches the gateway and nothing else, unless the profile widens it.** A runtime
+  profile's network policy (`none`, `restricted`, `open`) is a required, explicit choice on the
+  profile, not something a driver grants by default — and a driver that cannot enforce a policy
+  refuses it rather than pretending ([Self-host Agent Workspace](/building/self-hosting)).
+
+<CardGroup cols={2}>
+  <Card title="Self-host Agent Workspace" icon="server" href="/building/self-hosting">
+    The five services, the three modes, and which runtime drivers are real today.
+  </Card>
+  <Card title="Design principles" icon="compass" href="/concepts/design-principles">
+    The eight rules this contract follows, stated once.
+  </Card>
+  <Card title="Ownership and sharing" icon="users" href="/concepts/ownership-and-sharing">
+    Catalog, assignment and grant — how a resource reaches an agent and a person.
+  </Card>
+  <Card title="Migration roadmap" icon="road" href="/concepts/roadmap#the-data-plane">
+    D-2 through D-4: native object storage, native secret backends, and a verified sandbox driver
+    per cloud.
+  </Card>
+</CardGroup>

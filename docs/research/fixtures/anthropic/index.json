@@ -1,0 +1,51 @@
+{
+  "note": "R-03 — the Anthropic Messages research note",
+  "retrieved": "2026-09-03",
+  "reverify_after": "2026-12-02",
+  "provenance": "documented",
+  "provenance_meaning": "Every JSON fixture in this directory was hand-authored from the primary Anthropic documentation and from the shipped type definitions of @anthropic-ai/sdk@0.123.0 (a .d.ts read — a type contract, not an executed call). None was captured from a live API call: no credential was available in the research environment. W4-GW-01 must replay these against the real API once the Owner supplies a key (plan §6.2 PL-3) and re-mark this field \"verified\". This blanket label is a floor, not a guarantee about every value: entries in the \"fixtures\" array below may carry their own \"provenance\" override and a \"caveat\", and where they do, those take precedence over this field.",
+  "exception": "sdk-header-probe.md is the one artefact here backed by executed code: the SDK was driven against a local node:http stub server and the request headers it emitted were recorded. It still contacted no real API.",
+  "fact_check_round_1": "stream-thinking.json previously asserted the display:\"omitted\" default with no citation and an incomplete model list. The claim was re-checked against https://platform.claude.com/docs/en/build-with-claude/thinking and confirmed, and the fixture gained a verbatim citation. The model list it gained was still incomplete — see fact_check_round_2.",
+  "fact_check_round_2": "The round-1 repair cited the Thinking page's 'thinking is already on and needs no configuration' sentence, which lists seven models and scopes thinking-on-by-default rather than the display default. The authoritative list is in the page's 'Controlling thinking display' section and names nine models, adding Claude Opus 4.8 and Claude Opus 4.7. stream-thinking.json now carries that section's verbatim text, the nine-model display_default_scope, the separate seven-model thinking_on_by_default_scope, and the 'summarized'-default scope. A conformance case for Opus 4.8/4.7 must expect no thinking_delta events unless it sets display:'summarized' explicitly. See the 'Fact-check round 2' section of the note.",
+  "sse_framing": {
+    "wire": "event: <name>\ndata: <compact-json>\n\n",
+    "rules": [
+      "The SSE event name always equals the data object's \"type\".",
+      "There is NO \"data: [DONE]\" terminator — it was removed in anthropic-version 2023-06-01.",
+      "ping and error events may appear anywhere in the stream.",
+      "Readers must tolerate unknown event names (versioning policy).",
+      "usage token counts on message_delta are CUMULATIVE."
+    ]
+  },
+  "request_headers_for_replay": {
+    "content-type": "application/json",
+    "anthropic-version": "2023-06-01",
+    "x-api-key": "<credential>  (or) authorization: Bearer <credential>"
+  },
+  "fixtures": [
+    { "file": "messages-basic.request.json",              "endpoint": "POST /v1/messages",              "kind": "request",  "scenario_41": "basic response" },
+    { "file": "messages-basic.response.json",             "endpoint": "POST /v1/messages",              "kind": "response", "scenario_41": "basic response, usage" },
+    { "file": "messages-system-multiturn.request.json",   "endpoint": "POST /v1/messages",              "kind": "request",  "scenario_41": "system prompt, multi-turn conversation, prompt caching" },
+    { "file": "messages-system-multiturn.response.json",  "endpoint": "POST /v1/messages",              "kind": "response", "scenario_41": "system prompt, multi-turn conversation", "caveat": "Illustrative values, and the pair is NOT replay-ready as written. cache_read_input_tokens: 1024 presupposes a cached system prefix at or above claude-opus-5's 512-token minimum cacheable prefix (R-03 F7); below that floor a prefix silently does not cache and BOTH cache counters come back 0. The `system` block in messages-system-multiturn.request.json is a 26-character stand-in far under that floor, so replaying that body verbatim returns cache_read_input_tokens: 0, not 1024. Pad the system block past the model's minimum before using this pair as the prompt-caching conformance case (W4-GW-01)." },
+    { "file": "messages-tool-use.request.json",           "endpoint": "POST /v1/messages",              "kind": "request",  "scenario_41": "tool call" },
+    { "file": "messages-tool-use.response.json",          "endpoint": "POST /v1/messages",              "kind": "response", "scenario_41": "tool call, stop_reason=tool_use" },
+    { "file": "messages-tool-result.request.json",        "endpoint": "POST /v1/messages",              "kind": "request",  "scenario_41": "tool result" },
+    { "file": "messages-parallel-tool-use.response.json", "endpoint": "POST /v1/messages",              "kind": "response", "scenario_41": "multiple tool calls" },
+    { "file": "messages-cache-hit.response.json",         "endpoint": "POST /v1/messages",              "kind": "response", "scenario_41": "prompt caching (optional), usage", "caveat": "READ BEFORE ASSERTING ON `usage`. The numbers are copied from the prompt-caching documentation example reproduced in R-03 F7, and they satisfy input_tokens == cache_read_input_tokens + cache_creation_input_tokens (2048 == 1800 + 248), which reads as input_tokens being the TOTAL. R-03 F7's own arithmetic rule says the opposite: total_input_tokens = cache_read + cache_creation + input_tokens, with input_tokens counting only post-breakpoint tokens, which would make the total 4096 here. Both readings cannot hold. Resolve against a live response (W4-GW-01) before any conformance case asserts a total; the fixture is retained as the documented example, not as an attested total." },
+    { "file": "messages-refusal.response.json",           "endpoint": "POST /v1/messages",              "kind": "response", "scenario_41": "stop_reason=refusal — HTTP 200, not an error" },
+    { "file": "stream-basic.json",                        "endpoint": "POST /v1/messages (stream)",     "kind": "sse",      "scenario_41": "streaming" },
+    { "file": "stream-tool-use.json",                     "endpoint": "POST /v1/messages (stream)",     "kind": "sse",      "scenario_41": "streaming + tool call, input_json_delta accumulation" },
+    { "file": "stream-thinking.json",                     "endpoint": "POST /v1/messages (stream)",     "kind": "sse",      "scenario_41": "thinking (optional)" },
+    { "file": "stream-error.json",                        "endpoint": "POST /v1/messages (stream)",     "kind": "sse",      "scenario_41": "errors — mid-stream after HTTP 200" },
+    { "file": "count-tokens.request.json",                "endpoint": "POST /v1/messages/count_tokens", "kind": "request",  "scenario_41": "token counting" },
+    { "file": "count-tokens.response.json",               "endpoint": "POST /v1/messages/count_tokens", "kind": "response", "scenario_41": "token counting" },
+    { "file": "count-tokens-with-tools.request.json",     "endpoint": "POST /v1/messages/count_tokens", "kind": "request",  "scenario_41": "token counting with tools" },
+    { "file": "count-tokens-with-tools.response.json",    "endpoint": "POST /v1/messages/count_tokens", "kind": "response", "scenario_41": "token counting with tools" },
+    { "file": "models-list.response.json",                "endpoint": "GET /v1/models",                 "kind": "response", "scenario_41": "model capability metadata", "provenance": "documented (field names) + inferred (numeric values — see caveat)", "caveat": "Field names are from the List Models reference and the probed ModelInfo (R-03 F10). The VALUES are not all documented: max_input_tokens 1000000 and max_tokens 128000 are an INFERENCE, filled in from the Models overview table because the reference page's own /v1/models example prints 0 for both, and created_at, first_id and last_id are invented. R-03's Contract summary flags exactly these as illustrative/inferred. A conformance case must assert the field names and types here, not these numbers." },
+    { "file": "errors.json",                              "endpoint": "any",                            "kind": "errors",   "scenario_41": "errors — full status/type matrix" },
+    { "file": "sdk-header-probe.md",                      "endpoint": "client side",                    "kind": "probe",    "scenario_41": "inbound request headers a gateway must accept", "provenance": "executed probe" }
+  ],
+  "not_covered": [
+    "cancellation (spec §41): no cancel endpoint or cancel event is documented by Anthropic. The only documented mechanism is client disconnect. The conformance test must assert local behaviour, not a wire message. See R-03 Decisions table."
+  ]
+}

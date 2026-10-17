@@ -1,0 +1,175 @@
+---
+title: "Your own React"
+description: "Put the surface chat in your own React app: render the Chat component against the project running under aw dev, replace a part such as the composer, or draw everything yourself with useConversation."
+---
+
+<Info>
+**Chapter 4 · Put it in your product — step 5 of 8** · [the chapter map](/path/embed)
+
+- **You will:** render the surface's chat in your React app, then replace a part or draw it all yourself.
+- **You will learn:** the `<Chat/>` props, the parts you can swap, and what `useConversation()` returns.
+- **You need:** a React 18.3 or 19 app and `aw dev` running ([Embed an agent in your product](/building/embedding)).
+
+</Info>
+
+`@indx-workspace/react` is the chat that `GET /p/s/<name>` renders, as a component. Drop it into
+your Vite or Next.js app in a few lines, then replace parts of it or draw it all yourself.
+
+What you can do:
+
+- [Show the surface's chat in your React app](#show-the-chat-in-your-react-app)
+- [Replace one part, such as the composer](#replace-a-part)
+- [Draw the whole chat yourself](#draw-everything-yourself)
+- [Use it from a deployed page](#beyond-localhost)
+
+## Show the chat in your React app
+
+Run `aw dev` in your project; its ready screen prints the web origin (`http://127.0.0.1:3000`
+unless that port was busy) and each surface's name. Then install the package (React 18.3 or 19 is
+a peer dependency) and render the chat:
+
+```sh claim="run"
+npm install @indx-workspace/react @indx-workspace/sdk
+```
+
+```tsx title="src/App.tsx" claim="compile"
+import { Chat } from '@indx-workspace/react';
+import '@indx-workspace/react/styles.css';
+
+export function App() {
+  return <Chat surface="main" baseUrl="http://127.0.0.1:3000" />;
+}
+```
+
+`surface` is the surface's name and `baseUrl` is the Agent Workspace that `aw dev` started. Import
+the stylesheet once, anywhere in your app; it is plain CSS driven by the theme's custom properties.
+Pass the surface's definition (the object `defineSurface` returns in `surfaces/main.ts`) as
+`definition` to get its theme, title, greeting and prompts; without it the chat uses the default
+theme. In the built-in composer Enter sends and Shift+Enter adds a newline; an Enter that confirms
+IME input (Japanese, for example) does not send.
+
+You set up no CORS. Under `aw dev` the local draft of a surface admits pages on
+`http://localhost:*` and `http://127.0.0.1:*` by default, as long as the surface lists no
+`allowedOrigins` of its own. That default exists for the local draft only; a promoted surface
+answers the origins in its own `allowedOrigins` (see
+[Chat component](/building/frontend#chat-component-react)).
+
+## Replace a part
+
+Pass `components` to swap any of `MessageList`, `Message`, `Composer` and `ToolResult`, for example
+`<Chat surface="main" baseUrl={url} components={{ Composer }} />`. Each part receives the props its
+exported type declares and nothing else. The composer gets the draft text and the handlers, so a
+custom one needs no state of its own. `MessageProps` carries `message`, plus `tools` and
+`feedback`, the nodes to draw before and after it (or `null`). `ToolResultProps` carries the tool's
+raw `output` and the `component` the surface asked for (`table`, `card` or `text`).
+
+<Accordion title="A custom composer, in full">
+
+```tsx title="src/my-composer.tsx" claim="compile"
+import { Chat, type ComposerProps } from '@indx-workspace/react';
+import '@indx-workspace/react/styles.css';
+
+function Composer({
+  value,
+  onChange,
+  onSubmit,
+  disabled,
+  canSend,
+  label,
+  sendLabel,
+}: ComposerProps) {
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSubmit();
+      }}
+    >
+      <input
+        aria-label={label}
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      <button type="submit" disabled={!canSend}>
+        {sendLabel}
+      </button>
+    </form>
+  );
+}
+
+export function App() {
+  return <Chat surface="main" baseUrl="http://127.0.0.1:3000" components={{ Composer }} />;
+}
+```
+
+</Accordion>
+
+## Draw everything yourself
+
+`useConversation()` is the same conversation with no markup. It takes the same `surface`,
+`agentName`, `definition` and `baseUrl`, and returns `messages`, `status`
+(`'idle' | 'restoring' | 'sending' | 'ended'`), `runStatus`, `failure`, `turns`, `send(prompt)`,
+`rate(runId, rating)`, `agents` and `switchAgent(agent)`. A surface's `429` refusals come back as
+`failure`, and at the turn limit `status` is `ended`.
+
+<Accordion title="A minimal chat built on useConversation">
+
+```tsx title="src/my-chat.tsx" claim="compile"
+import { useConversation, type Message } from '@indx-workspace/react';
+import { useState } from 'react';
+
+function textOf(message: Message): string {
+  const paragraphs =
+    message.kind === 'user'
+      ? message.paragraphs
+      : message.blocks.flatMap((block) => (block.kind === 'prose' ? block.paragraphs : []));
+  return paragraphs.map((paragraph) => paragraph.map((inline) => inline.text).join('')).join('\n');
+}
+
+export function MyChat() {
+  const { messages, send, status } = useConversation({
+    surface: 'main',
+    baseUrl: 'http://127.0.0.1:3000',
+  });
+  const [draft, setDraft] = useState('');
+  return (
+    <div>
+      {messages.map((message) => (
+        <p key={message.id}>
+          <b>{message.speaker.name}:</b> {textOf(message)}
+        </p>
+      ))}
+      <input value={draft} onChange={(event) => setDraft(event.target.value)} />
+      <button
+        disabled={status !== 'idle' || draft.trim() === ''}
+        onClick={() => {
+          send(draft);
+          setDraft('');
+        }}
+      >
+        Send
+      </button>
+    </div>
+  );
+}
+```
+
+</Accordion>
+
+## Beyond localhost
+
+`baseUrl` takes an `http:` or `https:` URL. A deployed page works the same way once its origin is in
+the surface's `allowedOrigins`; the full rules, and the proxy to use for any other origin, are on
+[Build a frontend](/building/frontend#chat-component-react). To embed with no React at all, use the
+widget tag from [Embed an agent in your product](/building/embedding).
+
+<CardGroup cols={2}>
+  <Card title="Embed an agent in your product" icon="plug" href="/building/embedding">
+    The widget tag, `<Chat />
+    `, and the backend relay for a fully custom UI.
+  </Card>
+  <Card title="Build a frontend" icon="window" href="/building/frontend">
+    Cross-origin rules and a framework-agnostic run store.
+  </Card>
+</CardGroup>

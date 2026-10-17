@@ -1,0 +1,33 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.CliRuns.prompt_source_cases",
+    "AgentWorkspace.Theorems.WellFormed.CliRuns.unreadable_prompt_file_is_usage"],
+   "input": {"readable": true, "path": "", "inline": false, "file": false},
+   "id": "missing/",
+   "expected": {"source": "missing", "fileFailure": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.CliRuns.prompt_source_cases",
+    "AgentWorkspace.Theorems.WellFormed.CliRuns.unreadable_prompt_file_is_usage"],
+   "input": {"readable": true, "path": "", "inline": true, "file": false},
+   "id": "inline/",
+   "expected": {"source": "inline", "fileFailure": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.CliRuns.prompt_source_cases",
+    "AgentWorkspace.Theorems.WellFormed.CliRuns.unreadable_prompt_file_is_usage"],
+   "input": {"readable": true, "path": "file", "inline": true, "file": true},
+   "id": "conflict/file",
+   "expected": {"source": "conflict", "fileFailure": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.CliRuns.prompt_source_cases",
+    "AgentWorkspace.Theorems.WellFormed.CliRuns.unreadable_prompt_file_is_usage"],
+   "input": {"readable": true, "path": "-", "inline": false, "file": true},
+   "id": "stdin/-",
+   "expected": {"source": "stdin", "fileFailure": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.CliRuns.prompt_source_cases",
+    "AgentWorkspace.Theorems.WellFormed.CliRuns.unreadable_prompt_file_is_usage"],
+   "input": {"readable": false, "path": "missing.txt", "inline": false, "file": true},
+   "id": "file/missing.txt",
+   "expected": {"source": "file", "fileFailure": true}}],
+ "family": "cli-runs",
+ "description": "Prompt source and file failure"}

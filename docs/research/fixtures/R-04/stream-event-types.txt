@@ -1,0 +1,126 @@
+openai package version: 7.10.0
+source: resources/responses/responses.d.ts line 6526
+union members: 58
+resolved discriminants: 58
+duplicates: (none)
+unresolved: (none)
+
+--- every `type` value ResponseStreamEvent can carry, sorted ---
+error
+response.audio.delta
+response.audio.done
+response.audio.transcript.delta
+response.audio.transcript.done
+response.code_interpreter_call.completed
+response.code_interpreter_call.in_progress
+response.code_interpreter_call.interpreting
+response.code_interpreter_call_code.delta
+response.code_interpreter_call_code.done
+response.completed
+response.content_part.added
+response.content_part.done
+response.created
+response.custom_tool_call_input.delta
+response.custom_tool_call_input.done
+response.failed
+response.file_search_call.completed
+response.file_search_call.in_progress
+response.file_search_call.searching
+response.function_call_arguments.delta
+response.function_call_arguments.done
+response.image_generation_call.completed
+response.image_generation_call.generating
+response.image_generation_call.in_progress
+response.image_generation_call.partial_image
+response.in_progress
+response.incomplete
+response.mcp_call.completed
+response.mcp_call.failed
+response.mcp_call.in_progress
+response.mcp_call_arguments.delta
+response.mcp_call_arguments.done
+response.mcp_list_tools.completed
+response.mcp_list_tools.failed
+response.mcp_list_tools.in_progress
+response.output_item.added
+response.output_item.done
+response.output_text.annotation.added
+response.output_text.delta
+response.output_text.done
+response.queued
+response.reasoning_summary_part.added
+response.reasoning_summary_part.done
+response.reasoning_summary_text.delta
+response.reasoning_summary_text.done
+response.reasoning_text.delta
+response.reasoning_text.done
+response.refusal.delta
+response.refusal.done
+response.shell_call_command.added
+response.shell_call_command.delta
+response.shell_call_command.done
+response.shell_call_output_content.delta
+response.shell_call_output_content.done
+response.web_search_call.completed
+response.web_search_call.in_progress
+response.web_search_call.searching
+
+--- the same values in union-declaration order, with the interface each comes from ---
+response.audio.delta	ResponseAudioDeltaEvent
+response.audio.done	ResponseAudioDoneEvent
+response.audio.transcript.delta	ResponseAudioTranscriptDeltaEvent
+response.audio.transcript.done	ResponseAudioTranscriptDoneEvent
+response.code_interpreter_call_code.delta	ResponseCodeInterpreterCallCodeDeltaEvent
+response.code_interpreter_call_code.done	ResponseCodeInterpreterCallCodeDoneEvent
+response.code_interpreter_call.completed	ResponseCodeInterpreterCallCompletedEvent
+response.code_interpreter_call.in_progress	ResponseCodeInterpreterCallInProgressEvent
+response.code_interpreter_call.interpreting	ResponseCodeInterpreterCallInterpretingEvent
+response.completed	ResponseCompletedEvent
+response.content_part.added	ResponseContentPartAddedEvent
+response.content_part.done	ResponseContentPartDoneEvent
+response.created	ResponseCreatedEvent
+error	ResponseErrorEvent
+response.file_search_call.completed	ResponseFileSearchCallCompletedEvent
+response.file_search_call.in_progress	ResponseFileSearchCallInProgressEvent
+response.file_search_call.searching	ResponseFileSearchCallSearchingEvent
+response.function_call_arguments.delta	ResponseFunctionCallArgumentsDeltaEvent
+response.function_call_arguments.done	ResponseFunctionCallArgumentsDoneEvent
+response.shell_call_command.added	ResponseShellCallCommandAddedEvent
+response.shell_call_command.delta	ResponseShellCallCommandDeltaEvent
+response.shell_call_command.done	ResponseShellCallCommandDoneEvent
+response.shell_call_output_content.delta	ResponseShellCallOutputContentDeltaEvent
+response.shell_call_output_content.done	ResponseShellCallOutputContentDoneEvent
+response.in_progress	ResponseInProgressEvent
+response.failed	ResponseFailedEvent
+response.incomplete	ResponseIncompleteEvent
+response.output_item.added	ResponseOutputItemAddedEvent
+response.output_item.done	ResponseOutputItemDoneEvent
+response.reasoning_summary_part.added	ResponseReasoningSummaryPartAddedEvent
+response.reasoning_summary_part.done	ResponseReasoningSummaryPartDoneEvent
+response.reasoning_summary_text.delta	ResponseReasoningSummaryTextDeltaEvent
+response.reasoning_summary_text.done	ResponseReasoningSummaryTextDoneEvent
+response.reasoning_text.delta	ResponseReasoningTextDeltaEvent
+response.reasoning_text.done	ResponseReasoningTextDoneEvent
+response.refusal.delta	ResponseRefusalDeltaEvent
+response.refusal.done	ResponseRefusalDoneEvent
+response.output_text.delta	ResponseTextDeltaEvent
+response.output_text.done	ResponseTextDoneEvent
+response.web_search_call.completed	ResponseWebSearchCallCompletedEvent
+response.web_search_call.in_progress	ResponseWebSearchCallInProgressEvent
+response.web_search_call.searching	ResponseWebSearchCallSearchingEvent
+response.image_generation_call.completed	ResponseImageGenCallCompletedEvent
+response.image_generation_call.generating	ResponseImageGenCallGeneratingEvent
+response.image_generation_call.in_progress	ResponseImageGenCallInProgressEvent
+response.image_generation_call.partial_image	ResponseImageGenCallPartialImageEvent
+response.mcp_call_arguments.delta	ResponseMcpCallArgumentsDeltaEvent
+response.mcp_call_arguments.done	ResponseMcpCallArgumentsDoneEvent
+response.mcp_call.completed	ResponseMcpCallCompletedEvent
+response.mcp_call.failed	ResponseMcpCallFailedEvent
+response.mcp_call.in_progress	ResponseMcpCallInProgressEvent
+response.mcp_list_tools.completed	ResponseMcpListToolsCompletedEvent
+response.mcp_list_tools.failed	ResponseMcpListToolsFailedEvent
+response.mcp_list_tools.in_progress	ResponseMcpListToolsInProgressEvent
+response.output_text.annotation.added	ResponseOutputTextAnnotationAddedEvent
+response.queued	ResponseQueuedEvent
+response.custom_tool_call_input.delta	ResponseCustomToolCallInputDeltaEvent
+response.custom_tool_call_input.done	ResponseCustomToolCallInputDoneEvent

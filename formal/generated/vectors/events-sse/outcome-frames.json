@@ -1,0 +1,17 @@
+{"vectors":
+ [{"witnesses": ["AgentWorkspace.Theorems.Normative.EventsSse.outcome_frame_order"],
+   "input": "succeeded",
+   "id": "succeeded",
+   "expected": ["event: done\ndata: {}\n\n"]},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.EventsSse.outcome_frame_order"],
+   "input": "failed",
+   "id": "failed",
+   "expected":
+   ["event: run-failed\ndata: {\"status\":\"failed\",\"message\":\"safe\"}\n\n", "event: done\ndata: {}\n\n"]},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.EventsSse.outcome_frame_order"],
+   "input": "indeterminate",
+   "id": "indeterminate",
+   "expected":
+   ["event: run-failed\ndata: {\"status\":\"unknown\",\"message\":\"lost\"}\n\n", "event: done\ndata: {}\n\n"]}],
+ "family": "events-sse",
+ "description": "Terminal stream frame order"}

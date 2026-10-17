@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>New Agent — Agent Workspace</title>
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<script>window.PAGE = { nav: "agents", crumbs: [["Agents", "agents.html"], ["New Agent"]] };</script>
+
+<div class="app">
+  <div class="main">
+    <div class="page narrow">
+
+      <div class="page-head">
+        <div>
+          <h1>New Agent</h1>
+          <div class="sub">Five steps. Nothing here requires editing code, YAML or environment variables.</div>
+        </div>
+      </div>
+
+      <div class="steps" id="steps">
+        <div class="step current" data-step="1"><span class="n">1</span>Agent</div><span class="step-sep"></span>
+        <div class="step" data-step="2"><span class="n">2</span>Model</div><span class="step-sep"></span>
+        <div class="step" data-step="3"><span class="n">3</span>Capabilities</div><span class="step-sep"></span>
+        <div class="step" data-step="4"><span class="n">4</span>Permissions</div><span class="step-sep"></span>
+        <div class="step" data-step="5"><span class="n">5</span>Runtime</div>
+      </div>
+
+      <!-- ---------- step 1 ---------- -->
+      <section class="wiz active" data-wiz="1">
+        <div class="card"><div class="card-body">
+          <div class="field">
+            <label>Name</label>
+            <input type="text" value="Customer Support Agent" placeholder="e.g. Contract Review">
+          </div>
+          <div class="field">
+            <label>Description <span class="muted small">optional</span></label>
+            <input type="text" value="Answers employee questions from the handbook and Jira">
+          </div>
+          <div class="field mb0">
+            <label>Instructions</label>
+            <textarea rows="8">You help employees answer questions about internal policy, benefits and IT support.
+
+Always check the Company Handbook before answering. If the handbook does not cover the question, search Jira for a matching ticket and cite its key. Never guess at a policy.</textarea>
+            <div class="help">This becomes the agent’s system prompt. Plain language works better than instructions written for a developer.</div>
+          </div>
+        </div></div>
+        <div class="btn-row mt16" style="justify-content:flex-end">
+          <a class="btn" href="agents.html">Cancel</a>
+          <button class="btn primary" data-goto="2">Continue</button>
+        </div>
+      </section>
+
+      <!-- ---------- step 2 ---------- -->
+      <section class="wiz" data-wiz="2">
+        <div class="section-head mt0"><h2>Which model should this agent use?</h2>
+          <div class="actions"><a class="btn sm" href="model-add.html">Add provider</a></div>
+        </div>
+        <div class="choices">
+          <div class="choice selected"><div class="mark"></div><div class="grow">
+            <div class="t">Claude Sonnet 5 <span class="badge ok">Connected</span></div>
+            <div class="d">Anthropic · balanced speed and capability · full Claude Agent SDK support</div>
+          </div><div class="side">$3 / $15 per Mtok</div></div>
+          <div class="choice"><div class="mark"></div><div class="grow">
+            <div class="t">Claude Haiku 4.5 <span class="badge ok">Connected</span></div>
+            <div class="d">Anthropic · fastest and cheapest, good for classification and triage</div>
+          </div><div class="side">$1 / $5 per Mtok</div></div>
+          <div class="choice"><div class="mark"></div><div class="grow">
+            <div class="t">Claude Opus 5 <span class="badge ok">Connected</span></div>
+            <div class="d">Anthropic · strongest reasoning for long, complex work</div>
+          </div><div class="side">$15 / $75 per Mtok</div></div>
+          <div class="choice"><div class="mark"></div><div class="grow">
+            <div class="t">GPT‑4.1 <span class="badge ok">Connected</span> <span class="badge warn">Compatibility mode</span></div>
+            <div class="d">Azure OpenAI · translated to the Anthropic Messages API by the gateway. Some Claude features are approximated.</div>
+          </div><div class="side">$2 / $8 per Mtok</div></div>
+        </div>
+
+        <div class="callout mt16">
+          <span class="ico">ℹ</span>
+          <div class="grow">A non-Claude model behind the gateway is a <b>compatibility mode</b>, not an equivalent.
+            The exact differences are listed on the review step and in <a href="models.html#compat">Models → Compatibility</a>.</div>
+        </div>
+
+        <div class="btn-row mt16" style="justify-content:flex-end">
+          <button class="btn" data-goto="1">Back</button>
+          <button class="btn primary" data-goto="3">Continue</button>
+        </div>
+      </section>
+
+      <!-- ---------- step 3 ---------- -->
+      <section class="wiz" data-wiz="3">
+        <div class="section-head mt0"><h2>Capabilities</h2>
+          <div class="hint">What the agent can read and reach.</div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h3>Files</h3><div class="actions"><a class="btn sm" href="files.html">Manage files</a></div></div>
+          <div class="card-body">
+            <div class="checks">
+              <label class="check on"><span class="box"></span><span class="grow"><span class="t">Company Handbook</span><span class="d">handbook/ · 9 files</span></span><span class="side">Read only</span></label>
+              <label class="check on"><span class="box"></span><span class="grow"><span class="t">Response templates</span><span class="d">templates/ · 2 files</span></span><span class="side">Read only</span></label>
+              <label class="check"><span class="box"></span><span class="grow"><span class="t">Contracts</span><span class="d">contracts/ · 34 files</span></span><span class="side">Read only</span></label>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h3>Skills</h3><div class="actions"><a class="btn sm" href="skills.html">Manage skills</a></div></div>
+          <div class="card-body">
+            <div class="checks">
+              <label class="check on"><span class="box"></span><span class="grow"><span class="t">Customer Support</span><span class="d">Tone, escalation rules, response template</span></span></label>
+              <label class="check"><span class="box"></span><span class="grow"><span class="t">Document Writer</span><span class="d">Produces .docx and Markdown deliverables</span></span></label>
+              <label class="check"><span class="box"></span><span class="grow"><span class="t">Invoice Review</span><span class="d">Checks totals, tax treatment and PO matching</span></span></label>
+              <label class="check"><span class="box"></span><span class="grow"><span class="t">Security Review</span><span class="d">Reviews diffs against the security checklist</span></span></label>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h3>Connectors</h3><div class="actions"><a class="btn sm" href="connectors.html">Manage connectors</a></div></div>
+          <div class="card-body">
+            <div class="checks">
+              <label class="check on"><span class="box"></span><span class="grow"><span class="t">Internal Search</span><span class="d">Remote URL · Bearer token</span></span><span class="side"><span class="badge ok">Reachable</span></span></label>
+              <label class="check on"><span class="box"></span><span class="grow"><span class="t">Jira</span><span class="d">Remote URL · OAuth</span></span><span class="side"><span class="badge ok">Reachable</span></span></label>
+              <label class="check"><span class="box"></span><span class="grow"><span class="t">GitHub</span><span class="d">Remote URL · API key</span></span><span class="side"><span class="badge ok">Reachable</span></span></label>
+              <label class="check"><span class="box"></span><span class="grow"><span class="t">Filesystem</span><span class="d">Local command · npx</span></span><span class="side"><span class="badge warn">Local command</span></span></label>
+            </div>
+          </div>
+        </div>
+
+        <div class="btn-row mt16" style="justify-content:flex-end">
+          <button class="btn" data-goto="2">Back</button>
+          <button class="btn primary" data-goto="4">Continue</button>
+        </div>
+      </section>
+
+      <!-- ---------- step 4 ---------- -->
+      <section class="wiz" data-wiz="4">
+        <div class="section-head mt0"><h2>What can this agent do?</h2></div>
+        <div class="card"><div class="card-body">
+          <div class="checks">
+            <label class="check on"><span class="box"></span><span class="grow"><span class="t">Read files</span><span class="d">The files assigned above, inside the sandbox only</span></span></label>
+            <label class="check on"><span class="box"></span><span class="grow"><span class="t">Write files</span><span class="d">Create and edit files in the workspace</span></span></label>
+            <label class="check"><span class="box"></span><span class="grow"><span class="t">Run commands</span><span class="d">Shell access inside the sandbox</span></span></label>
+            <label class="check"><span class="box"></span><span class="grow"><span class="t">Access unrestricted internet</span><span class="d">Off: only the model gateway and enabled connectors are reachable</span></span></label>
+          </div>
+        </div></div>
+
+        <details class="adv">
+          <summary>Advanced <span class="hint">turns, budget, approval</span></summary>
+          <div class="adv-body">
+            <div class="field row2">
+              <div><label>Max turns</label><input type="text" value="24"></div>
+              <div><label>Budget per run (USD)</label><input type="text" value="1.50"></div>
+            </div>
+            <div class="field mb0">
+              <label>Approval</label>
+              <select><option>Run without asking</option><option>Ask before writing files or calling connectors</option></select>
+            </div>
+          </div>
+        </details>
+
+        <div class="btn-row mt16" style="justify-content:flex-end">
+          <button class="btn" data-goto="3">Back</button>
+          <button class="btn primary" data-goto="5">Continue</button>
+        </div>
+      </section>
+
+      <!-- ---------- step 5 ---------- -->
+      <section class="wiz" data-wiz="5">
+        <div class="section-head mt0"><h2>Where should this agent run?</h2>
+          <div class="actions"><a class="btn sm" href="runtimes.html">Manage runtimes</a></div>
+        </div>
+
+        <div class="choices">
+          <div class="choice selected"><div class="mark"></div><div class="grow">
+            <div class="t">Standard Sandbox <span class="badge ok">Verified</span> <span class="badge info">Recommended</span></div>
+            <div class="d">Docker · 1 CPU · 1 GB RAM · 5 GB disk · Network: Restricted</div>
+          </div><div class="side">~1 s start</div></div>
+          <div class="choice"><div class="mark"></div><div class="grow">
+            <div class="t">Heavy <span class="badge ok">Verified</span></div>
+            <div class="d">Kubernetes · 4 CPU · 8 GB RAM · 20 GB disk</div>
+          </div><div class="side">~3 s start</div></div>
+          <div class="choice"><div class="mark"></div><div class="grow">
+            <div class="t">Read Only <span class="badge ok">Verified</span></div>
+            <div class="d">Docker · Filesystem: read-only · Network: gateway only</div>
+          </div><div class="side">~1 s start</div></div>
+          <div class="choice disabled"><div class="mark"></div><div class="grow">
+            <div class="t">This machine <span class="badge danger">No isolation</span></div>
+            <div class="d">Development only. Disabled by the workspace policy “Block local runtime for deployed agents”.</div>
+          </div></div>
+        </div>
+
+        <div class="section-head"><h2>Review</h2></div>
+        <div class="card"><div class="card-body">
+          <dl class="kv">
+            <dt>Name</dt><dd>Customer Support Agent</dd>
+            <dt>Model</dt><dd>Claude Sonnet 5 <span class="muted small">· Anthropic</span></dd>
+            <dt>Files</dt><dd>2 folders · 11 files <span class="muted small">· read only</span></dd>
+            <dt>Skills</dt><dd>Customer Support</dd>
+            <dt>Connectors</dt><dd>Internal Search, Jira</dd>
+            <dt>Permissions</dt><dd>Read files, Write files</dd>
+            <dt>Runtime</dt><dd>Standard Sandbox <span class="muted small">· Docker · 1 CPU / 1 GB RAM</span></dd>
+            <dt>Budget</dt><dd>$1.50 per run · 24 turns</dd>
+          </dl>
+        </div></div>
+
+        <div class="callout ok mt16">
+          <span class="ico">✓</span>
+          <div class="grow"><b>No capability gaps.</b> Claude Sonnet 5 supports everything this agent requires, and
+            Standard Sandbox can enforce the requested network policy.</div>
+        </div>
+
+        <div class="btn-row mt16" style="justify-content:flex-end">
+          <button class="btn" data-goto="4">Back</button>
+          <a class="btn primary lg" href="agent.html">Deploy Agent</a>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+<script>
+document.addEventListener("click", function (e) {
+  var b = e.target.closest("[data-goto]");
+  if (!b) return;
+  var n = b.getAttribute("data-goto");
+  document.querySelectorAll(".wiz").forEach(function (s) { s.classList.toggle("active", s.dataset.wiz === n); });
+  document.querySelectorAll("#steps .step").forEach(function (s) {
+    s.classList.toggle("current", s.dataset.step === n);
+    s.classList.toggle("done", Number(s.dataset.step) < Number(n));
+  });
+  window.scrollTo({ top: 0, behavior: "smooth" });
+});
+</script>
+<style>.wiz{display:none}.wiz.active{display:block}</style>
+</body>
+</html>

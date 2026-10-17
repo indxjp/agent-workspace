@@ -1,0 +1,32 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "lib": ["DOM", "DOM.Iterable", "ES2023"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "jsx": "preserve",
+    "allowJs": true,
+    "allowImportingTsExtensions": true,
+    "allowArbitraryExtensions": true,
+    "noEmit": true,
+    "incremental": true,
+    "plugins": [{ "name": "next" }],
+    "paths": {
+      "@/*": ["./*"]
+    }
+  },
+  // Tests are included, not excluded. This config emits nothing - `next build`
+  // produces the app - so there is no dist/ for a compiled test to pollute, and
+  // the second config that used to re-include them (tsconfig.tests.json) was a
+  // list to keep in sync for no gain. See docs/adr/W0-INF-01-typescript-project-layout.md.
+  // `**` does not descend into a dot-directory, so the A2A agent card route under `.well-known`
+  // (ADR-0135) is named explicitly.
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    "app/api/a2a/agents/*/.well-known/**/*.ts",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": ["node_modules", ".next"]
+}

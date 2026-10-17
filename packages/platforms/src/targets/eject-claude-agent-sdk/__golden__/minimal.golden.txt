@@ -1,0 +1,146 @@
+=== .env.example ===
+ANTHROPIC_API_KEY=
+=== .gitignore ===
+node_modules
+.env
+=== README.md ===
+# helper
+
+## Run
+
+```sh
+npm install
+cp .env.example .env   # then fill in the values
+node --env-file=.env src/main.ts "your prompt"
+```
+
+## Claude Agent SDK
+
+The agent runs through `query()` of the Claude Agent SDK. `src/agent.ts` exports `agentOptions()`, which holds the permissions, MCP servers, skills and subagents; `.claude/skills/` holds the skills.
+Set `ANTHROPIC_API_KEY` in `.env`.
+
+## What was not carried over
+
+The platform report that came with this project gives every field a verdict and says why a field could not be carried. An ejected project is not importable back into Agent Workspace.
+=== package.json ===
+{
+  "name": "helper",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node src/main.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.296"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "typescript": "6.0.2"
+  }
+}
+=== src/agent.ts ===
+import type { Options } from "@anthropic-ai/claude-agent-sdk";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+
+const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+export async function agentOptions(): Promise<Options> {
+  const options: Options = {
+    cwd: projectRoot,
+    tools: {
+      type: "preset",
+      preset: "claude_code",
+    },
+    disallowedTools: [],
+    allowedTools: [],
+    permissionMode: "default",
+    settingSources: ["project"],
+    strictMcpConfig: true,
+    mcpServers: {},
+    skills: [],
+  };
+  return options;
+}
+=== src/main.ts ===
+import { query } from "@anthropic-ai/claude-agent-sdk";
+
+import { agentOptions } from "./agent.ts";
+
+const prompt = process.argv.slice(2).join(" ").trim();
+if (prompt === "") {
+  console.error("Usage: node --env-file=.env src/main.ts \"your prompt\"");
+  process.exit(1);
+}
+
+try {
+  const options = await agentOptions();
+  for await (const message of query({ prompt, options })) {
+    if (message.type !== "result") continue;
+    if (message.subtype === "success") {
+      console.log(message.result);
+    } else {
+      throw new Error(message.errors.join("; ") || message.subtype);
+    }
+  }
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+}
+=== tsconfig.json ===
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": [
+      "ES2023"
+    ],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "types": [
+      "node"
+    ],
+    "skipLibCheck": true
+  },
+  "include": [
+    "src",
+    "tools"
+  ]
+}
+=== report.json ===
+[
+  {
+    "path": "helper.instructions",
+    "verdict": "native",
+    "note": "empty, so no system prompt is appended"
+  },
+  {
+    "path": "helper.permissions.readFiles",
+    "verdict": "native",
+    "note": "the tools it governs are allowed"
+  },
+  {
+    "path": "helper.permissions.writeFiles",
+    "verdict": "native",
+    "note": "the tools it governs are allowed"
+  },
+  {
+    "path": "helper.permissions.runCommands",
+    "verdict": "native",
+    "note": "the tools it governs are allowed"
+  },
+  {
+    "path": "helper.permissions.unrestrictedNetwork",
+    "verdict": "native",
+    "note": "the tools it governs are allowed"
+  }
+]

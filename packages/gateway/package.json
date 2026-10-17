@@ -1,0 +1,72 @@
+{
+  "name": "@agent-workspace/gateway",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./start": {
+      "types": "./src/start.ts",
+      "default": "./dist/start.js"
+    },
+    "./tokens": {
+      "types": "./src/tokens/run-token.ts",
+      "default": "./dist/tokens/run-token.js"
+    },
+    "./providers/registry": {
+      "types": "./src/providers/registry.ts",
+      "default": "./dist/providers/registry.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "pnpm run build && tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@agent-workspace/core": "workspace:*",
+    "@indx-workspace/contracts": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "pg": "8.23.1",
+    "zod": "4.6.6"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "@types/pg": "8.23.1",
+    "@typescript/native": "npm:typescript@7.0.2",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
+    "vitest": "5.0.3"
+  },
+  "nx": {
+    "targets": {
+      "typecheck": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "tsc -p tsconfig.json",
+          "cwd": "packages/gateway"
+        }
+      },
+      "lint": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "eslint packages/gateway --max-warnings 0"
+        }
+      },
+      "test": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "vitest run --project @agent-workspace/gateway --reporter=default --reporter=json --outputFile={projectRoot}/.vitest-report.json",
+          "env": {
+            "NODE_OPTIONS": "--unhandled-rejections=strict",
+            "VITEST_MAX_WORKERS": "4"
+          }
+        }
+      }
+    }
+  }
+}

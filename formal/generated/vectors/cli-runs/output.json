@@ -1,0 +1,31 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.CliRuns.output_mode_precedence",
+    "AgentWorkspace.Theorems.Normative.CliRuns.stream_frame_output_cases",
+    "AgentWorkspace.Theorems.Normative.CliRuns.notices_never_enter_stdout"],
+   "input": {"raw": false, "quiet": false, "jsonl": false, "json": false},
+   "id": "false/false/false/false",
+   "expected": {"streamMode": "human", "recordMode": "human", "notice": ["next page: --cursor next"], "doneLines": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.CliRuns.output_mode_precedence",
+    "AgentWorkspace.Theorems.Normative.CliRuns.stream_frame_output_cases",
+    "AgentWorkspace.Theorems.Normative.CliRuns.notices_never_enter_stdout"],
+   "input": {"raw": false, "quiet": false, "jsonl": false, "json": true},
+   "id": "false/true/false/false",
+   "expected": {"streamMode": "jsonl", "recordMode": "json", "notice": [], "doneLines": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.CliRuns.output_mode_precedence",
+    "AgentWorkspace.Theorems.Normative.CliRuns.stream_frame_output_cases",
+    "AgentWorkspace.Theorems.Normative.CliRuns.notices_never_enter_stdout"],
+   "input": {"raw": false, "quiet": false, "jsonl": true, "json": false},
+   "id": "false/false/true/false",
+   "expected": {"streamMode": "jsonl", "recordMode": "jsonl", "notice": ["next page: --cursor next"], "doneLines": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.CliRuns.output_mode_precedence",
+    "AgentWorkspace.Theorems.Normative.CliRuns.stream_frame_output_cases",
+    "AgentWorkspace.Theorems.Normative.CliRuns.notices_never_enter_stdout"],
+   "input": {"raw": true, "quiet": true, "jsonl": true, "json": true},
+   "id": "true/true/true/true",
+   "expected": {"streamMode": "raw", "recordMode": "jsonl", "notice": [], "doneLines": ["raw"]}}],
+ "family": "cli-runs",
+ "description": "Output precedence and notices"}

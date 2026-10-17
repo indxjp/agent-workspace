@@ -1,0 +1,37 @@
+A = openai@7.10.0  (core/error.d.ts, 17 classes)
+  OpenAIError                    extends Error
+  APIUserAbortError              extends APIError<undefined, undefined, undefined>
+  APIConnectionError             extends APIError<undefined, undefined, undefined>
+  APIConnectionTimeoutError      extends APIConnectionError
+  BadRequestError                extends APIError<400, Headers>
+  AuthenticationError            extends APIError<401, Headers>
+  PermissionDeniedError          extends APIError<403, Headers>
+  NotFoundError                  extends APIError<404, Headers>
+  ConflictError                  extends APIError<409, Headers>
+  UnprocessableEntityError       extends APIError<422, Headers>
+  RateLimitError                 extends APIError<429, Headers>
+  InternalServerError            extends APIError<number, Headers>
+  LengthFinishReasonError        extends OpenAIError
+  ContentFilterFinishReasonError extends OpenAIError
+  InvalidWebhookSignatureError   extends Error
+  OAuthError                     extends APIError<400 | 401 | 403, Headers>
+  SubjectTokenProviderError      extends OpenAIError
+
+B = @anthropic-ai/sdk@0.123.0  (core/error.d.ts, 13 classes)
+  AnthropicError                 extends Error
+  APIUserAbortError              extends APIError<undefined, undefined, undefined>
+  APIConnectionError             extends APIError<undefined, undefined, undefined>
+  APIConnectionTimeoutError      extends APIConnectionError
+  RetryableError                 extends AnthropicError
+  BadRequestError                extends APIError<400, Headers>
+  AuthenticationError            extends APIError<401, Headers>
+  PermissionDeniedError          extends APIError<403, Headers>
+  NotFoundError                  extends APIError<404, Headers>
+  ConflictError                  extends APIError<409, Headers>
+  UnprocessableEntityError       extends APIError<422, Headers>
+  RateLimitError                 extends APIError<429, Headers>
+  InternalServerError            extends APIError<number, Headers>
+
+in BOTH (11): APIConnectionError, APIConnectionTimeoutError, APIUserAbortError, AuthenticationError, BadRequestError, ConflictError, InternalServerError, NotFoundError, PermissionDeniedError, RateLimitError, UnprocessableEntityError
+only in A (6): ContentFilterFinishReasonError, InvalidWebhookSignatureError, LengthFinishReasonError, OAuthError, OpenAIError, SubjectTokenProviderError
+only in B (2): AnthropicError, RetryableError

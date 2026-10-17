@@ -1,0 +1,58 @@
+{
+  "name": "@agent-workspace/engine-mastra",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "agentWorkspace": {
+    "engineSdk": "@mastra/core"
+  },
+  "dependencies": {
+    "@indx-workspace/contracts": "workspace:*",
+    "@agent-workspace/engine": "workspace:*",
+    "@ai-sdk/anthropic": "4.0.78",
+    "@ai-sdk/openai": "4.0.91",
+    "@mastra/core": "1.76.0",
+    "@mastra/mcp": "2.3.0",
+    "@mastra/memory": "1.37.0",
+    "zod": "4.6.6"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "@typescript/native": "npm:typescript@7.0.2",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
+    "vitest": "5.0.3"
+  },
+  "nx": {
+    "targets": {
+      "lint": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "eslint packages/engine-mastra --max-warnings 0"
+        }
+      },
+      "test": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "vitest run --project @agent-workspace/engine-mastra --reporter=default --reporter=json --outputFile={projectRoot}/.vitest-report.json",
+          "env": {
+            "NODE_OPTIONS": "--unhandled-rejections=strict",
+            "VITEST_MAX_WORKERS": "4"
+          }
+        }
+      }
+    }
+  }
+}

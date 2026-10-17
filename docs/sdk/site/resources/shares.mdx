@@ -1,0 +1,231 @@
+---
+title: "Shares"
+description: "Publish a read-only snapshot of an agent, session, project or skill, and revoke it — plus what publish honestly does today."
+---
+
+<Info>
+**Chapter 6 · Run it for your team — step 3 of 4** · [the chapter map](/path/operate)
+
+- **You will:** publish a read-only snapshot of an agent, session, project or skill, and revoke it.
+- **You will learn:** the three visibilities and four expiries, how the sharing policy gates a public link, and what publish does today.
+- **You need:** a workspace whose [sharing policy](/resources/workspaces#sharingpolicy-get) allows public shares, if you want a public link.
+
+</Info>
+
+**What you can do**
+
+- [List shares](#list): your own, or every share in the workspace as an Owner or Admin
+- [Publish a share](#publish) to the workspace or as a public `/p/<token>` link, with an expiry and an optional passphrase
+- [Revoke a share](#revoke): its link stops resolving at once
+
+`aw.shares` is the client family for `/api/shares/**` (`packages/sdk/src/resources/shares.ts`,
+contract `@indx-workspace/contracts/shares`). A **share** is a snapshot of an agent, session,
+project or skill that the workspace — or the public, through a `/p/<token>` link — may open. Public
+shares are gated by the workspace's sharing policy: see
+[`aw.workspaces.sharingPolicy`](/resources/workspaces#sharingpolicy-get).
+
+```ts title="shares.ts" claim="compile"
+import { createClient } from '@indx-workspace/sdk';
+
+const baseUrl = process.env.AGENT_WORKSPACE_URL;
+const apiKey = process.env.AGENT_WORKSPACE_API_KEY;
+if (baseUrl === undefined || apiKey === undefined) {
+  throw new Error('Set AGENT_WORKSPACE_URL and AGENT_WORKSPACE_API_KEY');
+}
+const aw = createClient({
+  baseUrl,
+  auth: { kind: 'api-key', apiKey },
+});
+
+// The caller's own shares, or every share in the workspace for an Owner or Admin.
+const shares = await aw.shares.list();
+console.log(shares.map((s) => `${s.subjectType}/${s.subjectLabel}: ${s.visibility}`));
+
+// Publish a workspace-visible share of a project.
+const share = await aw.shares.publish({
+  subjectType: 'project',
+  subjectId: 'a1b2c3d4-...',
+  subjectLabel: 'Customer onboarding',
+  visibility: 'workspace',
+});
+console.log(share.id, share.visibility);
+
+// Revoke it: the link stops resolving at once.
+await aw.shares.revoke(share.id);
+```
+
+<CodeGroup>
+```sh title="aw (illustrative)" claim="illustrative"
+aw shares list
+aw shares revoke <id>
+```
+</CodeGroup>
+
+<Warning>
+  The `aw` CLI has no `shares publish` command — see [`publish`](#publish) below for why, and [aw
+  vs. the SDK](/cli/cli-vs-sdk) for the full list of what the CLI omits.
+</Warning>
+
+## `SHARE_SUBJECT_TYPES`, visibilities, modes and expiries
+
+```ts title="illustrative" claim="illustrative"
+export const SHARE_SUBJECT_TYPES = ['agent', 'session', 'project', 'skill'] as const;
+export const SHARE_VISIBILITIES = ['private', 'workspace', 'public'] as const;
+export const SHARE_MODES = ['definition', 'runnable'] as const;
+export const SHARE_EXPIRIES = ['24 h', '7 days', '30 days', 'never'] as const;
+```
+
+- **`subjectType`** — what a share publishes.
+- **`visibility`** — who may open it. `public` mints a `/p/<token>` link and is refused
+  (`400 invalid_share`) while the workspace's sharing policy has public sharing off.
+- **`mode`** — only meaningful for an agent share; the server defaults it to `definition`.
+  `runnable` stays in the vocabulary because the wire already names it, but it is compiled off in
+  this release and the server refuses it (`400 invalid_share`).
+- **`expiry`** — how long the share stays open, counted from publication; the server defaults to
+  `never`.
+- A passphrase, when set, is at most `SHARE_PASSPHRASE_MAX_LENGTH` (1,024) code units, hashed at
+  rest, and never returned by any read.
+
+Reference: [`SHARE_SUBJECT_TYPES`](/reference/contracts/shares#share_subject_types), [`SHARE_VISIBILITIES`](/reference/contracts/shares#share_visibilities).
+
+## list
+
+`GET /api/shares`
+
+The caller's own shares, or every share of the workspace for an Owner or Admin. Each item also
+carries `viewCount` (`ShareListItem`, distinct from the bare `ShareResource` a `publish` returns).
+
+```ts title="illustrative" claim="illustrative"
+const shares = await aw.shares.list();
+for (const s of shares) {
+  console.log(s.subjectLabel, s.visibility, s.viewCount, s.url ?? '(not public)');
+}
+```
+
+| Code                            | Status | Meaning                                                             |
+| ------------------------------- | ------ | ------------------------------------------------------------------- |
+| `shares_runtime_not_configured` | 503    | This deployment has no sharing API configured.                      |
+| `unauthenticated`               | 401    | The request carried no usable session or key.                       |
+| `forbidden`                     | 403    | The caller's authorisation identity resolved a different workspace. |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw shares list
+```
+
+</CodeGroup>
+
+Reference: [`shares.list`](/reference/sdk/shares#list), [`ShareListResponseSchema`](/reference/contracts/shares#sharelistresponseschema).
+
+## publish
+
+`POST /api/shares`
+
+Publish a share of a subject the caller may share. The SDK sends the command exactly as given —
+every default (`mode`, `expiry`, the runnable budget) and the share's actual content are the
+server's to decide, never composed client-side.
+
+```ts title="illustrative" claim="illustrative"
+import type { PublishShareCommand } from '@indx-workspace/contracts/shares';
+
+const command: PublishShareCommand = {
+  subjectType: 'session',
+  subjectId: 'a1b2c3d4-...',
+  subjectLabel: 'Support call walkthrough',
+  visibility: 'public',
+  expiry: '7 days',
+  include: { technicalDetails: false, outputFiles: true },
+  passphrase: 'correct horse battery staple',
+};
+const share = await aw.shares.publish(command);
+console.log(share.url); // "/p/<token>" — present because visibility is "public"
+```
+
+`mode` and `budgetCapUsd` apply to an agent share only (`budgetCapUsd` further requires `runnable`
+mode, which the server currently refuses outright); `include` applies to a session share only. Any
+other pairing is refused as `400 invalid_share`.
+
+<Warning>
+  **What `publish` honestly does today.** `subjectLabel` is client-authored, and the route stores it
+  verbatim and requires it on every call — this is not yet server-derived from the subject. The
+  route also still requires the caller to send the share's content (`snapshot`/`transcript`/
+  `definition`, folded by the SDK's session/agent snapshot helpers where applicable) rather than
+  deriving it itself. Both are tracked as
+  **[RF-103](/concepts/roadmap#rf-103-server-owned-share-snapshots)** — "a pending server change
+  tracked in the API specification's §8" — and until it lands, a share this SDK publishes carries
+  only what the caller composed for it, not a canonical server-authored snapshot. This is also why
+  the CLI has no `shares publish` command: `packages/aw/src/commands/shares.ts` says outright that
+  `publish` "waits for [RF-103](/concepts/roadmap#rf-103-server-owned-share-snapshots)
+  (server-authored share content)".
+</Warning>
+
+| Code                            | Status | Meaning                                                                                                                                                                                                                                               |
+| ------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `shares_runtime_not_configured` | 503    | This deployment has no sharing API configured.                                                                                                                                                                                                        |
+| `unauthenticated`               | 401    | The request carried no usable session or key.                                                                                                                                                                                                         |
+| `forbidden`                     | 403    | The caller may not share this subject (own/other ownership check), or resolved a different workspace. Note: today the ownership lookup answers "unknown" for an `agent` or `skill` subject, so a Builder or Viewer cannot publish either kind at all. |
+| `invalid_share`                 | 400    | Any parse failure: a field outside the contract, an option the subject type does not take, a `public` share while the workspace's policy has public sharing off, or `runnable` mode.                                                                  |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+# no CLI command — see the note above (RF-103)
+```
+
+</CodeGroup>
+
+Reference: [`shares.publish`](/reference/sdk/shares#publish), [`ShareResourceSchema`](/reference/contracts/shares#shareresourceschema).
+
+## revoke
+
+`DELETE /api/shares/:id`
+
+Revoke a share: its link stops resolving at once. `204`, no body.
+
+```ts title="illustrative" claim="illustrative"
+await aw.shares.revoke(share.id);
+```
+
+| Code                            | Status | Meaning                                                          |
+| ------------------------------- | ------ | ---------------------------------------------------------------- |
+| `shares_runtime_not_configured` | 503    | This deployment has no sharing API configured.                   |
+| `unauthenticated`               | 401    | The request carried no usable session or key.                    |
+| `forbidden`                     | 403    | The caller did not publish this share and is not an Owner/Admin. |
+| `share_not_found`               | 404    | No share with that id in this workspace.                         |
+
+<CodeGroup>
+```sh title="aw (illustrative)" claim="illustrative"
+aw shares revoke <id>
+```
+</CodeGroup>
+
+Reference: [`shares.revoke`](/reference/sdk/shares#revoke).
+
+## `SHARES_PROBLEM_CODES`
+
+```ts title="illustrative" claim="illustrative"
+export const SHARES_PROBLEM_CODES = {
+  invalid_share: 400,
+  share_not_found: 404,
+  shares_runtime_not_configured: 503,
+} as const;
+```
+
+This is the family's own contract-level vocabulary. The `forbidden` and `unauthenticated` codes
+above come from the platform's common vocabulary (`COMMON_PROBLEM_CODES` at the contracts package
+root), not this list.
+
+Reference: [`SHARES_PROBLEM_CODES`](/reference/contracts/shares#shares_problem_codes).
+
+## Open questions
+
+- Resolving a public `/p/<token>` link (an unauthenticated visitor opening the share) is a
+  separate, unauthenticated route this SDK does not expose a method for at all — it is outside
+  `aw.shares`. Its own problem codes (`share_unavailable` 404, `invalid_passphrase` 403, both in
+  `apps/web/server/shares/core/service.ts`) are not part of the SDK-facing surface documented here
+  and are left out on that basis, not overlooked.
+- `list`'s `forbidden` and `publish`'s `forbidden` both come from the same generic RBAC check
+  (`requireResourceAccess`) rather than a shares-specific code; the contract's own
+  `SHARES_PROBLEM_CODES` does not list `forbidden` at all, so it is documented here from the route
+  source rather than the contract constant.

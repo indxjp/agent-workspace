@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "releaseVersion": "0.1.0",
+  "commitSha": null,
+  "generatedAt": null,
+  "checks": [],
+  "artifacts": {
+    "images": [],
+    "package": {
+      "name": null,
+      "version": "0.1.0",
+      "ownershipVerified": false,
+      "signatureVerified": false,
+      "provenanceVerified": false
+    }
+  },
+  "approvals": {
+    "owner": { "status": "pending", "actor": null, "approvedAt": null },
+    "security": { "status": "pending", "actor": null, "approvedAt": null }
+  },
+  "walkthrough": {
+    "status": "pending",
+    "actor": null,
+    "approvedAt": null,
+    "evidence": "docs/walkthrough/confusion-log.md"
+  },
+  "residualRisks": [
+    { "id": "RISK-01", "status": "pending", "actor": null, "dispositionAt": null },
+    { "id": "RISK-02", "status": "pending", "actor": null, "dispositionAt": null },
+    { "id": "RISK-03", "status": "pending", "actor": null, "dispositionAt": null }
+  ]
+}

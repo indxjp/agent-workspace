@@ -1,0 +1,67 @@
+[
+  {
+    "partNo": "P-10231",
+    "name": "モーター取付L形ブラケット",
+    "kind": "ブラケット",
+    "material": "SS400",
+    "lengthMm": 200,
+    "widthMm": 100,
+    "thicknessMm": 3.2,
+    "holeCount": 4,
+    "bendCount": 2,
+    "customer": "東和機工株式会社",
+    "orderNos": ["SO-2024-0412", "SO-2025-0108"]
+  },
+  {
+    "partNo": "P-10388",
+    "name": "センサー取付ブラケット",
+    "kind": "ブラケット",
+    "material": "SS400",
+    "lengthMm": 180,
+    "widthMm": 90,
+    "thicknessMm": 3.2,
+    "holeCount": 4,
+    "bendCount": 2,
+    "customer": "株式会社中央精工",
+    "orderNos": ["SO-2025-0377"]
+  },
+  {
+    "partNo": "P-10502",
+    "name": "架台ベースプレート",
+    "kind": "プレート",
+    "material": "SS400",
+    "lengthMm": 400,
+    "widthMm": 300,
+    "thicknessMm": 9,
+    "holeCount": 8,
+    "bendCount": 0,
+    "customer": "東和機工株式会社",
+    "orderNos": ["SO-2025-0219"]
+  },
+  {
+    "partNo": "P-20114",
+    "name": "制御盤点検カバー",
+    "kind": "カバー",
+    "material": "SUS304",
+    "lengthMm": 300,
+    "widthMm": 150,
+    "thicknessMm": 2,
+    "holeCount": 6,
+    "bendCount": 4,
+    "customer": "北陸フードシステム株式会社",
+    "orderNos": ["SO-2025-0533"]
+  },
+  {
+    "partNo": "P-30071",
+    "name": "放熱ブロック台座",
+    "kind": "ブロック",
+    "material": "A5052",
+    "lengthMm": 60,
+    "widthMm": 60,
+    "thicknessMm": 20,
+    "holeCount": 2,
+    "bendCount": 0,
+    "customer": "株式会社中央精工",
+    "orderNos": ["SO-2024-0920"]
+  }
+]

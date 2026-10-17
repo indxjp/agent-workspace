@@ -1,0 +1,192 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptIdentity.presented_bearers_follow_the_credential_table",
+    "AgentWorkspace.Theorems.Invariants.ConceptIdentity.no_bearer_is_both_an_api_key_and_a_browser_token"],
+   "input":
+   {"credential": "api-key", "bearer": "ak_live_AAAAAAAAAAAAAAAAAAAAAA_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+   "id": "bearer/api-key/exact",
+   "expected": {"shaped": true, "otherShaped": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptIdentity.presented_bearers_follow_the_credential_table",
+    "AgentWorkspace.Theorems.Invariants.ConceptIdentity.no_bearer_is_both_an_api_key_and_a_browser_token"],
+   "input":
+   {"credential": "api-key", "bearer": "ak_live_AAAAAAAAAAAAAAAAAAAAA_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+   "id": "bearer/api-key/id-short",
+   "expected": {"shaped": false, "otherShaped": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptIdentity.presented_bearers_follow_the_credential_table",
+    "AgentWorkspace.Theorems.Invariants.ConceptIdentity.no_bearer_is_both_an_api_key_and_a_browser_token"],
+   "input":
+   {"credential": "api-key", "bearer": "ak_live_AAAAAAAAAAAAAAAAAAAAAAA_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+   "id": "bearer/api-key/id-long",
+   "expected": {"shaped": false, "otherShaped": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptIdentity.presented_bearers_follow_the_credential_table",
+    "AgentWorkspace.Theorems.Invariants.ConceptIdentity.no_bearer_is_both_an_api_key_and_a_browser_token"],
+   "input":
+   {"credential": "api-key", "bearer": "ak_live_AAAAAAAAAAAAAAAAAAAAAA_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+   "id": "bearer/api-key/secret-short",
+   "expected": {"shaped": false, "otherShaped": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptIdentity.presented_bearers_follow_the_credential_table",
+    "AgentWorkspace.Theorems.Invariants.ConceptIdentity.no_bearer_is_both_an_api_key_and_a_browser_token"],
+   "input":
+   {"credential": "api-key", "bearer": "ak_live_AAAAAAAAAAAAAAAAAAAAAA_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+   "id": "bearer/api-key/secret-long",
+   "expected": {"shaped": false, "otherShaped": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptIdentity.presented_bearers_follow_the_credential_table",
+    "AgentWorkspace.Theorems.Invariants.ConceptIdentity.no_bearer_is_both_an_api_key_and_a_browser_token"],
+   "input":
+   {"credential": "api-key", "bearer": "awt_live_AAAAAAAAAAAAAAAAAAAAAA_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+   "id": "bearer/api-key/other-prefix",
+   "expected": {"shaped": false, "otherShaped": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptIdentity.presented_bearers_follow_the_credential_table",
+    "AgentWorkspace.Theorems.Invariants.ConceptIdentity.no_bearer_is_both_an_api_key_and_a_browser_token"],
+   "input":
+   {"credential": "api-key", "bearer": "ak_live_AAAAAAAAAAAAAAAAAAAAA._bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+   "id": "bearer/api-key/id-bad-char",
+   "expected": {"shaped": false, "otherShaped": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptIdentity.presented_bearers_follow_the_credential_table",
+    "AgentWorkspace.Theorems.Invariants.ConceptIdentity.no_bearer_is_both_an_api_key_and_a_browser_token"],
+   "input":
+   {"credential": "api-key", "bearer": "ak_live_AAAAAAAAAAAAAAAAAAAAAA_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb+"},
+   "id": "bearer/api-key/secret-bad-char",
+   "expected": {"shaped": false, "otherShaped": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptIdentity.presented_bearers_follow_the_credential_table",
+    "AgentWorkspace.Theorems.Invariants.ConceptIdentity.no_bearer_is_both_an_api_key_and_a_browser_token"],
+   "input":
+   {"credential": "api-key", "bearer": "ak_live________________________-------------------------------------------"},
+   "id": "bearer/api-key/underscores-inside",
+   "expected": {"shaped": true, "otherShaped": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptIdentity.presented_bearers_follow_the_credential_table",
+    "AgentWorkspace.Theorems.Invariants.ConceptIdentity.no_bearer_is_both_an_api_key_and_a_browser_token"],
+   "input":
+   {"credential": "api-key", "bearer": "ak_live_AAAAAAAAAAAAAAAAAAAAAA.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+   "id": "bearer/api-key/wrong-separator",
+   "expected": {"shaped": false, "otherShaped": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptIdentity.presented_bearers_follow_the_credential_table",
+    "AgentWorkspace.Theorems.Invariants.ConceptIdentity.no_bearer_is_both_an_api_key_and_a_browser_token"],
+   "input":
+   {"credential": "api-key", "bearer": "ak_live_AAAAAAAAAAAAAAAAAAAAAA_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb "},
+   "id": "bearer/api-key/trailing-space",
+   "expected": {"shaped": false, "otherShaped": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptIdentity.presented_bearers_follow_the_credential_table",
+    "AgentWorkspace.Theorems.Invariants.ConceptIdentity.no_bearer_is_both_an_api_key_and_a_browser_token"],
+   "input": {"credential": "api-key", "bearer": "ak_live_AAAAAAAAAAAAAAAAAAAAAA"},
+   "id": "bearer/api-key/display-prefix-only",
+   "expected": {"shaped": false, "otherShaped": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptIdentity.presented_bearers_follow_the_credential_table",
+    "AgentWorkspace.Theorems.Invariants.ConceptIdentity.no_bearer_is_both_an_api_key_and_a_browser_token"],
+   "input": {"credential": "api-key", "bearer": ""},
+   "id": "bearer/api-key/empty",
+   "expected": {"shaped": false, "otherShaped": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptIdentity.presented_bearers_follow_the_credential_table",
+    "AgentWorkspace.Theorems.Invariants.ConceptIdentity.no_bearer_is_both_an_api_key_and_a_browser_token"],
+   "input":
+   {"credential": "browser-token",
+    "bearer": "awt_live_AAAAAAAAAAAAAAAAAAAAAA_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+   "id": "bearer/browser-token/exact",
+   "expected": {"shaped": true, "otherShaped": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptIdentity.presented_bearers_follow_the_credential_table",
+    "AgentWorkspace.Theorems.Invariants.ConceptIdentity.no_bearer_is_both_an_api_key_and_a_browser_token"],
+   "input":
+   {"credential": "browser-token",
+    "bearer": "awt_live_AAAAAAAAAAAAAAAAAAAAA_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+   "id": "bearer/browser-token/id-short",
+   "expected": {"shaped": false, "otherShaped": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptIdentity.presented_bearers_follow_the_credential_table",
+    "AgentWorkspace.Theorems.Invariants.ConceptIdentity.no_bearer_is_both_an_api_key_and_a_browser_token"],
+   "input":
+   {"credential": "browser-token",
+    "bearer": "awt_live_AAAAAAAAAAAAAAAAAAAAAAA_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+   "id": "bearer/browser-token/id-long",
+   "expected": {"shaped": false, "otherShaped": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptIdentity.presented_bearers_follow_the_credential_table",
+    "AgentWorkspace.Theorems.Invariants.ConceptIdentity.no_bearer_is_both_an_api_key_and_a_browser_token"],
+   "input":
+   {"credential": "browser-token",
+    "bearer": "awt_live_AAAAAAAAAAAAAAAAAAAAAA_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+   "id": "bearer/browser-token/secret-short",
+   "expected": {"shaped": false, "otherShaped": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptIdentity.presented_bearers_follow_the_credential_table",
+    "AgentWorkspace.Theorems.Invariants.ConceptIdentity.no_bearer_is_both_an_api_key_and_a_browser_token"],
+   "input":
+   {"credential": "browser-token",
+    "bearer": "awt_live_AAAAAAAAAAAAAAAAAAAAAA_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+   "id": "bearer/browser-token/secret-long",
+   "expected": {"shaped": false, "otherShaped": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptIdentity.presented_bearers_follow_the_credential_table",
+    "AgentWorkspace.Theorems.Invariants.ConceptIdentity.no_bearer_is_both_an_api_key_and_a_browser_token"],
+   "input":
+   {"credential": "browser-token",
+    "bearer": "ak_live_AAAAAAAAAAAAAAAAAAAAAA_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+   "id": "bearer/browser-token/other-prefix",
+   "expected": {"shaped": false, "otherShaped": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptIdentity.presented_bearers_follow_the_credential_table",
+    "AgentWorkspace.Theorems.Invariants.ConceptIdentity.no_bearer_is_both_an_api_key_and_a_browser_token"],
+   "input":
+   {"credential": "browser-token",
+    "bearer": "awt_live_AAAAAAAAAAAAAAAAAAAAA._bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+   "id": "bearer/browser-token/id-bad-char",
+   "expected": {"shaped": false, "otherShaped": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptIdentity.presented_bearers_follow_the_credential_table",
+    "AgentWorkspace.Theorems.Invariants.ConceptIdentity.no_bearer_is_both_an_api_key_and_a_browser_token"],
+   "input":
+   {"credential": "browser-token",
+    "bearer": "awt_live_AAAAAAAAAAAAAAAAAAAAAA_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb+"},
+   "id": "bearer/browser-token/secret-bad-char",
+   "expected": {"shaped": false, "otherShaped": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptIdentity.presented_bearers_follow_the_credential_table",
+    "AgentWorkspace.Theorems.Invariants.ConceptIdentity.no_bearer_is_both_an_api_key_and_a_browser_token"],
+   "input":
+   {"credential": "browser-token",
+    "bearer": "awt_live________________________-------------------------------------------"},
+   "id": "bearer/browser-token/underscores-inside",
+   "expected": {"shaped": true, "otherShaped": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptIdentity.presented_bearers_follow_the_credential_table",
+    "AgentWorkspace.Theorems.Invariants.ConceptIdentity.no_bearer_is_both_an_api_key_and_a_browser_token"],
+   "input":
+   {"credential": "browser-token",
+    "bearer": "awt_live_AAAAAAAAAAAAAAAAAAAAAA.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+   "id": "bearer/browser-token/wrong-separator",
+   "expected": {"shaped": false, "otherShaped": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptIdentity.presented_bearers_follow_the_credential_table",
+    "AgentWorkspace.Theorems.Invariants.ConceptIdentity.no_bearer_is_both_an_api_key_and_a_browser_token"],
+   "input":
+   {"credential": "browser-token",
+    "bearer": "awt_live_AAAAAAAAAAAAAAAAAAAAAA_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb "},
+   "id": "bearer/browser-token/trailing-space",
+   "expected": {"shaped": false, "otherShaped": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptIdentity.presented_bearers_follow_the_credential_table",
+    "AgentWorkspace.Theorems.Invariants.ConceptIdentity.no_bearer_is_both_an_api_key_and_a_browser_token"],
+   "input": {"credential": "browser-token", "bearer": "awt_live_AAAAAAAAAAAAAAAAAAAAAA"},
+   "id": "bearer/browser-token/display-prefix-only",
+   "expected": {"shaped": false, "otherShaped": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptIdentity.presented_bearers_follow_the_credential_table",
+    "AgentWorkspace.Theorems.Invariants.ConceptIdentity.no_bearer_is_both_an_api_key_and_a_browser_token"],
+   "input": {"credential": "browser-token", "bearer": ""},
+   "id": "bearer/browser-token/empty",
+   "expected": {"shaped": false, "otherShaped": false}}],
+ "family": "concept-identity",
+ "description": "The ak_live_ and awt_live_ bearer grammars: exact shapes and every near miss"}

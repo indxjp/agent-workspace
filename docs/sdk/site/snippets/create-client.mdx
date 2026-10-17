@@ -1,0 +1,23 @@
+```ts title="client.ts" claim="compile"
+import { createClient } from '@indx-workspace/sdk';
+
+const baseUrl = process.env.AGENT_WORKSPACE_URL;
+const apiKey = process.env.AGENT_WORKSPACE_API_KEY;
+if (baseUrl === undefined || apiKey === undefined) {
+  throw new Error('Set AGENT_WORKSPACE_URL and AGENT_WORKSPACE_API_KEY');
+}
+const aw = createClient({
+  baseUrl,
+  auth: { kind: 'api-key', apiKey },
+  // Optional: covers only the wait for response headers; a stream body stays
+  // open after that. See /guides/timeouts-and-cancellation.
+  timeoutMs: 15_000,
+});
+```
+
+<Note>
+  A page on the control plane's own origin can sign in with the browser session instead:
+  `createClient({ baseUrl: window.location.origin, auth: { kind: 'session' } })`. Session auth
+  sends `credentials: 'include'` and is the only credential accepted on the `/api/workspaces` and
+  `/api/invitations` routes (an API-key principal gets `403 api_key_not_permitted` there).
+</Note>

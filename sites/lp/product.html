@@ -1,0 +1,830 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Platform — Agent Workspace</title>
+<meta name="description" content="How Agent Workspace configures, isolates, runs and observes Claude Agent SDK agents: the five-screen flow, the SDK mapping, runtime drivers and model compatibility.">
+<link rel="canonical" href="https://lp.agentworkspace.indx.jp/product">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://lp.agentworkspace.indx.jp/product">
+<meta property="og:title" content="Platform — Agent Workspace">
+<meta property="og:description" content="The thin enterprise layer around the Claude Agent SDK: configure, isolate, run and observe agents in your own infrastructure.">
+<!-- chrome:head -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23171614'/%3E%3Cpath d='M9 24 13.9 8h4.2L23 24h-3.3l-1.1-3.6h-5.2L12.3 24zm5.3-6.4h3.4L16 11.9z' fill='%23fff' fill-rule='evenodd'/%3E%3C/svg%3E">
+<meta property="og:site_name" content="Agent Workspace">
+<meta property="og:image" content="https://lp.agentworkspace.indx.jp/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Agent Workspace — deploy Claude agents your company can actually run.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://lp.agentworkspace.indx.jp/og.png">
+<meta name="theme-color" content="#08080a">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="assets/site.css">
+<script>
+/* Applied before first paint: without it the page paints visible and the reveal rules
+   would hide it again. A deep link (#section) opts out of the reveal altogether. */
+document.documentElement.className += location.hash ? " js no-reveal" : " js";
+</script>
+<script src="assets/site.js" defer></script>
+<!-- /chrome:head -->
+</head>
+<body>
+<!-- chrome:header -->
+<a class="skip" href="#top">Skip to content</a>
+<header class="hdr" id="site-header">
+  <div class="shell hdr-in">
+    <a class="wordmark" href="index.html"><span class="mk" aria-hidden="true"><svg viewBox="0 0 32 32" width="16" height="16" aria-hidden="true"><path d="M9 24 13.9 8h4.2L23 24h-3.3l-1.1-3.6h-5.2L12.3 24zm5.3-6.4h3.4L16 11.9z" fill="currentColor" fill-rule="evenodd"/></svg></span><span class="wm-t">Agent Workspace</span></a>
+    <nav class="hdr-nav-wrap" aria-label="Primary"><ul class="hdr-nav">
+      <li class="has-menu">
+        <button class="nav-btn" type="button" aria-expanded="false" aria-controls="menu-product">Product</button>
+        <div class="menu" id="menu-product">
+          <a href="product.html" aria-current="page"><b>Platform overview</b><span>Everything an Agent SDK deployment needs, and nothing else.</span></a>
+          <a href="product.html#how"><b>How it works</b><span>Five screens from an empty deployment to a running agent.</span></a>
+          <a href="product.html#runtimes"><b>Runtimes</b><span>Local, sandboxed process, Docker, Kubernetes and what is next.</span></a>
+          <a href="product.html#honesty"><b>Models &amp; compatibility</b><span>Claude, Azure OpenAI, OpenAI, and what does not carry over.</span></a>
+          <a href="security.html"><b>Security &amp; governance</b><span>Isolation, secrets, roles, SSO and the audit log.</span></a>
+          <a href="examples.html"><b>For developers</b><span>Agents as code, the aw CLI, evals and embedding.</span></a>
+          <div class="menu-foot"><span>New here?</span><a href="index.html#start">Start on a laptop</a><a href="https://docs.agentworkspace.indx.jp">Read the docs</a></div>
+        </div>
+      </li>
+      <li><a href="use-cases.html">Use cases</a></li>
+      <li><a href="examples.html">Examples</a></li>
+      <li><a href="security.html">Security</a></li>
+      <li><a href="compare.html">Compare</a></li>
+    </ul></nav>
+    <span class="sp"></span>
+    <div class="hdr-cta">
+      <a class="docs" href="https://docs.agentworkspace.indx.jp">Docs</a>
+      <a class="btn btn-action" href="https://indx.jp/en/contact">Book a demo</a>
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="mnav" aria-label="Open menu"><span></span></button>
+    </div>
+  </div>
+  <nav class="mnav" id="mnav" aria-label="Mobile">
+    <div class="shell">
+      <ul>
+        <li><a href="product.html" aria-current="page">Product <span>platform overview</span></a></li>
+        <li><a href="use-cases.html">Use cases <span>by team</span></a></li>
+        <li><a href="examples.html">Examples <span>agents as code</span></a></li>
+        <li><a href="security.html">Security <span>and governance</span></a></li>
+        <li><a href="compare.html">Compare <span>the alternatives</span></a></li>
+        <li><a href="https://docs.agentworkspace.indx.jp">Docs <span>docs.agentworkspace.indx.jp</span></a></li>
+      </ul>
+      <div class="btn-row"><a class="btn btn-action" href="https://indx.jp/en/contact">Book a demo</a><a class="btn btn-quiet" href="index.html#start">Start on a laptop</a></div>
+    </div>
+  </nav>
+</header>
+<!-- /chrome:header -->
+
+<main id="top" tabindex="-1">
+
+<section class="sec page-hero sec--paper" id="overview">
+  <div class="shell">
+    <ol class="crumbs"><li><a href="index.html">Home</a></li><li>Platform</li></ol>
+    <div class="page-hero-grid">
+      <div>
+        <span class="eyebrow reveal">Platform overview</span>
+        <h1 class="reveal" data-d="1">Everything an Agent SDK deployment needs. Nothing else.</h1>
+        <p class="lead reveal" data-d="2">
+          Agent Workspace never replaces <code>query()</code>. It stores what an agent is, secures the
+          credentials it needs, launches it in the sandbox you chose, and streams what it did back to
+          a browser, a terminal or your own app.
+        </p>
+        <div class="btn-row reveal" data-d="3">
+          <a class="btn btn-action btn-lg" href="https://indx.jp/en/contact">Book a demo</a>
+          <a class="btn btn-quiet btn-lg" href="#how">See the five screens</a>
+        </div>
+      </div>
+      <div class="mock mock-float reveal" data-d="2" role="img" aria-label="Design mockup: agent detail screen showing model, runtime, status and the latest run">
+        <div class="mock-bar"><i></i><i></i><i></i><span>agents.acme.internal</span></div>
+        <div class="mock-body">
+          <aside class="mock-side">
+            <div class="mock-brand"><span class="mk">A</span><span><b>Acme</b><em>Workspace</em></span></div>
+            <ul class="mock-nav">
+              <li>Home</li><li class="on">Agents<span class="n">4</span></li><li>Files<span class="n">12</span></li>
+              <li>Skills<span class="n">3</span></li><li>Connectors<span class="n">2</span></li><li>Runs</li>
+              <li class="grp">Administration</li><li>Models</li><li>Users</li><li>API Keys</li><li>Runtimes</li>
+            </ul>
+          </aside>
+          <div class="mock-main">
+            <div class="mock-top">Agents <span aria-hidden="true">›</span> <b>Customer Support Agent</b><span class="sp"></span><span class="rt-chip"><span class="dot"></span>Docker</span></div>
+            <div class="mock-page">
+              <div class="mock-h"><h4>Customer Support Agent</h4><span class="sp"></span><span class="mock-btn pri">Run</span></div>
+              <div class="mock-tabs"><span class="on">Configuration</span><span>Versions</span></div>
+              <dl class="mock-dl">
+                <dt>Status</dt><dd><span class="badge badge-ok">Ready</span></dd>
+                <dt>Model</dt><dd>Claude Sonnet</dd><dt>Runtime</dt><dd>Docker</dd>
+                <dt>Skills</dt><dd>3</dd><dt>Connectors</dt><dd>2</dd>
+              </dl>
+              <div class="mock-panel"><span class="lbl">Latest run</span><div class="mock-run-row"><span class="t">Completed</span><span class="m">2 minutes ago</span><span class="sp"></span><span class="m">23s</span><span class="m">$0.08</span></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <ul class="toc reveal" aria-label="On this page">
+      <li><a href="#solution">Architecture</a></li><li><a href="#how">How it works</a></li>
+      <li><a href="#mapping">SDK mapping</a></li><li><a href="#capabilities">Capabilities</a></li>
+      <li><a href="#run">Runs</a></li><li><a href="#runtimes">Runtimes</a></li><li><a href="#honesty">Compatibility</a></li>
+    </ul>
+  </div>
+</section>
+
+<section class="sec sec--surface" id="solution">
+  <div class="shell">
+    <div class="sec-head measure">
+      <span class="eyebrow reveal">The solution</span>
+      <h2 class="h2 reveal" data-d="1">Keep the Claude Agent SDK. Add the layer around it.</h2>
+      <p class="lead reveal" data-d="2">
+        Agent Workspace never replaces <code>query()</code>. It stores what an agent is, secures the
+        credentials it needs, launches it inside the sandbox you chose, and streams what it did back
+        to a browser. The Claude Agent SDK is the default engine. Three promises: managed agents in
+        your own cloud; you build the agent and the rest is one API call; switch the model or the
+        runtime and embed anywhere.
+      </p>
+    </div>
+
+    <div class="duty">
+      <div class="a reveal">
+        <h3>Claude Agent SDK owns</h3>
+        <ul>
+          <li>reason</li><li>plan</li><li>use tools</li><li>manage context</li><li>run the agent loop</li>
+        </ul>
+      </div>
+      <div class="b reveal" data-d="1">
+        <h3>Agent Workspace owns</h3>
+        <ul>
+          <li>configure</li><li>store</li><li>secure</li><li>deploy</li><li>isolate</li><li>observe</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="arch">
+      <div class="arch-box reveal"><b>Web browser</b><span class="d">simple enterprise UI</span></div>
+      <div class="arch-arrow reveal"><span class="ln">↓</span></div>
+      <div class="arch-box reveal"><b>Control plane</b><span class="d">Next.js · auth · users · agents · files · skills · MCP · runtime config</span></div>
+      <div class="arch-arrow reveal"><span class="ln">↓</span><span class="lb">create / run / resume</span></div>
+      <div class="arch-box core reveal"><b>Agent runner — Claude Agent SDK</b><span class="d">TypeScript · no custom agent loop</span></div>
+      <div class="arch-arrow reveal"><span class="ln">↓</span><span class="lb">RuntimeDriver</span></div>
+      <div class="arch-box reveal" style="border-bottom:0"><b>Sandbox</b><span class="d">one interface, eleven driver ids: four you can run today, two more implemented but not live-verified</span></div>
+      <div class="arch-drivers reveal">
+        <span>local</span><span>sandbox-runtime</span><span>docker</span><span>kubernetes</span>
+        <span>aca-sessions</span><span>cloud-run-service</span>
+        <span>gke-agent-sandbox · roadmap</span><span>aws-agentcore · roadmap</span>
+        <span>aws-ecs · roadmap</span><span>cloud-run-sandbox · roadmap</span><span>external · roadmap</span>
+      </div>
+      <div class="arch-arrow reveal"><span class="ln">↓</span></div>
+      <div class="arch-box reveal"><b>Agent workspace</b><span class="d">/workspace · skills · files · MCP configuration</span></div>
+      <div class="arch-arrow reveal"><span class="ln">↓</span><span class="lb">ANTHROPIC_BASE_URL</span></div>
+      <div class="arch-box reveal"><b>Model gateway</b><span class="d">Anthropic-compatible /v1/messages</span></div>
+      <div class="arch-arrow reveal"><span class="ln">↓</span></div>
+      <div class="arch-fan reveal">
+        <div>Anthropic</div><div>Azure OpenAI · OpenAI</div><div>Other, via adapters</div>
+      </div>
+    </div>
+
+    <div class="nongoals">
+      <div class="row reveal">
+        <h3>What this deliberately is not</h3>
+        <p>This project succeeds through subtraction.</p>
+      </div>
+      <ul class="chip-list reveal" data-d="1">
+        <li class="chip">another agent framework</li>
+        <li class="chip">a workflow canvas</li>
+        <li class="chip">RAG</li>
+        <li class="chip">embeddings</li>
+        <li class="chip">a vector database</li>
+        <li class="chip">a LiteLLM port</li>
+        <li class="chip">a Kubernetes management UI</li>
+        <li class="chip">an identity provider</li>
+        <li class="chip">a billing system</li>
+      </ul>
+    </div>
+    <a class="more" style="display:inline-block;margin-top:18px" href="https://docs.agentworkspace.indx.jp/features/your-stack">Learn more: your stack, layer by layer</a>
+  </div>
+</section>
+
+<section class="sec sec--paper" id="how">
+  <div class="shell">
+    <div class="sec-head measure">
+      <span class="eyebrow reveal">How it works</span>
+      <h2 class="h2 reveal" data-d="1">Five screens from empty deployment to a running agent.</h2>
+      <p class="lead reveal" data-d="2">
+        No code needed to ship a first agent: no <code>.claude</code> directory, no MCP JSON, no Dockerfile.
+        And when you want them, a typed SDK, a CLI and YAML are there. This is the whole browser path, in
+        the order the UI asks for it.
+      </p>
+    </div>
+
+    <div class="tabs" id="howtabs" data-tabs="vertical">
+      <ul class="tablist" role="tablist" aria-label="Setup steps">
+        <li role="presentation"><button class="tab" role="tab" id="tb1" aria-controls="tp1" aria-selected="true">
+          <span class="n">STEP 01</span><span class="t">Connect a model</span>
+          <span class="s">Anthropic, Azure OpenAI, OpenAI, or any compatible endpoint.</span></button></li>
+        <li role="presentation"><button class="tab" role="tab" id="tb2" aria-controls="tp2" aria-selected="false" tabindex="-1">
+          <span class="n">STEP 02</span><span class="t">Add files and skills</span>
+          <span class="s">Workspace files and native SKILL.md skills, not a new format.</span></button></li>
+        <li role="presentation"><button class="tab" role="tab" id="tb3" aria-controls="tp3" aria-selected="false" tabindex="-1">
+          <span class="n">STEP 03</span><span class="t">Add connectors</span>
+          <span class="s">MCP servers over HTTP or SSE, without anyone touching JSON.</span></button></li>
+        <li role="presentation"><button class="tab" role="tab" id="tb4" aria-controls="tp4" aria-selected="false" tabindex="-1">
+          <span class="n">STEP 04</span><span class="t">Set permissions</span>
+          <span class="s">What this agent may read, write, run and reach.</span></button></li>
+        <li role="presentation"><button class="tab" role="tab" id="tb5" aria-controls="tp5" aria-selected="false" tabindex="-1">
+          <span class="n">STEP 05</span><span class="t">Choose a runtime</span>
+          <span class="s">Where the agent actually executes. Then deploy.</span></button></li>
+      </ul>
+
+      <div>
+        <!-- STEP 1 -->
+        <div class="panel on" id="tp1" role="tabpanel" tabindex="0" aria-labelledby="tb1">
+          <div class="mock" role="img" aria-label="Design mockup: adding an Azure OpenAI model connection with endpoint, API key and deployment">
+            <div class="mock-bar"><i></i><i></i><i></i><span>Administration → Models → Add provider</span></div>
+            <div class="mock-page">
+              <div class="mock-h"><h4>Choose provider</h4></div>
+              <div class="f-opt"><span class="rd"></span>Anthropic</div>
+              <div class="f-opt on" style="background:var(--action-soft);border-radius:6px;padding:6px 8px"><span class="rd"></span>Microsoft Azure OpenAI</div>
+              <div class="f-opt"><span class="rd"></span>OpenAI</div>
+              <div class="f-opt"><span class="rd"></span>OpenAI-compatible</div>
+              <div class="f-opt"><span class="rd"></span>Anthropic-compatible endpoint</div>
+              <hr style="margin:16px 0">
+              <div class="f-row"><span class="f-lbl">Endpoint</span><div class="f-in">https://company.openai.azure.com</div></div>
+              <div class="grid grid-2" style="gap:12px">
+                <div class="f-row"><span class="f-lbl">API key</span><div class="f-in">••••••••••••••••</div></div>
+                <div class="f-row"><span class="f-lbl">Deployment</span><div class="f-in">gpt-…</div></div>
+              </div>
+              <div class="mock-h" style="margin:6px 0 0">
+                <span class="mock-btn pri">Save</span>
+              </div>
+            </div>
+          </div>
+          <p class="panel-cap">Secrets are stored in the secrets layer and never displayed again after creation.</p>
+        </div>
+
+        <!-- STEP 2 -->
+        <div class="panel" id="tp2" role="tabpanel" tabindex="0" aria-labelledby="tb2">
+          <div class="mock" role="img" aria-label="Design mockup: workspace file tree beside a list of skills to assign to the agent">
+            <div class="mock-bar"><i></i><i></i><i></i><span>Files &amp; Skills</span></div>
+            <div class="mock-body">
+              <div class="mock-main" style="border-right:1px solid var(--rule)">
+                <div class="mock-top"><b>Files</b></div>
+                <div class="mock-page">
+                  <div class="tree" style="margin:0">/
+├── contracts/
+│   ├── agreement.pdf
+│   └── pricing.xlsx
+├── instructions.md
+└── report-template.docx</div>
+                  <p class="small" style="margin-top:12px">Upload a file · download · rename · create folders · assign to an agent · read-only or read-write.</p>
+                </div>
+              </div>
+              <div class="mock-main">
+                <div class="mock-top"><b>Skills</b></div>
+                <div class="mock-page">
+                  <div class="f-opt on"><span class="cb"></span>Invoice Review</div>
+                  <div class="f-opt on"><span class="cb"></span>Security Review</div>
+                  <div class="f-opt"><span class="cb"></span>Financial Analysis</div>
+                  <div class="f-opt"><span class="cb"></span>Document Writer</div>
+                  <div class="mock-h" style="margin:14px 0 0">
+                    <span class="mock-btn">Create skill</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="panel-cap">Native <code>SKILL.md</code> folders, kept in object storage and placed under the session's <code>skills/&lt;name&gt;/</code> at run time. Import and export a skill folder with <code>aw skills</code> or the SDK.</p>
+        </div>
+
+        <!-- STEP 3 -->
+        <div class="panel" id="tp3" role="tabpanel" tabindex="0" aria-labelledby="tb3">
+          <div class="mock" role="img" aria-label="Design mockup: adding a remote MCP connector with bearer-token authentication">
+            <div class="mock-bar"><i></i><i></i><i></i><span>Connectors → Add connector</span></div>
+            <div class="mock-page">
+              <div class="f-row"><span class="f-lbl">Name</span><div class="f-in">Internal Contract Search</div></div>
+              <div class="f-row">
+                <span class="f-lbl">Type</span>
+                <div class="f-opt on"><span class="rd"></span>Remote URL</div>
+                <div class="f-opt dim"><span class="rd"></span>Local command<span class="note">stored, cannot run today</span></div>
+              </div>
+              <div class="f-row"><span class="f-lbl">URL</span><div class="f-in">https://intranet.acme.example/mcp</div></div>
+              <div class="f-row">
+                <span class="f-lbl">Authentication</span>
+                <div class="grid grid-2" style="gap:0 16px">
+                  <div class="f-opt"><span class="rd"></span>None</div>
+                  <div class="f-opt on"><span class="rd"></span>Bearer token</div>
+                  <div class="f-opt"><span class="rd"></span>API key</div>
+                  <div class="f-opt"><span class="rd"></span>OAuth token<span class="note">one you already hold</span></div>
+                </div>
+              </div>
+              <div class="mock-h" style="margin:6px 0 0">
+                <span class="mock-btn">Test connection</span><span class="mock-btn pri">Save</span>
+              </div>
+            </div>
+          </div>
+          <p class="panel-cap">HTTP and SSE transports today; a local-command (stdio) connector is stored but cannot run yet. Credentials go to the secrets layer, not the agent.</p>
+        </div>
+
+        <!-- STEP 4 -->
+        <div class="panel" id="tp4" role="tabpanel" tabindex="0" aria-labelledby="tb4">
+          <div class="mock" role="img" aria-label="Design mockup: permission checkboxes for reading files, writing files, running commands and internet access">
+            <div class="mock-bar"><i></i><i></i><i></i><span>Customer Support Agent → Permissions</span></div>
+            <div class="mock-page">
+              <div class="mock-h"><h4>What can this agent do?</h4></div>
+              <div class="f-opt on"><span class="cb"></span>Read files<span class="note">Workspace files assigned to this agent</span></div>
+              <div class="f-opt on"><span class="cb"></span>Write files<span class="note">Saved back to object storage only for the runtime profile's persist paths</span></div>
+              <div class="f-opt"><span class="cb"></span>Run commands<span class="note">Requires a container runtime or stronger</span></div>
+              <div class="f-opt"><span class="cb"></span>Access unrestricted internet<span class="note">Otherwise: gateway and the allowlist only</span></div>
+            </div>
+          </div>
+          <p class="panel-cap">Four switches on screen. Limits such as <code>maxTurns</code> and <code>maxBudgetUsd</code> are set in the agent's code or through the SDK.</p>
+        </div>
+
+        <!-- STEP 5 -->
+        <div class="panel" id="tp5" role="tabpanel" tabindex="0" aria-labelledby="tb5">
+          <div class="mock" role="img" aria-label="Design mockup: runtime picker with managed and external sandboxes shown disabled with the reason">
+            <div class="mock-bar"><i></i><i></i><i></i><span>Customer Support Agent → Runtime</span></div>
+            <div class="mock-page">
+              <div class="mock-h"><h4>Runtime</h4></div>
+              <div class="f-opt"><span class="rd"></span>This machine<span class="note">development only — no isolation</span></div>
+              <div class="f-opt on"><span class="rd"></span>Sandboxed process<span class="note">host OS sandbox, no container per session</span></div>
+              <div class="f-opt"><span class="rd"></span>Docker<span class="note">recommended for self-hosting</span></div>
+              <div class="f-opt"><span class="rd"></span>Kubernetes<span class="note">a Pod per session; partially verified</span></div>
+              <div class="f-opt dim"><span class="rd"></span>Managed sandbox<span class="note" style="color:var(--caveat)">Disabled: not configured. ACA dynamic sessions and Cloud Run are implemented and show Unverified until Test runtime passes; AgentCore, ECS and GKE Agent Sandbox are on the roadmap</span></div>
+              <div class="f-opt dim"><span class="rd"></span>External provider<span class="note" style="color:var(--caveat)">Disabled: roadmap</span></div>
+              <hr style="margin:16px 0">
+              <div class="mock-h" style="margin:0">
+                <span class="mock-btn">Test runtime</span><span class="mock-btn pri">Deploy agent</span>
+              </div>
+            </div>
+          </div>
+          <p class="panel-cap">For implemented drivers, Test runtime creates a sandbox, runs <code>echo</code>, and destroys it. A runtime that is unconfigured or unreachable is shown disabled with the reason.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="compiles">
+      <div class="measure" style="margin-bottom:24px">
+        <h3 class="h3 reveal" style="font-size:20px">Everything you clicked compiles into ordinary SDK options.</h3>
+        <p class="small reveal" data-d="1" style="margin-top:8px">
+          There is no intermediate agent abstraction. The platform's job is to turn database rows into
+          this object, and then get out of the way.
+        </p>
+      </div>
+      <pre data-claim="illustrative" class="code reveal" data-d="2"><span class="kw">const</span> options = {
+  cwd,                  <span class="cm">// the hydrated /workspace for this session</span>
+  model,                <span class="cm">// step 01 — model connection</span>
+  mcpServers,           <span class="cm">// step 03 — connectors</span>
+  skills,               <span class="cm">// step 02 — materialised as skills/&lt;name&gt;/SKILL.md for the session</span>
+  disallowedTools,      <span class="cm">// step 04 — a permission that is off removes its tools</span>
+  allowedTools,         <span class="cm">// step 03 — each connector auto-approved as mcp__&lt;connector-name&gt;__*</span>
+  maxTurns,             <span class="cm">// set in code or the SDK</span>
+  maxBudgetUsd,         <span class="cm">// set in code or the SDK</span>
+  settingSources: ["project"],   <span class="cm">// the session's own project only, never host user state</span>
+  strictMcpConfig: <span class="kw">true</span>, <span class="cm">// only the connectors this agent was given</span>
+  env,                  <span class="cm">// a gateway token for this run, never a provider key</span>
+};
+
+<span class="kw">for await</span> (<span class="kw">const</span> event <span class="kw">of</span> <span class="fn">query</span>({ prompt, options })) {
+  <span class="cm">// stream event to the UI</span>
+}</pre>
+    </div>
+    <a class="more" style="display:inline-block;margin-top:18px" href="https://docs.agentworkspace.indx.jp/features/agents-skills-tools-as-code">Learn more: agents, skills and tools as code</a>
+  </div>
+</section>
+
+<section class="sec sec--surface" id="mapping">
+  <div class="shell">
+    <div class="sec-head measure">
+      <span class="eyebrow reveal">Thin by design</span>
+      <h2 class="h2 reveal" data-d="1">Every switch in the UI is a Claude Agent SDK option.</h2>
+      <p class="lead reveal" data-d="2">
+        There is no proprietary agent model to learn and nothing to migrate off later.
+        If you already know the SDK, you already know this product.
+      </p>
+    </div>
+
+    <div class="grid grid-2" style="gap:32px; align-items:start">
+      <div class="scroll-x reveal" style="border-radius:var(--r); overflow:hidden">
+        <table class="map">
+          <thead><tr><th scope="col">Agent setting</th><th scope="col">Claude Agent SDK</th></tr></thead>
+          <tbody>
+            <tr><td>Agent model</td><td>model</td></tr>
+            <tr><td>Working directory</td><td>cwd</td></tr>
+            <tr><td>Skills</td><td>skills (materialised per session)</td></tr>
+            <tr><td>MCP connectors</td><td>mcpServers</td></tr>
+            <tr><td>Instructions</td><td>systemPrompt (preset + append)</td></tr>
+            <tr><td>Permissions</td><td>tools + disallowedTools</td></tr>
+            <tr><td>Connector approval</td><td>allowedTools: mcp__&lt;connector-name&gt;__*</td></tr>
+            <tr><td>Max turns</td><td>maxTurns</td></tr>
+            <tr><td>Budget</td><td>maxBudgetUsd</td></tr>
+            <tr><td>Session resume</td><td>resume</td></tr>
+            <tr><td>Environment</td><td>env</td></tr>
+            <tr><td>Agent events</td><td>SDK event stream</td></tr>
+            <tr><td>Host settings</td><td>settingSources: ["project"]</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="grid" style="gap:18px">
+        <article class="card reveal" data-d="1">
+          <h3 class="h3">Upgrades stay boring</h3>
+          <p>
+            The SDK is an upstream dependency, pinned and tested — not something copied into this
+            repository. All SDK-specific translation is concentrated in one small module, so an option
+            change upstream touches a handful of files. The same project can also run on the
+            <code>openai-agents</code>, <code>pi</code> or <code>mastra</code> engines when their
+            runtime image is installed; the Claude Agent SDK stays the default.
+          </p>
+        </article>
+        <article class="card reveal" data-d="2">
+          <h3 class="h3">Skills stay portable</h3>
+          <p>
+            The stored representation is Claude's native <code>SKILL.md</code> directory. Import an
+            existing skill folder with <code>aw skills import</code> or the SDK, edit it in the UI,
+            export it back out with <code>aw skills export</code>.
+          </p>
+          <div class="tree">skills/
+└── invoice-review/
+    ├── SKILL.md
+    └── supporting-files/</div>
+        </article>
+      </div>
+    </div>
+    <a class="more" style="display:inline-block;margin-top:18px" href="https://docs.agentworkspace.indx.jp/features/your-stack">Learn more: your stack, layer by layer</a>
+  </div>
+</section>
+
+<section class="sec sec--paper" id="capabilities">
+  <div class="shell">
+    <div class="sec-head measure">
+      <span class="eyebrow reveal">What you manage</span>
+      <h2 class="h2 reveal" data-d="1">The whole surface an Agent SDK deployment needs. Nothing else.</h2>
+      <p class="lead reveal" data-d="2">
+        Twelve objects a company actually has to manage around the SDK — and every one of them is
+        editable by a person who has never opened a terminal. Developers get the same objects as
+        code, below.
+      </p>
+    </div>
+
+    <div class="cap reveal">
+      <div><h3>Ship an agent without writing code</h3><p>Name, instructions, model, capabilities, permissions, runtime. Five screens, then Deploy.</p><span class="k">agents</span></div>
+      <div><h3>Point agents at any model</h3><p>Anthropic, Azure OpenAI, OpenAI or any compatible endpoint. Switching is a dropdown, not a refactor.</p><span class="k">model_connections</span></div>
+      <div><h3>Give agents your documents</h3><p>Upload files and create folders, assign them per agent, read-only or read-write. Not RAG, not embeddings — workspace files the SDK's file tools can read.</p><span class="k">files</span></div>
+      <div><h3>Reuse Claude skills as-is</h3><p>Create and edit skills in Claude's native format in the browser, import and export them with the CLI or SDK, then assign them to agents.</p><span class="k">SKILL.md</span></div>
+      <div><h3>Connect internal systems</h3><p>MCP servers over HTTP or SSE, added through a short form, or read-only OpenAPI tools run by the gateway. No raw JSON to edit.</p><span class="k">mcpServers</span></div>
+      <div><h3>Decide what an agent may do</h3><p>Read files, write files, run commands, reach the internet: four switches. One that is off removes its tools from the model.</p><span class="k">disallowedTools</span></div>
+      <div><h3>Choose where it runs</h3><p>One driver interface: local, sandboxed process, Docker and Kubernetes run today; two managed-cloud drivers are implemented and awaiting live proof. The agent never changes.</p><span class="k">RuntimeDriver</span></div>
+      <div><h3>Resume long conversations</h3><p>Session state lives in PostgreSQL and object storage. When a run was durable, a fresh sandbox is hydrated and the session resumes where it stopped.</p><span class="k">sessions</span></div>
+      <div><h3>Keep credentials out of agents</h3><p>Provider keys are resolved only by the gateway. A sandbox gets a short-lived token bound to one run and one model; secrets are write-only.</p><span class="k">secrets</span></div>
+      <div><h3>Give the right people the right access</h3><p>Four roles: Owner, Admin, Builder, Viewer. Viewers run only the agents they are granted. Enterprise SSO through any OIDC issuer.</p><span class="k">memberships</span></div>
+      <div><h3>Automate from CI</h3><p>Workspace API keys, each with one role and an optional expiry, used from the TypeScript SDK or the <code>aw</code> CLI on a server. The secret is shown once; keys never go to a browser.</p><span class="k">api_keys</span></div>
+      <div><h3>Answer "who changed what"</h3><p>21 audited actions, from permission and credential changes to agent edits and runtime switches. Owners read the trail; no secrets in it.</p><span class="k">audit_events</span></div>
+    </div>
+
+    <p class="small measure reveal" style="margin-top:28px">
+      No vector database. No RAG pipeline. No workflow canvas. Adding those would make this harder to
+      operate, not more useful.
+    </p>
+    <a class="more" style="display:inline-block;margin-top:18px" href="https://docs.agentworkspace.indx.jp/features/agents-skills-tools-as-code">Learn more: agents, skills and tools as code</a>
+  </div>
+</section>
+
+<section class="sec sec--surface" id="run">
+  <div class="shell">
+    <div class="sec-head measure">
+      <span class="eyebrow reveal">What a run looks like</span>
+      <h2 class="h2 reveal" data-d="1">Plain language by default. The trace is one click away.</h2>
+      <p class="lead reveal" data-d="2">
+        A run has to be readable by the person who asked for it — and the full SDK event stream has to
+        stay available, collapsed, for whoever needs it.
+      </p>
+    </div>
+
+    <div class="run-grid">
+      <div class="mock reveal">
+        <div class="mock-bar"><i></i><i></i><i></i><span>Customer Support Agent → Run</span></div>
+        <div class="stream">
+          <div class="msg">
+            <span class="who">User</span>
+            <div class="body">Prepare a summary of these contracts.</div>
+          </div>
+          <div class="msg">
+            <span class="who">Agent</span>
+            <div class="body">
+              <div class="thinking">Reviewing uploaded files…</div>
+              <ul class="steps">
+                <li><span class="tick">✓</span><span class="tool">Read agreement-01.pdf</span></li>
+                <li><span class="tick">✓</span><span class="tool">Read agreement-02.pdf</span></li>
+              </ul>
+              <div class="thinking">Searching internal contract database…</div>
+              <ul class="steps">
+                <li><span class="tick">✓</span><span class="tool">Internal Contract Search</span></li>
+              </ul>
+              <div class="thinking">Preparing summary…</div>
+            </div>
+          </div>
+          <div class="msg">
+            <span class="who">Agent</span>
+            <div class="body">Here is the summary of the three agreements<span class="caret" aria-hidden="true"></span></div>
+            <div class="small" style="margin-top:8px">From a terminal: <code>aw chat</code> &nbsp;·&nbsp; rate a run with <code>aw runs rate</code> or an embedded surface's feedback buttons</div>
+          </div>
+
+          <details class="tech">
+            <summary>Show technical details</summary>
+            <pre data-claim="illustrative" class="techbox"><span class="t">tool_use</span>   Read  agreement-01.pdf            18ms
+<span class="t">tool_use</span>   Read  agreement-02.pdf            21ms
+<span class="t">mcp_call</span>   internal-contract-search       212ms
+<span class="t">runtime</span>    docker · workspace-8f21 · 1 CPU / 1 GB
+<span class="t">session</span>    resumable · stored in postgres</pre>
+          </details>
+        </div>
+      </div>
+
+      <div class="grid" style="gap:18px">
+        <div class="mock reveal" data-d="1" role="img" aria-label="Design mockup: runs list with status, duration and cost per run">
+          <div class="mock-bar"><i></i><i></i><i></i><span>Runs</span></div>
+          <div class="mock-page">
+            <table class="matrix" style="min-width:0">
+              <thead><tr><th scope="col">Status</th><th scope="col" class="c">Duration</th><th scope="col" class="c">Cost</th></tr></thead>
+              <tbody>
+                <tr><td>Completed</td><td class="c">23s</td><td class="c">$0.08</td></tr>
+                <tr><td>Completed</td><td class="c">8s</td><td class="c">$0.01</td></tr>
+                <tr><td><span style="color:var(--caveat)">Failed</span></td><td class="c">4s</td><td class="c sym-no">−</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <article class="card reveal" data-d="2">
+          <h3 class="h3">No dashboard to build</h3>
+          <p>
+            Status, duration, tokens, estimated cost and every tool call are recorded on the run and
+            in its event stream. Set <code>OTEL_EXPORTER_OTLP_ENDPOINT</code> and each run is also
+            exported as an <code>agent.run</code> span to the collector you already run. Stream the
+            same events in code: see <a href="https://docs.agentworkspace.indx.jp/guides/streaming">streaming</a>.
+          </p>
+        </article>
+      </div>
+    </div>
+    <a class="more" style="display:inline-block;margin-top:18px" href="https://docs.agentworkspace.indx.jp/features/run-observe-evaluate">Learn more: run, observe and evaluate</a>
+  </div>
+</section>
+
+<section class="sec sec--paper" id="runtimes">
+  <div class="shell">
+    <div class="sec-head measure">
+      <span class="eyebrow reveal">Runtimes</span>
+      <h2 class="h2 reveal" data-d="1">Pick where agents actually execute. Change your mind later.</h2>
+      <p class="lead reveal" data-d="2">
+        The same agent definition runs on a laptop, on one Docker host or on your Kubernetes
+        cluster without changing the agent, the skills, the connectors, or any application code. Only
+        the selected runtime changes. Managed-cloud sandboxes sit behind the same interface; none has a
+        live isolation proof yet, so they are marked below as they stand.
+      </p>
+    </div>
+
+    <div class="rt-grid">
+      <div class="mock reveal" role="img" aria-label="Design mockup: runtimes settings listing local, sandboxed process, Docker and Kubernetes, with Azure Container Apps and Bedrock AgentCore disabled with the reason">
+        <div class="mock-bar"><i></i><i></i><i></i><span>Administration → Runtimes</span></div>
+        <div class="mock-page">
+          <div class="f-opt"><span class="rd"></span>This machine<span class="note">development only — no isolation</span></div>
+          <div class="f-opt on"><span class="rd"></span>Sandboxed process<span class="note">host OS sandbox, no container per session</span></div>
+          <div class="f-opt"><span class="rd"></span>Docker<span class="note">recommended for self-hosting</span></div>
+          <div class="f-opt"><span class="rd"></span>Kubernetes<span class="note">a Pod per session; partially verified</span></div>
+          <hr style="margin:12px 0">
+          <div class="f-opt dim" style="align-items:flex-start">
+            <span class="rd"></span>
+            <span>Azure Container Apps dynamic sessions
+              <span class="note" style="color:var(--caveat)">Not configured — no session pool registered. Implemented, not yet live-verified.</span></span>
+          </div>
+          <div class="mock-h" style="margin:-6px 0 8px 22px"><span class="mock-btn">Set up</span></div>
+          <div class="f-opt dim" style="align-items:flex-start">
+            <span class="rd"></span>
+            <span>Amazon Bedrock AgentCore Runtime
+              <span class="note" style="color:var(--caveat)">Roadmap — no driver implementation yet.</span></span>
+          </div>
+          <hr style="margin:12px 0">
+          <div class="mock-h" style="margin:0"><span class="mock-btn">Test runtime</span><span class="mock-btn pri">Save</span></div>
+          <p class="small" style="margin-top:12px">Unconfigured or unreachable runtimes are shown disabled with the reason, never hidden. A configured one shows Unverified until Test runtime passes.</p>
+        </div>
+      </div>
+
+      <div class="mock mock-float dialog reveal" data-d="1" role="img" aria-label="Illustration: what to weigh when changing an agent's runtime">
+        <h4>Changing runtime</h4>
+        <p class="sub">Docker → Azure Container Apps dynamic sessions</p>
+        <div class="warn w">
+          <span class="s">⚠</span>
+          <span>Domain allowlist is not supported on this runtime.
+            <em>"Restricted" will become all-or-nothing egress.</em></span>
+        </div>
+        <div class="warn x">
+          <span class="s">✕</span>
+          <span>This agent uses a local command connector (Filesystem MCP).
+            <em>This runtime has no outbound network for package downloads. Bundle the connector into
+            the runtime image, or switch it to a remote URL.</em></span>
+        </div>
+        <div class="acts">
+          <span class="mock-btn">Cancel</span>
+          <span class="mock-btn" style="opacity:.45">Save</span>
+        </div>
+        <p class="small" style="margin-top:14px">
+          Illustrative: the product shows a fixed comparison like this, and Save is gated by
+          Test runtime passing, not by these messages. Changes take effect from the next run; runs already in flight finish where
+          they started.
+        </p>
+      </div>
+    </div>
+
+    <h3 class="h3 reveal" style="font-size:19px; margin-bottom:14px">A driver interface: four runtimes you can run today, two more implemented but not live-verified</h3>
+    <div class="scroll-x reveal" data-d="1">
+      <table class="matrix">
+        <thead>
+          <tr><th scope="col">Driver</th><th scope="col">Tier</th><th scope="col">Isolation</th><th scope="col">Where the sandbox runs</th><th scope="col">Status today</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="k">local</td><td class="k">P0</td><td>none — same process and user <span class="badge badge-caveat">no tenant isolation</span></td><td>the control-plane host</td><td><span class="badge badge-ok">implemented</span> development only</td></tr>
+          <tr><td class="k">sandbox-runtime</td><td class="k">P0</td><td>host OS sandbox (bubblewrap on Linux)</td><td>the control-plane host</td><td><span class="badge badge-ok">implemented</span></td></tr>
+          <tr><td class="k">docker</td><td class="k">P0</td><td>a container per session <span class="badge badge-ok">recommended for self-hosting</span></td><td>a Docker host</td><td><span class="badge badge-ok">verified</span> fixture-verified</td></tr>
+          <tr><td class="k">kubernetes</td><td class="k">P1</td><td>a Pod per session, optionally a gVisor RuntimeClass</td><td>your cluster (Helm values for EKS, GKE, AKS, OpenShift)</td><td><span class="badge badge-ok">implemented</span> lifecycle and isolation partially verified</td></tr>
+          <tr><td class="k">gke-agent-sandbox</td><td class="k">P2</td><td>gVisor, managed by GKE</td><td>GKE</td><td><span class="badge badge-caveat">roadmap</span></td></tr>
+          <tr><td class="k">aca-sessions</td><td class="k">P2</td><td>Hyper-V per session</td><td>Azure Container Apps dynamic sessions</td><td><span class="badge badge-caveat">implemented, not live-verified</span></td></tr>
+          <tr><td class="k">aws-agentcore</td><td class="k">P2</td><td>Firecracker microVM per session</td><td>Bedrock AgentCore Runtime</td><td><span class="badge badge-caveat">roadmap</span></td></tr>
+          <tr><td class="k">aws-ecs</td><td class="k">P2</td><td>VM-isolated Fargate task</td><td>ECS on Fargate</td><td><span class="badge badge-caveat">roadmap</span></td></tr>
+          <tr><td class="k">cloud-run-sandbox</td><td class="k">P2</td><td>Cloud Run sandbox in a gen2 microVM</td><td>Cloud Run service or worker pool</td><td><span class="badge badge-caveat">roadmap</span></td></tr>
+          <tr><td class="k">cloud-run-service</td><td class="k">P1</td><td>Cloud Run service container</td><td>Cloud Run</td><td><span class="badge badge-caveat">implemented, not live-verified</span></td></tr>
+          <tr><td class="k">external</td><td class="k">P3</td><td>vendor-defined</td><td>third-party sandbox providers</td><td><span class="badge badge-caveat">roadmap</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="small reveal" style="margin-top:14px">
+      Docker refuses the <code>restricted</code> network policy and <code>allowedDomains</code>; Kubernetes refuses <code>allowedDomains</code>.
+      Per-driver standing: <a href="https://docs.agentworkspace.indx.jp/building/self-hosting#which-runtime-drivers-are-real-today">self-hosting guide</a>.
+    </p>
+
+    <h3 class="h3 reveal" style="font-size:19px; margin:44px 0 0">What survives a runtime switch</h3>
+    <div class="survives reveal" data-d="1">
+      <div><span class="s yes">✓</span><p>Workspace files — object storage is the source of truth, the new sandbox is hydrated</p></div>
+      <div><span class="s yes">✓</span><p>Skills and connectors — materialized into the workspace at launch</p></div>
+      <div><span class="s yes">✓</span><p>The session, when its run was durable: stored, then resumed with <code>resume</code></p></div>
+      <div><span class="s no">✕</span><p>Anything else in the old sandbox — sandboxes are disposable by definition</p></div>
+    </div>
+    <p class="small reveal" style="margin-top:18px">
+      If switching a runtime requires editing the agent, the abstraction has failed and the driver is
+      wrong — not the agent.
+    </p>
+  </div>
+</section>
+
+<section class="sec sec--paper" id="honesty">
+  <div class="shell">
+    <div class="sec-head measure">
+      <span class="eyebrow reveal">Compatibility, honestly</span>
+      <h2 class="h2 reveal" data-d="1">We tell you what does not work.</h2>
+      <p class="lead reveal" data-d="2">
+        A non-Claude model behind an Anthropic-compatible endpoint is a compatibility mode, not an
+        equivalent. Every model provider declares capability flags, and every runtime declares the
+        network policies it can enforce. Today the agent editor warns in plain language when the
+        chosen model lacks prompt caching, and a runtime refuses a policy it cannot enforce.
+      </p>
+    </div>
+
+    <div class="grid grid-2" style="gap:32px; align-items:start">
+      <div>
+        <div class="scroll-x reveal">
+          <table class="matrix" style="min-width:420px">
+            <thead>
+              <tr><th scope="col">Capability</th><th scope="col" class="c">Claude</th><th scope="col" class="c">Azure GPT</th><th scope="col" class="c">OpenAI</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Streaming</td><td class="c sym-ok">✓</td><td class="c sym-ok">✓</td><td class="c sym-ok">✓</td></tr>
+              <tr><td>Tools</td><td class="c sym-ok">✓</td><td class="c sym-ok">✓</td><td class="c sym-ok">✓</td></tr>
+              <tr><td>Thinking</td><td class="c sym-ok">✓</td><td class="c sym-no">−</td><td class="c sym-ok">✓</td></tr>
+              <tr><td>Prompt caching</td><td class="c sym-no">−</td><td class="c sym-no">−</td><td class="c sym-ok">✓</td></tr>
+              <tr><td>Context management</td><td class="c sym-ok">✓</td><td class="c sym-no">−</td><td class="c sym-ok">✓</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="legend reveal" data-d="1">
+          <span><span class="sym-ok">✓</span> declared</span>
+          <span><span class="sym-no">−</span> not declared</span>
+        </div>
+        <p class="small reveal" data-d="1" style="margin-top:14px">
+          The flags each gateway adapter declares today. Claude prompt caching stays undeclared
+          until a live replay verifies it. A provider compatibility suite exists and the adapters are
+          fixture-verified; live-provider results are not yet published. See
+          <a href="https://docs.agentworkspace.indx.jp/building/models-and-runtimes">models and runtimes</a>.
+        </p>
+      </div>
+
+      <div class="grid" style="gap:14px">
+        <div class="notice reveal" data-d="1">
+          <span class="sym">⚠</span>
+          <span><b>This model does not fully support Claude prompt caching.</b><br>
+            The agent can still run, but behavior may differ.</span>
+        </div>
+        <div class="notice reveal" data-d="2">
+          <span class="sym">⚠</span>
+          <span><b>This runtime cannot enforce a domain allowlist.</b><br>
+            Choose <code>none</code> or <code>open</code>, or a runtime that can.</span>
+        </div>
+        <div class="notice reveal" data-d="3">
+          <span class="sym">⚠</span>
+          <span><b>This runtime is Unverified.</b><br>
+            The badge stays until Test runtime passes on your deployment.</span>
+        </div>
+        <p class="pull reveal" data-d="3" style="margin-top:14px">
+          Never silently claim 100% compatibility. Never silently downgrade a guarantee.
+        </p>
+      </div>
+    </div>
+    <a class="more" style="display:inline-block;margin-top:18px" href="https://docs.agentworkspace.indx.jp/features/your-stack">Learn more: your stack, layer by layer</a>
+  </div>
+</section>
+
+<section class="sec sec--surface" style="padding:56px 0">
+  <div class="shell">
+    <div class="band reveal">
+      <div><h2>See which agents your teams would build first.</h2><p>Example configurations by team, each with its model, files, connectors and runtime.</p></div>
+      <div class="btn-row"><a class="btn btn-action" href="use-cases.html">Browse use cases</a><a class="btn btn-quiet" href="security.html">Security review notes</a></div>
+    </div>
+  </div>
+</section>
+
+<section class="sec final" id="demo">
+  <div class="shell">
+    <div class="measure">
+      <h2 class="h2 reveal">See it on your cloud, with your model and your sandbox.</h2>
+      <p class="lead reveal" data-d="1">A 30-minute walkthrough of the five screens, the CLI and the runtime you would use.</p>
+      <div class="btn-row reveal" data-d="2">
+        <a class="btn btn-convert btn-xl" href="https://indx.jp/en/contact">Book a demo</a>
+        <a class="btn btn-quiet btn-xl" href="https://docs.agentworkspace.indx.jp/getting-started/quickstart">Read the quickstart</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- chrome:footer -->
+<footer class="ftr" id="site-footer">
+  <div class="shell">
+    <div class="ftr-grid ftr-grid-5">
+      <div>
+        <a class="wordmark" href="index.html"><span class="mk" aria-hidden="true"><svg viewBox="0 0 32 32" width="16" height="16" aria-hidden="true"><path d="M9 24 13.9 8h4.2L23 24h-3.3l-1.1-3.6h-5.2L12.3 24zm5.3-6.4h3.4L16 11.9z" fill="currentColor" fill-rule="evenodd"/></svg></span>Agent Workspace</a>
+        <p class="small" style="margin-top:14px; max-width:30em">The smallest practical enterprise deployment layer for the Claude Agent SDK.</p>
+        <p class="small" style="margin-top:10px"><a href="https://indx.jp/en/contact">Contact INDX</a></p>
+      </div>
+      <div>
+        <h4>Product</h4>
+        <ul>
+          <li><a href="product.html">Platform overview</a></li>
+          <li><a href="product.html#how">How it works</a></li>
+          <li><a href="product.html#runtimes">Runtimes</a></li>
+          <li><a href="product.html#honesty">Compatibility</a></li>
+          <li><a href="security.html">Security</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Solutions</h4>
+        <ul>
+          <li><a href="use-cases.html">Use cases</a></li>
+          <li><a href="examples.html">Examples</a></li>
+          <li><a href="compare.html">Compare</a></li>
+          <li><a href="index.html#faq">FAQ</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Deploy</h4>
+        <ul>
+          <li><a href="https://docs.agentworkspace.indx.jp/getting-started/quickstart">Quickstart</a></li>
+          <li><a href="https://docs.agentworkspace.indx.jp/building/self-hosting">Self-host</a></li>
+          <li><a href="https://docs.agentworkspace.indx.jp/guides/deploy">Deploy guide</a></li>
+          <li><a href="https://docs.agentworkspace.indx.jp/building/embedding">Embedding</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Reference</h4>
+        <ul>
+          <li><a href="https://docs.agentworkspace.indx.jp">Documentation</a></li>
+          <li><a href="https://docs.agentworkspace.indx.jp/reference/cli/commands">CLI reference</a></li>
+          <li><a href="https://docs.agentworkspace.indx.jp/tutorials/index">Tutorials</a></li>
+          <li><a href="https://platform.claude.com/docs/en/agent-sdk/overview">Claude Agent SDK</a></li>
+        </ul>
+      </div>
+    </div>
+    <p class="ftr-note">
+      Screens are illustrative of the product UI. Capabilities, runtime driver standing and the
+      compatibility matrix are described as they stand in the <a href="https://docs.agentworkspace.indx.jp/building/models-and-runtimes">docs</a>.
+      Third-party products are described from their public documentation as of the date shown on each page.
+      <br>
+      Claude and Claude Agent SDK are products of Anthropic. This site is unofficial material for the
+      Agent Workspace project and is not affiliated with or endorsed by Anthropic.
+    </p>
+  </div>
+</footer>
+<!-- /chrome:footer -->
+</body>
+</html>

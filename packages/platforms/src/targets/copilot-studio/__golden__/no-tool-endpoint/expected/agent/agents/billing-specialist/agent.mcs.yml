@@ -1,0 +1,11 @@
+mcs.metadata:
+  componentName: billing-specialist
+kind: AgentDialog
+beginDialog:
+  kind: OnToolSelected
+  id: main
+  description: Answers billing and refund questions.
+settings:
+  instructions: You answer billing questions using the refund-policy skill.
+inputType: {}
+outputType: {}

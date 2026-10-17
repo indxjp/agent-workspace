@@ -1,0 +1,387 @@
+name: Developer journey against the real model
+
+# Issue #609: the developer journey (tests/journey/run.mjs, B1 and S2-08's B2, B3b and B3a) with
+# `--live`: the real Anthropic API instead of the fake, nightly and on demand. It is NOT a required
+# check and no ci-success need, because a model outage must not block a merge; the gated journey
+# stays `journey-e2e` in ci.yml, which uses no secret. The measurement is the `journey-live-timings`
+# artifact (per-step seconds, `model: "live"` and `firstTokenSeconds`) and the job summary.
+#
+# It needs the repository secret ANTHROPIC_API_KEY, passed only to the two steps that read it.
+#
+# Issue #801: the build-to-deploy journey (tests/e2e/build-deploy-journey) shares this file for its
+# build recipe but uses NO secret: `npm create`, a code tool, `aw eval` against a scripted model,
+# `aw deploy` to this host, `aw push`, one chat turn through the tool sandbox, `aw promote`. It is
+# the only job that runs on a pull request, and only for a release PR (the scope step names the
+# paths). Like tool-sandbox-e2e it is not in ci-success.needs: making it required is an Owner
+# decision in branch protection, which also changes scripts/check-workflows.mjs.
+#
+# Issue #979: the platforms journey (tests/e2e/platforms-journey) also uses NO secret: `npm create`
+# from the packed packages, `aw platforms export` to every agent platform compared with a committed
+# golden verdict list, three refusals, `doctor` and the import round trip. It runs on a pull request
+# only when the diff touches the platform code or the journey (the scope step names the paths), and
+# is not in ci-success.needs either.
+#
+# Issue #979 (live lane): platforms-live-managed-agents publishes the same agent to Claude Managed
+# Agents with the real `ant` CLI and removes it again (tests/e2e/platforms-journey/
+# managed-agents-live.e2e.mjs). It creates real resources, so it runs on workflow_dispatch only,
+# never on a pull request or a schedule, and is not in ci-success.needs. It needs the repository
+# secret ANTHROPIC_API_KEY, passed only to the refusal step and the step that runs the lane. `ant` is
+# installed in a run step from a pinned release tarball and checked against the sha256 in
+# ANT_SHA256 (the linux_amd64 line of the release's ant_<version>_checksums.txt), so no new action
+# joins scripts/check-workflows.mjs.
+
+on:
+  schedule:
+    - cron: '23 3 * * *'
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: journey-live-${{ github.event_name == 'pull_request' && github.ref || 'nightly' }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  journey-live:
+    name: developer journey against the real model (B1, B3)
+    if: ${{ github.event_name != 'pull_request' }}
+    runs-on: ubuntu-latest
+    # The same arithmetic as ci.yml's journey-e2e: install (8) + build (10) + the journey (80)
+    # + the deploy plan (10, #621) + the first-hour stopwatch (25, #700) + setup and uploads,
+    # inside 145.
+    timeout-minutes: 145
+    steps:
+      - name: Refuse a missing live-model secret
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "${ANTHROPIC_API_KEY//[[:space:]]/}" ]; then
+            echo "::error title=Missing secret ANTHROPIC_API_KEY::journey-live needs the repository secret ANTHROPIC_API_KEY (an Anthropic API key). An Owner must add it under Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Start freeing disk for the Docker builds
+        uses: ./.github/actions/free-disk
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        timeout-minutes: 8
+        run: pnpm install --frozen-lockfile
+
+      # Only the eight packages scripts/release/pack-packages.mjs packs, on the local Nx cache.
+      - name: Build the published packages
+        id: build
+        timeout-minutes: 25
+        run: scripts/ci/nx.sh run-many -t build --projects=@indx-workspace/contracts,@indx-workspace/platforms,@indx-workspace/sdk,@indx-workspace/react,@indx-workspace/aw,@indx-workspace/cli,@indx-workspace/embedded,@indx-workspace/create --parallel=6 --output-style=static
+
+      - name: Wait for the freed disk
+        uses: ./.github/actions/free-disk
+        with:
+          wait: 'true'
+
+      - name: Run the developer journey against the real model
+        timeout-minutes: 80
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          JOURNEY_WORK_DIR: ${{ runner.temp }}/journey
+          JOURNEY_PREPARE_TIMEOUT_MS: '600000'
+          JOURNEY_CHECKS_TIMEOUT_MS: '600000'
+        run: node tests/journey/run.mjs --live
+
+      # Issue #621: `aw deploy production --plan` on a fresh project. Nightly only, not PR CI: it
+      # needs Docker and the published release images. It runs whatever the journey's outcome.
+      - name: Plan a single-VM deploy of a fresh project
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 10
+        run: node tests/journey/deploy.e2e.mjs
+
+      # Issue #700 (FH-13): the first-hour stopwatch (tests/journey/first-hour.e2e.mjs) against the
+      # real model. Its own work directory, so it never touches the journey's evidence above.
+      - name: Time the first hour against the real model
+        id: first-hour
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 25
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          JOURNEY_WORK_DIR: ${{ runner.temp }}/journey-first-hour
+          JOURNEY_PREPARE_TIMEOUT_MS: '600000'
+        run: node tests/journey/run.mjs --first-hour --live
+
+      - name: Keep the measured timings
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: journey-live-timings
+          path: ${{ runner.temp }}/journey/journey-timings.json
+          if-no-files-found: warn
+
+      - name: Keep the first-hour timings
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: journey-live-first-hour-timings
+          path: ${{ runner.temp }}/journey-first-hour/first-hour-timings.json
+          if-no-files-found: warn
+
+      - name: Keep the Playwright report and failure evidence
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: journey-live-evidence
+          # run.mjs scrubs everything here of the run's secrets (the API key included): the logs it writes, and the container's Playwright report and test results it copies (a binary file holding a secret is removed).
+          path: ${{ runner.temp }}/journey/evidence/
+          retention-days: 14
+
+  # Issue #801. The Docker host is this runner: it builds the platform images into a throwaway
+  # registry and deploys the project with `aw deploy` on the docker driver. The only model is the
+  # fake Anthropic API (tests/e2e/tool-sandbox-provider.mjs) and, for `aw eval`, a scripted model.
+  build-deploy-journey:
+    name: build-to-deploy journey · create, eval, deploy, push, tool turn, promote
+    runs-on: ubuntu-latest
+    # install (8) + build (10) + packing and the images (45, BD_PREPARE_TIMEOUT_MS) + the journey
+    # steps and the evidence upload, inside 90.
+    timeout-minutes: 90
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Start freeing disk for the Docker builds
+        uses: ./.github/actions/free-disk
+
+      - name: Decide whether the diff is a release change
+        id: scope
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # A release PR changes what a release ships or verifies, or this journey itself.
+          pattern='^(docs/release/|scripts/release/|infra/release/|tests/e2e/build-deploy-journey/|\.github/workflows/journey-live\.yml$)'
+          changed="$(git diff --name-only origin/main...HEAD)"
+          if grep -Eq "$pattern" <<<"$changed"; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "applies=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Build-to-deploy journey not applicable::the diff is not a release change."
+          fi
+
+      - name: Set up pnpm
+        if: steps.scope.outputs.applies == 'true'
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        if: steps.scope.outputs.applies == 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        if: steps.scope.outputs.applies == 'true'
+        timeout-minutes: 8
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the published packages
+        if: steps.scope.outputs.applies == 'true'
+        timeout-minutes: 25
+        run: scripts/ci/nx.sh run-many -t build --projects=@indx-workspace/contracts,@indx-workspace/platforms,@indx-workspace/sdk,@indx-workspace/react,@indx-workspace/aw,@indx-workspace/cli,@indx-workspace/embedded,@indx-workspace/create --parallel=6 --output-style=static
+
+      - name: Wait for the freed disk
+        uses: ./.github/actions/free-disk
+        with:
+          wait: 'true'
+
+      - name: Run the build-to-deploy journey
+        if: steps.scope.outputs.applies == 'true'
+        timeout-minutes: 70
+        env:
+          BD_WORK_DIR: ${{ runner.temp }}/build-deploy-journey
+        run: node tests/e2e/build-deploy-journey/journey.e2e.mjs
+
+      - name: Keep the eval reports
+        if: failure() && steps.scope.outputs.applies == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: build-deploy-journey-evidence
+          path: ${{ runner.temp }}/build-deploy-journey/evidence/
+          if-no-files-found: warn
+          retention-days: 14
+
+  # Issue #979. Verdaccio (the npm registry the packed packages are published to) is the only
+  # container; there is no model and no vendor CLI, and nothing is sent to any platform.
+  platforms-journey:
+    name: platforms journey · create, export to every platform, goldens, refusals, round trip
+    runs-on: ubuntu-latest
+    # install (8) + build (10) + packing (15, PJ_PREPARE_TIMEOUT_MS) + the journey steps and the
+    # evidence upload, inside 40.
+    timeout-minutes: 40
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Start freeing disk for the Docker builds
+        uses: ./.github/actions/free-disk
+
+      - name: Decide whether the diff is a platforms change
+        id: scope
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # The platform translators, their commands and the publish path, or this journey itself.
+          pattern='^(packages/platforms/|packages/aw/src/commands/platforms|packages/cli/src/publish/|packages/cli/src/create|tests/e2e/platforms-journey/|\.github/workflows/journey-live\.yml$)'
+          changed="$(git diff --name-only origin/main...HEAD)"
+          if grep -Eq "$pattern" <<<"$changed"; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "applies=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Platforms journey not applicable::the diff does not touch the platforms."
+          fi
+
+      - name: Set up pnpm
+        if: steps.scope.outputs.applies == 'true'
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        if: steps.scope.outputs.applies == 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        if: steps.scope.outputs.applies == 'true'
+        timeout-minutes: 8
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the published packages
+        if: steps.scope.outputs.applies == 'true'
+        timeout-minutes: 25
+        run: scripts/ci/nx.sh run-many -t build --projects=@indx-workspace/contracts,@indx-workspace/platforms,@indx-workspace/sdk,@indx-workspace/react,@indx-workspace/aw,@indx-workspace/cli,@indx-workspace/embedded,@indx-workspace/create --parallel=6 --output-style=static
+
+      - name: Wait for the freed disk
+        uses: ./.github/actions/free-disk
+        with:
+          wait: 'true'
+
+      - name: Run the platforms journey
+        if: steps.scope.outputs.applies == 'true'
+        timeout-minutes: 20
+        env:
+          PJ_WORK_DIR: ${{ runner.temp }}/platforms-journey
+        run: node tests/e2e/platforms-journey/journey.e2e.mjs
+
+      - name: Keep the exports and verdicts
+        if: failure() && steps.scope.outputs.applies == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: platforms-journey-evidence
+          path: ${{ runner.temp }}/platforms-journey/evidence/
+          if-no-files-found: warn
+          retention-days: 14
+
+  # Issue #979 (live lane). Creates one agent and one custom skill in the account of the key and
+  # removes them in the script's own cleanup; a leftover fails the job. Verdaccio is the only
+  # container. The key is passed only to the refusal step and the lane step, never as an argument.
+  platforms-live-managed-agents:
+    name: platforms live lane · publish to Claude Managed Agents with ant, read back, remove
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    # install (8) + build (10) + ant (2) + the lane (20, packing 12) + the evidence upload,
+    # inside 45.
+    timeout-minutes: 45
+    steps:
+      - name: Refuse a missing live-model secret
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "${ANTHROPIC_API_KEY//[[:space:]]/}" ]; then
+            echo "::error title=Missing secret ANTHROPIC_API_KEY::platforms-live-managed-agents needs the repository secret ANTHROPIC_API_KEY (an Anthropic API key). An Owner must add it under Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Start freeing disk for the Docker builds
+        uses: ./.github/actions/free-disk
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        timeout-minutes: 8
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the published packages
+        timeout-minutes: 25
+        run: scripts/ci/nx.sh run-many -t build --projects=@indx-workspace/contracts,@indx-workspace/platforms,@indx-workspace/sdk,@indx-workspace/react,@indx-workspace/aw,@indx-workspace/cli,@indx-workspace/embedded,@indx-workspace/create --parallel=6 --output-style=static
+
+      # A pinned release tarball checked against a sha256 recorded here (the linux_amd64 line of
+      # ant_<version>_checksums.txt of the release), instead of a new third-party action
+      # (scripts/check-workflows.mjs allowlists every action). Bump both values together.
+      - name: Install the ant CLI (pinned, checksum-verified)
+        timeout-minutes: 2
+        env:
+          ANT_VERSION: 1.40.0
+          ANT_SHA256: 9845b2a2d44ff3204b3fdaebb64c9da8e7558ad6b9b4547ce4c0eda36dea6e8f
+        run: |
+          set -euo pipefail
+          base="https://github.com/anthropics/anthropic-cli/releases/download/v${ANT_VERSION}"
+          curl --fail --silent --show-error --location --output ant.tar.gz "${base}/ant_${ANT_VERSION}_linux_amd64.tar.gz"
+          echo "${ANT_SHA256}  ant.tar.gz" | sha256sum --check -
+          tar -xzf ant.tar.gz ant
+          sudo install --mode 0755 ant /usr/local/bin/ant
+          rm ant ant.tar.gz
+          ant --version
+
+      - name: Wait for the freed disk
+        uses: ./.github/actions/free-disk
+        with:
+          wait: 'true'
+
+      - name: Publish to Claude Managed Agents and remove it again
+        timeout-minutes: 20
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PJ_LIVE_RUN_ID: ${{ github.run_id }}
+          PJ_WORK_DIR: ${{ runner.temp }}/platforms-live
+          # Packing gets 12 of the step's 20 minutes, so publish and cleanup always have time.
+          PJ_PREPARE_TIMEOUT_MS: '720000'
+        run: node tests/e2e/platforms-journey/managed-agents-live.e2e.mjs
+
+      - name: Keep the scrubbed evidence
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: platforms-live-managed-agents-evidence
+          path: ${{ runner.temp }}/platforms-live/evidence/
+          if-no-files-found: warn
+          retention-days: 14

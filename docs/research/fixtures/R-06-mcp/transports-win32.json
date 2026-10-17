@@ -1,0 +1,498 @@
+{
+  "node": "v24.19.0",
+  "platform": "win32",
+  "at": "2026-09-04T06:54:18.088Z",
+  "results": [
+    {
+      "case": "http/ok-bearer",
+      "outcome": "connected",
+      "ms": 36,
+      "serverInfo": {
+        "name": "r06-probe-http",
+        "version": "0.0.1"
+      },
+      "serverCapabilities": {
+        "tools": {}
+      },
+      "tools": [
+        "ping"
+      ]
+    },
+    {
+      "case": "http/wrong-token",
+      "outcome": "threw",
+      "ms": 7,
+      "error": {
+        "ctor": "StreamableHTTPError",
+        "name": "Error",
+        "message": "Streamable HTTP error: Error POSTing to endpoint: {\"error\":\"invalid_token\",\"error_description\":\"The access token is invalid\"}",
+        "code": 401,
+        "causeCtor": null,
+        "causeMessage": null,
+        "causeCode": null,
+        "causeErrno": null,
+        "causeSyscall": null,
+        "keys": [
+          "code"
+        ]
+      }
+    },
+    {
+      "case": "http/no-token",
+      "outcome": "threw",
+      "ms": 15,
+      "error": {
+        "ctor": "StreamableHTTPError",
+        "name": "Error",
+        "message": "Streamable HTTP error: Error POSTing to endpoint: {\"error\":\"invalid_token\",\"error_description\":\"The access token is invalid\"}",
+        "code": 401,
+        "causeCtor": null,
+        "causeMessage": null,
+        "causeCode": null,
+        "causeErrno": null,
+        "causeSyscall": null,
+        "keys": [
+          "code"
+        ]
+      }
+    },
+    {
+      "case": "http/wrong-path-404",
+      "outcome": "threw",
+      "ms": 2,
+      "error": {
+        "ctor": "StreamableHTTPError",
+        "name": "Error",
+        "message": "Streamable HTTP error: Error POSTing to endpoint: {\"error\":\"not found\"}",
+        "code": 404,
+        "causeCtor": null,
+        "causeMessage": null,
+        "causeCode": null,
+        "causeErrno": null,
+        "causeSyscall": null,
+        "keys": [
+          "code"
+        ]
+      }
+    },
+    {
+      "case": "http/port-closed",
+      "outcome": "threw",
+      "ms": 3,
+      "error": {
+        "ctor": "TypeError",
+        "name": "TypeError",
+        "message": "fetch failed",
+        "code": null,
+        "causeCtor": "Error",
+        "causeMessage": "connect ECONNREFUSED 127.0.0.1:8999",
+        "causeCode": "ECONNREFUSED",
+        "causeErrno": -4078,
+        "causeSyscall": "connect",
+        "keys": []
+      }
+    },
+    {
+      "case": "http/dns-nxdomain",
+      "outcome": "threw",
+      "ms": 23,
+      "error": {
+        "ctor": "TypeError",
+        "name": "TypeError",
+        "message": "fetch failed",
+        "code": null,
+        "causeCtor": "Error",
+        "causeMessage": "getaddrinfo ENOTFOUND r06-probe-does-not-exist.invalid",
+        "causeCode": "ENOTFOUND",
+        "causeErrno": -3008,
+        "causeSyscall": "getaddrinfo",
+        "keys": []
+      }
+    },
+    {
+      "case": "http/tls-to-plain-port",
+      "outcome": "threw",
+      "ms": 3,
+      "error": {
+        "ctor": "TypeError",
+        "name": "TypeError",
+        "message": "fetch failed",
+        "code": null,
+        "causeCtor": "Error",
+        "causeMessage": "C4BF0000:error:0A00010B:SSL routines:tls_validate_record_header:wrong version number:openssl\\ssl\\record\\methods\\tlsany_meth.c:78:\n",
+        "causeCode": "ERR_SSL_WRONG_VERSION_NUMBER",
+        "causeErrno": null,
+        "causeSyscall": null,
+        "keys": []
+      }
+    },
+    {
+      "case": "http/hangs-forever",
+      "outcome": "threw",
+      "ms": 3009,
+      "error": {
+        "ctor": "McpError",
+        "name": "McpError",
+        "message": "MCP error -32001: Request timed out",
+        "code": -32001,
+        "causeCtor": null,
+        "causeMessage": null,
+        "causeCode": null,
+        "causeErrno": null,
+        "causeSyscall": null,
+        "keys": [
+          "code",
+          "data",
+          "name"
+        ]
+      }
+    },
+    {
+      "case": "http/protocol-2024-11-05-server",
+      "outcome": "connected",
+      "ms": 10,
+      "serverInfo": {
+        "name": "r06-probe-http",
+        "version": "0.0.1"
+      },
+      "serverCapabilities": {
+        "tools": {}
+      },
+      "tools": [
+        "ping"
+      ]
+    },
+    {
+      "case": "sse/ok-bearer",
+      "outcome": "connected",
+      "ms": 22,
+      "serverInfo": {
+        "name": "r06-probe-sse",
+        "version": "0.0.1"
+      },
+      "serverCapabilities": {
+        "tools": {}
+      },
+      "tools": [
+        "ping"
+      ]
+    },
+    {
+      "case": "sse/wrong-token",
+      "outcome": "threw",
+      "ms": 2,
+      "error": {
+        "ctor": "SseError",
+        "name": "Error",
+        "message": "SSE error: Non-200 status code (401)",
+        "code": 401,
+        "causeCtor": null,
+        "causeMessage": null,
+        "causeCode": null,
+        "causeErrno": null,
+        "causeSyscall": null,
+        "keys": [
+          "code",
+          "event"
+        ]
+      }
+    },
+    {
+      "case": "sse/no-token",
+      "outcome": "threw",
+      "ms": 1,
+      "error": {
+        "ctor": "SseError",
+        "name": "Error",
+        "message": "SSE error: Non-200 status code (401)",
+        "code": 401,
+        "causeCtor": null,
+        "causeMessage": null,
+        "causeCode": null,
+        "causeErrno": null,
+        "causeSyscall": null,
+        "keys": [
+          "code",
+          "event"
+        ]
+      }
+    },
+    {
+      "case": "sse/wrong-path-404",
+      "outcome": "threw",
+      "ms": 11,
+      "error": {
+        "ctor": "SseError",
+        "name": "Error",
+        "message": "SSE error: Non-200 status code (404)",
+        "code": 404,
+        "causeCtor": null,
+        "causeMessage": null,
+        "causeCode": null,
+        "causeErrno": null,
+        "causeSyscall": null,
+        "keys": [
+          "code",
+          "event"
+        ]
+      }
+    },
+    {
+      "case": "sse/port-closed",
+      "outcome": "threw",
+      "ms": 1,
+      "error": {
+        "ctor": "SseError",
+        "name": "Error",
+        "message": "SSE error: TypeError: fetch failed: connect ECONNREFUSED 127.0.0.1:8999",
+        "code": null,
+        "causeCtor": null,
+        "causeMessage": null,
+        "causeCode": null,
+        "causeErrno": null,
+        "causeSyscall": null,
+        "keys": [
+          "code",
+          "event"
+        ]
+      }
+    },
+    {
+      "case": "sse/dns-nxdomain",
+      "outcome": "threw",
+      "ms": 2,
+      "error": {
+        "ctor": "SseError",
+        "name": "Error",
+        "message": "SSE error: TypeError: fetch failed: getaddrinfo ENOTFOUND r06-probe-does-not-exist.invalid",
+        "code": null,
+        "causeCtor": null,
+        "causeMessage": null,
+        "causeCode": null,
+        "causeErrno": null,
+        "causeSyscall": null,
+        "keys": [
+          "code",
+          "event"
+        ]
+      }
+    },
+    {
+      "case": "sse/http-endpoint-not-sse",
+      "outcome": "threw",
+      "ms": 1,
+      "error": {
+        "ctor": "SseError",
+        "name": "Error",
+        "message": "SSE error: Non-200 status code (405)",
+        "code": 405,
+        "causeCtor": null,
+        "causeMessage": null,
+        "causeCode": null,
+        "causeErrno": null,
+        "causeSyscall": null,
+        "keys": [
+          "code",
+          "event"
+        ]
+      }
+    },
+    {
+      "case": "stdio/ok",
+      "outcome": "connected",
+      "ms": 49,
+      "serverInfo": {
+        "name": "r06-probe-stdio",
+        "version": "0.0.1"
+      },
+      "serverCapabilities": {
+        "tools": {}
+      },
+      "tools": [
+        "ping"
+      ]
+    },
+    {
+      "case": "stdio/env-credential-ok",
+      "outcome": "connected",
+      "ms": 47,
+      "serverInfo": {
+        "name": "r06-probe-stdio",
+        "version": "0.0.1"
+      },
+      "serverCapabilities": {
+        "tools": {}
+      },
+      "tools": [
+        "ping"
+      ]
+    },
+    {
+      "case": "stdio/env-credential-wrong",
+      "outcome": "threw",
+      "ms": 46,
+      "error": {
+        "ctor": "McpError",
+        "name": "McpError",
+        "message": "MCP error -32001: Unauthorized: environment variable MCP_TOKEN is set but rejected",
+        "code": -32001,
+        "causeCtor": null,
+        "causeMessage": null,
+        "causeCode": null,
+        "causeErrno": null,
+        "causeSyscall": null,
+        "keys": [
+          "code",
+          "data",
+          "name"
+        ]
+      }
+    },
+    {
+      "case": "stdio/env-credential-missing",
+      "outcome": "threw",
+      "ms": 45,
+      "error": {
+        "ctor": "McpError",
+        "name": "McpError",
+        "message": "MCP error -32001: Unauthorized: environment variable MCP_TOKEN is not set",
+        "code": -32001,
+        "causeCtor": null,
+        "causeMessage": null,
+        "causeCode": null,
+        "causeErrno": null,
+        "causeSyscall": null,
+        "keys": [
+          "code",
+          "data",
+          "name"
+        ]
+      }
+    },
+    {
+      "case": "stdio/command-not-found",
+      "outcome": "threw",
+      "ms": 39,
+      "error": {
+        "ctor": "McpError",
+        "name": "McpError",
+        "message": "MCP error -32000: Connection closed",
+        "code": -32000,
+        "causeCtor": null,
+        "causeMessage": null,
+        "causeCode": null,
+        "causeErrno": null,
+        "causeSyscall": null,
+        "keys": [
+          "code",
+          "data",
+          "name"
+        ]
+      }
+    },
+    {
+      "case": "stdio/exits-immediately",
+      "outcome": "threw",
+      "ms": 49,
+      "error": {
+        "ctor": "McpError",
+        "name": "McpError",
+        "message": "MCP error -32000: Connection closed",
+        "code": -32000,
+        "causeCtor": null,
+        "causeMessage": null,
+        "causeCode": null,
+        "causeErrno": null,
+        "causeSyscall": null,
+        "keys": [
+          "code",
+          "data",
+          "name"
+        ]
+      }
+    },
+    {
+      "case": "stdio/stdout-noise",
+      "outcome": "connected",
+      "ms": 47,
+      "serverInfo": {
+        "name": "r06-probe-stdio",
+        "version": "0.0.1"
+      },
+      "serverCapabilities": {
+        "tools": {}
+      },
+      "tools": [
+        "ping"
+      ]
+    },
+    {
+      "case": "stdio/hangs-forever",
+      "outcome": "threw",
+      "ms": 3016,
+      "error": {
+        "ctor": "McpError",
+        "name": "McpError",
+        "message": "MCP error -32001: Request timed out",
+        "code": -32001,
+        "causeCtor": null,
+        "causeMessage": null,
+        "causeCode": null,
+        "causeErrno": null,
+        "causeSyscall": null,
+        "keys": [
+          "code",
+          "data",
+          "name"
+        ]
+      }
+    },
+    {
+      "case": "stdio/slow-but-answers",
+      "outcome": "connected",
+      "ms": 3071,
+      "serverInfo": {
+        "name": "r06-probe-stdio",
+        "version": "0.0.1"
+      },
+      "serverCapabilities": {
+        "tools": {}
+      },
+      "tools": [
+        "ping"
+      ]
+    },
+    {
+      "case": "stdio/protocol-2024-11-05-server",
+      "outcome": "connected",
+      "ms": 46,
+      "serverInfo": {
+        "name": "r06-probe-stdio",
+        "version": "0.0.1"
+      },
+      "serverCapabilities": {
+        "tools": {}
+      },
+      "tools": [
+        "ping"
+      ]
+    },
+    {
+      "case": "stdio/protocol-unknown-server",
+      "outcome": "threw",
+      "ms": 44,
+      "error": {
+        "ctor": "Error",
+        "name": "Error",
+        "message": "Server's protocol version is not supported: 1999-01-01",
+        "code": null,
+        "causeCtor": null,
+        "causeMessage": null,
+        "causeCode": null,
+        "causeErrno": null,
+        "causeSyscall": null,
+        "keys": []
+      }
+    }
+  ]
+}

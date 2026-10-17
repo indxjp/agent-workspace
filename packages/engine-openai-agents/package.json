@@ -1,0 +1,56 @@
+{
+  "name": "@agent-workspace/engine-openai-agents",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "agentWorkspace": {
+    "engineSdk": "@openai/agents"
+  },
+  "dependencies": {
+    "@indx-workspace/contracts": "workspace:*",
+    "@agent-workspace/engine": "workspace:*",
+    "@ai-sdk/anthropic": "4.0.78",
+    "@ai-sdk/provider": "4.0.26",
+    "@openai/agents": "0.20.0",
+    "@openai/agents-extensions": "0.20.0",
+    "zod": "4.6.6"
+  },
+  "devDependencies": {
+    "@typescript/native": "npm:typescript@7.0.2",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
+    "vitest": "5.0.3"
+  },
+  "nx": {
+    "targets": {
+      "lint": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "eslint packages/engine-openai-agents --max-warnings 0"
+        }
+      },
+      "test": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "vitest run --project @agent-workspace/engine-openai-agents --reporter=default --reporter=json --outputFile={projectRoot}/.vitest-report.json",
+          "env": {
+            "NODE_OPTIONS": "--unhandled-rejections=strict",
+            "VITEST_MAX_WORKERS": "4"
+          }
+        }
+      }
+    }
+  }
+}

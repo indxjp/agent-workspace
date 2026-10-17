@@ -1,0 +1,29 @@
+{
+  "main": "manager-worker.mjs",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "containers": [
+    {
+      "class_name": "Manager",
+      "image": "registry.example/runner@sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "max_instances": 1,
+      "instance_type": "standard-1"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "MANAGER",
+        "class_name": "Manager"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "Manager"
+      ]
+    }
+  ]
+}

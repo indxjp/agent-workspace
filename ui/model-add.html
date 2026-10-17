@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Add Provider — Agent Workspace</title>
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<script>window.PAGE = { nav: "models", crumbs: [["Administration"], ["Models", "models.html"], ["Add Provider"]] };</script>
+
+<div class="app">
+  <div class="main">
+    <div class="page narrow">
+
+      <div class="page-head">
+        <div>
+          <h1>Add Provider</h1>
+          <div class="sub">Choose a provider, then answer only the questions that provider actually needs.</div>
+        </div>
+      </div>
+
+      <div class="section-head mt0"><h2>Choose provider</h2></div>
+      <div class="choices">
+        <div class="choice" data-reveal="anthropic">
+          <div class="mark"></div>
+          <div class="grow"><div class="t">Anthropic <span class="badge info">Recommended</span></div>
+            <div class="d">Claude models, native. Every Claude Agent SDK feature is supported.</div></div>
+        </div>
+        <div class="choice selected" data-reveal="azure">
+          <div class="mark"></div>
+          <div class="grow"><div class="t">Microsoft Azure OpenAI</div>
+            <div class="d">Translated to the Anthropic Messages API by the gateway. Compatibility mode.</div></div>
+        </div>
+        <div class="choice" data-reveal="openai">
+          <div class="mark"></div>
+          <div class="grow"><div class="t">OpenAI</div>
+            <div class="d">Translated by the gateway. Compatibility mode.</div></div>
+        </div>
+        <div class="choice" data-reveal="compatible">
+          <div class="mark"></div>
+          <div class="grow"><div class="t">OpenAI-compatible endpoint</div>
+            <div class="d">vLLM, Ollama, a vendor gateway — anything speaking the OpenAI API.</div></div>
+        </div>
+        <div class="choice" data-reveal="advanced">
+          <div class="mark"></div>
+          <div class="grow"><div class="t">Advanced</div>
+            <div class="d">Anthropic-compatible endpoint: Bedrock, Vertex AI, Microsoft Foundry, or a private proxy.</div></div>
+        </div>
+      </div>
+
+      <!-- ---------- Azure ---------- -->
+      <div data-reveal-target="azure">
+        <div class="section-head"><h2>Azure OpenAI</h2></div>
+        <div class="card"><div class="card-body">
+          <div class="field">
+            <label>Endpoint</label>
+            <input type="text" class="mono-input" value="https://meridian.openai.azure.com">
+          </div>
+          <div class="field">
+            <label>API Key</label>
+            <input type="password" value="••••••••••••••••">
+            <div class="help">Stored encrypted in the secrets layer. It is never displayed again, never sent to a
+              sandbox, and never included in an export.</div>
+          </div>
+          <div class="field row2">
+            <div><label>Deployment</label><input type="text" class="mono-input" value="gpt-41-japaneast"></div>
+            <div><label>API Version</label><input type="text" class="mono-input" value="2025-04-01-preview"></div>
+          </div>
+          <div class="field">
+            <label>Display name</label>
+            <input type="text" value="GPT‑4.1">
+            <div class="help">What people choose in the agent editor.</div>
+          </div>
+          <div class="btn-row">
+            <button class="btn" data-toast="Connected · gpt-41-japaneast · 310 ms">Test Connection</button>
+            <span class="badge ok">Connected · 310 ms</span>
+          </div>
+        </div></div>
+
+        <div class="callout warn mt16">
+          <span class="ico">⚠</span>
+          <div class="grow">
+            <b>This model does not fully support Claude prompt caching.</b> Agents can still run, but repeated
+            context is re-sent on every turn, so cost and latency will differ. Thinking and context management
+            are approximated.
+            <a href="models.html#compat">See the full matrix</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- ---------- Anthropic ---------- -->
+      <div data-reveal-target="anthropic" hidden>
+        <div class="section-head"><h2>Anthropic</h2></div>
+        <div class="card"><div class="card-body">
+          <div class="field">
+            <label>API Key</label>
+            <input type="password" placeholder="sk-ant-…">
+          </div>
+          <div class="field mb0">
+            <label>Models to expose</label>
+            <div class="checks">
+              <label class="check on"><span class="box"></span><span class="grow"><span class="t">Claude Sonnet 5</span><span class="d mono">claude-sonnet-5</span></span></label>
+              <label class="check on"><span class="box"></span><span class="grow"><span class="t">Claude Opus 5</span><span class="d mono">claude-opus-5</span></span></label>
+              <label class="check on"><span class="box"></span><span class="grow"><span class="t">Claude Haiku 4.5</span><span class="d mono">claude-haiku-4-5-20251001</span></span></label>
+            </div>
+          </div>
+        </div></div>
+      </div>
+
+      <!-- ---------- OpenAI ---------- -->
+      <div data-reveal-target="openai" hidden>
+        <div class="section-head"><h2>OpenAI</h2></div>
+        <div class="card"><div class="card-body">
+          <div class="field"><label>API Key</label><input type="password" placeholder="sk-…"></div>
+          <div class="field"><label>Model</label><input type="text" class="mono-input" placeholder="gpt-4.1"></div>
+          <div class="field mb0"><label>Organisation <span class="muted small">optional</span></label><input type="text" class="mono-input"></div>
+        </div></div>
+      </div>
+
+      <!-- ---------- OpenAI-compatible ---------- -->
+      <div data-reveal-target="compatible" hidden>
+        <div class="section-head"><h2>OpenAI-compatible endpoint</h2></div>
+        <div class="card"><div class="card-body">
+          <div class="field"><label>Base URL</label><input type="text" class="mono-input" placeholder="http://vllm.internal:8000/v1"></div>
+          <div class="field"><label>API Key <span class="muted small">optional</span></label><input type="password"></div>
+          <div class="field mb0"><label>Model name</label><input type="text" class="mono-input" placeholder="llama-3.3-70b-instruct"></div>
+        </div></div>
+        <div class="callout warn mt16">
+          <span class="ico">⚠</span>
+          <div class="grow">Capabilities are unknown until the compatibility suite has run against this endpoint.
+            Until then the model is offered with every optional capability marked unsupported.</div>
+        </div>
+      </div>
+
+      <!-- ---------- Advanced ---------- -->
+      <div data-reveal-target="advanced" hidden>
+        <div class="section-head"><h2>Anthropic-compatible endpoint</h2></div>
+        <div class="card"><div class="card-body">
+          <div class="field"><label>Base URL</label><input type="text" class="mono-input" placeholder="https://bedrock-runtime.ap-northeast-1.amazonaws.com"></div>
+          <div class="field"><label>Auth header</label><input type="text" class="mono-input" placeholder="Authorization: Bearer ${SECRET}"></div>
+          <div class="field mb0"><label>Model id</label><input type="text" class="mono-input" placeholder="anthropic.claude-sonnet-5"></div>
+          <div class="help mt8">Native Claude deployments (Bedrock, Vertex AI, Microsoft Foundry) should use this
+            path rather than a translation layer — nothing is lost that way.</div>
+        </div></div>
+      </div>
+
+      <div class="btn-row mt24" style="justify-content:flex-end">
+        <a class="btn" href="models.html">Cancel</a>
+        <a class="btn primary" href="models.html">Save</a>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

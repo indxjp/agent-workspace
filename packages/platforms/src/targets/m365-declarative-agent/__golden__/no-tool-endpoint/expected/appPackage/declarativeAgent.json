@@ -1,0 +1,21 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/copilot/declarative-agent/v1.8/schema.json",
+  "version": "v1.8",
+  "name": "support-triage",
+  "description": "Triages customer support tickets and drafts replies.",
+  "instructions": "You triage support tickets.\n\n- Look up the order before answering.\n- Hand billing questions to billing-specialist.",
+  "capabilities": [
+    {
+      "name": "WebSearch"
+    },
+    {
+      "name": "CodeInterpreter"
+    }
+  ],
+  "actions": [
+    {
+      "id": "zendesk",
+      "file": "ai-plugin.zendesk.json"
+    }
+  ]
+}

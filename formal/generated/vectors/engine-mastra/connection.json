@@ -1,0 +1,75 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.Mastra.every_model_request_goes_to_the_gateway_with_the_run_token",
+    "AgentWorkspace.Theorems.Adversarial.Mastra.the_model_is_an_explicit_provider_at_the_gateway"],
+   "input": {"token": "run-token", "protocol": "anthropic-messages", "baseUrl": "http://gateway.invalid"},
+   "id": "anthropic-messages",
+   "expected":
+   {"requests": [{"url": "http://gateway.invalid/v1/messages", "authorization": "Bearer run-token"}],
+    "model":
+    {"option": "authToken",
+     "method": "messages",
+     "kind": "provider",
+     "factory": "createAnthropic",
+     "baseURL": "http://gateway.invalid/v1"},
+    "connection":
+    {"protocol": "anthropic-messages",
+     "baseUrl": "http://gateway.invalid/v1",
+     "authorization": "Bearer run-token",
+     "api": "anthropic.messages"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.Mastra.every_model_request_goes_to_the_gateway_with_the_run_token",
+    "AgentWorkspace.Theorems.Adversarial.Mastra.the_model_is_an_explicit_provider_at_the_gateway"],
+   "input": {"token": "t", "protocol": "anthropic-messages", "baseUrl": "http://gateway:8787//"},
+   "id": "anthropic-trailing-slashes",
+   "expected":
+   {"requests": [{"url": "http://gateway:8787/v1/messages", "authorization": "Bearer t"}],
+    "model":
+    {"option": "authToken",
+     "method": "messages",
+     "kind": "provider",
+     "factory": "createAnthropic",
+     "baseURL": "http://gateway:8787/v1"},
+    "connection":
+    {"protocol": "anthropic-messages",
+     "baseUrl": "http://gateway:8787/v1",
+     "authorization": "Bearer t",
+     "api": "anthropic.messages"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.Mastra.every_model_request_goes_to_the_gateway_with_the_run_token",
+    "AgentWorkspace.Theorems.Adversarial.Mastra.the_model_is_an_explicit_provider_at_the_gateway"],
+   "input": {"token": "run-token", "protocol": "openai-responses", "baseUrl": "https://gw.example"},
+   "id": "openai-responses",
+   "expected":
+   {"requests": [{"url": "https://gw.example/v1/responses", "authorization": "Bearer run-token"}],
+    "model":
+    {"option": "apiKey",
+     "method": "responses",
+     "kind": "provider",
+     "factory": "createOpenAI",
+     "baseURL": "https://gw.example/v1"},
+    "connection":
+    {"protocol": "openai-responses",
+     "baseUrl": "https://gw.example/v1",
+     "authorization": "Bearer run-token",
+     "api": "openai.responses"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.Mastra.every_model_request_goes_to_the_gateway_with_the_run_token",
+    "AgentWorkspace.Theorems.Adversarial.Mastra.the_model_is_an_explicit_provider_at_the_gateway"],
+   "input": {"token": "tok", "protocol": "openai-chat-completions", "baseUrl": "https://gw.example/"},
+   "id": "openai-chat-completions",
+   "expected":
+   {"requests": [{"url": "https://gw.example/v1/chat/completions", "authorization": "Bearer tok"}],
+    "model":
+    {"option": "apiKey",
+     "method": "chat",
+     "kind": "provider",
+     "factory": "createOpenAI",
+     "baseURL": "https://gw.example/v1"},
+    "connection":
+    {"protocol": "openai-chat-completions",
+     "baseUrl": "https://gw.example/v1",
+     "authorization": "Bearer tok",
+     "api": "openai.chat"}}}],
+ "family": "engine-mastra",
+ "description": "mastraModelConnection: the gateway /v1 prefix, the run token as the bearer, and an explicit provider"}

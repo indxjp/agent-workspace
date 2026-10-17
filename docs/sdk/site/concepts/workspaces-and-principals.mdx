@@ -1,0 +1,164 @@
+---
+title: "Workspaces and principals"
+description: "The tenancy model — workspaces, principals, membership roles, and which credential to use for which job."
+---
+
+<Info>
+
+- **Read this when:** you pick a credential for a backend, a CI job, a browser or the CLI, or a call
+  fails with `401`, `403` or `404`.
+- **You will learn:** what a workspace and a principal are, what each of the four roles may do, and
+  which credential to use for which job.
+- **Used in:** [Chapter 4: Put it in your product](/path/embed) and [Chapter 6: Run it for your
+  team](/path/operate).
+
+</Info>
+
+Every resource the SDK returns belongs to exactly one workspace: `Workspace(tenant, slug, archive
+state, publicSharingEnabled)` is the root of the resource model in
+the platform's resource model. This page is the model behind
+[Authentication](/getting-started/authentication) — read that page for how to
+configure `createClient`; read this one for what a workspace, a principal, and a role actually mean
+before you pick one.
+
+## Workspace and principal
+
+A **workspace** is the tenant. A **principal** is "the exact actor a request runs as: a membership
+(a user in a workspace, with a role) or an API key (with a role). Never a bare user." (API
+specification §1.1). Concretely, a request is authenticated as one of two principal kinds:
+
+- **A membership** — a user, acting through a browser sign-in session, with the role that user holds
+  in the workspace the sign-in session currently has selected.
+- **An API key** — a credential minted inside one workspace, with a role fixed at mint time. An
+  API key has no user behind it and no membership row; it _is_ the principal.
+
+Most ownership checks compare principals. Agent grants are the current exception: their relation
+is keyed by user ID. A run inherits its owner from its run-history session rather than storing an
+owner column. `createdBy`/`userId`/`initiatingUserId` are human attribution fields that may be
+`null` (API specification §2, "Ownership").
+
+## Three separate questions, three separate mechanisms
+
+The platform states this as a single rule: **"A browser sign-in session proves identity; RBAC proves permission; a repository scope proves tenant
+selection. None substitutes for another."**
+
+Read literally: knowing _who_ is calling (a valid browser sign-in session or API key) tells you nothing about
+_what_ they may do, and _what_ they may do tells you nothing about _which workspace's rows_ a
+query is allowed to touch. The SDK does not collapse these for you — a `401` means the credential
+itself was not accepted, a `403` means the accepted principal lacks the role a resource requires,
+and a `404` (never a `403`) is the platform's answer to a resource in a workspace the principal
+cannot see at all, so that a wrong id can never be used to probe for another tenant's existence.
+
+## Membership roles
+
+Every membership and every API key carries exactly one of four roles, `MEMBERSHIP_ROLES` in
+`packages/contracts/src/team.ts`:
+
+```ts title="illustrative" claim="illustrative"
+export const MEMBERSHIP_ROLES = ['owner', 'admin', 'builder', 'viewer'] as const;
+```
+
+The SDK does not encode what each role may do — it surfaces whatever the server decides, as a
+`403 forbidden` `ApiProblemError`. The following table is API specification §3.3's own, reproduced
+as of its date, with the Admin `skills, files` cell updated to ADR-0116 (it is documentation of current server behaviour, not a contract the SDK
+enforces — always branch on the `403` you actually receive, not on this table):
+
+| Resource                                                 | Owner                                                                 | Admin          | Builder                 | Viewer                    |
+| -------------------------------------------------------- | --------------------------------------------------------------------- | -------------- | ----------------------- | ------------------------- |
+| agents                                                   | all                                                                   | all            | read any, write/run own | read any, run _permitted_ |
+| skills, files                                            | all                                                                   | all (ADR-0116) | read any, write own     | none                      |
+| connectors                                               | all                                                                   | manage         | read any, write own     | none                      |
+| model-connections, models, runtime-connections, runtimes | all                                                                   | manage         | none                    | none                      |
+| runtime-profiles                                         | all                                                                   | manage         | read                    | none                      |
+| secrets                                                  | all                                                                   | none           | none                    | none                      |
+| projects                                                 | all                                                                   | none           | own                     | none                      |
+| sessions                                                 | all                                                                   | own            | own                     | own (read)                |
+| runs                                                     | all                                                                   | read/run any   | read/run own            | read/run own              |
+| memberships, users, invitations, api-keys                | all                                                                   | manage         | none                    | none                      |
+| shares                                                   | all                                                                   | manage         | own                     | own                       |
+| sharing-policies                                         | all                                                                   | read           | read                    | read                      |
+| metrics                                                  | all                                                                   | read           | read                    | read                      |
+| audit-events                                             | all                                                                   | none           | none                    | none                      |
+| me                                                       | all                                                                   | read           | read                    | read                      |
+| setup                                                    | all                                                                   | none           | none                    | none                      |
+| workspaces                                               | member-scoped: read any membership, write only as Owner of the target |                |                         |                           |
+
+"Permitted" for a Viewer running an agent means an explicit `agent_grants` row. Manage those rows
+with `aw.agents.getGrants` and `aw.agents.replaceGrants`, using membership principal ids.
+
+[Ownership and sharing](/concepts/ownership-and-sharing) is the full statement of this table plus
+the sharing vocabulary it implies — the catalog → assignment → grant verbs that decide what a
+resource is reachable _from_, as distinct from what this table decides a principal may _do_ to
+it. Today the workspace is the outermost boundary either question can reach; an organisation
+catalog spanning several workspaces is the target, tracked as
+[N-2](/concepts/roadmap#n-2-an-organisation-catalog-above-workspaces).
+
+## API keys act for one workspace, with no human membership
+
+An API key is not a stand-in for a person. It is minted inside one workspace, it holds one role
+fixed at mint time, and it has no membership row to read, list, or fall back to. This has a sharp,
+deliberate consequence, a deliberate platform decision: **every route under `/api/workspaces` and
+every route under `/api/invitations` refuses an API-key principal outright, with `403
+api_key_not_permitted`**, before any other authorisation check runs.
+
+The reasoning is worth repeating in one sentence: an earlier implementation let an
+API-key request fall back to attributing itself to "the oldest Owner" of the key's workspace, which
+meant a Viewer-scoped key in one workspace could enumerate and even rename or archive a _different_
+tenant that Owner happened to belong to — a cross-tenant authorisation bug, not a style choice. The
+fix is uniform refusal rather than a narrower fallback, because an API key genuinely has no answer
+to "list my current memberships" or "who owns the workspace I'm about to create" — it has no
+memberships and no human identity to attach as an owner.
+
+In SDK terms: `aw.workspaces.list/get/create/update` and `aw.team.invitations.*` require
+`auth: { kind: 'session' }`. Calling them with an API key always fails, regardless of the key's
+role. See [Authentication](/getting-started/authentication) for the same rule
+from the credential's point of view.
+
+## The `ak_live_` key format
+
+An API key's plaintext, wherever it appears (the `Authorization` header, the mint response, the
+`aw` CLI's `--api-key-stdin`), matches `API_KEY_PATTERN` in
+`packages/contracts/src/api-keys.ts`:
+
+```text
+ak_live_<22 base64url characters>_<43 base64url characters>
+```
+
+`API_KEY_PREFIX` (`ak_live_`) marks the format; the first 22-character segment
+(`API_KEY_ID_LENGTH`) is the key's public id and the second 43-character segment
+(`API_KEY_SECRET_LENGTH`) is the secret. Once a key has lost its secret — any row read back through
+`GET /api/api-keys` — it is shown only as its display prefix, `ak_live_<key id>`
+(`API_KEY_DISPLAY_PREFIX_PATTERN`), which cannot authenticate and exists only to make a list
+recognisable.
+
+## Shown once: minted keys and invitation tokens
+
+Two responses in this API carry a secret, and both carry it exactly once:
+
+- `POST /api/api-keys` (`aw.team.apiKeys.create`) returns `MintedApiKeyResponseSchema`: the stored
+  `apiKey` resource, the plaintext `key`, and a `warning` string from the server stating that this
+  is the only time it is shown. `ApiKeyResourceSchema` itself — what every later read of the key
+  returns — has no field for the secret or its hash; `.strict()` refuses a body that tries to add
+  one.
+- `POST /api/invitations` (`aw.team.invitations.create`) returns the invitation resource plus a
+  `token`, a ready-to-send `link`, and the same kind of one-time `warning`. There is no route to
+  recover a lost token; `aw.team.invitations.resend` mints a fresh one instead of revealing the old
+  one.
+
+Store both immediately, somewhere the caller controls — a secret manager, a password vault, the
+message you are about to send. There is no "show it again" endpoint for either.
+
+## Which credential for which job
+
+| Job                                                                       | Credential                                                                                                                                            | Why                                                                                                                                                                                                                              |
+| ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A customer's backend, a CI job, or the `aw` CLI calling the control plane | `auth: { kind: 'api-key', apiKey }`                                                                                                                   | The caller is not a browser; it holds a long-lived credential scoped to one workspace and one role.                                                                                                                              |
+| A browser page served from the control plane's own origin                 | `auth: { kind: 'session' }`                                                                                                                           | The browser already carries the control plane's session cookie; `credentials: 'include'` uses it. This is how the control plane's own UI calls its own API — not a credential you can hand to an arbitrary third-party frontend. |
+| Managing workspaces (`list/get/create/update`) or invitations             | `auth: { kind: 'session' }`, always                                                                                                                   | API keys are refused on these routes regardless of role (see above).                                                                                                                                                             |
+| A customer's own frontend, off the control plane's origin                 | `auth: { kind: 'browser-token', token }`, minted by your backend with `aw.tokens.mint(scope)` ([Embed an agent in your product](/building/embedding)) | Handing an API key to a browser is unsafe (the key's full role travels with it, unscoped to a run or session); a browser token is scoped to exactly one run or session and expires in minutes.                                   |
+
+For the full picture of what each `auth.kind` sends on the wire and its current implementation
+status, see [Authentication](/getting-started/authentication). For the
+mechanics of minting, listing, and revoking keys and invitations, see
+[Team](/resources/team). For the workspace resource itself — listing, creating,
+archiving — see [Workspaces](/resources/workspaces).

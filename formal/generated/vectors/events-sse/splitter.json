@@ -1,0 +1,33 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.EventsSse.sdk_splitter_resolves_lone_cr",
+    "AgentWorkspace.Theorems.Refinement.EventsSse.lone_cr_splitter_agrees"],
+   "input": "event: x\ndata: {}\n\n",
+   "id": "\"event: x\\ndata: {}\\n\\n\"",
+   "expected": {"rest": "", "frames": ["event: x\ndata: {}"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.EventsSse.sdk_splitter_resolves_lone_cr",
+    "AgentWorkspace.Theorems.Refinement.EventsSse.lone_cr_splitter_agrees"],
+   "input": "event: x\r\ndata: {}\r\n\r\n",
+   "id": "\"event: x\\r\\ndata: {}\\r\\n\\r\\n\"",
+   "expected": {"rest": "", "frames": ["event: x\ndata: {}"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.EventsSse.sdk_splitter_resolves_lone_cr",
+    "AgentWorkspace.Theorems.Refinement.EventsSse.lone_cr_splitter_agrees"],
+   "input": "event: x\r\r",
+   "id": "\"event: x\\r\\r\"",
+   "expected": {"rest": "event: x\n\r", "frames": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.EventsSse.sdk_splitter_resolves_lone_cr",
+    "AgentWorkspace.Theorems.Refinement.EventsSse.lone_cr_splitter_agrees"],
+   "input": "event: x\ndata: {}\n\nevent: y\ndata: 2\n\n",
+   "id": "\"event: x\\ndata: {}\\n\\nevent: y\\ndata: 2\\n\\n\"",
+   "expected": {"rest": "", "frames": ["event: x\ndata: {}", "event: y\ndata: 2"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.EventsSse.sdk_splitter_resolves_lone_cr",
+    "AgentWorkspace.Theorems.Refinement.EventsSse.lone_cr_splitter_agrees"],
+   "input": "event: x\ndata: {}\n\nevent: partial",
+   "id": "\"event: x\\ndata: {}\\n\\nevent: partial\"",
+   "expected": {"rest": "event: partial", "frames": ["event: x\ndata: {}"]}}],
+ "family": "events-sse",
+ "description": "SDK frame splitter"}

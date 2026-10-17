@@ -1,0 +1,14 @@
+mcs.metadata:
+  componentName: zendesk
+  description: MCP server zendesk
+kind: TaskDialog
+modelDisplayName: zendesk
+modelDescription: Tools from the zendesk MCP server
+action:
+  kind: InvokeExternalAgentTaskAction
+  connectionReference: acme_supportTriage.mcp.zendesk
+  connectionProperties:
+    mode: Maker
+  operationDetails:
+    kind: ModelContextProtocolMetadata
+    operationId: InvokeMCP

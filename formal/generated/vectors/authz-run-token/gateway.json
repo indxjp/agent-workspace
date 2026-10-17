@@ -1,0 +1,71 @@
+{"vectors":
+ [{"witnesses": ["AgentWorkspace.Theorems.Normative.AuthzRunToken.gateway_error_order"],
+   "input": {"tokenState": "valid", "resolution": "revoked", "expectedRunId": "other", "bearer": false},
+   "id": "gateway/missing-bearer",
+   "expected":
+   {"status": 401,
+    "code": "token_missing",
+    "body":
+    {"type": "error",
+     "error":
+     {"type": "authentication_error", "message": "A gateway run token is required.", "code": "token_missing"}}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.AuthzRunToken.gateway_error_order"],
+   "input": {"tokenState": "invalid", "resolution": "revoked", "expectedRunId": "other", "bearer": true},
+   "id": "gateway/invalid",
+   "expected":
+   {"status": 401,
+    "code": "token_invalid",
+    "body":
+    {"type": "error",
+     "error":
+     {"type": "authentication_error", "message": "The gateway run token is invalid.", "code": "token_invalid"}}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.AuthzRunToken.gateway_error_order"],
+   "input": {"tokenState": "expired", "resolution": "revoked", "expectedRunId": "other", "bearer": true},
+   "id": "gateway/expired",
+   "expected":
+   {"status": 401,
+    "code": "token_expired",
+    "body":
+    {"type": "error",
+     "error":
+     {"type": "authentication_error", "message": "The gateway run token has expired.", "code": "token_expired"}}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.AuthzRunToken.gateway_error_order"],
+   "input": {"tokenState": "valid", "resolution": "revoked", "expectedRunId": "run-a", "bearer": true},
+   "id": "gateway/revoked",
+   "expected":
+   {"status": 401,
+    "code": "token_revoked",
+    "body":
+    {"type": "error",
+     "error":
+     {"type": "authentication_error", "message": "The gateway run token has been revoked.", "code": "token_revoked"}}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.AuthzRunToken.gateway_error_order"],
+   "input": {"tokenState": "valid", "resolution": "deleted", "expectedRunId": "run-a", "bearer": true},
+   "id": "gateway/deleted",
+   "expected":
+   {"status": 410,
+    "code": "run_deleted",
+    "body":
+    {"type": "error",
+     "error":
+     {"type": "authentication_error",
+      "message": "The run named by this gateway token was deleted.",
+      "code": "run_deleted"}}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.AuthzRunToken.gateway_error_order"],
+   "input": {"tokenState": "valid", "resolution": "missing", "expectedRunId": "run-a", "bearer": true},
+   "id": "gateway/missing-run",
+   "expected":
+   {"status": 404,
+    "code": "run_not_found",
+    "body":
+    {"type": "error",
+     "error":
+     {"type": "authentication_error",
+      "message": "The run named by this gateway token does not exist.",
+      "code": "run_not_found"}}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.AuthzRunToken.gateway_error_order"],
+   "input": {"tokenState": "valid", "resolution": "active", "expectedRunId": "run-a", "bearer": true},
+   "id": "gateway/active",
+   "expected": {"status": 200, "code": "ok", "body": null}}],
+ "family": "authz-run-token",
+ "description": "Gateway authentication errors in evaluation order"}

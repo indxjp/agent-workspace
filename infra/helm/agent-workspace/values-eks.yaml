@@ -1,0 +1,6 @@
+storageClassName: gp3
+service:
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: external
+# Layer an operator-owned values file with
+# serviceAccount.annotations.eks.amazonaws.com/role-arn for S3 and KMS workload identity.

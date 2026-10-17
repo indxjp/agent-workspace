@@ -1,0 +1,145 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.EventsSse.runtime_cannot_claim_control_or_platform_name",
+    "AgentWorkspace.Theorems.Adversarial.EventsSse.name_injection_is_refused",
+    "AgentWorkspace.Theorems.Adversarial.EventsSse.accepted_runtime_name_is_in_grammar"],
+   "input": "system",
+   "id": "\"system\"",
+   "expected":
+   {"stored": {"name": "system", "kind": "ok"},
+    "relay": {"name": "system", "kind": "ok"},
+    "platform": {"kind": "rejected"},
+    "pattern": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.EventsSse.runtime_cannot_claim_control_or_platform_name",
+    "AgentWorkspace.Theorems.Adversarial.EventsSse.name_injection_is_refused",
+    "AgentWorkspace.Theorems.Adversarial.EventsSse.accepted_runtime_name_is_in_grammar"],
+   "input": "run.status",
+   "id": "\"run.status\"",
+   "expected":
+   {"stored": {"name": "run.status", "kind": "ok"},
+    "relay": {"name": "run.status", "kind": "reserved"},
+    "platform": {"name": "run.status", "kind": "ok"},
+    "pattern": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.EventsSse.runtime_cannot_claim_control_or_platform_name",
+    "AgentWorkspace.Theorems.Adversarial.EventsSse.name_injection_is_refused",
+    "AgentWorkspace.Theorems.Adversarial.EventsSse.accepted_runtime_name_is_in_grammar"],
+   "input": "done",
+   "id": "\"done\"",
+   "expected":
+   {"stored": {"kind": "rejected"},
+    "relay": {"name": "done", "kind": "reserved"},
+    "platform": {"kind": "rejected"},
+    "pattern": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.EventsSse.runtime_cannot_claim_control_or_platform_name",
+    "AgentWorkspace.Theorems.Adversarial.EventsSse.name_injection_is_refused",
+    "AgentWorkspace.Theorems.Adversarial.EventsSse.accepted_runtime_name_is_in_grammar"],
+   "input": "run-failed",
+   "id": "\"run-failed\"",
+   "expected":
+   {"stored": {"kind": "rejected"},
+    "relay": {"name": "run-failed", "kind": "reserved"},
+    "platform": {"kind": "rejected"},
+    "pattern": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.EventsSse.runtime_cannot_claim_control_or_platform_name",
+    "AgentWorkspace.Theorems.Adversarial.EventsSse.name_injection_is_refused",
+    "AgentWorkspace.Theorems.Adversarial.EventsSse.accepted_runtime_name_is_in_grammar"],
+   "input": "stream-reset",
+   "id": "\"stream-reset\"",
+   "expected":
+   {"stored": {"kind": "rejected"},
+    "relay": {"name": "stream-reset", "kind": "reserved"},
+    "platform": {"kind": "rejected"},
+    "pattern": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.EventsSse.runtime_cannot_claim_control_or_platform_name",
+    "AgentWorkspace.Theorems.Adversarial.EventsSse.name_injection_is_refused",
+    "AgentWorkspace.Theorems.Adversarial.EventsSse.accepted_runtime_name_is_in_grammar"],
+   "input": "error",
+   "id": "\"error\"",
+   "expected":
+   {"stored": {"kind": "rejected"},
+    "relay": {"name": "error", "kind": "reserved"},
+    "platform": {"kind": "rejected"},
+    "pattern": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.EventsSse.runtime_cannot_claim_control_or_platform_name",
+    "AgentWorkspace.Theorems.Adversarial.EventsSse.name_injection_is_refused",
+    "AgentWorkspace.Theorems.Adversarial.EventsSse.accepted_runtime_name_is_in_grammar"],
+   "input": "x",
+   "id": "\"x\"",
+   "expected":
+   {"stored": {"name": "x", "kind": "ok"},
+    "relay": {"name": "x", "kind": "ok"},
+    "platform": {"kind": "rejected"},
+    "pattern": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.EventsSse.runtime_cannot_claim_control_or_platform_name",
+    "AgentWorkspace.Theorems.Adversarial.EventsSse.name_injection_is_refused",
+    "AgentWorkspace.Theorems.Adversarial.EventsSse.accepted_runtime_name_is_in_grammar"],
+   "input": "",
+   "id": "\"\"",
+   "expected":
+   {"stored": {"kind": "rejected"}, "relay": {"kind": "rejected"}, "platform": {"kind": "rejected"}, "pattern": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.EventsSse.runtime_cannot_claim_control_or_platform_name",
+    "AgentWorkspace.Theorems.Adversarial.EventsSse.name_injection_is_refused",
+    "AgentWorkspace.Theorems.Adversarial.EventsSse.accepted_runtime_name_is_in_grammar"],
+   "input": "a_b.c-9",
+   "id": "\"a_b.c-9\"",
+   "expected":
+   {"stored": {"name": "a_b.c-9", "kind": "ok"},
+    "relay": {"name": "a_b.c-9", "kind": "ok"},
+    "platform": {"kind": "rejected"},
+    "pattern": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.EventsSse.runtime_cannot_claim_control_or_platform_name",
+    "AgentWorkspace.Theorems.Adversarial.EventsSse.name_injection_is_refused",
+    "AgentWorkspace.Theorems.Adversarial.EventsSse.accepted_runtime_name_is_in_grammar"],
+   "input": "9first",
+   "id": "\"9first\"",
+   "expected":
+   {"stored": {"kind": "rejected"}, "relay": {"kind": "rejected"}, "platform": {"kind": "rejected"}, "pattern": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.EventsSse.runtime_cannot_claim_control_or_platform_name",
+    "AgentWorkspace.Theorems.Adversarial.EventsSse.name_injection_is_refused",
+    "AgentWorkspace.Theorems.Adversarial.EventsSse.accepted_runtime_name_is_in_grammar"],
+   "input": "system\ndata: forged",
+   "id": "\"system\\ndata: forged\"",
+   "expected":
+   {"stored": {"kind": "rejected"}, "relay": {"kind": "rejected"}, "platform": {"kind": "rejected"}, "pattern": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.EventsSse.runtime_cannot_claim_control_or_platform_name",
+    "AgentWorkspace.Theorems.Adversarial.EventsSse.name_injection_is_refused",
+    "AgentWorkspace.Theorems.Adversarial.EventsSse.accepted_runtime_name_is_in_grammar"],
+   "input": "system\r\nevent: done",
+   "id": "\"system\\r\\nevent: done\"",
+   "expected":
+   {"stored": {"kind": "rejected"}, "relay": {"kind": "rejected"}, "platform": {"kind": "rejected"}, "pattern": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.EventsSse.runtime_cannot_claim_control_or_platform_name",
+    "AgentWorkspace.Theorems.Adversarial.EventsSse.name_injection_is_refused",
+    "AgentWorkspace.Theorems.Adversarial.EventsSse.accepted_runtime_name_is_in_grammar"],
+   "input": "axxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "id": "\"axxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"",
+   "expected":
+   {"stored": {"name": "axxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "kind": "ok"},
+    "relay": {"name": "axxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "kind": "ok"},
+    "platform": {"kind": "rejected"},
+    "pattern": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.EventsSse.runtime_cannot_claim_control_or_platform_name",
+    "AgentWorkspace.Theorems.Adversarial.EventsSse.name_injection_is_refused",
+    "AgentWorkspace.Theorems.Adversarial.EventsSse.accepted_runtime_name_is_in_grammar"],
+   "input": "axxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "id": "\"axxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"",
+   "expected":
+   {"stored": {"kind": "rejected"},
+    "relay": {"kind": "rejected"},
+    "platform": {"kind": "rejected"},
+    "pattern": false}}],
+ "family": "events-sse",
+ "description": "Event name classification"}

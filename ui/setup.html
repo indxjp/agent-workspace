@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Set up Agent Workspace</title>
+<link rel="stylesheet" href="assets/app.css">
+<style>.wiz{display:none}.wiz.active{display:block}</style>
+</head>
+<body>
+
+<div class="centered" style="align-items:start;padding-top:8vh">
+  <div class="box lg">
+
+    <div class="logo-lg"><div class="mark">M</div><b>Agent Workspace</b></div>
+    <p class="muted" style="text-align:center;margin-bottom:26px">
+      First run · <span class="mono">http://localhost:3000</span> · five questions, then you have a working
+      Claude Agent SDK deployment.
+    </p>
+
+    <div class="steps" id="steps" style="justify-content:center">
+      <div class="step current" data-step="1"><span class="n">1</span>Provider</div><span class="step-sep"></span>
+      <div class="step" data-step="2"><span class="n">2</span>Credentials</div><span class="step-sep"></span>
+      <div class="step" data-step="3"><span class="n">3</span>Runtime</div><span class="step-sep"></span>
+      <div class="step" data-step="4"><span class="n">4</span>Administrator</div><span class="step-sep"></span>
+      <div class="step" data-step="5"><span class="n">5</span>First agent</div>
+    </div>
+
+    <!-- 1 -->
+    <section class="wiz active" data-wiz="1">
+      <div class="card"><div class="card-body">
+        <div class="label mb8">Which model provider do you want to use?</div>
+        <div class="choices">
+          <div class="choice selected"><div class="mark"></div><div class="grow">
+            <div class="t">Anthropic <span class="badge info">Recommended</span></div>
+            <div class="d">Claude models, native. Every Claude Agent SDK feature is supported.</div></div></div>
+          <div class="choice"><div class="mark"></div><div class="grow">
+            <div class="t">Microsoft Azure OpenAI</div><div class="d">Translated by the built-in gateway. Compatibility mode.</div></div></div>
+          <div class="choice"><div class="mark"></div><div class="grow">
+            <div class="t">OpenAI</div><div class="d">Translated by the built-in gateway. Compatibility mode.</div></div></div>
+          <div class="choice"><div class="mark"></div><div class="grow">
+            <div class="t">Something else</div><div class="d">OpenAI-compatible or Anthropic-compatible endpoint (Bedrock, Vertex AI, Foundry, vLLM)</div></div></div>
+        </div>
+      </div></div>
+      <div class="btn-row mt16" style="justify-content:flex-end"><button class="btn primary" data-goto="2">Continue</button></div>
+    </section>
+
+    <!-- 2 -->
+    <section class="wiz" data-wiz="2">
+      <div class="card"><div class="card-body">
+        <div class="field">
+          <label>Anthropic API key</label>
+          <input type="password" placeholder="sk-ant-…">
+          <div class="help">Encrypted with the deployment master key and held by the gateway. Agents never receive it.</div>
+        </div>
+        <div class="btn-row">
+          <button class="btn" data-toast="Connected · 3 models available · 180 ms">Test connection</button>
+          <span class="badge ok">Connected · 3 models</span>
+        </div>
+      </div></div>
+      <div class="btn-row mt16" style="justify-content:flex-end">
+        <button class="btn" data-goto="1">Back</button><button class="btn primary" data-goto="3">Continue</button>
+      </div>
+    </section>
+
+    <!-- 3 -->
+    <section class="wiz" data-wiz="3">
+      <div class="card"><div class="card-body">
+        <div class="label mb8">Which sandbox should agents run in?</div>
+        <div class="choices">
+          <div class="choice selected"><div class="mark"></div><div class="grow">
+            <div class="t">Sandboxed process <span class="badge ok">Detected: bubblewrap</span></div>
+            <div class="d">Filesystem and network allowlists without a container. No Docker required.</div></div>
+            <div class="side">strongest available here</div></div>
+          <div class="choice"><div class="mark"></div><div class="grow">
+            <div class="t">Docker <span class="badge ok">Detected: Docker 27.3</span></div>
+            <div class="d">One container per session. Recommended for a shared deployment.</div></div></div>
+          <div class="choice"><div class="mark"></div><div class="grow">
+            <div class="t">Kubernetes <span class="badge outline">Detected: context “prod”</span></div>
+            <div class="d">One Pod per session, through the Helm chart.</div></div></div>
+          <div class="choice"><div class="mark"></div><div class="grow">
+            <div class="t">Managed sandbox</div>
+            <div class="d">AWS, Google Cloud or Azure. Needs a one-time administrator setup.</div></div></div>
+          <div class="choice"><div class="mark"></div><div class="grow">
+            <div class="t">This machine <span class="badge danger">No isolation</span></div>
+            <div class="d">Development only. The agent runs as the same user as the control plane.</div></div></div>
+        </div>
+        <div class="callout mt16">
+          <span class="ico">ℹ</span>
+          <div class="grow">The default is the strongest isolation this machine can actually deliver. Every screen
+            shows which driver is in force, so “it looked sandboxed” cannot happen.</div>
+        </div>
+      </div></div>
+      <div class="btn-row mt16" style="justify-content:flex-end">
+        <button class="btn" data-goto="2">Back</button><button class="btn primary" data-goto="4">Continue</button>
+      </div>
+    </section>
+
+    <!-- 4 -->
+    <section class="wiz" data-wiz="4">
+      <div class="card"><div class="card-body">
+        <div class="field"><label>Workspace name</label><input type="text" value="Meridian Manufacturing"></div>
+        <div class="field"><label>Your name</label><input type="text" value="Aya Ito"></div>
+        <div class="field"><label>Email</label><input type="email" value="aya.ito@meridian.example"></div>
+        <div class="field mb0"><label>Password</label><input type="password" value="••••••••••••">
+          <div class="help">This is the local bootstrap administrator. Enterprise SSO (OIDC) can be added later
+            without losing this account.</div></div>
+      </div></div>
+      <div class="btn-row mt16" style="justify-content:flex-end">
+        <button class="btn" data-goto="3">Back</button><button class="btn primary" data-goto="5">Continue</button>
+      </div>
+    </section>
+
+    <!-- 5 -->
+    <section class="wiz" data-wiz="5">
+      <div class="card"><div class="card-body">
+        <div class="field"><label>Name your first agent</label><input type="text" value="General"></div>
+        <div class="field mb0"><label>Instructions</label>
+          <textarea rows="5">You are a helpful assistant for employees of Meridian Manufacturing. Answer clearly and say when you are unsure.</textarea>
+          <div class="help">You can change everything later. Files, skills and connectors are added from the UI.</div>
+        </div>
+      </div></div>
+
+      <div class="card"><div class="card-body">
+        <dl class="kv">
+          <dt>Provider</dt><dd>Anthropic <span class="badge ok">Connected</span></dd>
+          <dt>Model</dt><dd>Claude Sonnet 5</dd>
+          <dt>Runtime</dt><dd>Sandboxed process <span class="muted small">· bubblewrap · network: gateway only</span></dd>
+          <dt>Storage</dt><dd>Local filesystem <span class="muted small">· switch to S3/SeaweedFS in Settings</span></dd>
+          <dt>Database</dt><dd>Included PostgreSQL</dd>
+        </dl>
+      </div></div>
+
+      <div class="btn-row mt16" style="justify-content:flex-end">
+        <button class="btn" data-goto="4">Back</button>
+        <a class="btn primary lg" href="home.html">Finish setup</a>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+<script>
+document.addEventListener("click", function (e) {
+  var b = e.target.closest("[data-goto]");
+  if (!b) return;
+  var n = b.getAttribute("data-goto");
+  document.querySelectorAll(".wiz").forEach(function (s) { s.classList.toggle("active", s.dataset.wiz === n); });
+  document.querySelectorAll("#steps .step").forEach(function (s) {
+    s.classList.toggle("current", s.dataset.step === n);
+    s.classList.toggle("done", Number(s.dataset.step) < Number(n));
+  });
+  window.scrollTo({ top: 0, behavior: "smooth" });
+});
+</script>
+</body>
+</html>

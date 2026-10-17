@@ -1,0 +1,17 @@
+{
+  // The type-checking view: the whole of `src`, tests included, emitting
+  // nothing. This is the project the editor and type-aware ESLint resolve to.
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    // Declaration diagnostics without emitting: an exported type that cannot be named portably
+    // (TS2883) fails here, not only in the `build-contributor` emit view.
+    "declaration": true,
+    "rewriteRelativeImportExtensions": true,
+    // src/bundle.test.ts runs the release checks of scripts/release/pack-packages.mjs on the
+    // packed tarball; their types come from that file's JSDoc, which is not checked here.
+    "allowJs": true,
+    "checkJs": false
+  },
+  "include": ["src"]
+}

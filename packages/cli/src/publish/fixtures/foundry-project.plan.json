@@ -1,0 +1,62 @@
+{
+  "platform": "microsoft-foundry",
+  "foundryApiVersion": "v1",
+  "root": "support-triage",
+  "connections": [
+    {
+      "name": "aw-zendesk",
+      "kind": "mcp",
+      "target": "https://mcp.example.com/zendesk",
+      "auth": {
+        "type": "custom-keys",
+        "header": "Authorization",
+        "valuePrefix": "Bearer ",
+        "secretRef": "ZENDESK_TOKEN"
+      }
+    },
+    {
+      "name": "aw-tools",
+      "kind": "mcp",
+      "target": "https://aw.example.com/mcp/projects/acme-support",
+      "auth": {
+        "type": "custom-keys",
+        "header": "Authorization",
+        "valuePrefix": "Bearer ",
+        "secretRef": "ACME_TOOL_ENDPOINT_TOKEN"
+      }
+    },
+    {
+      "name": "aw-agent-billing-specialist",
+      "kind": "a2a",
+      "targetPath": "/agents/billing-specialist/endpoint/protocols/a2a",
+      "auth": {
+        "type": "agentic-identity",
+        "audience": "https://ai.azure.com"
+      }
+    }
+  ],
+  "agents": [
+    {
+      "name": "billing-specialist",
+      "version": "agents/billing-specialist.version.json",
+      "endpoint": "agents/billing-specialist.endpoint.json"
+    },
+    {
+      "name": "support-triage",
+      "version": "agents/support-triage.version.json"
+    }
+  ],
+  "openapiSpecs": [],
+  "notes": [
+    {
+      "id": "V5",
+      "note": "Unconfirmed: whether a Claude deployment is accepted as a prompt agent model. Check at publish time; the translator never refuses on provider.",
+      "source": "https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/model-router-agents"
+    },
+    {
+      "id": "V6",
+      "note": "Unconfirmed: the ARM connection category and authType for an MCP connection. The A2A page shows PUT .../connections/{name}?api-version=2025-04-01-preview with authType CustomKeys and category RemoteA2A; the publish step maps custom-keys, api-key and oauth2 from the neutral auth.",
+      "source": "https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/tools/agent-to-agent"
+    }
+  ]
+}

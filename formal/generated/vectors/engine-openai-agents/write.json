@@ -1,0 +1,129 @@
+{"vectors":
+ [{"witnesses": ["AgentWorkspace.Theorems.Adversarial.OpenAiAgents.no_permitted_write_lands_in_a_read_only_grant"],
+   "input":
+   {"grants":
+    [{"readOnly": true, "path": "docs", "directory": true},
+     {"readOnly": true, "path": "notes/plan.md", "directory": false},
+     {"readOnly": false, "path": "src", "directory": true}],
+    "candidate": "docs"},
+   "id": "docs",
+   "expected": {"allowed": false}},
+  {"witnesses": ["AgentWorkspace.Theorems.Adversarial.OpenAiAgents.no_permitted_write_lands_in_a_read_only_grant"],
+   "input":
+   {"grants":
+    [{"readOnly": true, "path": "docs", "directory": true},
+     {"readOnly": true, "path": "notes/plan.md", "directory": false},
+     {"readOnly": false, "path": "src", "directory": true}],
+    "candidate": "docs/spec.md"},
+   "id": "docs/spec.md",
+   "expected": {"allowed": false}},
+  {"witnesses": ["AgentWorkspace.Theorems.Adversarial.OpenAiAgents.no_permitted_write_lands_in_a_read_only_grant"],
+   "input":
+   {"grants":
+    [{"readOnly": true, "path": "docs", "directory": true},
+     {"readOnly": true, "path": "notes/plan.md", "directory": false},
+     {"readOnly": false, "path": "src", "directory": true}],
+    "candidate": "docs/./spec.md"},
+   "id": "docs/./spec.md",
+   "expected": {"allowed": false}},
+  {"witnesses": ["AgentWorkspace.Theorems.Adversarial.OpenAiAgents.no_permitted_write_lands_in_a_read_only_grant"],
+   "input":
+   {"grants":
+    [{"readOnly": true, "path": "docs", "directory": true},
+     {"readOnly": true, "path": "notes/plan.md", "directory": false},
+     {"readOnly": false, "path": "src", "directory": true}],
+    "candidate": "notes/../docs/spec.md"},
+   "id": "notes/../docs/spec.md",
+   "expected": {"allowed": false}},
+  {"witnesses": ["AgentWorkspace.Theorems.Adversarial.OpenAiAgents.no_permitted_write_lands_in_a_read_only_grant"],
+   "input":
+   {"grants":
+    [{"readOnly": true, "path": "docs", "directory": true},
+     {"readOnly": true, "path": "notes/plan.md", "directory": false},
+     {"readOnly": false, "path": "src", "directory": true}],
+    "candidate": "docs/deep/er.md"},
+   "id": "docs/deep/er.md",
+   "expected": {"allowed": false}},
+  {"witnesses": ["AgentWorkspace.Theorems.Adversarial.OpenAiAgents.no_permitted_write_lands_in_a_read_only_grant"],
+   "input":
+   {"grants":
+    [{"readOnly": true, "path": "docs", "directory": true},
+     {"readOnly": true, "path": "notes/plan.md", "directory": false},
+     {"readOnly": false, "path": "src", "directory": true}],
+    "candidate": "notes/plan.md"},
+   "id": "notes/plan.md",
+   "expected": {"allowed": false}},
+  {"witnesses": ["AgentWorkspace.Theorems.Adversarial.OpenAiAgents.no_permitted_write_lands_in_a_read_only_grant"],
+   "input":
+   {"grants":
+    [{"readOnly": true, "path": "docs", "directory": true},
+     {"readOnly": true, "path": "notes/plan.md", "directory": false},
+     {"readOnly": false, "path": "src", "directory": true}],
+    "candidate": "notes/other.md"},
+   "id": "notes/other.md",
+   "expected": {"allowed": true}},
+  {"witnesses": ["AgentWorkspace.Theorems.Adversarial.OpenAiAgents.no_permitted_write_lands_in_a_read_only_grant"],
+   "input":
+   {"grants":
+    [{"readOnly": true, "path": "docs", "directory": true},
+     {"readOnly": true, "path": "notes/plan.md", "directory": false},
+     {"readOnly": false, "path": "src", "directory": true}],
+    "candidate": "docs-private/draft.md"},
+   "id": "docs-private/draft.md",
+   "expected": {"allowed": true}},
+  {"witnesses": ["AgentWorkspace.Theorems.Adversarial.OpenAiAgents.no_permitted_write_lands_in_a_read_only_grant"],
+   "input":
+   {"grants":
+    [{"readOnly": true, "path": "docs", "directory": true},
+     {"readOnly": true, "path": "notes/plan.md", "directory": false},
+     {"readOnly": false, "path": "src", "directory": true}],
+    "candidate": "src/main.ts"},
+   "id": "src/main.ts",
+   "expected": {"allowed": true}},
+  {"witnesses": ["AgentWorkspace.Theorems.Adversarial.OpenAiAgents.no_permitted_write_lands_in_a_read_only_grant"],
+   "input":
+   {"grants":
+    [{"readOnly": true, "path": "docs", "directory": true},
+     {"readOnly": true, "path": "notes/plan.md", "directory": false},
+     {"readOnly": false, "path": "src", "directory": true}],
+    "candidate": "scratch/out.md"},
+   "id": "scratch/out.md",
+   "expected": {"allowed": true}},
+  {"witnesses": ["AgentWorkspace.Theorems.Adversarial.OpenAiAgents.no_permitted_write_lands_in_a_read_only_grant"],
+   "input":
+   {"grants":
+    [{"readOnly": true, "path": "docs", "directory": true},
+     {"readOnly": true, "path": "notes/plan.md", "directory": false},
+     {"readOnly": false, "path": "src", "directory": true}],
+    "candidate": ".openai-agents/settings.json"},
+   "id": ".openai-agents/settings.json",
+   "expected": {"allowed": false}},
+  {"witnesses": ["AgentWorkspace.Theorems.Adversarial.OpenAiAgents.no_permitted_write_lands_in_a_read_only_grant"],
+   "input":
+   {"grants":
+    [{"readOnly": true, "path": "docs", "directory": true},
+     {"readOnly": true, "path": "notes/plan.md", "directory": false},
+     {"readOnly": false, "path": "src", "directory": true}],
+    "candidate": "x/../.openai-agents/settings.json"},
+   "id": "x/../.openai-agents/settings.json",
+   "expected": {"allowed": false}},
+  {"witnesses": ["AgentWorkspace.Theorems.Adversarial.OpenAiAgents.no_permitted_write_lands_in_a_read_only_grant"],
+   "input":
+   {"grants":
+    [{"readOnly": true, "path": "docs", "directory": true},
+     {"readOnly": true, "path": "notes/plan.md", "directory": false},
+     {"readOnly": false, "path": "src", "directory": true}],
+    "candidate": "../escape.md"},
+   "id": "../escape.md",
+   "expected": {"allowed": false}},
+  {"witnesses": ["AgentWorkspace.Theorems.Adversarial.OpenAiAgents.no_permitted_write_lands_in_a_read_only_grant"],
+   "input":
+   {"grants":
+    [{"readOnly": true, "path": "docs", "directory": true},
+     {"readOnly": true, "path": "notes/plan.md", "directory": false},
+     {"readOnly": false, "path": "src", "directory": true}],
+    "candidate": "/etc/passwd"},
+   "id": "/etc/passwd",
+   "expected": {"allowed": false}}],
+ "family": "engine-openai-agents",
+ "description": "workspaceWriteAllowed over read-only grants and candidate spellings"}

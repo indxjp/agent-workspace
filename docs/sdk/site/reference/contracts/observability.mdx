@@ -1,0 +1,192 @@
+---
+title: "observability"
+description: "The @indx-workspace/contracts/observability exports, sorted alphabetically."
+---
+
+<Note>This page is generated from `packages/contracts/src/observability.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## AUDIT_ACTIONS
+
+The control-plane actions the audit trail records, as the `audit_events.action` column
+restates them. An action name is a name, not a reference: values for objects a deployment does
+not hold are still valid, and a row's subject may no longer exist when the row is read.
+
+- `'user-created'`
+- `'user-deleted'`
+- `'agent-changed'`
+- `'provider-credential-changed'`
+- `'api-key-created'`
+- `'api-key-revoked'`
+- `'connector-changed'`
+- `'permission-changed'`
+- `'runtime-profile-changed'`
+- `'project-created'`
+- `'project-deleted'`
+- `'project-archived'`
+- `'project-restored'`
+- `'session-published'`
+- `'public-link-revoked'`
+- `'runnable-link-stopped'`
+- `'public-sharing-policy-changed'`
+- `'invitation-created'`
+- `'invitation-resent'`
+- `'invitation-revoked'`
+- `'invitation-accepted'`
+- `'endpoint-client-created'`
+- `'endpoint-client-changed'`
+- `'endpoint-client-revoked'`
+- `'endpoint-tool-called'`
+- `'oauth-client-secret-rotated'`
+- `'oauth-grant-issued'`
+- `'oauth-grant-revoked'`
+
+## AUDIT_LIST_DEFAULT_LIMIT
+
+The bounds of `GET /api/audit-events?limit=`. The route refuses anything that is not an
+integer from 1 to `AUDIT_LIST_MAX_LIMIT` as `400 invalid_limit`.
+
+Value: `100`
+
+## AUDIT_LIST_MAX_LIMIT
+
+Value: `500`
+
+## AuditAction
+
+- `"user-created"`
+- `"user-deleted"`
+- `"agent-changed"`
+- `"provider-credential-changed"`
+- `"api-key-created"`
+- `"api-key-revoked"`
+- `"connector-changed"`
+- `"permission-changed"`
+- `"runtime-profile-changed"`
+- `"project-created"`
+- `"project-deleted"`
+- `"project-archived"`
+- `"project-restored"`
+- `"session-published"`
+- `"public-link-revoked"`
+- `"runnable-link-stopped"`
+- `"public-sharing-policy-changed"`
+- `"invitation-created"`
+- `"invitation-resent"`
+- `"invitation-revoked"`
+- `"invitation-accepted"`
+- `"endpoint-client-created"`
+- `"endpoint-client-changed"`
+- `"endpoint-client-revoked"`
+- `"endpoint-tool-called"`
+- `"oauth-client-secret-rotated"`
+- `"oauth-grant-issued"`
+- `"oauth-grant-revoked"`
+
+## AuditEvent
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `workspaceId` | `string` | Yes |  |
+| `actorUserId` | `null \| string` | Yes |  |
+| `actorPrincipalId` | `null \| string` | Yes |  |
+| `actorLabel` | `string` | Yes |  |
+| `action` | `"user-created" \| "user-deleted" \| "agent-changed" \| "provider-credential-changed" \| "api-key-created" \| "api-key-revoked" \| "connector-changed" \| "permission-changed" \| "runtime-profile-changed" \| "project-created" \| "project-deleted" \| "project-archived" \| "project-restored" \| "session-published" \| "public-link-revoked" \| "runnable-link-stopped" \| "public-sharing-policy-changed" \| "invitation-created" \| "invitation-resent" \| "invitation-revoked" \| "invitation-accepted" \| "endpoint-client-created" \| "endpoint-client-changed" \| "endpoint-client-revoked" \| "endpoint-tool-called" \| "oauth-client-secret-rotated" \| "oauth-grant-issued" \| "oauth-grant-revoked"` | Yes |  |
+| `subjectId` | `null \| string` | Yes |  |
+| `subjectLabel` | `string` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+
+## AuditEventListResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `events` | `readonly AuditEvent[]` | Yes |  |
+| `nextCursor` | `null \| string` | Yes |  |
+
+## AuditEventListResponseSchema
+
+The body of `GET /api/audit-events`: the newest rows first, at most `limit` of them, and an
+opaque cursor for the next page (`null` on the last).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `events` | `readonly AuditEvent[]` | Yes |  |
+| `nextCursor` | `null \| string` | Yes |  |
+
+## AuditEventSchema
+
+One audit row as every item of `GET /api/audit-events` renders it: who, what, to which thing,
+when — and nothing more. There is no free-form metadata, by design: a request body on an audit
+row is where a secret ends up.
+
+The labels are snapshots taken when the row was written, so a line still reads after the actor
+or the subject is renamed or deleted. `actorPrincipalId` is `null` only for a non-workspace
+service or system actor; `actorUserId` is the legacy human attribution and goes `null` when the
+user is deleted. `subjectId` is `null` for an action with no one subject.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `workspaceId` | `string` | Yes |  |
+| `actorUserId` | `null \| string` | Yes |  |
+| `actorPrincipalId` | `null \| string` | Yes |  |
+| `actorLabel` | `string` | Yes |  |
+| `action` | `"user-created" \| "user-deleted" \| "agent-changed" \| "provider-credential-changed" \| "api-key-created" \| "api-key-revoked" \| "connector-changed" \| "permission-changed" \| "runtime-profile-changed" \| "project-created" \| "project-deleted" \| "project-archived" \| "project-restored" \| "session-published" \| "public-link-revoked" \| "runnable-link-stopped" \| "public-sharing-policy-changed" \| "invitation-created" \| "invitation-resent" \| "invitation-revoked" \| "invitation-accepted" \| "endpoint-client-created" \| "endpoint-client-changed" \| "endpoint-client-revoked" \| "endpoint-tool-called" \| "oauth-client-secret-rotated" \| "oauth-grant-issued" \| "oauth-grant-revoked"` | Yes |  |
+| `subjectId` | `null \| string` | Yes |  |
+| `subjectLabel` | `string` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+
+## AuditListQuery
+
+The query `GET /api/audit-events` accepts. `cursor` is exactly the `nextCursor` of a previous
+page, and is refused as `400 invalid_cursor` by any other list or workspace.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `limit` | `undefined \| number` | No |  |
+| `cursor` | `undefined \| string` | No |  |
+
+## RunTelemetry
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `runId` | `string` | Yes |  |
+| `workspaceId` | `string` | Yes |  |
+| `agentId` | `string` | Yes |  |
+| `status` | `"completed" \| "failed" \| "running" \| "queued" \| "cancelled"` | Yes |  |
+| `durationMs` | `null \| number` | Yes |  |
+| `costUsd` | `null \| number` | Yes |  |
+
+## RunTelemetryListResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `runs` | `readonly RunTelemetry[]` | Yes |  |
+
+## RunTelemetryListResponseSchema
+
+The body of `GET /api/metrics`: the projection, in the order the runs were last observed.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `runs` | `readonly RunTelemetry[]` | Yes |  |
+
+## RunTelemetrySchema
+
+One finished run as `GET /api/metrics` reports it.
+
+This is the control plane's **operational** projection, not the durable run store: one web
+process keeps the last thousand runs it observed finish, in memory, and serves the caller's own
+workspace's share of them. It is not complete across instances and does not survive a restart;
+`GET /api/runs` is the product surface. `status` is the terminal status the launcher wrote.
+`costUsd` is the one money field the API renders as a JSON number rather than a decimal string
+— it is the settled cost at the moment the run ended, or `null` when the store carried none.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `runId` | `string` | Yes |  |
+| `workspaceId` | `string` | Yes |  |
+| `agentId` | `string` | Yes |  |
+| `status` | `"completed" \| "failed" \| "running" \| "queued" \| "cancelled"` | Yes |  |
+| `durationMs` | `null \| number` | Yes |  |
+| `costUsd` | `null \| number` | Yes |  |

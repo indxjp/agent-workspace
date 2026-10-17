@@ -1,0 +1,10 @@
+import { Chat } from '@indx-workspace/react';
+import '@indx-workspace/react/styles.css';
+import { createRoot } from 'react-dom/client';
+
+// The chat of the project running under `aw dev`: `surface` is surfaces/main.ts's name, and
+// `baseUrl` is the web origin `aw dev` prints; `aw deploy` sets VITE_AW_BASE_URL to the control plane.
+const baseUrl = import.meta.env.VITE_AW_BASE_URL ?? 'http://127.0.0.1:3000';
+createRoot(document.getElementById('root')).render(
+  <Chat surface="main" agentName="{{agentName}}" baseUrl={baseUrl} />,
+);

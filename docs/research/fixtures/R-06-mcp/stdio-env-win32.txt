@@ -1,0 +1,13 @@
+platform=win32 node=v24.19.0
+DEFAULT_INHERITED_ENV_VARS (12) = ["APPDATA","HOMEDRIVE","HOMEPATH","LOCALAPPDATA","PATH","PROCESSOR_ARCHITECTURE","SYSTEMDRIVE","SYSTEMROOT","TEMP","USERNAME","USERPROFILE","PROGRAMFILES"]
+this process has 72 environment variables
+
+== @modelcontextprotocol/sdk ==
+  [no env declared] -> keys=15 PATH=present HOME=absent API_KEY=absent CANARY=absent
+  [env: { API_KEY } only] -> keys=16 PATH=present HOME=absent API_KEY=k CANARY=absent
+  [env: { ...process.env, API_KEY }] -> keys=73 PATH=present HOME=present API_KEY=k CANARY=inherited-from-parent
+
+== @anthropic-ai/claude-agent-sdk ==
+  [no_env] connected -> keys=73 PATH=present HOME=present API_KEY=absent CANARY=inherited-from-parent
+  [api_key_only] connected -> keys=74 PATH=present HOME=present API_KEY=k CANARY=inherited-from-parent
+  [spread_env] connected -> keys=75 PATH=present HOME=present API_KEY=k CANARY=inherited-from-parent

@@ -1,0 +1,15 @@
+{
+  // The production view: `src` without the conformance kit and the tests, emitting nothing, and
+  // with no ambient types at all. `DOM` is in `lib` because the translators are pure and are
+  // bundled for a browser, the control plane and `aw` alike, so production code may only use Web
+  // platform globals Node 24 also provides. With `types` empty, `process`, `Buffer` and the
+  // `node:*` modules do not type-check here; `tsconfig.test.json` is the view that has them.
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": [],
+    "noEmit": true
+  },
+  "include": ["src"],
+  "exclude": ["src/testing", "**/*.test.ts"]
+}

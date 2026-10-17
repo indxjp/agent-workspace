@@ -1,0 +1,19 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -eu
+        docker build --target web     -t "$_AR/web:$_TAG"     -f Dockerfile .
+        docker build --target runner  -t "$_AR/runner:$_TAG"  -f Dockerfile .
+        docker build                  -t "$_AR/runtime:$_TAG" -f runtime.Dockerfile .
+        docker build                  -t "$_AR/gateway:$_TAG" -f gateway.Dockerfile .
+images:
+  - '$_AR/web:$_TAG'
+  - '$_AR/runner:$_TAG'
+  - '$_AR/runtime:$_TAG'
+  - '$_AR/gateway:$_TAG'
+options:
+  machineType: E2_HIGHCPU_8
+timeout: 1800s

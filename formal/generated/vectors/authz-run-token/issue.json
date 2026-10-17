@@ -1,0 +1,123 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzRunToken.issue_uses_injected_clock",
+    "AgentWorkspace.Theorems.WellFormed.AuthzRunToken.ttl_edges"],
+   "input":
+   {"ttl": 300,
+    "tokenId": "token",
+    "subject":
+    {"workspaceId": "workspace",
+     "sessionId": "session",
+     "runId": "run-a",
+     "modelConnectionId": "connection",
+     "agentId": "agent"},
+    "now": 100},
+   "id": "issue/default",
+   "expected":
+   {"claims":
+    {"workspaceId": "workspace",
+     "version": 1,
+     "tokenId": "token",
+     "sessionId": "session",
+     "runId": "run-a",
+     "modelConnectionId": "connection",
+     "issuedAt": 100,
+     "expiresAt": 400,
+     "agentId": "agent"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzRunToken.issue_uses_injected_clock",
+    "AgentWorkspace.Theorems.WellFormed.AuthzRunToken.ttl_edges"],
+   "input":
+   {"ttl": 1,
+    "tokenId": "token",
+    "subject":
+    {"workspaceId": "workspace",
+     "sessionId": "session",
+     "runId": "run-a",
+     "modelConnectionId": "connection",
+     "agentId": "agent"},
+    "now": 100},
+   "id": "issue/minimum",
+   "expected":
+   {"claims":
+    {"workspaceId": "workspace",
+     "version": 1,
+     "tokenId": "token",
+     "sessionId": "session",
+     "runId": "run-a",
+     "modelConnectionId": "connection",
+     "issuedAt": 100,
+     "expiresAt": 101,
+     "agentId": "agent"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzRunToken.issue_uses_injected_clock",
+    "AgentWorkspace.Theorems.WellFormed.AuthzRunToken.ttl_edges"],
+   "input":
+   {"ttl": 3600,
+    "tokenId": "token",
+    "subject":
+    {"workspaceId": "workspace",
+     "sessionId": "session",
+     "runId": "run-a",
+     "modelConnectionId": "connection",
+     "agentId": "agent"},
+    "now": 100},
+   "id": "issue/maximum",
+   "expected":
+   {"claims":
+    {"workspaceId": "workspace",
+     "version": 1,
+     "tokenId": "token",
+     "sessionId": "session",
+     "runId": "run-a",
+     "modelConnectionId": "connection",
+     "issuedAt": 100,
+     "expiresAt": 3700,
+     "agentId": "agent"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzRunToken.issue_uses_injected_clock",
+    "AgentWorkspace.Theorems.WellFormed.AuthzRunToken.ttl_edges"],
+   "input":
+   {"ttl": 0,
+    "tokenId": "token",
+    "subject":
+    {"workspaceId": "workspace",
+     "sessionId": "session",
+     "runId": "run-a",
+     "modelConnectionId": "connection",
+     "agentId": "agent"},
+    "now": 100},
+   "id": "issue/zero-ttl",
+   "expected": {"claims": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzRunToken.issue_uses_injected_clock",
+    "AgentWorkspace.Theorems.WellFormed.AuthzRunToken.ttl_edges"],
+   "input":
+   {"ttl": 3601,
+    "tokenId": "token",
+    "subject":
+    {"workspaceId": "workspace",
+     "sessionId": "session",
+     "runId": "run-a",
+     "modelConnectionId": "connection",
+     "agentId": "agent"},
+    "now": 100},
+   "id": "issue/over-ttl",
+   "expected": {"claims": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzRunToken.issue_uses_injected_clock",
+    "AgentWorkspace.Theorems.WellFormed.AuthzRunToken.ttl_edges"],
+   "input":
+   {"ttl": 300,
+    "tokenId": "token",
+    "subject":
+    {"workspaceId": "workspace",
+     "sessionId": "session",
+     "runId": " \u0009",
+     "modelConnectionId": "connection",
+     "agentId": "agent"},
+    "now": 100},
+   "id": "issue/blank-run",
+   "expected": {"claims": null}}],
+ "family": "authz-run-token",
+ "description": "Run token issuance inputs and claims"}

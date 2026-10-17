@@ -1,0 +1,228 @@
+import { createHash } from 'node:crypto';
+import { lstat, mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { spawn } from 'node:child_process';
+
+import { describe, expect, it } from 'vitest';
+
+import {
+  archiveWorkspacePaths,
+  bytesToStream,
+  decodeUstar,
+  encodeUstar,
+  extractUstar,
+  normalizeArchivePath,
+  readStream,
+} from './transfer.js';
+
+function run(command: string, args: readonly string[]): Promise<{ code: number; output: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, [...args], { shell: false, windowsHide: true });
+    let output = '';
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk: string) => {
+      output += chunk;
+    });
+    child.stderr.on('data', (chunk: string) => {
+      output += chunk;
+    });
+    child.once('error', reject);
+    child.once('close', (code) => resolve({ code: code ?? 1, output }));
+  });
+}
+
+function hash(bytes: Uint8Array): string {
+  return createHash('sha256').update(bytes).digest('hex');
+}
+
+describe('POSIX ustar transfer', () => {
+  it('round-trips names, modes, sizes, and exact bytes', () => {
+    const entries = [
+      { path: 'dir', type: 'directory' as const, mode: 0o755 },
+      {
+        path: 'dir/with-newline.txt',
+        type: 'file' as const,
+        mode: 0o640,
+        data: Buffer.from('line\n'),
+      },
+      {
+        path: 'without-newline.txt',
+        type: 'file' as const,
+        mode: 0o600,
+        data: Buffer.from('tail'),
+      },
+    ];
+    const decoded = decodeUstar(encodeUstar(entries));
+    expect(
+      decoded.map(({ path: entryPath, type, mode, data }) => ({
+        path: entryPath,
+        type,
+        mode,
+        data: data === undefined ? undefined : Buffer.from(data).toString('utf8'),
+      })),
+    ).toEqual([
+      { path: 'dir', type: 'directory', mode: 0o755, data: undefined },
+      { path: 'dir/with-newline.txt', type: 'file', mode: 0o640, data: 'line\n' },
+      { path: 'without-newline.txt', type: 'file', mode: 0o600, data: 'tail' },
+    ]);
+  });
+
+  it('emits an archive the system tar lists with the right paths, modes, and sizes', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'w3-ustar-list-'));
+    const archive = path.join(root, 'out.tar');
+    try {
+      await writeFile(
+        archive,
+        encodeUstar([
+          { path: 'folder', type: 'directory', mode: 0o755 },
+          { path: 'folder/five.txt', type: 'file', mode: 0o640, data: Buffer.from('12345') },
+        ]),
+      );
+      const listing = await run('tar', ['-tvf', archive]);
+      expect(listing.code, listing.output).toBe(0);
+      expect(listing.output).toContain('folder/');
+      expect(listing.output).toContain('folder/five.txt');
+      expect(listing.output).toMatch(/-rw-r-----[\s\S]*\s5\s/u);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('hydrates a system-tar archive and round-trips a tree byte-identically', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'w3-ustar-roundtrip-'));
+    const source = path.join(root, 'source');
+    const hydrated = path.join(root, 'hydrated');
+    const collected = path.join(root, 'collected');
+    const archive = path.join(root, 'system.tar');
+    try {
+      await mkdir(path.join(source, 'nested'), { recursive: true });
+      await writeFile(path.join(source, 'with.txt'), 'with newline\n');
+      await writeFile(path.join(source, 'without.txt'), 'without newline');
+      await writeFile(path.join(source, 'nested', 'binary.bin'), Buffer.from([0, 1, 2, 255]));
+      const made = await run('tar', [
+        '-cf',
+        archive,
+        '-C',
+        source,
+        'with.txt',
+        'without.txt',
+        'nested/binary.bin',
+      ]);
+      expect(made.code, made.output).toBe(0);
+      await extractUstar(bytesToStream(await readFile(archive)), hydrated);
+
+      const stream = await archiveWorkspacePaths(hydrated, [
+        'with.txt',
+        'without.txt',
+        'nested/binary.bin',
+      ]);
+      await extractUstar(bytesToStream(await readStream(stream)), collected);
+      for (const relative of ['with.txt', 'without.txt', 'nested/binary.bin']) {
+        const original = await readFile(path.join(source, relative));
+        const final = await readFile(path.join(collected, relative));
+        expect(hash(final), relative).toBe(hash(original));
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects an existing leaf symlink without modifying its outside target', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'w3-ustar-leaf-symlink-'));
+    const workspace = path.join(root, 'workspace');
+    const outside = path.join(root, 'outside.txt');
+    const leaf = path.join(workspace, 'payload.txt');
+    try {
+      await mkdir(workspace, { recursive: true });
+      await writeFile(outside, 'outside must survive');
+      await symlink(outside, leaf, 'file');
+      const archive = encodeUstar([
+        { path: 'payload.txt', type: 'file', mode: 0o600, data: Buffer.from('attacker data') },
+      ]);
+
+      await expect(extractUstar(bytesToStream(archive), workspace)).rejects.toThrow(/symlink/u);
+      expect(await readFile(outside, 'utf8')).toBe('outside must survive');
+      expect((await lstat(leaf)).isSymbolicLink()).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('overwrites an existing regular file without leaving a backup on Windows', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'w3-ustar-overwrite-'));
+    const workspace = path.join(root, 'workspace');
+    try {
+      await mkdir(workspace);
+      await writeFile(path.join(workspace, 'payload.txt'), 'old data');
+      await extractUstar(
+        bytesToStream(
+          encodeUstar([
+            { path: 'payload.txt', type: 'file', mode: 0o600, data: Buffer.from('new data') },
+          ]),
+        ),
+        workspace,
+      );
+
+      expect(await readFile(path.join(workspace, 'payload.txt'), 'utf8')).toBe('new data');
+      expect((await readdir(workspace)).filter((name) => /\.(?:bak|tmp)$/u.test(name))).toEqual([]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects an existing directory leaf symlink instead of materializing through it', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'w3-ustar-directory-symlink-'));
+    const workspace = path.join(root, 'workspace');
+    const outside = path.join(root, 'outside');
+    try {
+      await mkdir(workspace, { recursive: true });
+      await mkdir(outside);
+      await symlink(outside, path.join(workspace, 'linked'), 'dir');
+
+      await expect(
+        extractUstar(
+          bytesToStream(encodeUstar([{ path: 'linked', type: 'directory', mode: 0o755 }])),
+          workspace,
+        ),
+      ).rejects.toThrow(/symlink/u);
+      expect(await readdir(outside)).toEqual([]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses to collect through a linked parent directory', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'w3-collect-parent-'));
+    const workspace = path.join(root, 'workspace');
+    const outside = path.join(root, 'outside');
+    try {
+      await mkdir(workspace);
+      await mkdir(outside);
+      await writeFile(path.join(outside, 'secret.txt'), 'outside the workspace');
+      await symlink(outside, path.join(workspace, 'outputs'), 'junction');
+
+      const failure = await archiveWorkspacePaths(workspace, ['outputs/secret.txt']).then(
+        () => undefined,
+        (error: unknown) => error as Error,
+      );
+      expect(failure?.message).toMatch(/symlink parent is forbidden: outputs/u);
+      expect(failure?.message).not.toContain(root);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    '../escape',
+    '/absolute',
+    'C:\\absolute',
+    '%2e%2e/escape',
+    '%252e%252e/escape',
+    '%00',
+    'a/%2500b',
+  ])('refuses unsafe path %s', (unsafe) => {
+    expect(() => normalizeArchivePath(unsafe)).toThrow(/unsafe archive path/u);
+  });
+});

@@ -1,0 +1,150 @@
+---
+title: "ProjectsClient"
+description: "Every method of ProjectsClient, its parameters, return type, and route."
+---
+
+<Note>This page is generated from `packages/sdk/src/resources/projects.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+`/api/projects/**` — spec §20.5.
+
+## list
+
+```ts
+async list(query?: ListProjectsQuery, options?: RequestOptions): Promise<readonly ProjectResource[]>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `query` | `ListProjectsQuery` | No |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<readonly ProjectResource[]>`
+
+**Route:** `GET /api/projects`
+
+## get
+
+```ts
+async get(projectId: string, options?: RequestOptions): Promise<ProjectResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `projectId` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<ProjectResource>`
+
+**Route:** `GET /api/projects/:projectId`
+
+## create
+
+```ts
+create(input: ProjectCreateInput, options?: RequestOptions): Promise<ProjectResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `input` | `ProjectCreateInput` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<ProjectResource>`
+
+**Route:** `POST /api/projects`
+
+## update
+
+```ts
+async update(projectId: string, patch: ProjectPatchInput, options?: RequestOptions): Promise<ProjectResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `projectId` | `string` | Yes |
+| `patch` | `ProjectPatchInput` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<ProjectResource>`
+
+**Route:** `PATCH /api/projects/:projectId`
+
+## archive
+
+Retire a project: it keeps its history and accepts no new session. Idempotent.
+
+```ts
+async archive(projectId: string, options?: RequestOptions): Promise<ProjectResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `projectId` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<ProjectResource>`
+
+## restore
+
+```ts
+async restore(projectId: string, options?: RequestOptions): Promise<ProjectResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `projectId` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<ProjectResource>`
+
+## startSession
+
+Open a session attributed to the project before its first run, so the run's project
+attribution is set at creation and never rewritten. Pass the returned `id` as `sessionId`
+when starting the run.
+
+```ts
+async startSession(projectId: string, input?: StartProjectSessionInput, options?: RequestOptions): Promise<ProjectSessionResponse>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `projectId` | `string` | Yes |
+| `input` | `StartProjectSessionInput` | No |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<ProjectSessionResponse>`
+
+**Route:** `POST /api/projects/:projectId/sessions`
+
+## adoptSession
+
+Move an existing session into the project. The same route as `startSession`: a body
+naming a `sessionId` moves instead of starting. Refused with `409 project_session_has_runs`
+once the session has any run, with `409 project_archived` for a retired destination, and
+with `403 forbidden` when the caller may not edit the session's current project.
+
+```ts
+async adoptSession(projectId: string, sessionId: string, options?: RequestOptions): Promise<ProjectSessionMoveResponse>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `projectId` | `string` | Yes |
+| `sessionId` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<ProjectSessionMoveResponse>`
+
+**Route:** `POST /api/projects/:projectId/sessions`
+
+## ListProjectsQuery
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `archived` | `undefined \| "all" \| "active" \| "archived"` | No | `active` (the default), `archived`, or `all`. |
+
+## StartProjectSessionInput
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `agentId` | `undefined \| string` | No | Omit to use the project's default agent. |

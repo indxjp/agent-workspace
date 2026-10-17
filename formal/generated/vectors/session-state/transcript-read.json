@@ -1,0 +1,62 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Refinement.SessionStateMigration.the_public_read_serves_the_store_when_it_has_the_stream",
+    "AgentWorkspace.Theorems.Refinement.SessionStateMigration.a_pre_eng06_session_falls_back_to_its_legacy_history",
+    "AgentWorkspace.Theorems.Refinement.SessionStateMigration.the_public_read_is_unchanged_by_the_migration"],
+   "input":
+   {"storeEntries": [{"payload": "first", "entryKey": "a"}, {"payload": "second", "entryKey": "b"}],
+    "legacyDeliveries": null},
+   "id": "a-new-session-is-served-from-the-store",
+   "expected": {"entries": [{"payload": "first", "entryKey": "a"}, {"payload": "second", "entryKey": "b"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Refinement.SessionStateMigration.the_public_read_serves_the_store_when_it_has_the_stream",
+    "AgentWorkspace.Theorems.Refinement.SessionStateMigration.a_pre_eng06_session_falls_back_to_its_legacy_history",
+    "AgentWorkspace.Theorems.Refinement.SessionStateMigration.the_public_read_is_unchanged_by_the_migration"],
+   "input":
+   {"storeEntries": [{"payload": "current", "entryKey": "a"}],
+    "legacyDeliveries":
+    [{"sequence": 1, "position": 1, "payload": "first", "entryUuid": "u-1"},
+     {"sequence": 2, "position": 2, "payload": "summary", "entryUuid": null},
+     {"sequence": 3, "position": 1, "payload": "redelivered", "entryUuid": "u-1"}]},
+   "id": "the-store-wins-over-the-legacy-tables",
+   "expected": {"entries": [{"payload": "current", "entryKey": "a"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Refinement.SessionStateMigration.the_public_read_serves_the_store_when_it_has_the_stream",
+    "AgentWorkspace.Theorems.Refinement.SessionStateMigration.a_pre_eng06_session_falls_back_to_its_legacy_history",
+    "AgentWorkspace.Theorems.Refinement.SessionStateMigration.the_public_read_is_unchanged_by_the_migration"],
+   "input":
+   {"storeEntries": [],
+    "legacyDeliveries":
+    [{"sequence": 1, "position": 1, "payload": "first", "entryUuid": "u-1"},
+     {"sequence": 2, "position": 2, "payload": "summary", "entryUuid": null},
+     {"sequence": 3, "position": 1, "payload": "redelivered", "entryUuid": "u-1"}]},
+   "id": "an-empty-stream-is-an-empty-transcript",
+   "expected": {"entries": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Refinement.SessionStateMigration.the_public_read_serves_the_store_when_it_has_the_stream",
+    "AgentWorkspace.Theorems.Refinement.SessionStateMigration.a_pre_eng06_session_falls_back_to_its_legacy_history",
+    "AgentWorkspace.Theorems.Refinement.SessionStateMigration.the_public_read_is_unchanged_by_the_migration"],
+   "input":
+   {"storeEntries": null,
+    "legacyDeliveries":
+    [{"sequence": 1, "position": 1, "payload": "first", "entryUuid": "u-1"},
+     {"sequence": 2, "position": 2, "payload": "summary", "entryUuid": null},
+     {"sequence": 3, "position": 1, "payload": "redelivered", "entryUuid": "u-1"}]},
+   "id": "a-pre-eng06-session-falls-back",
+   "expected": {"entries": [{"payload": "redelivered", "entryKey": "u-1"}, {"payload": "summary", "entryKey": null}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Refinement.SessionStateMigration.the_public_read_serves_the_store_when_it_has_the_stream",
+    "AgentWorkspace.Theorems.Refinement.SessionStateMigration.a_pre_eng06_session_falls_back_to_its_legacy_history",
+    "AgentWorkspace.Theorems.Refinement.SessionStateMigration.the_public_read_is_unchanged_by_the_migration"],
+   "input": {"storeEntries": null, "legacyDeliveries": []},
+   "id": "a-pre-eng06-empty-transcript-falls-back",
+   "expected": {"entries": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Refinement.SessionStateMigration.the_public_read_serves_the_store_when_it_has_the_stream",
+    "AgentWorkspace.Theorems.Refinement.SessionStateMigration.a_pre_eng06_session_falls_back_to_its_legacy_history",
+    "AgentWorkspace.Theorems.Refinement.SessionStateMigration.the_public_read_is_unchanged_by_the_migration"],
+   "input": {"storeEntries": null, "legacyDeliveries": null},
+   "id": "neither-store-has-it",
+   "expected": {"entries": null}}],
+ "family": "session-state",
+ "description": "The public transcript read, over the store and the legacy tables"}

@@ -1,0 +1,62 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ContractsEngines.legacy_provider_discriminant_is_always_refused",
+    "AgentWorkspace.Theorems.Normative.ContractsEngines.legacy_refusal_names_the_rename"],
+   "input":
+   {"unionAccepts": true,
+    "registered": ["claude-agent-sdk", "openai-agents", "pi", "mastra"],
+    "body": {"provider": "claude-agent-sdk"}},
+   "id": "legacy-provider",
+   "expected": {"verdict": "invalid_body", "status": 400}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.ContractsEngines.legacy_provider_discriminant_is_always_refused"],
+   "input":
+   {"unionAccepts": false,
+    "registered": ["claude-agent-sdk", "openai-agents", "pi", "mastra"],
+    "body": {"provider": "claude-agent-sdk"}},
+   "id": "legacy-provider-union-refuses",
+   "expected": {"verdict": "invalid_body", "status": 400}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ContractsEngines.unregistered_engine_is_always_refused",
+    "AgentWorkspace.Theorems.Normative.ContractsEngines.unsupported_engine_is_a_four_hundred"],
+   "input":
+   {"unionAccepts": true,
+    "registered": ["claude-agent-sdk", "openai-agents", "pi", "mastra"],
+    "body": {"engine": "acp"}},
+   "id": "unregistered-engine",
+   "expected": {"verdict": "unsupported_engine", "status": 400}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.ContractsEngines.unregistered_engine_is_always_refused"],
+   "input":
+   {"unionAccepts": true, "registered": ["claude-agent-sdk", "openai-agents", "pi", "mastra"], "body": {"engine": 1}},
+   "id": "unregistered-engine-not-a-string",
+   "expected": {"verdict": "unsupported_engine", "status": 400}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.ContractsEngines.a_registered_engine_reaches_the_union"],
+   "input":
+   {"unionAccepts": true,
+    "registered": ["claude-agent-sdk", "openai-agents", "pi", "mastra"],
+    "body":
+    {"tools": {"permissionMode": "default", "deny": [], "base": "claude_code_preset", "autoApprove": []},
+     "skills": {"mode": "all"},
+     "limits": {"maxTurns": null, "maxBudgetUsd": null},
+     "engine": "claude-agent-sdk"}},
+   "id": "registered-engine-accepted",
+   "expected": {"verdict": "accepted", "status": 200}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.ContractsEngines.a_registered_engine_reaches_the_union"],
+   "input":
+   {"unionAccepts": false,
+    "registered": ["claude-agent-sdk", "openai-agents", "pi", "mastra"],
+    "body": {"engine": "claude-agent-sdk"}},
+   "id": "registered-engine-union-refuses",
+   "expected": {"verdict": "invalid_policy", "status": 400}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.ContractsEngines.naming_both_discriminants_is_refused"],
+   "input":
+   {"unionAccepts": false,
+    "registered": ["claude-agent-sdk", "openai-agents", "pi", "mastra"],
+    "body": {"provider": "anthropic", "engine": "claude-agent-sdk"}},
+   "id": "both-discriminants",
+   "expected": {"verdict": "invalid_policy", "status": 400}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.ContractsEngines.the_refusal_is_about_the_registry"],
+   "input": {"unionAccepts": false, "registered": ["claude-agent-sdk", "acp"], "body": {"engine": "acp"}},
+   "id": "registry-decides",
+   "expected": {"verdict": "invalid_policy", "status": 400}}],
+ "family": "engines",
+ "description": "parsePolicyBody's verdict for each body, registry and union answer"}

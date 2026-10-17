@@ -1,0 +1,767 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Customer Support Agent — Agent Workspace</title>
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<script>window.PAGE = { nav: "agents", crumbs: [["Agents", "agents.html"], ["Customer Support Agent"]] };</script>
+
+<div class="app">
+  <div class="main">
+    <div class="page">
+
+      <div class="page-head">
+        <div>
+          <h1>Customer Support Agent</h1>
+          <div class="sub">Answers employee questions from the handbook and Jira · Updated 12 minutes ago by Aya Ito</div>
+        </div>
+        <div class="actions">
+          <a class="btn primary" href="agent-run.html">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M5.5 3.6 12 8l-6.5 4.4z"/></svg>
+            Run
+          </a>
+          <button class="btn" data-modal-open="m-share-agent">Share</button>
+          <button class="btn" data-modal-open="m-more">•••</button>
+        </div>
+      </div>
+
+      <div class="tabs" data-tabs>
+        <button data-tab="overview" class="active">Overview</button>
+        <button data-tab="model">Model</button>
+        <button data-tab="files">Files</button>
+        <button data-tab="skills">Skills</button>
+        <button data-tab="connectors">Connectors</button>
+        <button data-tab="permissions">Permissions</button>
+        <button data-tab="runtime">Runtime</button>
+        <button data-tab="runs">Runs</button>
+      </div>
+
+      <!-- ============================ OVERVIEW ============================ -->
+      <section class="tabpanel active" data-panel="overview">
+        <div class="split-wide">
+          <div>
+            <div class="card">
+              <div class="card-body">
+                <dl class="kv">
+                  <dt>Status</dt>
+                  <dd><span class="badge ok"><span class="dot"></span>Ready</span></dd>
+                  <dt>Model</dt>
+                  <dd>Claude Sonnet 5 <span class="muted small">· Anthropic</span></dd>
+                  <dt>Runtime</dt>
+                  <dd>Standard Sandbox <span class="muted small">· Docker · 1 CPU / 1 GB RAM · Network: Restricted</span></dd>
+                  <dt>Files</dt>
+                  <dd>12 <span class="muted small">· 2 folders assigned</span></dd>
+                  <dt>Skills</dt>
+                  <dd>3</dd>
+                  <dt>Connectors</dt>
+                  <dd>2</dd>
+                  <dt>Session policy</dt>
+                  <dd>Resume last session <span class="muted small">· 34 stored sessions</span></dd>
+                </dl>
+              </div>
+            </div>
+
+            <div class="section-head"><h2>Instructions</h2>
+              <div class="actions"><button class="btn sm" data-toast="Instructions editor opened">Edit</button></div>
+            </div>
+            <div class="card"><div class="card-body">
+              <p class="mb0" style="white-space:pre-line;color:var(--text-2)">You help employees answer questions about internal policy, benefits and IT support.
+
+Always check the Company Handbook before answering. If the handbook does not cover the question, search Jira for a matching ticket and cite its key. Never guess at a policy. If you are unsure, say so and suggest who to contact.
+
+Answer in the language the employee used.</p>
+            </div></div>
+
+            <details class="adv">
+              <summary>Advanced <span class="hint">SDK options compiled from this page</span></summary>
+              <div class="adv-body">
+                <div class="grid-2">
+                  <div class="field">
+                    <label>Max turns <span class="muted small">maxTurns</span></label>
+                    <input type="text" value="24">
+                  </div>
+                  <div class="field">
+                    <label>Budget per run <span class="muted small">maxBudgetUsd</span></label>
+                    <input type="text" value="1.50">
+                  </div>
+                </div>
+                <div class="field">
+                  <label>Setting sources <span class="muted small">settingSources</span></label>
+                  <select><option>None — do not inherit host or user .claude settings (recommended)</option><option>Project only</option></select>
+                  <div class="help">Multi-tenant isolation requires an empty list unless this workspace explicitly opts in (spec §14.7, §25).</div>
+                </div>
+                <div class="label">Effective Claude Agent SDK options</div>
+                <pre class="code">const options = {
+  <span class="k">cwd</span>:            <span class="s">"/workspace"</span>,
+  <span class="k">model</span>:          <span class="s">"claude-sonnet-5"</span>,
+  <span class="k">mcpServers</span>:     { internalSearch: {…}, jira: {…} },
+  <span class="k">skills</span>:         [<span class="s">"customer-support"</span>, <span class="s">"document-writer"</span>, <span class="s">"invoice-review"</span>],
+  <span class="k">allowedTools</span>:   [<span class="s">"Read"</span>, <span class="s">"Write"</span>, <span class="s">"Glob"</span>, <span class="s">"Grep"</span>, <span class="s">"mcp__internalSearch"</span>, <span class="s">"mcp__jira"</span>],
+  <span class="k">maxTurns</span>:       24,
+  <span class="k">maxBudgetUsd</span>:   1.50,
+  <span class="k">settingSources</span>: [],
+  <span class="k">env</span>:            { ANTHROPIC_BASE_URL: <span class="s">"http://gateway:4000"</span>, JIRA_TOKEN: <span class="s">"«secret»"</span> },
+  <span class="k">sandbox</span>:        { enabled: <span class="k">true</span>, network: <span class="s">"restricted"</span> },
+};</pre>
+                <p class="small muted mt8">Read-only. Every value above comes from a field on this page — the platform never stores hand-written SDK code.</p>
+              </div>
+            </details>
+          </div>
+
+          <aside>
+            <div class="card">
+              <div class="card-head"><h3>Latest run</h3></div>
+              <div class="card-body">
+                <div class="small muted">2 minutes ago · by Aya Ito</div>
+                <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
+                  <span class="badge ok"><span class="dot"></span>Completed</span>
+                  <span class="muted small">23 s · $0.08 · 14.2k tokens</span>
+                </div>
+                <a class="btn sm mt16" href="run.html">Open run</a>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><h3>Last 7 days</h3></div>
+              <div class="card-body">
+                <div class="stat-row" style="border:0">
+                  <div class="stat"><div class="k">Runs</div><div class="v">128</div></div>
+                  <div class="stat"><div class="k">Failed</div><div class="v">3</div></div>
+                  <div class="stat"><div class="k">Cost</div><div class="v">$9.84</div></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="callout ok mt16">
+              <span class="ico">✓</span>
+              <div class="grow"><b>Runtime verified.</b> Standard Sandbox last passed create → echo → destroy 4 hours ago.</div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <!-- ============================ MODEL ============================ -->
+      <section class="tabpanel" data-panel="model">
+        <div class="split-wide">
+          <div>
+            <div class="section-head mt0"><h2>Model</h2>
+              <div class="actions"><a class="btn sm" href="models.html">Manage providers</a></div>
+            </div>
+            <div class="choices">
+              <div class="choice selected">
+                <div class="mark"></div>
+                <div class="grow">
+                  <div class="t">Claude Sonnet 5 <span class="badge ok">Connected</span></div>
+                  <div class="d">Anthropic · claude-sonnet-5 · full Claude Agent SDK feature support</div>
+                </div>
+                <div class="side">$3 / $15 per Mtok</div>
+              </div>
+              <div class="choice">
+                <div class="mark"></div>
+                <div class="grow">
+                  <div class="t">Claude Haiku 4.5 <span class="badge ok">Connected</span></div>
+                  <div class="d">Anthropic · claude-haiku-4-5-20251001 · fastest, lowest cost</div>
+                </div>
+                <div class="side">$1 / $5 per Mtok</div>
+              </div>
+              <div class="choice">
+                <div class="mark"></div>
+                <div class="grow">
+                  <div class="t">Claude Opus 5 <span class="badge ok">Connected</span></div>
+                  <div class="d">Anthropic · claude-opus-5 · strongest reasoning</div>
+                </div>
+                <div class="side">$15 / $75 per Mtok</div>
+              </div>
+              <div class="choice">
+                <div class="mark"></div>
+                <div class="grow">
+                  <div class="t">GPT‑4.1 <span class="badge ok">Connected</span> <span class="badge warn">Compatibility mode</span></div>
+                  <div class="d">Azure OpenAI · deployment <span class="mono">gpt-41-japaneast</span> · translated to the Anthropic Messages API by the gateway</div>
+                </div>
+                <div class="side">$2 / $8 per Mtok</div>
+              </div>
+              <div class="choice disabled">
+                <div class="mark"></div>
+                <div class="grow">
+                  <div class="t">Internal Llama <span class="badge danger">Connection failed</span></div>
+                  <div class="d">OpenAI-compatible · last error: connection refused (2 hours ago) · <a href="models.html">Fix connection</a></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="callout mt16">
+              <span class="ico">ℹ</span>
+              <div class="grow">
+                Model changes take effect on the next run. Sessions already stored can be resumed on the new model,
+                but the conversation was produced with the previous one.
+              </div>
+            </div>
+          </div>
+
+          <aside>
+            <div class="card">
+              <div class="card-head"><h3>Capabilities</h3></div>
+              <div class="card-body">
+                <p class="small muted">What the selected model supports, compared with what this agent requires.</p>
+                <table class="tbl" style="font-size:12.5px">
+                  <tbody>
+                    <tr><td>Streaming</td><td class="num"><span class="badge ok">Native</span></td></tr>
+                    <tr><td>Tool use</td><td class="num"><span class="badge ok">Native</span></td></tr>
+                    <tr><td>Thinking</td><td class="num"><span class="badge ok">Native</span></td></tr>
+                    <tr><td>Prompt caching</td><td class="num"><span class="badge ok">Native</span></td></tr>
+                    <tr><td>Structured output</td><td class="num"><span class="badge ok">Native</span></td></tr>
+                    <tr><td>Context management</td><td class="num"><span class="badge ok">Native</span></td></tr>
+                    <tr><td>Token counting</td><td class="num"><span class="badge ok">Native</span></td></tr>
+                    <tr><td>Web search</td><td class="num"><span class="badge muted">Unsupported</span></td></tr>
+                  </tbody>
+                </table>
+                <p class="small muted mt16 mb0">
+                  Selecting GPT‑4.1 would show: prompt caching <b>unsupported</b>, thinking and context management
+                  <b>approximated</b>. <a href="models.html#compat">See the full matrix</a>.
+                </p>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <!-- ============================ FILES ============================ -->
+      <section class="tabpanel" data-panel="files">
+        <div class="section-head mt0"><h2>Assigned files</h2>
+          <div class="hint">Hydrated into <span class="mono">/workspace</span> before the run and collected back afterwards.</div>
+          <div class="actions"><button class="btn sm" data-modal-open="m-assign-files">Assign files</button></div>
+        </div>
+
+        <div class="rows">
+          <div class="row">
+            <div class="row-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M2.5 4.2A1.2 1.2 0 0 1 3.7 3h2.4l1.2 1.6h4.9A1.2 1.2 0 0 1 13.4 5.8v6A1.2 1.2 0 0 1 12.2 13H3.7a1.2 1.2 0 0 1-1.2-1.2z"/></svg></div>
+            <div class="grow">
+              <div class="title">handbook/</div>
+              <div class="meta">9 files · 4.2 MB · mounted at <span class="mono">/workspace/handbook</span></div>
+            </div>
+            <div class="right">
+              <select style="width:150px"><option>Read only</option><option>Read and write</option></select>
+              <button class="btn sm ghost" data-toast="Removed from this agent">Remove</button>
+            </div>
+          </div>
+          <div class="row">
+            <div class="row-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M2.5 4.2A1.2 1.2 0 0 1 3.7 3h2.4l1.2 1.6h4.9A1.2 1.2 0 0 1 13.4 5.8v6A1.2 1.2 0 0 1 12.2 13H3.7a1.2 1.2 0 0 1-1.2-1.2z"/></svg></div>
+            <div class="grow">
+              <div class="title">templates/</div>
+              <div class="meta">2 files · 310 KB · mounted at <span class="mono">/workspace/templates</span></div>
+            </div>
+            <div class="right">
+              <select style="width:150px"><option>Read only</option><option>Read and write</option></select>
+              <button class="btn sm ghost" data-toast="Removed from this agent">Remove</button>
+            </div>
+          </div>
+          <div class="row">
+            <div class="row-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M4 2.5h4.6L12 5.9V13a.5.5 0 0 1-.5.5h-7A.5.5 0 0 1 4 13z"/><path d="M8.5 2.6v3.3H12"/></svg></div>
+            <div class="grow">
+              <div class="title">escalation-contacts.md</div>
+              <div class="meta">6 KB · updated yesterday</div>
+            </div>
+            <div class="right">
+              <select style="width:150px"><option>Read only</option><option>Read and write</option></select>
+              <button class="btn sm ghost" data-toast="Removed from this agent">Remove</button>
+            </div>
+          </div>
+          <div class="row">
+            <div class="row-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M4 2.5h4.6L12 5.9V13a.5.5 0 0 1-.5.5h-7A.5.5 0 0 1 4 13z"/><path d="M8.5 2.6v3.3H12"/></svg></div>
+            <div class="grow">
+              <div class="title">output/</div>
+              <div class="meta">Written by the agent · persisted back to object storage after each run</div>
+            </div>
+            <div class="right">
+              <select style="width:150px"><option selected>Read and write</option><option>Read only</option></select>
+              <button class="btn sm ghost" data-toast="Removed from this agent">Remove</button>
+            </div>
+          </div>
+        </div>
+
+        <details class="adv">
+          <summary>Advanced <span class="hint">persistence</span></summary>
+          <div class="adv-body">
+            <div class="field">
+              <label>Persist paths <span class="muted small">persistPaths</span></label>
+              <input type="text" class="mono-input" value="/workspace/output">
+              <div class="help">Everything else in the sandbox is discarded when the run ends. Object storage is the source of truth.</div>
+            </div>
+          </div>
+        </details>
+      </section>
+
+      <!-- ============================ SKILLS ============================ -->
+      <section class="tabpanel" data-panel="skills">
+        <div class="section-head mt0"><h2>Skills</h2>
+          <div class="hint">Materialised into <span class="mono">.claude/skills/&lt;name&gt;/</span> at launch.</div>
+          <div class="actions"><a class="btn sm" href="skills.html">Manage skills</a></div>
+        </div>
+
+        <div class="card"><div class="card-body">
+          <div class="checks">
+            <label class="check on">
+              <span class="box"></span>
+              <span class="grow"><span class="t">Customer Support</span>
+                <span class="d">Tone, escalation rules and the response template for employee questions.</span></span>
+              <span class="side">Read, Grep, Glob</span>
+            </label>
+            <label class="check on">
+              <span class="box"></span>
+              <span class="grow"><span class="t">Document Writer</span>
+                <span class="d">Produces .docx and Markdown deliverables from the report template.</span></span>
+              <span class="side">Read, Write</span>
+            </label>
+            <label class="check on">
+              <span class="box"></span>
+              <span class="grow"><span class="t">Invoice Review</span>
+                <span class="d">Checks invoice totals, tax treatment and PO matching.</span></span>
+              <span class="side">Read, Bash</span>
+            </label>
+            <label class="check">
+              <span class="box"></span>
+              <span class="grow"><span class="t">Security Review</span>
+                <span class="d">Reviews diffs against the internal security checklist.</span></span>
+              <span class="side">Read, Grep</span>
+            </label>
+            <label class="check">
+              <span class="box"></span>
+              <span class="grow"><span class="t">Financial Analysis</span>
+                <span class="d">Builds quarter-on-quarter comparisons from spreadsheet exports.</span></span>
+              <span class="side">Read, Bash</span>
+            </label>
+          </div>
+        </div></div>
+
+        <div class="callout warn mt16">
+          <span class="ico">⚠</span>
+          <div class="grow">
+            <b>Invoice Review requests the Bash tool</b>, but this agent has “Run commands” switched off in
+            Permissions. The skill will load and the tool will be refused at call time.
+            <a href="#" data-tab="permissions">Review permissions</a>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================ CONNECTORS ============================ -->
+      <section class="tabpanel" data-panel="connectors">
+        <div class="section-head mt0"><h2>Connectors</h2>
+          <div class="hint">Compiled into <span class="mono">mcpServers</span>. Credentials are injected at runtime from Secrets.</div>
+          <div class="actions"><a class="btn sm" href="connectors.html">Manage connectors</a></div>
+        </div>
+
+        <div class="card"><div class="card-body">
+          <div class="checks">
+            <label class="check on">
+              <span class="box"></span>
+              <span class="grow"><span class="t">Internal Search</span>
+                <span class="d">Remote URL · https://mcp.meridian.internal/search · Bearer token</span></span>
+              <span class="side"><span class="badge ok">Reachable</span></span>
+            </label>
+            <label class="check on">
+              <span class="box"></span>
+              <span class="grow"><span class="t">Jira</span>
+                <span class="d">Remote URL · https://meridian.atlassian.net/mcp · OAuth</span></span>
+              <span class="side"><span class="badge ok">Reachable</span></span>
+            </label>
+            <label class="check">
+              <span class="box"></span>
+              <span class="grow"><span class="t">GitHub</span>
+                <span class="d">Remote URL · https://api.githubcopilot.com/mcp · API key</span></span>
+              <span class="side"><span class="badge ok">Reachable</span></span>
+            </label>
+            <label class="check">
+              <span class="box"></span>
+              <span class="grow"><span class="t">Filesystem</span>
+                <span class="d">Local command · npx @modelcontextprotocol/server-filesystem /workspace</span></span>
+              <span class="side"><span class="badge warn">Local command</span></span>
+            </label>
+            <label class="check">
+              <span class="box"></span>
+              <span class="grow"><span class="t">Google Drive</span>
+                <span class="d">Remote URL · SSE · OAuth</span></span>
+              <span class="side"><span class="badge muted">Not tested</span></span>
+            </label>
+          </div>
+        </div></div>
+
+        <div class="callout mt16">
+          <span class="ico">ℹ</span>
+          <div class="grow">
+            The runtime for this agent enforces a domain allowlist. Enabling a connector adds its host to that
+            allowlist automatically — no other outbound destination is reachable from the sandbox.
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================ PERMISSIONS ============================ -->
+      <section class="tabpanel" data-panel="permissions">
+        <div class="split-wide">
+          <div>
+            <div class="section-head mt0"><h2>What can this agent do?</h2></div>
+            <div class="card"><div class="card-body">
+              <div class="checks">
+                <label class="check on">
+                  <span class="box"></span>
+                  <span class="grow"><span class="t">Read files</span>
+                    <span class="d">Files assigned to this agent, inside the sandbox workspace only.</span></span>
+                  <span class="side mono">Read, Glob, Grep</span>
+                </label>
+                <label class="check on">
+                  <span class="box"></span>
+                  <span class="grow"><span class="t">Write files</span>
+                    <span class="d">Create and edit files in the workspace. Persisted paths are synced back.</span></span>
+                  <span class="side mono">Write, Edit</span>
+                </label>
+                <label class="check">
+                  <span class="box"></span>
+                  <span class="grow"><span class="t">Run commands</span>
+                    <span class="d">Shell access inside the sandbox. Never on the control-plane host.</span></span>
+                  <span class="side mono">Bash</span>
+                </label>
+                <label class="check">
+                  <span class="box"></span>
+                  <span class="grow"><span class="t">Access unrestricted internet</span>
+                    <span class="d">Off: outbound traffic is limited to the model gateway and enabled connectors.</span></span>
+                  <span class="side mono">WebFetch</span>
+                </label>
+                <label class="check on">
+                  <span class="box"></span>
+                  <span class="grow"><span class="t">Use enabled connectors</span>
+                    <span class="d">Internal Search and Jira, as selected on the Connectors tab.</span></span>
+                  <span class="side mono">mcp__*</span>
+                </label>
+              </div>
+            </div></div>
+
+            <div class="section-head"><h2>Approval</h2></div>
+            <div class="card"><div class="card-body">
+              <div class="choices">
+                <div class="choice selected"><div class="mark"></div><div class="grow">
+                  <div class="t">Run without asking</div>
+                  <div class="d">The agent uses its permitted tools directly. Everything is recorded in the run log.</div>
+                </div></div>
+                <div class="choice"><div class="mark"></div><div class="grow">
+                  <div class="t">Ask before writing files or calling connectors</div>
+                  <div class="d">The person running the agent approves each action in the chat view.</div>
+                </div></div>
+              </div>
+            </div></div>
+
+            <details class="adv">
+              <summary>Advanced <span class="hint">allowedTools, hooks</span></summary>
+              <div class="adv-body">
+                <div class="field">
+                  <label>Allowed tools <span class="muted small">allowedTools</span></label>
+                  <input type="text" class="mono-input" value="Read, Write, Edit, Glob, Grep, mcp__internalSearch, mcp__jira">
+                </div>
+                <div class="field">
+                  <label>Denied tools</label>
+                  <input type="text" class="mono-input" value="Bash, WebFetch, WebSearch">
+                </div>
+                <div class="field mb0">
+                  <label>Hooks</label>
+                  <div class="rows">
+                    <div class="row"><div class="grow"><div class="title">PreToolUse → redact-pii</div>
+                      <div class="meta">Runs inside the sandbox before every tool call</div></div>
+                      <div class="right"><span class="toggle on"></span></div></div>
+                  </div>
+                </div>
+              </div>
+            </details>
+          </div>
+
+          <aside>
+            <div class="callout">
+              <span class="ico">🛡</span>
+              <div class="grow">
+                <b>Permissions are enforced twice.</b> The Agent SDK refuses a tool that is not allowed, and the
+                sandbox refuses the syscall or the network destination underneath it.
+              </div>
+            </div>
+            <div class="card mt16">
+              <div class="card-head"><h3>Effective boundary</h3></div>
+              <div class="card-body">
+                <dl class="kv" style="grid-template-columns:110px 1fr">
+                  <dt>Filesystem</dt><dd>Read/write, workspace only</dd>
+                  <dt>Shell</dt><dd>Denied</dd>
+                  <dt>Network</dt><dd>Gateway + 2 connector hosts</dd>
+                  <dt>Secrets</dt><dd>2 of 6 injected</dd>
+                </dl>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <!-- ============================ RUNTIME ============================ -->
+      <section class="tabpanel" data-panel="runtime">
+        <div class="split-wide">
+          <div>
+            <div class="section-head mt0"><h2>Runtime profile</h2>
+              <div class="actions"><a class="btn sm" href="runtimes.html">Manage runtimes</a></div>
+            </div>
+
+            <div class="choices">
+              <div class="choice selected">
+                <div class="mark"></div>
+                <div class="grow">
+                  <div class="t">Standard Sandbox <span class="badge ok">Verified</span></div>
+                  <div class="d">Docker · 1 CPU · 1 GB RAM · 5 GB disk · Network: Restricted · Filesystem: read‑write</div>
+                </div>
+                <div class="side">~1 s start</div>
+              </div>
+              <div class="choice">
+                <div class="mark"></div>
+                <div class="grow">
+                  <div class="t">Heavy <span class="badge ok">Verified</span></div>
+                  <div class="d">Kubernetes · 4 CPU · 8 GB RAM · 20 GB disk · Network: Restricted</div>
+                </div>
+                <div class="side">~3 s start</div>
+              </div>
+              <div class="choice">
+                <div class="mark"></div>
+                <div class="grow">
+                  <div class="t">Read Only <span class="badge ok">Verified</span></div>
+                  <div class="d">Docker · 1 CPU · 1 GB RAM · Filesystem: read‑only · Network: gateway only</div>
+                </div>
+                <div class="side">~1 s start</div>
+              </div>
+              <div class="choice" data-modal-open="m-switch-runtime">
+                <div class="mark"></div>
+                <div class="grow">
+                  <div class="t">Azure Sessions <span class="badge ok">Verified</span> <span class="badge warn">Capability differences</span></div>
+                  <div class="d">Azure Container Apps dynamic sessions · Hyper‑V isolation · pool <span class="mono">agent-workspace-runtimes</span></div>
+                </div>
+                <div class="side">~200 ms start</div>
+              </div>
+              <div class="choice disabled">
+                <div class="mark"></div>
+                <div class="grow">
+                  <div class="t">AgentCore microVM</div>
+                  <div class="d">Not selectable — runtime image not published to ECR for this account. <a href="runtimes.html">How to publish</a></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="callout mt16">
+              <span class="ico">ℹ</span>
+              <div class="grow">
+                Changing the runtime takes effect <b>from the next run</b>. Runs already in flight finish on the
+                runtime they started on.
+              </div>
+            </div>
+          </div>
+
+          <aside>
+            <div class="card">
+              <div class="card-head"><h3>Standard Sandbox</h3></div>
+              <div class="card-body">
+                <dl class="kv" style="grid-template-columns:130px 1fr">
+                  <dt>Isolation</dt><dd>Container</dd>
+                  <dt>Custom image</dt><dd>Yes <span class="muted small">by digest</span></dd>
+                  <dt>Persistent files</dt><dd>Yes <span class="muted small">volume mount</span></dd>
+                  <dt>Session affinity</dt><dd>Yes</dd>
+                  <dt>Max session</dt><dd>Unbounded</dd>
+                  <dt>Network policies</dt><dd>none / allowlist / open</dd>
+                  <dt>Exec commands</dt><dd>Yes</dd>
+                  <dt>GPU</dt><dd>No</dd>
+                  <dt>Typical start</dt><dd>~1 000 ms</dd>
+                </dl>
+                <button class="btn sm mt16" data-toast="Creating sandbox → echo → destroy…">Test runtime</button>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <!-- ============================ RUNS ============================ -->
+      <section class="tabpanel" data-panel="runs">
+        <div class="section-head mt0"><h2>Runs</h2>
+          <div class="actions"><a class="btn sm" href="runs.html">All runs</a></div>
+        </div>
+        <div class="card">
+          <div class="table-wrap">
+          <table class="tbl">
+            <thead><tr><th>Started</th><th>Status</th><th>Started by</th><th class="num">Duration</th><th class="num">Tokens</th><th class="num">Cost</th><th>Session</th><th></th></tr></thead>
+            <tbody>
+              <tr><td class="nowrap">Today 14:32</td><td><span class="badge ok">Completed</span></td><td>Aya Ito</td><td class="num">23 s</td><td class="num">14.2k</td><td class="num">$0.08</td><td class="mono">sess_8f21…</td><td><a class="btn sm" href="run.html">Open</a></td></tr>
+              <tr><td class="nowrap">Today 13:57</td><td><span class="badge ok">Completed</span></td><td>Kenji Sato</td><td class="num">8 s</td><td class="num">3.1k</td><td class="num">$0.01</td><td class="mono">sess_8f21…</td><td><a class="btn sm" href="run.html">Open</a></td></tr>
+              <tr><td class="nowrap">Today 11:02</td><td><span class="badge danger">Failed</span></td><td>API key “CI”</td><td class="num">4 s</td><td class="num">0.4k</td><td class="num">—</td><td class="mono">sess_71c0…</td><td><a class="btn sm" href="run.html">Open</a></td></tr>
+              <tr><td class="nowrap">Yesterday 18:40</td><td><span class="badge ok">Completed</span></td><td>Aya Ito</td><td class="num">1 m 12 s</td><td class="num">46.8k</td><td class="num">$0.31</td><td class="mono">sess_71c0…</td><td><a class="btn sm" href="run.html">Open</a></td></tr>
+              <tr><td class="nowrap">Yesterday 09:15</td><td><span class="badge warn">Interrupted</span></td><td>Marie Dupont</td><td class="num">39 s</td><td class="num">11.0k</td><td class="num">$0.06</td><td class="mono">sess_5ad9…</td><td><a class="btn sm" href="run.html">Open</a></td></tr>
+            </tbody>
+          </table>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<!-- ---------- modal: more actions ---------- -->
+<div class="scrim" id="m-more" hidden>
+  <div class="modal" style="max-width:420px">
+    <div class="m-head"><h3>Customer Support Agent</h3></div>
+    <div class="m-body" style="padding:8px">
+      <div class="rows" style="box-shadow:none;border:0">
+        <a class="row" href="#" data-toast="Duplicated as “Customer Support Agent (copy)”"><div class="grow"><div class="title">Duplicate</div></div></a>
+        <a class="row" href="#" data-toast="Exported agent definition (JSON)"><div class="grow"><div class="title">Export definition</div><div class="meta">Model, skills, connectors and permissions. Secrets are never exported.</div></div></a>
+        <a class="row" href="#" data-toast="Agent paused"><div class="grow"><div class="title">Pause agent</div><div class="meta">New runs are refused; in-flight runs finish.</div></div></a>
+        <a class="row" href="#" data-toast="Type the agent name to confirm deletion"><div class="grow"><div class="title" style="color:var(--danger)">Delete agent</div><div class="meta">Runs and audit history are kept.</div></div></a>
+      </div>
+    </div>
+    <div class="m-foot"><button class="btn" data-modal-close>Close</button></div>
+  </div>
+</div>
+
+<!-- ---------- modal: share an agent (spec §20.6.3) ---------- -->
+<div class="scrim" id="m-share-agent" hidden>
+  <div class="modal wide">
+    <div class="m-head"><h3>Share “Customer Support Agent”</h3>
+      <div class="sub">Two different things. Sharing the definition never runs anything.</div></div>
+    <div class="m-body">
+
+      <div class="label">What are you sharing</div>
+      <div class="choices mb16">
+        <div class="choice selected" data-reveal="definition">
+          <div class="mark"></div>
+          <div class="grow">
+            <div class="t">The definition <span class="badge muted">Default</span></div>
+            <div class="d">The viewer sees how this agent is configured and can copy it into their own workspace. Nothing runs.</div>
+          </div>
+        </div>
+        <div class="choice" data-reveal="runnable">
+          <div class="mark"></div>
+          <div class="grow">
+            <div class="t">A runnable link <span class="badge warn">Admin only</span></div>
+            <div class="d">Visitors can send messages from a minimal public page. Runs execute in this workspace, on this workspace’s budget.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="label">Who can see this</div>
+      <div class="choices mb16">
+        <div class="choice"><div class="mark"></div><div class="grow"><div class="t">Only me</div></div></div>
+        <div class="choice selected"><div class="mark"></div><div class="grow"><div class="t">Everyone in Meridian Manufacturing</div></div></div>
+        <div class="choice"><div class="mark"></div><div class="grow"><div class="t">Anyone with the link</div></div></div>
+      </div>
+
+      <!-- definition -->
+      <div data-reveal-target="definition">
+        <div class="card"><div class="card-body">
+          <div class="label mb8">What the viewer receives</div>
+          <table class="tbl">
+            <tbody>
+              <tr><td>Instructions, skills, permissions, runtime profile</td><td class="num"><span class="badge ok">Included</span></td></tr>
+              <tr><td>Model connection</td><td class="num"><span class="badge outline">Named only</span></td></tr>
+              <tr><td>Connector credentials, secrets, environment values</td><td class="num"><span class="badge muted">Never</span></td></tr>
+              <tr><td>Assigned files</td><td class="num"><span class="badge muted">Not included</span></td></tr>
+            </tbody>
+          </table>
+          <p class="small muted mt16 mb0">The importer is told what to supply: a model connection, credentials
+            for the Jira connector, and 2 files.</p>
+        </div></div>
+      </div>
+
+      <!-- runnable -->
+      <div data-reveal-target="runnable" hidden>
+        <div class="callout warn mb16">
+          <span class="ico">⚠</span>
+          <div class="grow"><b>Anonymous visitors will spend this workspace’s budget.</b> Limits below are enforced
+            server-side and cannot be raised from the public page.</div>
+        </div>
+        <div class="grid-2">
+          <div class="field"><label>Total budget cap</label><input type="text" value="$20.00"></div>
+          <div class="field"><label>Per visitor</label><input type="text" value="5 messages per hour"></div>
+        </div>
+        <div class="checks mb16">
+          <label class="check on locked"><span class="box"></span><span class="grow"><span class="t">Force read-only permissions</span><span class="d">“Run commands” and file writes are removed for public visitors</span></span></label>
+          <label class="check on locked"><span class="box"></span><span class="grow"><span class="t">One ephemeral session per visitor</span><span class="d">Never shared, never resumable by another visitor</span></span></label>
+          <label class="check"><span class="box"></span><span class="grow"><span class="t">Attach files</span><span class="d">Read-only, and only files you attach explicitly</span></span></label>
+        </div>
+        <div class="callout">
+          <span class="ico">⏻</span>
+          <div class="grow">A single <b>Stop accepting messages</b> control is always available, and the link stops
+            automatically when the budget cap is reached.</div>
+        </div>
+      </div>
+
+      <div class="secret mt16"><span class="grow">https://agents.meridian.example/p/agt_3Xf9Lp</span><button class="btn sm" data-toast="Link copied">Copy</button></div>
+      <p class="small muted mt8 mb0">Preview what a visitor sees: <a href="public-agent.html">public agent page</a>.</p>
+    </div>
+    <div class="m-foot">
+      <button class="btn" data-modal-close>Cancel</button>
+      <button class="btn primary" data-modal-close data-toast="Agent shared with the workspace">Share</button>
+    </div>
+  </div>
+</div>
+
+<!-- ---------- modal: assign files ---------- -->
+<div class="scrim" id="m-assign-files" hidden>
+  <div class="modal">
+    <div class="m-head"><h3>Assign files</h3><div class="sub">Selected files and folders are hydrated into the sandbox workspace before each run.</div></div>
+    <div class="m-body">
+      <div class="search mb16" style="width:100%"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="7" cy="7" r="4.2"/><path d="m10.2 10.2 3 3"/></svg><input type="search" placeholder="Search files"></div>
+      <div class="checks">
+        <label class="check on"><span class="box"></span><span class="grow"><span class="t">handbook/</span><span class="d">9 files · 4.2 MB</span></span></label>
+        <label class="check on"><span class="box"></span><span class="grow"><span class="t">templates/</span><span class="d">2 files · 310 KB</span></span></label>
+        <label class="check"><span class="box"></span><span class="grow"><span class="t">contracts/</span><span class="d">34 files · 88 MB</span></span></label>
+        <label class="check on"><span class="box"></span><span class="grow"><span class="t">escalation-contacts.md</span><span class="d">6 KB</span></span></label>
+        <label class="check"><span class="box"></span><span class="grow"><span class="t">report-template.docx</span><span class="d">142 KB</span></span></label>
+      </div>
+    </div>
+    <div class="m-foot"><button class="btn" data-modal-close>Cancel</button><button class="btn primary" data-modal-close data-toast="Files assigned">Assign 3 items</button></div>
+  </div>
+</div>
+
+<!-- ---------- modal: runtime switch (spec §14.9) ---------- -->
+<div class="scrim" id="m-switch-runtime" hidden>
+  <div class="modal wide">
+    <div class="m-head">
+      <h3>Changing runtime: Standard Sandbox → Azure Sessions</h3>
+      <div class="sub">Docker → Azure Container Apps dynamic sessions</div>
+    </div>
+    <div class="m-body">
+      <div class="callout warn">
+        <span class="ico">⚠</span>
+        <div class="grow"><b>Domain allowlist is not supported on this runtime.</b>
+          “Restricted” becomes all-or-nothing egress, enforced by our proxy rather than by the platform.</div>
+      </div>
+      <div class="callout warn">
+        <span class="ico">⚠</span>
+        <div class="grow"><b>Sessions on this runtime end after the pool cooldown (10 minutes idle).</b>
+          Longer conversations are resumed on a fresh sandbox and the workspace is rehydrated from object storage.</div>
+      </div>
+      <div class="callout danger">
+        <span class="ico">✕</span>
+        <div class="grow"><b>This agent uses a local command connector (Filesystem MCP).</b>
+          This runtime has no outbound network for package downloads. Bundle the connector into the runtime image,
+          or switch it to a remote URL.</div>
+      </div>
+
+      <div class="section-head"><h2>What survives the switch</h2></div>
+      <table class="tbl">
+        <tbody>
+          <tr><td>Workspace files</td><td class="num"><span class="badge ok">Kept</span></td><td class="cell-sub">Object storage is the source of truth; the new sandbox is hydrated</td></tr>
+          <tr><td>Skills, connectors</td><td class="num"><span class="badge ok">Kept</span></td><td class="cell-sub">Materialised into the workspace at launch</td></tr>
+          <tr><td>Claude session</td><td class="num"><span class="badge ok">Kept</span></td><td class="cell-sub">Session state in PostgreSQL, resumed with <span class="mono">resume</span></td></tr>
+          <tr><td>Anything else in the old sandbox</td><td class="num"><span class="badge muted">Lost</span></td><td class="cell-sub">Sandboxes are disposable by definition</td></tr>
+        </tbody>
+      </table>
+      <p class="small muted mt16 mb0">Switching back restores the previous behaviour exactly. This change is recorded in the audit log.</p>
+    </div>
+    <div class="m-foot">
+      <button class="btn" data-modal-close>Cancel</button>
+      <button class="btn disabled" title="Blocked: the Filesystem connector cannot run on this runtime">Save — blocked</button>
+    </div>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,94 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.ConceptCatalog.grants_body_admits_only_distinct_uuids",
+    "AgentWorkspace.Theorems.Adversarial.ConceptCatalog.case_variant_duplicate_grant_ids_are_refused"],
+   "input": {"principalIds": []},
+   "id": "grants-body/[]",
+   "expected": {"valid": true, "principalIds": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.ConceptCatalog.grants_body_admits_only_distinct_uuids",
+    "AgentWorkspace.Theorems.Adversarial.ConceptCatalog.case_variant_duplicate_grant_ids_are_refused"],
+   "input": {"principalIds": ["123e4567-e89b-12d3-a456-426614174000"]},
+   "id": "grants-body/[\"123e4567-e89b-12d3-a456-426614174000\"]",
+   "expected": {"valid": true, "principalIds": ["123e4567-e89b-12d3-a456-426614174000"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.ConceptCatalog.grants_body_admits_only_distinct_uuids",
+    "AgentWorkspace.Theorems.Adversarial.ConceptCatalog.case_variant_duplicate_grant_ids_are_refused"],
+   "input": {"principalIds": ["123E4567-E89B-12D3-A456-426614174000"]},
+   "id": "grants-body/[\"123E4567-E89B-12D3-A456-426614174000\"]",
+   "expected": {"valid": true, "principalIds": ["123e4567-e89b-12d3-a456-426614174000"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.ConceptCatalog.grants_body_admits_only_distinct_uuids",
+    "AgentWorkspace.Theorems.Adversarial.ConceptCatalog.case_variant_duplicate_grant_ids_are_refused"],
+   "input": {"principalIds": ["123e4567-e89b-12d3-a456-426614174000", "00000000-0000-4000-8000-000000000002"]},
+   "id": "grants-body/[\"123e4567-e89b-12d3-a456-426614174000\",\"00000000-0000-4000-8000-000000000002\"]",
+   "expected":
+   {"valid": true, "principalIds": ["123e4567-e89b-12d3-a456-426614174000", "00000000-0000-4000-8000-000000000002"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.ConceptCatalog.grants_body_admits_only_distinct_uuids",
+    "AgentWorkspace.Theorems.Adversarial.ConceptCatalog.case_variant_duplicate_grant_ids_are_refused"],
+   "input": {"principalIds": ["00000000-0000-4000-8000-000000000002", "123e4567-e89b-12d3-a456-426614174000"]},
+   "id": "grants-body/[\"00000000-0000-4000-8000-000000000002\",\"123e4567-e89b-12d3-a456-426614174000\"]",
+   "expected":
+   {"valid": true, "principalIds": ["00000000-0000-4000-8000-000000000002", "123e4567-e89b-12d3-a456-426614174000"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.ConceptCatalog.grants_body_admits_only_distinct_uuids",
+    "AgentWorkspace.Theorems.Adversarial.ConceptCatalog.case_variant_duplicate_grant_ids_are_refused"],
+   "input": {"principalIds": ["123e4567-e89b-12d3-a456-426614174000", "123e4567-e89b-12d3-a456-426614174000"]},
+   "id": "grants-body/[\"123e4567-e89b-12d3-a456-426614174000\",\"123e4567-e89b-12d3-a456-426614174000\"]",
+   "expected": {"valid": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.ConceptCatalog.grants_body_admits_only_distinct_uuids",
+    "AgentWorkspace.Theorems.Adversarial.ConceptCatalog.case_variant_duplicate_grant_ids_are_refused"],
+   "input": {"principalIds": ["123E4567-E89B-12D3-A456-426614174000", "123e4567-e89b-12d3-a456-426614174000"]},
+   "id": "grants-body/[\"123E4567-E89B-12D3-A456-426614174000\",\"123e4567-e89b-12d3-a456-426614174000\"]",
+   "expected": {"valid": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.ConceptCatalog.grants_body_admits_only_distinct_uuids",
+    "AgentWorkspace.Theorems.Adversarial.ConceptCatalog.case_variant_duplicate_grant_ids_are_refused"],
+   "input":
+   {"principalIds":
+    ["123e4567-e89b-12d3-a456-426614174000",
+     "00000000-0000-4000-8000-000000000002",
+     "123e4567-e89b-12d3-a456-426614174000"]},
+   "id":
+   "grants-body/[\"123e4567-e89b-12d3-a456-426614174000\",\"00000000-0000-4000-8000-000000000002\",\"123e4567-e89b-12d3-a456-426614174000\"]",
+   "expected": {"valid": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.ConceptCatalog.grants_body_admits_only_distinct_uuids",
+    "AgentWorkspace.Theorems.Adversarial.ConceptCatalog.case_variant_duplicate_grant_ids_are_refused"],
+   "input": {"principalIds": ["not-a-uuid"]},
+   "id": "grants-body/[\"not-a-uuid\"]",
+   "expected": {"valid": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.ConceptCatalog.grants_body_admits_only_distinct_uuids",
+    "AgentWorkspace.Theorems.Adversarial.ConceptCatalog.case_variant_duplicate_grant_ids_are_refused"],
+   "input": {"principalIds": ["123e4567-e89b-12d3-a456-426614174000", ""]},
+   "id": "grants-body/[\"123e4567-e89b-12d3-a456-426614174000\",\"\"]",
+   "expected": {"valid": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.ConceptCatalog.grants_body_admits_only_distinct_uuids",
+    "AgentWorkspace.Theorems.Adversarial.ConceptCatalog.case_variant_duplicate_grant_ids_are_refused"],
+   "input": {"principalIds": ["123e4567e89b12d3a456426614174000"]},
+   "id": "grants-body/[\"123e4567e89b12d3a456426614174000\"]",
+   "expected": {"valid": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.ConceptCatalog.grants_body_admits_only_distinct_uuids",
+    "AgentWorkspace.Theorems.Adversarial.ConceptCatalog.case_variant_duplicate_grant_ids_are_refused"],
+   "input": {"principalIds": ["123e4567-e89b-12d3-a456-42661417400g"]},
+   "id": "grants-body/[\"123e4567-e89b-12d3-a456-42661417400g\"]",
+   "expected": {"valid": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.ConceptCatalog.grants_body_admits_only_distinct_uuids",
+    "AgentWorkspace.Theorems.Adversarial.ConceptCatalog.case_variant_duplicate_grant_ids_are_refused"],
+   "input": {"principalIds": ["{123e4567-e89b-12d3-a456-426614174000}"]},
+   "id": "grants-body/[\"{123e4567-e89b-12d3-a456-426614174000}\"]",
+   "expected": {"valid": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.ConceptCatalog.grants_body_admits_only_distinct_uuids",
+    "AgentWorkspace.Theorems.Adversarial.ConceptCatalog.case_variant_duplicate_grant_ids_are_refused"],
+   "input": {"principalIds": ["123e4567-e89b-12d3-a456-426614174000 "]},
+   "id": "grants-body/[\"123e4567-e89b-12d3-a456-426614174000 \"]",
+   "expected": {"valid": false}}],
+ "family": "concept-catalog",
+ "description": "AgentGrantsSchema: canonical UUIDs, lower-cased, no case-variant duplicates"}

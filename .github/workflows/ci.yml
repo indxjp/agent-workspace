@@ -1,0 +1,1712 @@
+# Per-PR quality gates: typecheck (including no-new-suppressions), lint, test, file-ownership,
+# licence and sdk-surface. The sdk-surface gate is not a step of its own: it is
+# `tests/sdk-surface.test.ts`, which `pnpm test` collects through the `tests` entry in
+# vitest.config.ts's `projects`.
+#
+# RUNNERS AND THE TASK GRAPH. Every job runs on an ephemeral VM, one job per machine — never on a
+# self-hosted runner; this repository owns none and must not grow one. Every job runs on GitHub's
+# own `ubuntu-latest`, except the four that set how long a run takes (formal, generated-project-e2e,
+# journey-e2e, tool-sandbox-e2e: 12-18 minutes there, the rest done 2-3 minutes sooner). Those read
+# the repository variable CI_BOTTLENECK_RUNNER (a Blacksmith label) and fall back to `ubuntu-latest`
+# when it is unset (docs/adr/0053, Amendment 2026-10-16, second): if the vendor stops picking jobs
+# up again, deleting the variable moves them back without a pull request. scripts/check-workflows.mjs
+# holds every other job to `ubuntu-latest`, so the paid runner never spreads past the bottleneck.
+# `ubuntu-latest` is fast enough elsewhere because no work is done twice and the long jobs are split. So the run is shaped around that: the `build` job builds every
+# workspace ONCE and hands the outputs to the other jobs as an artifact
+# (.github/actions/workspace-build); typecheck and lint, the test projects and the image scan are
+# each spread over parallel jobs; and the jobs that build Docker images first delete the SDKs the
+# image ships and this repository never uses (.github/actions/free-disk). The heavy lifting inside a job goes through Nx (`nx.json`, the `nx` block
+# of every workspace package.json): `nx affected` runs only the projects a pull request's diff
+# reaches, a `main` push always runs the complete graph, and within a job every task result is
+# cached, so the test step's `^build` dependencies replay what the build step just produced.
+# Between runs (and between this run's parallel jobs) the cache is this repository's own Nx
+# remote cache (infra/nx-cache, docs/adr/0110) — Nx Cloud is gone (nx.json neverConnectToCloud).
+# Each Nx job connects through .github/actions/nx-remote-cache: the job's GitHub OIDC token is
+# exchanged for a short-lived cache token whose role the SERVER decides from GitHub's signed
+# claims, so only a push to `main` can write and a pull request — even one that edits this file —
+# can only read. Every task-running `nx` call goes through scripts/ci/nx.sh, which reruns on the
+# local cache if the remote one fails mid-run: the cache is an optimisation and never decides
+# whether CI is green. Kill switch: repository variable INDX_NX_REMOTE_CACHE_ENABLED != 'true'.
+# Caching `.nx/cache` with actions/cache is NOT an option: since Nx 20 the cache index is a
+# database named after the machine, so a directory restored onto a fresh VM is never consulted
+# (verified on 23.2.1 — see docs/adr/0053). docs/operations/ci.md has the operating detail.
+#
+# fast-checks (static gates) needs nothing and runs beside `build`, so a malformed PR body still
+# fails in seconds; everything that needs built packages starts when `build` is done.
+# `ci-success` is the single check branch protection should require.
+name: CI
+
+on:
+  workflow_dispatch:
+  pull_request:
+    # `edited` is here on purpose: the ownership gate reads the PR *body*, so without it an
+    # author could pass the gate and then edit the Ownership section away. Body and title
+    # edits re-run the gate. The other three are the defaults for this event.
+    types: [opened, synchronize, reopened, edited]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # THE remote-cache plan for this run, computed once and read by every Nx job's
+  # nx-remote-cache step: `off` when the kill switch is not 'true' or no server is configured,
+  # `write` for a push to `main`, `read` for everything else (pull requests, dispatches).
+  # The server applies the same rule independently from the job's signed OIDC claims and can
+  # only ever grant LESS than this; the action fails the job if it is granted more.
+  NX_REMOTE_CACHE_KIND: ${{ (vars.INDX_NX_REMOTE_CACHE_ENABLED != 'true' || vars.NX_SELF_HOSTED_REMOTE_CACHE_SERVER == '') && 'off' || (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'write' || 'read' }}
+
+jobs:
+  fast-checks:
+    name: fast checks · PR contract · workflow policy
+    runs-on: ubuntu-latest
+    # id-token: the job's GitHub OIDC token is its only remote-cache credential (see the header).
+    permissions:
+      contents: read
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Workflow policy and PR template gate
+        run: node scripts/check-workflows.mjs
+
+      # Node built-ins only, so it runs before the install.
+      - name: Infra contract tests
+        run: node --test infra/tests/contracts.test.mjs
+
+      # No Nx Cloud path, no CI write credential, no bucket cache, every cached nx call through
+      # scripts/ci/nx.sh (docs/adr/0110). Node built-ins only, so it runs before the install.
+      - name: Nx remote-cache config guard
+        run: node scripts/ci/check-nx-cache-config.mjs
+
+      - name: Ownership checker self-test
+        run: node scripts/check-file-ownership.mjs --self-test
+
+      - name: File-ownership gate
+        if: github.event_name == 'pull_request'
+        env:
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+        run: |
+          set -euo pipefail
+          body="$(node -e '
+            const fs = require("fs");
+            const event = JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH, "utf8"));
+            const text = event && event.pull_request && event.pull_request.body;
+            if (typeof text !== "string") {
+              console.error("the pull_request payload carries no body string");
+              process.exit(1);
+            }
+            process.stdout.write(text);
+          ')"
+          if printf '%s' "$body" | grep -qE '^[[:space:]]*Merged[[:space:]]+[^:]+:'; then
+            node scripts/check-file-ownership.mjs --integration
+          else
+            node scripts/check-file-ownership.mjs --pr
+          fi
+
+      - name: No new type or lint suppressions in the diff
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          sources=$(git diff --name-only "$BASE_SHA...$HEAD_SHA" -- \
+            '*.ts' '*.tsx' '*.mts' '*.cts' '*.js' '*.jsx' '*.mjs' '*.cjs' \
+            ':(exclude).github/**' ':(exclude).claude/**')
+          hits=''
+          if [ -n "$sources" ]; then
+            while IFS= read -r f; do
+              [ -n "$f" ] || continue
+              added=$(git diff --unified=0 "$BASE_SHA...$HEAD_SHA" -- "$f" | { grep -E '^\+[^+]' || true; })
+              found=$(printf '%s\n' "$added" | grep -E 'ts-ignore|ts-expect-error|eslint-disable' || true)
+              if [ -n "$found" ]; then
+                hits=$(printf '%s\n  %s\n%s\n' "$hits" "$f" "$found")
+              fi
+            done <<SOURCES
+          $sources
+          SOURCES
+          fi
+          if [ -n "$hits" ]; then
+            echo "This diff adds type or lint suppressions to TS/JS files:"
+            printf '%s\n' "$hits"
+            echo "Fix the type or lint error, or explicitly escalate the suppression."
+            exit 1
+          fi
+          echo "No new suppressions in any TS/JS file outside .github/ and .claude/."
+
+      - name: Diff gates do not run on push
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "::notice title=Reduced gate set::event_name=${{ github.event_name }}. The diff-based suppression and ownership gates require pull-request context and are skipped."
+
+      - name: Generated blocks are current
+        run: |
+          set -euo pipefail
+          if [ ! -f docs/adr/regenerate-index.sh ]; then
+            echo "docs/adr/regenerate-index.sh is not present on this branch; skipping."
+            exit 0
+          fi
+          sh docs/adr/regenerate-index.sh --check
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Formatting
+        run: pnpm format:check
+
+      # Reads packages/{contracts,sdk,aw}/src directly (no dist), so it sits after the
+      # two-second format check and before the Nx graph, matching check:fast's order of cheap
+      # deterministic gates first. Also checks llms.txt against the documents it indexes.
+      - name: Generated SDK reference and llms.txt are current
+        run: pnpm docs:check
+
+      - name: Licence gate
+        run: |
+          set -euo pipefail
+          node scripts/check-licenses.mjs --self-test
+          node scripts/check-licenses.mjs
+          node scripts/check-licenses.mjs --dev
+
+  # Every workspace is built ONCE per run and handed to each job that needs built packages as an
+  # artifact (restored by .github/actions/workspace-build). Before this, six jobs each ran their
+  # own `nx run-many -t build`, and on a pull request that misses the remote cache for
+  # @indx-workspace/embedded every one of them paid for it. Embedded is built beside this job, in
+  # `build-embedded`: its webpack build alone is ~9 minutes on a 2-vCPU runner, and only the jobs
+  # that pack the published set wait for it.
+  build:
+    name: build · every workspace but embedded
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Assert pull_request runs cannot select remote-cache write
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ "$NX_REMOTE_CACHE_KIND" = "write" ]; then
+            echo "::error::pull_request event resolved to remote-cache kind 'write'"
+            exit 1
+          fi
+
+      - name: Connect Nx to the remote cache
+        uses: ./.github/actions/nx-remote-cache
+        with:
+          kind: ${{ env.NX_REMOTE_CACHE_KIND }}
+          server: ${{ vars.NX_SELF_HOSTED_REMOTE_CACHE_SERVER }}
+
+      # The root `pnpm build` (`nx run-many -t build`) through scripts/ci/nx.sh, without
+      # @indx-workspace/embedded (no project depends on it): in dependency order, replayed from
+      # the cache for every package whose inputs are unchanged. Every project, not only the
+      # affected ones: the jobs downstream run whole packages whatever the diff touched.
+      - name: Build all workspaces but embedded
+        run: scripts/ci/nx.sh run-many -t build --exclude=@indx-workspace/embedded --parallel=3 --output-style=static
+
+      # BUILD ORDERING. It has to be a step of its own rather than a line in the root
+      # `typecheck` script, because the root script is not this task's file to change.
+      #
+      # WHAT THIS STEP DOES AND DOES NOT BUY, re-measured after W1-DEP-01 landed on the base
+      # of this branch, because that change moved the ground under it. `packages/core` is
+      # consumed as a package: `apps/web` declares `@agent-workspace/core` at `workspace:*`,
+      # which pnpm links as `link:../../packages/core`, and `dist/` is gitignored.
+      #
+      #   * Before W1-DEP-01, `exports["."].types` pointed at `./dist/index.d.ts`, so with
+      #     `dist/` absent a one-line `apps/web` import failed `pnpm typecheck` with
+      #     `error TS2307: Cannot find module '@agent-workspace/core'`. Measured on 3a49175.
+      #   * W1-DEP-01 repointed those `types` at `./src/index.ts`. Measured on the merged tree:
+      #     the same probe now type-checks with `dist/` absent. That route is closed, by them.
+      #   * What is NOT closed: `main`, top-level `types`, and both `exports[*].default` still
+      #     name `./dist/*`. With `dist/` absent, `node` in `apps/web` importing the package
+      #     fails with
+      #       ERR_MODULE_NOT_FOUND: Cannot find module '…/@agent-workspace/core/dist/index.js'
+      #     and succeeds after this step. Nothing else in this job asserts that the package
+      #     produces the files its own manifest promises — `pnpm typecheck` and `pnpm test`
+      #     both pass with no `dist/` at all.
+      #
+      # So this step plus the assertion under it are the ordering gate the brief asked for,
+      # held independently of how the resolution is currently wired. If a later task repoints
+      # `types` back at `dist/`, TS2307 does not come back, because the build already ran.
+      #
+      # Only `packages/core` is built. `pnpm build` would also run `next build` in `apps/web`
+      # (measured at 7.3 s on this app today, and it grows with every route added) for no gain
+      # here: nothing in this job type-checks against the Next.js output.
+      # apps/web now composes the runtime registry through the package's public entry point.
+      # Build its declarations before web typecheck, just as the core package above is built.
+      # ADR-0015: assert the artefact POSITIVELY, do not infer it from the build's exit code.
+      # A green `tsc` is not evidence that anything was written. The concrete case, measured on
+      # TypeScript 5.9.3 rather than assumed: packages/core/tsconfig.json sets `noEmit: true`
+      # and tsconfig.build.json overrides it to `false`. Delete that one override and `tsc -p
+      # tsconfig.build.json` exits 0, prints nothing and creates no `dist/` at all — a step
+      # that checks only `$?` calls that a successful build. (An `include` matching no file is
+      # NOT this case: that is error TS18003 and exit 2. An earlier draft of this comment said
+      # otherwise and was wrong.)
+      #
+      # So read the manifest and require every target it declares to exist as a file. Following
+      # `exports`/`main`/`types` rather than a list copied into this workflow means the check
+      # tracks the package instead of rotting beside it.
+      - name: packages/core's declared entry points exist
+        # It follows `exports`, `main` and `types` wherever they point. After W1-DEP-01 that is
+        # a mix — `exports[*].types` at `./src/*.ts`, `main`/`types`/`exports[*].default` at
+        # `./dist/*` — and the check is correct for both without being told which is which.
+        run: |
+          set -euo pipefail
+          node --input-type=module -e '
+            import { readFileSync, statSync } from "node:fs";
+            import { resolve, dirname } from "node:path";
+            const manifest = "packages/core/package.json";
+            const pkg = JSON.parse(readFileSync(manifest, "utf8"));
+            const base = dirname(manifest);
+            const targets = new Set();
+            const walk = (node) => {
+              if (typeof node === "string") { if (node.startsWith("./")) targets.add(node); return; }
+              if (node && typeof node === "object") for (const v of Object.values(node)) walk(v);
+            };
+            walk(pkg.exports);
+            walk(pkg.main);
+            walk(pkg.types);
+            if (targets.size === 0) {
+              console.error(`${manifest} declares no entry points; this gate would assert nothing.`);
+              process.exit(1);
+            }
+            let missing = 0;
+            for (const t of [...targets].sort()) {
+              const p = resolve(base, t);
+              let size = -1;
+              try { size = statSync(p).size; } catch { /* reported as missing below */ }
+              if (size < 0) { console.error(`MISSING ${t}`); missing += 1; }
+              else console.log(`ok ${t} (${size} bytes)`);
+            }
+            console.log(`${targets.size} declared entry points, ${missing} missing.`);
+            if (missing > 0) {
+              console.error("packages/core did not produce every entry point its own manifest");
+              console.error("declares. A consumer resolving one of the missing paths fails:");
+              console.error("  a dist/*.js target  -> ERR_MODULE_NOT_FOUND at import time");
+              console.error("  a *.d.ts / *.ts target -> TS2307 from tsc");
+              console.error("Which of those bites depends on where the manifest currently points,");
+              console.error("so this gate asserts the files rather than guessing the symptom.");
+              process.exit(1);
+            }
+          '
+
+      # Every build target's declared outputs (nx.json `targetDefaults.build.outputs` and the
+      # web and embedded overrides): each workspace's dist/, embedded's publish/, and apps/web's
+      # .next without its cache. The node step fails when a declared output that exists on disk is
+      # not under one of these paths, so a new output cannot silently fall out of the artifact.
+      # tar keeps the symlinks and modes that upload-artifact would drop.
+      - name: Pack the workspace build
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          outputs=(apps/*/dist packages/*/dist packages/*/publish apps/web/.next apps/web/next-env.d.ts)
+          pnpm exec nx graph --file="$RUNNER_TEMP/graph.json" > /dev/null
+          node --input-type=module -e '
+            import { existsSync, readFileSync } from "node:fs";
+            const packed = process.argv.slice(1);
+            const graph = JSON.parse(readFileSync(`${process.env.RUNNER_TEMP}/graph.json`, "utf8"));
+            const missing = [];
+            for (const { data } of Object.values(graph.graph.nodes)) {
+              for (const output of data.targets.build?.outputs ?? []) {
+                if (output.startsWith("!")) continue;
+                const path = output.replace("{projectRoot}", data.root);
+                if (existsSync(path) && !packed.some((p) => path === p || path.startsWith(`${p}/`))) {
+                  missing.push(path);
+                }
+              }
+            }
+            if (missing.length > 0) {
+              console.error(`Nx build outputs missing from the workspace-build artifact: ${missing.join(" ")}`);
+              process.exit(1);
+            }
+          ' "${outputs[@]}"
+          tar --zstd --exclude=apps/web/.next/cache -cf "$RUNNER_TEMP/workspace-build.tar.zst" "${outputs[@]}"
+          ls -lh "$RUNNER_TEMP/workspace-build.tar.zst"
+
+      - name: Upload the workspace build
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: workspace-build
+          path: ${{ runner.temp }}/workspace-build.tar.zst
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
+
+  # @indx-workspace/embedded's webpack build of apps/web (ADR-0109) and its tests, beside `build`.
+  # No project depends on embedded, so `build` and the jobs behind it never wait for this one;
+  # only the jobs that pack the published set (release-checks, the generated project, the journey,
+  # the docs claims) need both. Embedded's dependencies are rebuilt here (or replayed from the
+  # cache) rather than waited for: they take about a minute, apps/web's own build is skipped
+  # (embedded makes its own), and the webpack build starts minutes earlier. Keeping webpack's own
+  # cache between runs was measured and not adopted: 1.4 GB for 283 s -> 251 s after a web change.
+  build-embedded:
+    name: build · embedded and its tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Assert pull_request runs cannot select remote-cache write
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ "$NX_REMOTE_CACHE_KIND" = "write" ]; then
+            echo "::error::pull_request event resolved to remote-cache kind 'write'"
+            exit 1
+          fi
+
+      - name: Connect Nx to the remote cache
+        uses: ./.github/actions/nx-remote-cache
+        with:
+          kind: ${{ env.NX_REMOTE_CACHE_KIND }}
+          server: ${{ vars.NX_SELF_HOSTED_REMOTE_CACHE_SERVER }}
+
+      - name: Build embedded's dependencies but apps/web
+        run: scripts/ci/nx.sh run-many -t build --exclude=@agent-workspace/web,@indx-workspace/embedded --parallel=3 --output-style=static
+
+      # Node's default heap on a 7 GB runner leaves webpack's production build collecting garbage
+      # near its limit; the build runs in workers that inherit NODE_OPTIONS.
+      - name: Build embedded
+        env:
+          NODE_OPTIONS: --max-old-space-size=5120
+        run: scripts/ci/nx.sh run @indx-workspace/embedded:build --excludeTaskDependencies --output-style=static
+
+      - name: Pack the embedded build
+        run: |
+          set -euo pipefail
+          tar --zstd -cf "$RUNNER_TEMP/embedded-build.tar.zst" packages/embedded/dist packages/embedded/publish
+          ls -lh "$RUNNER_TEMP/embedded-build.tar.zst"
+
+      - name: Upload the embedded build
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: embedded-build
+          path: ${{ runner.temp }}/embedded-build.tar.zst
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
+
+      # Embedded's tests read its build output, so they run here rather than in a heavy-checks
+      # shard, which would then wait for this build. They use no database or S3 service.
+      - name: Test embedded
+        run: scripts/ci/nx.sh run @indx-workspace/embedded:test --excludeTaskDependencies --output-style=static
+
+      # The same no-skip gate as the heavy-checks shards; see there.
+      - name: No test in the run was skipped
+        run: node scripts/ci/vitest-no-skip.mjs
+
+  # Typecheck and lint, as Nx tasks, one target per runner. A pull request runs only the projects
+  # its diff reaches (the base is the merge base with `main`, hence `fetch-depth: 0`); a push to
+  # `main` runs every project so a gap in affected-detection can never hide behind "nothing
+  # looked affected". The builds both targets depend on come from the `build` job, so Nx is told
+  # not to run them (`--excludeTaskDependencies`). The repository-wide static checks that read
+  # built packages run once, on the typecheck runner.
+  typecheck-lint:
+    name: ${{ matrix.target }} · Nx task graph
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [typecheck, lint]
+    permissions:
+      contents: read
+      # .github/actions/workspace-build waits for the build artifacts through the run's API.
+      actions: read
+      id-token: write
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Assert pull_request runs cannot select remote-cache write
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ "$NX_REMOTE_CACHE_KIND" = "write" ]; then
+            echo "::error::pull_request event resolved to remote-cache kind 'write'"
+            exit 1
+          fi
+
+      - name: Connect Nx to the remote cache
+        uses: ./.github/actions/nx-remote-cache
+        with:
+          kind: ${{ env.NX_REMOTE_CACHE_KIND }}
+          server: ${{ vars.NX_SELF_HOSTED_REMOTE_CACHE_SERVER }}
+
+      - name: Restore the workspace build
+        uses: ./.github/actions/workspace-build
+
+      - name: Typecheck or lint through the Nx task graph
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            scripts/ci/nx.sh affected -t ${{ matrix.target }} --base=origin/main --head=HEAD --excludeTaskDependencies --parallel=2 --output-style=static
+          else
+            scripts/ci/nx.sh run-many -t ${{ matrix.target }} --excludeTaskDependencies --parallel=2 --output-style=static
+          fi
+
+      - name: Architecture boundaries
+        if: matrix.target == 'typecheck'
+        run: pnpm architecture:check
+
+      - name: Dead code and dependency declarations
+        if: matrix.target == 'typecheck'
+        run: pnpm deadcode:check
+
+      - name: Duplication budget
+        if: matrix.target == 'typecheck'
+        run: pnpm duplication:check
+
+  heavy-checks:
+    name: tests · ${{ matrix.shard }}
+    needs: build
+    # The Vitest projects, spread over four runners by measured time (main, 2026-10-15, seconds
+    # on a 16-vCPU runner): the root `tests` project is serial by design (tests/vitest.config.ts,
+    # 315 s) and gets a runner to itself; aw (178) with cli (82); web (132) with core (128); and
+    # every other project (each under 60 s) in `rest`. `rest` is defined as "not named in another
+    # shard", so a project added to the workspace is tested without editing this list.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: tests
+            projects: agent-workspace
+          - shard: aw-cli
+            projects: '@indx-workspace/aw @indx-workspace/cli'
+          - shard: web-core
+            projects: '@agent-workspace/web @agent-workspace/core'
+          - shard: rest
+            projects: ''
+    runs-on: ubuntu-latest
+
+    # A REAL PostgreSQL 17, for the whole job. Before this existed, `pnpm test` reported
+    # `150 passed | 14 skipped` and a green tick: W1-DB-01's migration, its seed, the "exactly
+    # one General agent" assertion and every cross-tenant foreign key were exercised only in a
+    # container run pasted into a PR body. The suites are gated on TEST_DATABASE_URL and skip
+    # loudly when it is absent, which is why the gap was honest rather than hidden — but a
+    # skipped acceptance test is not a passed one, and CI had verified none of it.
+    #
+    # `postgres:17-alpine` is the image W1-DB-01 produced its evidence against (17.11). The
+    # tag floats within 17.x on purpose: the step "PostgreSQL service is a real PostgreSQL 17"
+    # below asserts the major version it actually got, so a silent bump to 18 fails a gate
+    # instead of being pinned away in a comment nobody re-checks.
+    #
+    # The credentials are the defaults for a throwaway container that lives for one job and is
+    # reachable only from that job's runner. They are not a secret and must not be treated as
+    # one: GitHub withholds secrets from a pull_request build raised on a fork, so a `secrets.`
+    # reference here would leave the service unreachable exactly where CI matters most.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: agent_workspace_test
+        ports:
+          # The job's steps run on the runner host, not inside a container, so the service is
+          # reached on localhost through this published port — not by its service name.
+          - 5432:5432
+        # A health check, not a sleep. GitHub holds every step until the container reports
+        # healthy, so a slow start delays the job rather than failing it in a way that looks
+        # like a test failure.
+        #
+        # WHAT THIS CHECK DOES NOT PROVE, measured rather than assumed. `pg_isready` reports
+        # whether the server is accepting connections and nothing else. Against a live
+        # PostgreSQL 17.11 all three of these exit 0:
+        #     pg_isready -U postgres -d agent_workspace_test
+        #     pg_isready -U postgres -d database_that_does_not_exist
+        #     pg_isready -U postgres
+        # So `-d agent_workspace_test` here is documentation of which database the job wants,
+        # NOT a guarantee that it exists — an earlier draft of this comment claimed it was, and
+        # that claim was false. The step that actually asserts the database is
+        # "PostgreSQL service is a real PostgreSQL 17" below: it opens a connection to that
+        # database and runs a query, so a missing one fails with
+        # `database "…" does not exist` instead of being waved through by a liveness probe.
+        # This is ADR-0015 in miniature — a health check is a liveness signal, not a gate.
+        options: >-
+          --health-cmd "pg_isready -U postgres -d agent_workspace_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+          --health-start-period 10s
+
+    permissions:
+      contents: read
+      # .github/actions/workspace-build waits for the build artifacts through the run's API.
+      actions: read
+      id-token: write
+
+    env:
+      # Read by packages/core/src/db/seed.test.ts. This database is created, migrated,
+      # truncated and written to by the suite; it is a throwaway container, never a
+      # development database. Set at job level so the assertion step below and the test step
+      # read the identical value — two spellings of one connection string is how this kind of
+      # gate ends up asserting against a database the tests never touched.
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/agent_workspace_test
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # Full history: the ownership and suppression gates diff base...head.
+          fetch-depth: 0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # The S3 object-store contract suite (packages/core/src/storage/s3-store.test.ts) is gated
+      # on TEST_S3_ENDPOINT exactly as the database suites are gated on TEST_DATABASE_URL, and
+      # the same no-skip gate below would fail without it. `pnpm test` (scripts/
+      # test-with-services.mjs) starts this container itself when the variable is absent; here
+      # the tests run per project through Nx, so one S3 test server is started once for the job
+      # instead of once per task. Same image digest, same credentials, same health probe as that
+      # script — keep the two in step. The server is SeaweedFS 4.47 (`weed mini`, S3 on 8333),
+      # pinned by its multi-arch image index digest; the AWS_* variables create its only S3
+      # identity. docs/adr/0066-the-s3-contract-suite-runs-against-seaweedfs.md records why.
+      - name: Start the S3 test server for the object-store contract suite
+        run: |
+          set -euo pipefail
+          docker run --rm -d --name aw-ci-s3 \
+            -e AWS_ACCESS_KEY_ID=agent_workspace -e AWS_SECRET_ACCESS_KEY=agent_workspace \
+            -p 127.0.0.1:9000:8333 \
+            chrislusf/seaweedfs@sha256:ce9e796f1fe6f06968f4c04bdaf8f678dad9c8acdfef3d244133d71bfa6bf882 \
+            mini
+          for _ in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:9000/healthz > /dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:9000/healthz > /dev/null
+          {
+            echo "TEST_S3_ENDPOINT=http://127.0.0.1:9000"
+            echo "TEST_S3_ACCESS_KEY_ID=agent_workspace"
+            echo "TEST_S3_SECRET_ACCESS_KEY=agent_workspace"
+          } >> "$GITHUB_ENV"
+
+      - name: Assert pull_request runs cannot select remote-cache write
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ "$NX_REMOTE_CACHE_KIND" = "write" ]; then
+            echo "::error::pull_request event resolved to remote-cache kind 'write'"
+            exit 1
+          fi
+
+      - name: Connect Nx to the remote cache
+        uses: ./.github/actions/nx-remote-cache
+        with:
+          kind: ${{ env.NX_REMOTE_CACHE_KIND }}
+          server: ${{ vars.NX_SELF_HOSTED_REMOTE_CACHE_SERVER }}
+
+      # Built once by the `build` job; nothing in this job runs an Nx build.
+      - name: Restore the workspace build
+        uses: ./.github/actions/workspace-build
+
+      # ADR-0015 again, and this is the step the whole database change turns on. The suites in
+      # packages/core/src/db/seed.test.ts are `describe.skipIf(!hasDatabase)`: with
+      # TEST_DATABASE_URL unset, misspelt, or pointing at nothing, they SKIP and `pnpm test`
+      # exits 0. That is a gate passing because it could not run. So before the tests, assert
+      # positively that the thing they need is there and is what it claims to be — a
+      # PostgreSQL whose major version is 17, reached through the exact same variable the
+      # tests read.
+      #
+      # `pg` is resolved from packages/core, which depends on it (R-15 pinned it at 8.23.0);
+      # no dependency is added to make this step work.
+      - name: PostgreSQL service is a real PostgreSQL 17
+        working-directory: packages/core
+        run: |
+          set -euo pipefail
+          node -e '
+            const { Client } = require("pg");
+            const url = process.env.TEST_DATABASE_URL;
+            if (!url || url.trim() === "") {
+              console.error("TEST_DATABASE_URL is unset. The database-backed suites would SKIP");
+              console.error("and this job would go green over an acceptance test that never ran.");
+              process.exit(1);
+            }
+            const client = new Client({ connectionString: url });
+            client.connect()
+              .then(() => client.query("select version() as version, current_database() as db, current_setting($1) as server_version", ["server_version"]))
+              .then(async (result) => {
+                const row = result.rows[0];
+                console.log(row.version);
+                console.log(`database=${row.db} server_version=${row.server_version}`);
+                await client.end();
+                const major = Number.parseInt(String(row.server_version).split(".")[0], 10);
+                if (major !== 17) {
+                  console.error(`Expected PostgreSQL major version 17, got ${row.server_version}.`);
+                  console.error("W1-DB-01 produced its schema evidence against 17. Either pin the");
+                  console.error("service image back to 17 or re-run that evidence and say so.");
+                  process.exit(1);
+                }
+                console.log("PostgreSQL 17 is reachable at TEST_DATABASE_URL.");
+              })
+              .catch((error) => {
+                console.error("Could not reach TEST_DATABASE_URL:", error.message);
+                process.exit(1);
+              });
+          '
+
+      # One Nx `test` task per Vitest project (every workspace package plus the root `tests`
+      # project), started all at once: `--parallel=10` is the project count. Each PACKAGE's task
+      # caps its own worker pool (VITEST_MAX_WORKERS=4 in its package.json `nx` block) so ten
+      # Vitest processes share the 16 cores; the root project's task sets no cap on purpose,
+      # because that variable overrides the `tests` project's `fileParallelism: false` and would
+      # run its two `next dev` suites side by side (nx.json, targetDefaults.test `//workers`).
+      # Never export VITEST_MAX_WORKERS at step level here. Every task writes `.vitest-report.json` in
+      # its project root (`--reporter=default` keeps the human-readable log, `--reporter=json`
+      # the file the no-skip gate reads), and nx.json declares that file as the task's output so
+      # a cache replay restores it too. A pull request runs only the affected projects; the
+      # root project depends on every package (`implicitDependencies: ["*"]`), so its
+      # cross-cutting suites run whenever anything changes. A push to `main` runs them all.
+      # TEST_DATABASE_URL and TEST_S3_ENDPOINT are part of every test task's cache hash
+      # (nx.json `vitestConfig`), so a result computed without the services is never replayed.
+      - name: Test
+        id: test
+        env:
+          SHARD_PROJECTS: ${{ matrix.projects }}
+          # Every project a named shard owns; `rest` runs whatever is not in this list. Keep it in
+          # step with the matrix above.
+          NAMED_PROJECTS: 'agent-workspace @indx-workspace/aw @indx-workspace/cli @agent-workspace/web @agent-workspace/core'
+          # Tested in build-embedded, where its build is, not in any shard.
+          ELSEWHERE_PROJECTS: '@indx-workspace/embedded'
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            candidates="$(pnpm exec nx show projects --with-target test --affected --base=origin/main --head=HEAD)"
+          else
+            candidates="$(pnpm exec nx show projects --with-target test)"
+          fi
+          projects=''
+          for project in $candidates; do
+            if [ -n "$SHARD_PROJECTS" ]; then
+              case " $SHARD_PROJECTS " in *" $project "*) projects="$projects,$project" ;; esac
+            else
+              case " $NAMED_PROJECTS $ELSEWHERE_PROJECTS " in *" $project "*) ;; *) projects="$projects,$project" ;; esac
+            fi
+          done
+          projects="${projects#,}"
+          if [ -z "$projects" ]; then
+            echo "::notice title=No test project in this shard::the diff reaches no test project of shard ${{ matrix.shard }}."
+            echo "ran=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "ran=true" >> "$GITHUB_OUTPUT"
+          scripts/ci/nx.sh run-many -t test --projects="$projects" --excludeTaskDependencies --parallel=2 --output-style=static
+
+      # The positive assertion that the database suites RAN. `pnpm test` exiting 0 does not say
+      # so — vitest counts a skipped test as neither passed nor failed, and the 14 tests this
+      # workflow exists to enable were exactly that until now. This step reads the run's own
+      # report and requires it to contain zero skipped tests, printing every one it finds by
+      # full name. It also requires the report to exist and to contain tests at all, so a
+      # reporter that wrote nothing fails here rather than passing silently.
+      #
+      # WHAT MAKES A NO-SKIP RULE SAFE HERE: on this branch the run is 164 tests and the only
+      # skips in it are the 14 gated on TEST_DATABASE_URL, so with the service above there is
+      # nothing left to skip. It is deliberately strict: `it.skip` and a `skipIf` on a missing
+      # environment are the same shape, and this programme's recurring defect is a green tick
+      # over something that never executed. A future task that needs a genuine skip changes
+      # this step and says why in its PR — which is the point. It does not get to add one
+      # quietly.
+      #
+      # There is one report per Nx test task that ran (`<project root>/.vitest-report.json`),
+      # so this reads every one it finds and requires at least one: a run in which no project
+      # was affected at all cannot happen (every file belongs to some project, and the root
+      # project's suites run for any change), so zero reports means the reports were not
+      # written, not that there was nothing to test.
+      - name: No test in the run was skipped
+        if: steps.test.outputs.ran == 'true'
+        run: node scripts/ci/vitest-no-skip.mjs
+
+      # §2.3 — the diff must be a subset of the Owns globs declared in the PR body.
+      # Diff gate: pull_request only, for the reason given above the suppression step.
+
+  # The release checks that used to follow the tests in heavy-checks: none of them reads the
+  # PostgreSQL or S3 service, so they run on their own runner beside the test shards. The image
+  # builds are in `release-images`, which needs neither build.
+  release-checks:
+    name: release · packages and declarations
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # .github/actions/workspace-build waits for the build artifacts through the run's API.
+      actions: read
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Built once by the `build` job; nothing in this job runs an Nx build.
+      - name: Restore the workspace build
+        uses: ./.github/actions/workspace-build
+        with:
+          embedded: 'true'
+
+      # The published packages (issue #246, ADR-0082): pack contracts, sdk and aw exactly as the
+      # publish workflow does, refuse a tarball with anything but dist/ and the manifests, then
+      # install the tarballs from file: into an empty project, import every documented subpath,
+      # type-check a consumer of @indx-workspace/sdk/testing and run `npx aw --version`.
+      # Reads every workspace's built files, so it runs where both builds are restored.
+      - name: Validate built package entry points
+        run: pnpm package-exports:check:artifacts
+
+      - name: Pack and install the published packages
+        run: pnpm release:pack --smoke
+
+      # W3 exit gate: both concrete drivers run A.12 here, and each test prints one line per
+      # scenario. Keeping this separate from the aggregate test run makes a missing scenario or
+      # driver visible in the job log instead of disappearing inside a suite count.
+      - name: A.12 local and Docker per-scenario report
+        run: pnpm vitest run tests/conformance/a12-local.test.ts packages/runtime/src/docker.test.ts --reporter=verbose
+
+      # ENG-07 (docs/adr/0073-one-runtime-image-per-engine.md): one runtime image per engine that
+      # has an adapter package — scripts/engine-images.mjs derives the list, so an engine that is
+      # not implemented yet has no row. Each image is built, its labels and its adapter set are
+      # checked against the manifests (`--verify-image`, the image build test the Lean model's
+      # label hypothesis rests on), and its production dependency tree is held to the licence gate.
+      # Built for the runner's own platform only: the release builds amd64 and arm64.
+      # #370: `create --cloud local` against the real registry, anonymously. It fails only when
+      # every pinned image is public and `create` still fails; any other registry state (not
+      # published, not public, no answer after retries) skips with a warning (ADR-0086 D5).
+      - name: Generator resolves the published platform images
+        run: node infra/release/smoke-create.mjs
+
+      # D-08 keeps the full Docker Compose flow out of per-PR CI. These tests are the
+      # credential-free acceptance subset and the harness's own weakening checks.
+      - name: Wave 8 credential-free acceptance gates
+        run: pnpm vitest run tests/e2e/flow.test.ts tests/e2e/mcp-fixture.test.ts tests/matrix/weakening.test.ts tests/release/check.test.ts tests/release/ready.test.ts tests/security-review/evidence.test.ts tests/walkthrough/script.test.ts --reporter=dot
+
+      - name: Wave 8 matrices are generated from evidence
+        run: pnpm matrix
+
+      - name: Wave 8 release declarations agree
+        run: pnpm release:check
+  # The release image checks: one runtime image per engine, the image release dry run and the egress
+  # proxy's hardening. They build from the Dockerfiles and read no workspace build, so they need no
+  # other job and start at once, beside `build`.
+  release-images:
+    name: release · runtime, gateway and egress-proxy images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Start freeing disk for the Docker builds
+        uses: ./.github/actions/free-disk
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # check-licenses.mjs --engine reads the installed production tree.
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Wait for the freed disk
+        uses: ./.github/actions/free-disk
+        with:
+          wait: 'true'
+
+      - name: Runtime image per engine
+        run: |
+          set -euo pipefail
+          node scripts/engine-images.mjs > "$RUNNER_TEMP/engines"
+          while read -r engine image engine_version <&3; do
+            docker build --file runtime.Dockerfile --target runtime \
+              --build-arg "ENGINE=$engine" \
+              --build-arg "ENGINE_VERSION=$engine_version" \
+              --tag "agent-workspace/$image:ci" .
+            node scripts/engine-images.mjs --verify-image "agent-workspace/$image:ci" "$engine" "$engine_version"
+            node scripts/check-licenses.mjs --engine "$engine"
+          done 3< "$RUNNER_TEMP/engines"
+
+      # #370 (docs/adr/0086): the image release script, dry-run. It reads the release plan from
+      # infra/release/images.mjs and builds one image of it for the runner's platform, pushing
+      # nothing; images.yml runs the same script for every image, amd64 and arm64, signed.
+      - name: Image release dry run (one image, one platform, no push)
+        run: sh infra/release/build-and-push.sh --dry-run --security skip --platform linux/amd64 --image gateway --image egress-proxy
+
+      # docs/adr/0117: the egress proxy image must run as a non-root user on a read-only root file
+      # system with every capability dropped, because the sandbox network depends on it. The
+      # dry run above builds into the build cache only, so this builds a loadable image and starts it.
+      - name: Egress proxy image runs non-root on a read-only root file system
+        run: |
+          set -euo pipefail
+          docker build --file egress-proxy.Dockerfile --target egress-proxy --tag agent-workspace/egress-proxy:ci .
+          user="$(docker inspect --format '{{.Config.User}}' agent-workspace/egress-proxy:ci)"
+          case "$user" in ''|0|0:*|root|root:*) echo "::error::the egress proxy image runs as '$user', not a non-root user"; exit 1 ;; esac
+          container="$(docker run --detach --read-only --cap-drop ALL --security-opt no-new-privileges \
+            --env EGRESS_SESSION_ID=ci --env EGRESS_ALLOWLIST=example.com agent-workspace/egress-proxy:ci)"
+          trap 'docker rm --force "$container" >/dev/null' EXIT
+          for _ in $(seq 1 30); do
+            [ "$(docker inspect --format '{{.State.Health.Status}}' "$container")" = healthy ] && exit 0
+            sleep 2
+          done
+          docker logs "$container"
+          echo '::error::the egress proxy container did not become healthy'
+          exit 1
+
+  # The Lean 4 specification (docs/adr/0062, docs/formal/README.md). It builds the model, runs
+  # the soundness audit (no `sorry`, no axiom beyond propext / Classical.choice / Quot.sound),
+  # checks the model's layer direction, regenerates the catalogue, traceability matrix and test
+  # vectors and fails when the committed ones are stale, then replays the vectors against the
+  # real TypeScript. It runs beside the other two gate jobs and ci-success requires it.
+  #
+  # PATH FILTER INSIDE THE JOB, NOT ON IT. ci-success treats a skipped job as a failure, so a
+  # job-level `if:` would turn every unrelated pull request red. Instead the first step decides
+  # whether the diff reaches the model or anything it cites, and the job succeeds with its
+  # remaining steps skipped when it does not. A push to `main` always runs everything.
+  #
+  # elan is installed from a pinned release whose SHA-256 is checked before it runs — no
+  # unpinned `curl | sh`. The Lean toolchain itself is pinned by formal/lean-toolchain and the
+  # dependencies by commit in formal/lake-manifest.json.
+  formal:
+    name: formal · Lean specification
+    needs: build
+    runs-on: ${{ vars.CI_BOTTLENECK_RUNNER || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+      # .github/actions/workspace-build waits for the build artifacts through the run's API.
+      actions: read
+    env:
+      ELAN_VERSION: v4.2.4
+      ELAN_SHA256: 42b94d4244e8353142c456ec0e4ca6528fd898a6c604d4059f494e706e431f63
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Decide whether the diff reaches the formal model
+        id: scope
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # The model's sources (contracts, SDK, aw, the server domains and the core, gateway, runtime
+          # and runner code it mirrors), the conformance suite, the generators, and the documents
+          # the model cites.
+          pattern='^(formal/|packages/(contracts|sdk|aw|core|gateway|runtime)/src/|apps/web/server/|apps/runner/src/|apps/(web|runner)/formal/|tests/formal/|scripts/formal/|docs/formal/|docs/sdk/|docs/adr/|docs/spec\.md$|docs/architecture\.md$|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$)'
+          # Read the whole list before matching. Piping git diff into grep -q fails open under
+          # pipefail: grep exits at the first match and git then dies of SIGPIPE on a long diff.
+          changed="$(git diff --name-only origin/main...HEAD)"
+          if grep -Eq "$pattern" <<<"$changed"; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "applies=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Formal job not applicable::the diff touches nothing the Lean model reads or cites."
+          fi
+
+      - name: Start freeing disk for the swap file and the Lean toolchain
+        if: steps.scope.outputs.applies == 'true'
+        uses: ./.github/actions/free-disk
+
+      - name: Install elan from a checksum-verified release
+        if: steps.scope.outputs.applies == 'true'
+        run: |
+          set -euo pipefail
+          archive="elan-x86_64-unknown-linux-gnu.tar.gz"
+          curl --fail --silent --show-error --location --output "$RUNNER_TEMP/$archive" \
+            "https://github.com/leanprover/elan/releases/download/${ELAN_VERSION}/${archive}"
+          echo "${ELAN_SHA256}  $RUNNER_TEMP/$archive" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP"
+          "$RUNNER_TEMP/elan-init" -y --no-modify-path --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Restore the Lean toolchain and build cache
+        if: steps.scope.outputs.applies == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.elan/toolchains
+            formal/.lake
+          key: formal-${{ runner.os }}-${{ hashFiles('formal/lean-toolchain', 'formal/lake-manifest.json') }}-${{ hashFiles('formal/**/*.lean') }}
+          restore-keys: |
+            formal-${{ runner.os }}-${{ hashFiles('formal/lean-toolchain', 'formal/lake-manifest.json') }}-
+
+      - name: Set up pnpm
+        if: steps.scope.outputs.applies == 'true'
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        if: steps.scope.outputs.applies == 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        if: steps.scope.outputs.applies == 'true'
+        run: pnpm install --frozen-lockfile
+
+      # A cold Lean build (no cache restored) lost the 2-vCPU runner twice, about 9 minutes in, with
+      # "The runner has received a shutdown signal": out of memory, on a VM with ~7 GB of RAM.
+      # Swap lets the two parallel Lean processes spill instead; the memory log says how close it
+      # gets. A warm build (formal/.lake restored) compiles only the changed modules. The swap file
+      # and the Lean toolchain do not both fit in the image's free space, so the unused SDKs go first.
+      - name: Wait for the freed disk
+        if: steps.scope.outputs.applies == 'true'
+        uses: ./.github/actions/free-disk
+        with:
+          wait: 'true'
+
+      - name: Add swap for the Lean build
+        if: steps.scope.outputs.applies == 'true'
+        run: |
+          set -euo pipefail
+          sudo fallocate -l 8G /formal.swap
+          sudo chmod 600 /formal.swap
+          sudo mkswap /formal.swap > /dev/null
+          sudo swapon /formal.swap
+          free -m
+          nohup sh -c 'while sleep 30; do free -m | sed -n 2,3p | tr -s " " | paste -sd " "; done' \
+            > "$RUNNER_TEMP/formal-memory.log" 2>&1 &
+
+      - name: Build the Lean model and its tools
+        if: steps.scope.outputs.applies == 'true'
+        run: pnpm formal:build
+
+      - name: Memory during the Lean build
+        if: always() && steps.scope.outputs.applies == 'true'
+        run: tail -n 40 "$RUNNER_TEMP/formal-memory.log" || true
+
+      - name: Soundness audit, layer direction and generated artefacts are current
+        if: steps.scope.outputs.applies == 'true'
+        run: pnpm formal:check
+
+      # Built once by the `build` job; nothing in this job runs an Nx build.
+      - name: Restore the workspace build
+        if: steps.scope.outputs.applies == 'true'
+        uses: ./.github/actions/workspace-build
+
+      - name: Replay the model's vectors against the TypeScript
+        if: steps.scope.outputs.applies == 'true'
+        run: pnpm vitest run tests/formal apps/web/formal apps/runner/formal --reporter=verbose
+
+  # #373 (docs/adr/0087): the release vulnerability gate, on every pull request. It builds each
+  # image of the release plan (infra/release/images.mjs) for linux/amd64 and runs
+  # infra/release/trivy-gate.sh on it: the same script, and so the same flags and the same
+  # .trivyignore.yaml, that build-and-push.sh runs on every published digest. A finding that would
+  # stop an images-v* release fails the pull request that introduces it instead. trivy is pinned to
+  # the version images.yml uses (tests/release/platform-images.test.ts holds the two together).
+  # Its own job, beside the other gates, because it builds seven images; ci-success requires it.
+  image-scan:
+    name: release images · trivy gate · ${{ matrix.shard }}/3
+    runs-on: ubuntu-latest
+    # Nine images, three per runner: scan-images.sh --shard takes every third image of the plan,
+    # so a new image lands in a shard without this list naming it.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Start freeing disk for the Docker builds
+        uses: ./.github/actions/free-disk
+
+      # The release tooling uses Node built-ins only, so nothing is installed.
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+
+      - uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+        with:
+          version: v0.74.0
+
+      - name: Wait for the freed disk
+        uses: ./.github/actions/free-disk
+        with:
+          wait: 'true'
+
+      - name: Build every release image for linux/amd64 and run the release trivy gate
+        run: sh infra/release/scan-images.sh --platform linux/amd64 --shard ${{ matrix.shard }}/3
+
+  # #398: the generated project, end to end, as a new user meets it, against this change's own
+  # packages and images (tests/generated-project/run.mjs): the five @indx-workspace packages are
+  # packed, the four platform images the generator pins are built and pushed to a throwaway
+  # registry on the runner, and Playwright then runs `npm create` with the packed generator,
+  # `pnpm install` and `pnpm start`, setup through the API, a chat through the API, through `aw`
+  # with an `ak_live_` key and through the browser, and `pnpm stop`. The model is a
+  # fake Anthropic API the test starts inside the project (tests/generated-project/
+  # fake-anthropic.mjs), so no secret and no real key is involved, and D-08's API budget does not
+  # apply to it.
+  #
+  # PATH FILTER INSIDE THE JOB, as `formal` does: ci-success treats a skipped job as a failure.
+  # It runs when the diff reaches anything a generated project runs or installs, and always on
+  # `main`. That is most code changes, on purpose: the job costs one 16-vCPU runner for about the
+  # wall time of heavy-checks, beside it, and a docs-only change does not pay for it.
+  generated-project-e2e:
+    name: generated project · create, start, chat (API, CLI, browser), teardown
+    needs: build
+    runs-on: ${{ vars.CI_BOTTLENECK_RUNNER || 'ubuntu-latest' }}
+    # A cold build of the four images took about 16 minutes locally, the suite about 3 (the first
+    # CI run took 4 minutes in all). The budget leaves each cap room to report its own failure:
+    # about 5 minutes of setup and install, at most 30 to pack, install and build the images
+    # (run.mjs's GP_PREPARE_TIMEOUT_MS), at most 20 for the suite (the Playwright config's
+    # globalTimeout), and the rest for the evidence upload. A hung step fails with its own message
+    # instead of the runner's.
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      # .github/actions/workspace-build waits for the build artifacts through the run's API.
+      actions: read
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Decide whether the diff reaches a generated project
+        id: scope
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # What the generated project installs (the published packages) and every input its
+          # images read: the web image copies the whole build context (`COPY . .`, minus
+          # .dockerignore), so that is every package, the two apps, the migrations, the image
+          # helpers (infra/images), the root manifests, .npmrc and tsconfig files, and the
+          # Dockerfiles; how they are built (infra/release); and this test and its job.
+          pattern='^(packages/|apps/(web|runner)/|migrations/|infra/(images|release)/|tests/generated-project/|scripts/release/|scripts/engine-images\.mjs$|(gateway\.|runtime\.)?Dockerfile$|\.dockerignore$|\.npmrc$|tsconfig[^/]*\.json$|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|playwright\.generated-project\.config\.mjs$|\.github/workflows/ci\.yml$)'
+          # Read the whole list before matching. Piping git diff into grep -q fails open under
+          # pipefail: grep exits at the first match and git then dies of SIGPIPE on a long diff.
+          changed="$(git diff --name-only origin/main...HEAD)"
+          if grep -Eq "$pattern" <<<"$changed"; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "applies=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Generated-project E2E not applicable::the diff touches nothing a generated project installs or runs."
+          fi
+
+      - name: Start freeing disk for the Docker builds
+        if: steps.scope.outputs.applies == 'true'
+        uses: ./.github/actions/free-disk
+
+      - name: Set up pnpm
+        if: steps.scope.outputs.applies == 'true'
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        if: steps.scope.outputs.applies == 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        if: steps.scope.outputs.applies == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        if: steps.scope.outputs.applies == 'true'
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Wait for the freed disk
+        if: steps.scope.outputs.applies == 'true'
+        uses: ./.github/actions/free-disk
+        with:
+          wait: 'true'
+
+      # The four pinned images do not read the workspace build: built here (~7 min) while
+      # build-embedded still runs, they make run.mjs's own builds cache hits.
+      - name: Build the pinned images ahead of the packages
+        if: steps.scope.outputs.applies == 'true'
+        run: node tests/generated-project/images.mjs --warm
+
+      # Built once by the `build` job; nothing in this job runs an Nx build.
+      - name: Restore the workspace build
+        if: steps.scope.outputs.applies == 'true'
+        uses: ./.github/actions/workspace-build
+        with:
+          embedded: 'true'
+
+      - name: Run the generated project end to end
+        if: steps.scope.outputs.applies == 'true'
+        env:
+          GP_WORK_DIR: ${{ runner.temp }}/generated-project
+        run: node tests/generated-project/run.mjs
+
+      - name: Keep the Playwright report and failure evidence
+        if: failure() && steps.scope.outputs.applies == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: generated-project-e2e
+          path: |
+            playwright-report/generated-project/
+            test-results/generated-project/
+          retention-days: 14
+
+  # Developer journey — the slice-1 exit test (delivery unit S1-19, issue #457; plan §7 "S1-19").
+  #
+  # On a clean Linux container (the digest-pinned Playwright image: Node 24, no Docker, no checkout
+  # of this repository), tests/journey/run.mjs runs the four commands a new user runs:
+  #   npm create @indx-workspace@latest demo (answered on a terminal: the recommended answers, brand
+  #   colour #c0392b, not the widget's default)  →  npm install  →  npm run dev  →  the widget on
+  #   /p/s/main/try, in that brand colour, answers a question.
+  # Each step is timed, and the wall clock from the start of npm create to the answer is checked
+  # against a 600 s budget (tests/journey/harness.mjs JOURNEY_BUDGET_SECONDS, not overridable). The
+  # measured seconds are printed, written to journey-timings.json (uploaded below, always) and
+  # appended to the job summary. No file in the generated project may be edited by hand: the
+  # harness snapshots demo/ after create and fails on any change outside the runtime-owned paths.
+  #
+  # The slice-2 exit test (delivery unit S2-08, issue #550) follows in the same container, each
+  # block on its own clock and fixed budget (harness.mjs, not overridable): B2, a colour written to
+  # surfaces/main.ts shows in the launcher (60 s); B3b, a hand-written OpenAPI tool after an
+  # `aw dev` restart with ORDERS_TOKEN (900 s); B3a, `npm create` answering `openapi` makes the tool
+  # with no file edited (900 s). Each widget answer must carry the loopback orders API's data,
+  # fetched with the token. Untimed: a policy ceiling refused by the server (403
+  # policy_cannot_widen) with Bash denied at compose, and the token absent from every file but the
+  # sealed store, every log and transcript, and the runtime's environment. The timings go under
+  # `budgets` in journey-timings.json.
+  #
+  # NO SECRET IS USED. The model answers through the fake Anthropic provider
+  # (tests/generated-project/fake-anthropic.mjs, wrapped by tests/journey/fake-anthropic-tools.mjs)
+  # served on loopback, with a fake key the harness generates per run (sk-ant-e2e-fake-<random>)
+  # and passes only to the `npm run dev` exec — never in a file or an unredacted log. The orders
+  # token (orders-e2e-<random>) is generated and passed the same way. This job references no
+  # repository secret.
+  #
+  # The packages come from this checkout's own tarballs (scripts/release/pack-packages.mjs),
+  # published to a throwaway, digest-pinned Verdaccio whose @indx-workspace/* scope has no uplink,
+  # so a public publish can never leak into the run and a pull request is judged on its own code
+  # (ADR-0082 D5). The packages already on npm are installed from registry.npmjs.org, with a real
+  # model and on macOS and Windows, by the non-required install-live workflow (ADR-0130). This job
+  # never publishes to npm and never pushes a tag.
+  #
+  # Required by ci-success (#514); PATH FILTER INSIDE THE JOB, as `formal` does, because
+  # ci-success treats a skipped job as a failure. On a pull request the scope step below decides
+  # whether the diff reaches what a new user installs or runs, so the cost stays bounded; a push to
+  # `main` and a dispatch always run it, and the latest `main` commit's run records the timings.
+  journey-e2e:
+    name: developer journey · ${{ matrix.part }}
+    needs: build
+    runs-on: ${{ vars.CI_BOTTLENECK_RUNNER || 'ubuntu-latest' }}
+    # The journey and the first-hour stopwatch share nothing but the packages, so they run on two
+    # runners; each leg runs only its own steps.
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [journey, first-hour]
+    # Every phase has its own cap, so a slow run fails inside run.mjs with a named reason and its
+    # `finally` still collects the evidence: checkout and setup (~2 min), install (8), build (10),
+    # then the journey step (80 = JOURNEY_PREPARE_TIMEOUT_MS 10 + B1's 600 s budget and its 60 s
+    # grace, 11 + JOURNEY_CHECKS_TIMEOUT_MS 10 + B2's 60 s + 60 s, 2 + B3b's and B3a's 900 s +
+    # 60 s each, 16 + 16 + the ceiling and secret checks' JOURNEY_CHECKS_TIMEOUT_MS 10 + 3 for
+    # cleanup = 78, and 2 to spare), the first-hour step (25 = JOURNEY_PREPARE_TIMEOUT_MS 10 + the
+    # stopwatch's 11 + 1 to read its record + 3 for cleanup), and the uploads (~3). harness.test.ts
+    # checks this arithmetic.
+    timeout-minutes: 130
+    permissions:
+      contents: read
+      # .github/actions/workspace-build waits for the build artifacts through the run's API.
+      actions: read
+      # Only for .github/actions/nx-remote-cache's OIDC exchange.
+      id-token: write
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Decide whether the diff reaches the developer journey
+        id: scope
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # What a new user installs (every published package and what it serves: the two apps and
+          # the migrations), how it is packed (scripts/release), the journey itself and everything
+          # tests/journey/run.mjs imports, directly or not (harness.test.ts checks this), and what
+          # this job builds with.
+          pattern='^(packages/|apps/(web|runner)/|migrations/|scripts/release/|tests/journey/|tests/generated-project/(fake-anthropic|project|run|images)\.mjs$|infra/release/images\.mjs$|scripts/engine-images\.mjs$|\.github/actions/(nx-remote-cache|workspace-build|free-disk)/|scripts/ci/nx\.sh$|nx\.json$|tsconfig[^/]*\.json$|playwright\.journey\.config\.mjs$|docs/sdk/site/getting-started/quickstart\.mdx$|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$)'
+          # Read the whole list before matching. Piping git diff into grep -q fails open under
+          # pipefail: grep exits at the first match and git then dies of SIGPIPE on a long diff.
+          changed="$(git diff --name-only origin/main...HEAD)"
+          if grep -Eq "$pattern" <<<"$changed"; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "applies=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Developer journey not applicable::the diff touches nothing the developer journey installs, builds or runs."
+          fi
+
+      - name: Start freeing disk for the Docker builds
+        if: steps.scope.outputs.applies == 'true'
+        uses: ./.github/actions/free-disk
+
+      - name: Set up pnpm
+        if: steps.scope.outputs.applies == 'true'
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        if: steps.scope.outputs.applies == 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        timeout-minutes: 8
+        if: steps.scope.outputs.applies == 'true'
+        run: pnpm install --frozen-lockfile
+
+      # Built once by the `build` job; nothing in this job runs an Nx build.
+      - name: Restore the workspace build
+        if: steps.scope.outputs.applies == 'true'
+        uses: ./.github/actions/workspace-build
+        with:
+          embedded: 'true'
+
+      - name: Wait for the freed disk
+        if: steps.scope.outputs.applies == 'true'
+        uses: ./.github/actions/free-disk
+        with:
+          wait: 'true'
+
+      - name: Run the developer journey on a clean container
+        timeout-minutes: 80
+        if: matrix.part == 'journey' && steps.scope.outputs.applies == 'true'
+        env:
+          JOURNEY_WORK_DIR: ${{ runner.temp }}/journey
+          JOURNEY_PREPARE_TIMEOUT_MS: '600000'
+          JOURNEY_CHECKS_TIMEOUT_MS: '600000'
+        run: node tests/journey/run.mjs
+
+      - name: Keep the measured timings
+        if: always() && matrix.part == 'journey' && steps.scope.outputs.applies == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: journey-timings
+          path: ${{ runner.temp }}/journey/journey-timings.json
+          if-no-files-found: warn
+
+      # The first-hour stopwatch (FH-13, issue #700): the shell block of getting-started/quickstart.mdx
+      # run unchanged on a clean container, one row per step, each pending until its issue lands.
+      # It has its own work directory, so it never touches the journey's evidence. Same fake model,
+      # same Verdaccio, no secret. Reported against the B0 targets, not yet enforced.
+      - name: Time the first hour
+        id: first-hour
+        timeout-minutes: 25
+        if: ${{ !cancelled() && matrix.part == 'first-hour' && steps.scope.outputs.applies == 'true' }}
+        env:
+          JOURNEY_WORK_DIR: ${{ runner.temp }}/journey-first-hour
+          JOURNEY_PREPARE_TIMEOUT_MS: '600000'
+        run: node tests/journey/run.mjs --first-hour
+
+      - name: Keep the first-hour timings
+        if: always() && matrix.part == 'first-hour' && steps.scope.outputs.applies == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: first-hour-timings
+          path: ${{ runner.temp }}/journey-first-hour/first-hour-timings.json
+          if-no-files-found: warn
+
+      - name: Keep the Playwright report and failure evidence
+        if: failure() && matrix.part == 'journey' && steps.scope.outputs.applies == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: journey-e2e-evidence
+          # run.mjs copies the container's Playwright report and test results in here too.
+          path: ${{ runner.temp }}/journey/evidence/
+          retention-days: 14
+
+  # Every install command and code sample the landing page, the docs site and the READMEs show
+  # (issue #880): `node tests/docs-claims/run.mjs` runs the shell blocks marked `claim=run` on the
+  # journey's clean container (the same digest-pinned Verdaccio, fake Anthropic API and Playwright
+  # image machine; the published packages are install-live's, ADR-0130), type-checks the blocks marked
+  # `claim=compile` against the packed packages, and compares the blocks marked `file=` with the file
+  # they copy. An unmarked block fails the extractor. The table of one row per claim goes to the job
+  # summary and the logs to the docs-claims artifact. No secret is used. Required by ci-success, with
+  # the path filter inside the job as in journey-e2e, because ci-success treats a skipped job as a
+  # failure.
+  docs-claims:
+    name: docs claims · ${{ matrix.shard }}/3
+    needs: build
+    runs-on: ubuntu-latest
+    # The run claims' pages are split over three runners (run.mjs --shard); the first also checks
+    # the static rows, the last the `aw` and compile rows. Each shard writes its own report.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    # Checkout and setup (~2 min), install (8), build (10), the runner (50: JOURNEY_PREPARE_TIMEOUT_MS
+    # 10, then every command under DOCS_CLAIMS_COMMAND_TIMEOUT_MS, 5) and the upload (~2).
+    timeout-minutes: 75
+    permissions:
+      contents: read
+      # .github/actions/workspace-build waits for the build artifacts through the run's API.
+      actions: read
+      # Only for .github/actions/nx-remote-cache's OIDC exchange.
+      id-token: write
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Decide whether the diff reaches a documented claim
+        id: scope
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # What the pages claim about (packages/), the pages (docs/sdk/site, sites, the READMEs), the
+          # runner and everything tests/docs-claims/run.mjs imports (run.test.ts checks this), and
+          # what this job builds with.
+          pattern='^(packages/|docs/sdk/site/|sites/|README\.md$|tests/docs-claims/|tests/gallery/|tests/journey/|tests/generated-project/(fake-anthropic|project|run|images)\.mjs$|apps/(web|runner)/|migrations/|scripts/release/|infra/release/images\.mjs$|scripts/engine-images\.mjs$|\.github/actions/(nx-remote-cache|workspace-build|free-disk)/|scripts/ci/nx\.sh$|nx\.json$|tsconfig[^/]*\.json$|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$)'
+          # Read the whole list before matching: see journey-e2e.
+          changed="$(git diff --name-only origin/main...HEAD)"
+          if grep -Eq "$pattern" <<<"$changed"; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "applies=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Docs claims not applicable::the diff touches no page, package or runner the documented claims depend on."
+          fi
+
+      - name: Start freeing disk for the Docker builds
+        if: steps.scope.outputs.applies == 'true'
+        uses: ./.github/actions/free-disk
+
+      - name: Set up pnpm
+        if: steps.scope.outputs.applies == 'true'
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        if: steps.scope.outputs.applies == 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        timeout-minutes: 8
+        if: steps.scope.outputs.applies == 'true'
+        run: pnpm install --frozen-lockfile
+
+      # Built once by the `build` job; nothing in this job runs an Nx build.
+      - name: Restore the workspace build
+        if: steps.scope.outputs.applies == 'true'
+        uses: ./.github/actions/workspace-build
+        with:
+          embedded: 'true'
+
+      - name: Wait for the freed disk
+        if: steps.scope.outputs.applies == 'true'
+        uses: ./.github/actions/free-disk
+        with:
+          wait: 'true'
+
+      - name: Run, compile and compare every documented claim
+        timeout-minutes: 50
+        if: steps.scope.outputs.applies == 'true'
+        env:
+          DOCS_CLAIMS_WORK_DIR: ${{ runner.temp }}/docs-claims
+          JOURNEY_PREPARE_TIMEOUT_MS: '600000'
+        run: node tests/docs-claims/run.mjs --shard ${{ matrix.shard }}/3
+
+      - name: Keep the claims table and logs
+        if: always() && steps.scope.outputs.applies == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: docs-claims-${{ matrix.shard }}
+          path: |
+            ${{ runner.temp }}/docs-claims/summary.md
+            ${{ runner.temp }}/docs-claims/results.json
+            ${{ runner.temp }}/docs-claims/logs/
+          if-no-files-found: warn
+          retention-days: 14
+
+  # A code tool, end to end, on the repository's own compose.yaml with the tool sandbox on (issue
+  # #847, ADR-0118): `aw push --yes` makes the aw-dev-tools connector and the version, a run calls
+  # the tool in the session's tool sandbox through the gateway, `aw promote --yes` moves production.
+  # The only model is the fake Anthropic API (tests/e2e/tool-sandbox-provider.mjs); this job
+  # references no repository secret. Not in ci-success.needs: it is a check beside the required
+  # gates, until the Owner decides to require it (that also changes scripts/check-workflows.mjs).
+  # The path filter is inside the job, as in journey-e2e, so a diff that cannot reach it costs only
+  # the checkout.
+  tool-sandbox-e2e:
+    name: code tools · push, run and promote on compose with the tool sandbox
+    runs-on: ${{ vars.CI_BOTTLENECK_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      # .github/actions/workspace-build waits for the build artifacts through the run's API.
+      actions: read
+      # Only for .github/actions/nx-remote-cache's OIDC exchange.
+      id-token: write
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Decide whether the diff reaches the tool sandbox
+        id: scope
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # The services compose.yaml runs and the images it builds or expects, what `aw push`
+          # and `aw promote` send, the tool host, the E2E and the fakes it imports.
+          pattern='^(packages/(aw|contracts|sdk|cli|core|gateway|runtime|tool-host)/|apps/(web|runner)/|migrations/|compose\.yaml$|([a-z-]+\.)?Dockerfile$|tests/e2e/tool-sandbox|tests/journey/fake-anthropic-tools\.mjs$|tests/generated-project/(fake-anthropic|project|run|stack-api)\.mjs$|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$)'
+          changed="$(git diff --name-only origin/main...HEAD)"
+          if grep -Eq "$pattern" <<<"$changed"; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "applies=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Tool sandbox E2E not applicable::the diff touches nothing the tool sandbox E2E builds or runs."
+          fi
+
+      - name: Start freeing disk for the Docker builds
+        if: steps.scope.outputs.applies == 'true'
+        uses: ./.github/actions/free-disk
+
+      - name: Set up pnpm
+        if: steps.scope.outputs.applies == 'true'
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        if: steps.scope.outputs.applies == 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        timeout-minutes: 8
+        if: steps.scope.outputs.applies == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Wait for the freed disk
+        if: steps.scope.outputs.applies == 'true'
+        uses: ./.github/actions/free-disk
+        with:
+          wait: 'true'
+
+      # The Compose stack's images do not read the workspace build: built here while `build`
+      # still runs, they make the E2E's `docker build` and `compose up --build` cache hits.
+      - name: Build the stack's images ahead of the workspace build
+        if: steps.scope.outputs.applies == 'true'
+        run: node tests/e2e/tool-sandbox-images.mjs --warm
+
+      # Built once by the `build` job; nothing in this job runs an Nx build.
+      - name: Restore the workspace build
+        if: steps.scope.outputs.applies == 'true'
+        uses: ./.github/actions/workspace-build
+
+      - name: Run the tool sandbox E2E
+        timeout-minutes: 40
+        if: steps.scope.outputs.applies == 'true'
+        run: node tests/e2e/tool-sandbox.e2e.mjs
+
+  # D-08: the stack-level E2E run is on demand, never a pull-request requirement.
+  # The harness currently has no repository adapter capable of completing all eleven
+  # steps, so this job remains honestly red until that declared Wave 8 gap is closed.
+  full-e2e:
+    name: on-demand Docker Compose E2E
+    if: github.event_name == 'workflow_dispatch'
+    needs: [fast-checks, heavy-checks]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Start freeing disk for the Docker builds
+        uses: ./.github/actions/free-disk
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Configure the disposable stack
+        run: |
+          cp .env.example .env
+          sed -i 's/^MASTER_ENCRYPTION_KEY=.*/MASTER_ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/' .env
+          sed -i 's/^SESSION_SECRET=.*/SESSION_SECRET=wave8-ci-session-secret-000000000000/' .env
+          sed -i 's/^BOOTSTRAP_ADMIN_PASSWORD=.*/BOOTSTRAP_ADMIN_PASSWORD=wave8-ci-bootstrap-password/' .env
+
+      - name: Wait for the freed disk
+        uses: ./.github/actions/free-disk
+        with:
+          wait: 'true'
+
+      - name: Build and start the five-service stack
+        run: docker compose up -d --build
+
+      - name: Run the spec-derived eleven-step harness
+        id: full_flow
+        continue-on-error: true
+        run: pnpm e2e
+
+      - name: Require exactly eleven persisted results
+        if: always()
+        run: |
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const path = "tests/e2e/results/flow.json";
+            let document;
+            try { document = JSON.parse(readFileSync(path, "utf8")); }
+            catch (error) {
+              console.error(`E2E result is absent or unreadable at ${path}: ${error.message}`);
+              process.exit(1);
+            }
+            if (!Array.isArray(document.steps) || document.steps.length !== 11) {
+              console.error(`Expected exactly 11 flow entries, got ${document.steps?.length ?? "none"}`);
+              process.exit(1);
+            }
+            console.log("flow.json contains exactly 11 entries");
+          '
+
+      - name: Preserve the harness verdict
+        if: always() && steps.full_flow.outcome != 'success'
+        run: |
+          echo "The full E2E harness did not pass; a result file never converts that failure to green."
+          exit 1
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
+
+  # The one status check to require. fast-checks and heavy-checks run side by side, so a
+  # branch rule pointing at either would see the other's result only by accident; this job
+  # fails if any required job (the two gate jobs, `formal`, `image-scan`,
+  # `generated-project-e2e`, the developer journey `journey-e2e` and `docs-claims`) did not SUCCEED — a skip
+  # or a cancellation is a failure here, not a pass, because a gate that did not run has not
+  # passed. full-e2e is on demand and is left out on purpose. No checkout, no install: a `jq`
+  # over the `needs` context on the smallest runner size.
+  ci-success:
+    name: CI success
+    if: always()
+    needs:
+      [
+        fast-checks,
+        build,
+        build-embedded,
+        typecheck-lint,
+        heavy-checks,
+        release-checks,
+        release-images,
+        formal,
+        image-scan,
+        generated-project-e2e,
+        journey-e2e,
+        docs-claims,
+        tool-sandbox-e2e,
+      ]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every required job succeeded
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          echo "$NEEDS_JSON" | jq .
+          failed=$(echo "$NEEDS_JSON" | jq -r 'to_entries[] | select(.value.result != "success") | "\(.key): \(.value.result)"')
+          if [ -n "$failed" ]; then
+            echo "One or more required jobs did not succeed:"
+            echo "$failed"
+            exit 1
+          fi
+          echo "All required jobs succeeded."

@@ -1,0 +1,266 @@
+---
+title: "portable-agent"
+description: "The @indx-workspace/contracts/portable-agent exports, sorted alphabetically."
+---
+
+<Note>This page is generated from `packages/contracts/src/portable-agent.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## PORTABLE_AGENT_API_VERSION
+
+The portable agent (ADR-0133 D2): one agent as an external agent host describes it, and the
+project that carries it (`agents/<name>.agent.md` plus the files it references). The order of the
+keys in each object is the canonical order of the file; `@indx-workspace/sdk/portable` writes
+them in this order.
+
+Value: `AGENT_DEFINITION_API_VERSION`
+
+## PORTABLE_AGENT_DESCRIPTION_MAX_LENGTH
+
+Value: `1_024`
+
+## PORTABLE_AGENT_KIND
+
+Value: `'Agent'`
+
+## PORTABLE_AGENT_LIST_MAX
+
+The longest list an agent carries: tools, knowledge entries, skills, and paths per entry.
+
+Value: `128`
+
+## PORTABLE_AGENT_SUBAGENTS_MAX
+
+Claude Managed Agents' predefined-agent ceiling.
+
+Value: `20`
+
+## PORTABLE_BUILTIN_TOOL_IDS
+
+- `'web_search'`
+- `'web_fetch'`
+- `'code_execution'`
+- `'file_access'`
+
+## PORTABLE_MCP_AUTH_SCHEMES
+
+- `'bearer'`
+- `'api-key'`
+- `'oauth2'`
+
+## PORTABLE_MCP_TRANSPORTS
+
+- `'streamable-http'`
+- `'sse'`
+- `'stdio'`
+
+## PORTABLE_PROJECT_AGENTS_MAX
+
+A root agent and its `PORTABLE_AGENT_SUBAGENTS_MAX` subagents.
+
+Value: `21`
+
+## PORTABLE_TOOL_ENDPOINT_AUTH_SCHEMES
+
+- `'bearer'`
+- `'oauth2'`
+
+## PortableAgent
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `apiVersion` | `"agentworkspace.dev/v1"` | Yes |  |
+| `kind` | `"Agent"` | Yes |  |
+| `name` | `string` | Yes |  |
+| `instructions` | `string` | Yes |  |
+| `permissions` | `Readonly<{ readFiles: boolean; writeFiles: boolean; runCommands: boolean; unrestrictedNetwork: boolean; }>` | Yes |  |
+| `tools` | `readonly (Readonly<{ kind: "mcp"; name: string; transport: "sse" \| "streamable-http"; url: string; auth?: Readonly<{ scheme: "bearer" \| "api-key" \| "oauth2"; secretRef: string; }> \| undefined; }> \| Readonly<{ kind: "mcp"; name: string; transport: "stdio"; command: string; args?: readonly string[] \| undefined; }> \| Readonly<{ kind: "code"; name: string; description: string; inputSchema: Readonly<Record<string, unknown>>; }> \| Readonly<{ kind: "openapi"; name: string; specRef: string; allow?: readonly string[] \| undefined; baseUrl?: string \| undefined; auth?: Readonly<{ secretRef: string; header?: string \| undefined; }> \| undefined; }> \| Readonly<{ kind: "builtin"; id: "web_search" \| "web_fetch" \| "code_execution" \| "file_access"; }>)[]` | Yes |  |
+| `skills` | `readonly Readonly<{ name: string; path: string; }>[]` | Yes |  |
+| `knowledge` | `readonly (Readonly<{ kind: "files"; paths: readonly string[]; access?: "read" \| "read-write" \| undefined; }> \| Readonly<{ kind: "url"; url: string; }> \| Readonly<{ kind: "connector"; name: string; }>)[]` | Yes |  |
+| `subagents` | `readonly Readonly<{ name: string; }>[]` | Yes |  |
+| `description` | `undefined \| string` | No |  |
+| `model` | `undefined \| Readonly<{ id: string; provider?: "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible" \| undefined; }>` | No | Absent: the host's default model. |
+| `engine` | `undefined \| "claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | No | A preference: the engine the agent runs on here, which another host may not offer. |
+| `limits` | `undefined \| Readonly<{ maxTurns?: number \| undefined; maxBudgetUsd?: number \| undefined; }>` | No |  |
+| `extensions` | `undefined \| Readonly<{ engines?: Partial<Record<"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra", Readonly<Record<string, unknown>>>> \| undefined; platforms?: Partial<Record<"aws-agentcore" \| "claude-managed-agents" \| "copilot-studio" \| "m365-declarative-agent" \| "microsoft-foundry" \| "gemini-enterprise" \| "eject-claude-agent-sdk" \| "eject-mastra" \| "eject-openai-agents", Readonly<Record<string, unknown>>>> \| undefined; }>` | No |  |
+
+## PortableAgentInput
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `apiVersion` | `"agentworkspace.dev/v1"` | Yes |  |
+| `kind` | `"Agent"` | Yes |  |
+| `name` | `string` | Yes |  |
+| `instructions` | `string` | Yes |  |
+| `permissions` | `Readonly<{ readFiles: boolean; writeFiles: boolean; runCommands: boolean; unrestrictedNetwork: boolean; }>` | Yes |  |
+| `description` | `undefined \| string` | No |  |
+| `model` | `undefined \| Readonly<{ id: string; provider?: "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible" \| undefined; }>` | No | Absent: the host's default model. |
+| `engine` | `undefined \| "claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | No | A preference: the engine the agent runs on here, which another host may not offer. |
+| `tools` | `undefined \| readonly (Readonly<{ kind: "mcp"; name: string; transport: "sse" \| "streamable-http"; url: string; auth?: Readonly<{ scheme: "bearer" \| "api-key" \| "oauth2"; secretRef: string; }> \| undefined; }> \| Readonly<{ kind: "mcp"; name: string; transport: "stdio"; command: string; args?: readonly string[] \| undefined; }> \| Readonly<{ kind: "code"; name: string; description: string; inputSchema: Readonly<Record<string, unknown>>; }> \| Readonly<{ kind: "openapi"; name: string; specRef: string; allow?: readonly string[] \| undefined; baseUrl?: string \| undefined; auth?: Readonly<{ secretRef: string; header?: string \| undefined; }> \| undefined; }> \| Readonly<{ kind: "builtin"; id: "web_search" \| "web_fetch" \| "code_execution" \| "file_access"; }>)[]` | No |  |
+| `skills` | `undefined \| readonly Readonly<{ name: string; path: string; }>[]` | No |  |
+| `knowledge` | `undefined \| readonly (Readonly<{ kind: "files"; paths: readonly string[]; access?: "read" \| "read-write" \| undefined; }> \| Readonly<{ kind: "url"; url: string; }> \| Readonly<{ kind: "connector"; name: string; }>)[]` | No |  |
+| `subagents` | `undefined \| readonly Readonly<{ name: string; }>[]` | No |  |
+| `limits` | `undefined \| Readonly<{ maxTurns?: number \| undefined; maxBudgetUsd?: number \| undefined; }>` | No |  |
+| `extensions` | `undefined \| Readonly<{ engines?: Partial<Record<"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra", Readonly<Record<string, unknown>>>> \| undefined; platforms?: Partial<Record<"aws-agentcore" \| "claude-managed-agents" \| "copilot-studio" \| "m365-declarative-agent" \| "microsoft-foundry" \| "gemini-enterprise" \| "eject-claude-agent-sdk" \| "eject-mastra" \| "eject-openai-agents", Readonly<Record<string, unknown>>>> \| undefined; }>` | No |  |
+
+## PortableAgentSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `apiVersion` | `"agentworkspace.dev/v1"` | Yes |  |
+| `kind` | `"Agent"` | Yes |  |
+| `name` | `string` | Yes |  |
+| `instructions` | `string` | Yes |  |
+| `permissions` | `Readonly<{ readFiles: boolean; writeFiles: boolean; runCommands: boolean; unrestrictedNetwork: boolean; }>` | Yes |  |
+| `tools` | `readonly (Readonly<{ kind: "mcp"; name: string; transport: "sse" \| "streamable-http"; url: string; auth?: Readonly<{ scheme: "bearer" \| "api-key" \| "oauth2"; secretRef: string; }> \| undefined; }> \| Readonly<{ kind: "mcp"; name: string; transport: "stdio"; command: string; args?: readonly string[] \| undefined; }> \| Readonly<{ kind: "code"; name: string; description: string; inputSchema: Readonly<Record<string, unknown>>; }> \| Readonly<{ kind: "openapi"; name: string; specRef: string; allow?: readonly string[] \| undefined; baseUrl?: string \| undefined; auth?: Readonly<{ secretRef: string; header?: string \| undefined; }> \| undefined; }> \| Readonly<{ kind: "builtin"; id: "web_search" \| "web_fetch" \| "code_execution" \| "file_access"; }>)[]` | Yes |  |
+| `skills` | `readonly Readonly<{ name: string; path: string; }>[]` | Yes |  |
+| `knowledge` | `readonly (Readonly<{ kind: "files"; paths: readonly string[]; access?: "read" \| "read-write" \| undefined; }> \| Readonly<{ kind: "url"; url: string; }> \| Readonly<{ kind: "connector"; name: string; }>)[]` | Yes |  |
+| `subagents` | `readonly Readonly<{ name: string; }>[]` | Yes |  |
+| `description` | `undefined \| string` | No |  |
+| `model` | `undefined \| Readonly<{ id: string; provider?: "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible" \| undefined; }>` | No | Absent: the host's default model. |
+| `engine` | `undefined \| "claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | No | A preference: the engine the agent runs on here, which another host may not offer. |
+| `limits` | `undefined \| Readonly<{ maxTurns?: number \| undefined; maxBudgetUsd?: number \| undefined; }>` | No |  |
+| `extensions` | `undefined \| Readonly<{ engines?: Partial<Record<"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra", Readonly<Record<string, unknown>>>> \| undefined; platforms?: Partial<Record<"aws-agentcore" \| "claude-managed-agents" \| "copilot-studio" \| "m365-declarative-agent" \| "microsoft-foundry" \| "gemini-enterprise" \| "eject-claude-agent-sdk" \| "eject-mastra" \| "eject-openai-agents", Readonly<Record<string, unknown>>>> \| undefined; }>` | No |  |
+
+## PortableBinaryContentSchema
+
+A file's bytes: a string is UTF-8 text.
+
+- `string`
+- `Uint8Array<ArrayBuffer>`
+
+## PortableBuiltinToolSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"builtin"` | Yes |  |
+| `id` | `"web_search" \| "web_fetch" \| "code_execution" \| "file_access"` | Yes |  |
+
+## PortableCodeToolSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"code"` | Yes |  |
+| `name` | `string` | Yes |  |
+| `description` | `string` | Yes |  |
+| `inputSchema` | `Readonly<Record<string, unknown>>` | Yes |  |
+
+## PortableKnowledgeConnectorSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"connector"` | Yes |  |
+| `name` | `string` | Yes |  |
+
+## PortableKnowledgeFilesSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"files"` | Yes |  |
+| `paths` | `readonly string[]` | Yes |  |
+| `access` | `undefined \| "read" \| "read-write"` | No | What the agent may do with these files; absent is `read`. |
+
+## PortableKnowledgeSourceSchema
+
+- `Readonly<{ kind: "files"; paths: readonly string[]; access?: "read" | "read-write" | undefined; }>`
+- `Readonly<{ kind: "url"; url: string; }>`
+- `Readonly<{ kind: "connector"; name: string; }>`
+
+## PortableKnowledgeUrlSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"url"` | Yes |  |
+| `url` | `string` | Yes |  |
+
+## PortableMcpToolSchema
+
+- `Readonly<{ kind: "mcp"; name: string; transport: "sse" | "streamable-http"; url: string; auth?: Readonly<{ scheme: "bearer" | "api-key" | "oauth2"; secretRef: string; }> | undefined; }>`
+- `Readonly<{ kind: "mcp"; name: string; transport: "stdio"; command: string; args?: readonly string[] | undefined; }>`
+
+## PortableModelSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `provider` | `undefined \| "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible"` | No |  |
+
+## PortableNameSchema
+
+Agent, skill and subagent names: the project file's `NAME_KEY_PATTERN`.
+
+`string`
+
+## PortableOpenApiToolSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"openapi"` | Yes |  |
+| `name` | `string` | Yes |  |
+| `specRef` | `string` | Yes | An https URL or a project-relative path to the OpenAPI document; its bytes travel in `PortableProject.openapiSpecs`. |
+| `allow` | `undefined \| readonly string[]` | No | `GET <glob>` / `HEAD <glob>` / `operationId:<id>` rules. Absent: every operation the document declares. |
+| `baseUrl` | `undefined \| string` | No |  |
+| `auth` | `undefined \| Readonly<{ secretRef: string; header?: string \| undefined; }>` | No | Absent header: `Authorization: Bearer`. |
+
+## PortableProject
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `root` | `string` | Yes |  |
+| `agents` | `readonly PortableAgent[]` | Yes |  |
+| `skills` | `readonly Readonly<{ name: string; files: readonly Readonly<{ path: string; content: string \| Uint8Array<ArrayBuffer>; }>[]; }>[]` | Yes |  |
+| `knowledgeFiles` | `readonly Readonly<{ path: string; content: string \| Uint8Array<ArrayBuffer>; }>[]` | Yes |  |
+| `openapiSpecs` | `readonly Readonly<{ ref: string; content: string; }>[]` | Yes |  |
+| `toolEndpoint` | `undefined \| Readonly<{ url: string; auth: Readonly<{ scheme: "bearer" \| "oauth2"; secretRef: string; }>; }>` | No |  |
+
+## PortableProjectInput
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `root` | `string` | Yes |  |
+| `agents` | `readonly PortableAgentInput[]` | Yes |  |
+| `skills` | `undefined \| readonly Readonly<{ name: string; files: readonly Readonly<{ path: string; content: string \| Uint8Array<ArrayBuffer>; }>[]; }>[]` | No |  |
+| `knowledgeFiles` | `undefined \| readonly Readonly<{ path: string; content: string \| Uint8Array<ArrayBuffer>; }>[]` | No |  |
+| `openapiSpecs` | `undefined \| readonly Readonly<{ ref: string; content: string; }>[]` | No |  |
+| `toolEndpoint` | `undefined \| Readonly<{ url: string; auth: Readonly<{ scheme: "bearer" \| "oauth2"; secretRef: string; }>; }>` | No |  |
+
+## PortableProjectSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `root` | `string` | Yes |  |
+| `agents` | `readonly PortableAgent[]` | Yes |  |
+| `skills` | `readonly Readonly<{ name: string; files: readonly Readonly<{ path: string; content: string \| Uint8Array<ArrayBuffer>; }>[]; }>[]` | Yes |  |
+| `knowledgeFiles` | `readonly Readonly<{ path: string; content: string \| Uint8Array<ArrayBuffer>; }>[]` | Yes |  |
+| `openapiSpecs` | `readonly Readonly<{ ref: string; content: string; }>[]` | Yes |  |
+| `toolEndpoint` | `undefined \| Readonly<{ url: string; auth: Readonly<{ scheme: "bearer" \| "oauth2"; secretRef: string; }>; }>` | No |  |
+
+## PortableRelativePathSchema
+
+A project-relative POSIX path: no leading `/`, no `\`, no `:`, no `.`, `..` or empty segment, no
+control or format character, at most 1024 characters. Rejecting `:` and `\` keeps a Windows drive
+or separator from making one path mean two places.
+
+`string`
+
+## PortableSecretAuthSchema
+
+A secret is named, never carried: `secretRef` is a name, and the value stays with the host.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `scheme` | `"bearer" \| "api-key" \| "oauth2"` | Yes |  |
+| `secretRef` | `string` | Yes |  |
+
+## PortableToolNameSchema
+
+MCP server and OpenAPI tool names: 1-64 of `[A-Za-z0-9_-]`, starting alphanumeric.
+
+`string`
+
+## PortableToolSchema
+
+- `Readonly<{ kind: "mcp"; name: string; transport: "sse" | "streamable-http"; url: string; auth?: Readonly<{ scheme: "bearer" | "api-key" | "oauth2"; secretRef: string; }> | undefined; }>`
+- `Readonly<{ kind: "mcp"; name: string; transport: "stdio"; command: string; args?: readonly string[] | undefined; }>`
+- `Readonly<{ kind: "code"; name: string; description: string; inputSchema: Readonly<Record<string, unknown>>; }>`
+- `Readonly<{ kind: "openapi"; name: string; specRef: string; allow?: readonly string[] | undefined; baseUrl?: string | undefined; auth?: Readonly<{ secretRef: string; header?: string | undefined; }> | undefined; }>`
+- `Readonly<{ kind: "builtin"; id: "web_search" | "web_fetch" | "code_execution" | "file_access"; }>`

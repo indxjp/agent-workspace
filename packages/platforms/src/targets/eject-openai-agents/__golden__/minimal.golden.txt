@@ -1,0 +1,141 @@
+=== .env.example ===
+OPENAI_API_KEY=
+=== .gitignore ===
+node_modules
+.env
+=== README.md ===
+# helper
+
+## Run
+
+```sh
+npm install
+cp .env.example .env   # then fill in the values
+node --env-file=.env src/main.ts "your prompt"
+```
+
+## OpenAI Agents SDK
+
+The agent runs through `run()` of the OpenAI Agents SDK. `src/agent.ts` exports `createAgent()`, which holds the models, MCP servers, code tools and handoffs.
+The SDK has no file or shell tool and no skills, so the agent has neither; add a file or shell tool with `tool()` where the report asks for one.
+A subagent is a handoff: the conversation moves to it and does not return to the root agent.
+
+## What was not carried over
+
+The platform report that came with this project gives every field a verdict and says why a field could not be carried. An ejected project is not importable back into Agent Workspace.
+=== package.json ===
+{
+  "name": "helper",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node src/main.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@openai/agents": "0.20.0",
+    "zod": "4.6.6"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "typescript": "6.0.2"
+  }
+}
+=== src/agent.ts ===
+import { Agent } from "@openai/agents";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+
+const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+export async function createAgent(): Promise<{ agent: Agent; close(): Promise<void> }> {
+  const agent = new Agent({
+    name: "helper",
+    instructions: "",
+    handoffs: [],
+  });
+  return { agent, close: async () => {} };
+}
+=== src/main.ts ===
+import { run } from "@openai/agents";
+
+import { createAgent } from "./agent.ts";
+
+const prompt = process.argv.slice(2).join(" ").trim();
+if (prompt === "") {
+  console.error("Usage: node --env-file=.env src/main.ts \"your prompt\"");
+  process.exit(1);
+}
+
+let close: (() => Promise<void>) | undefined;
+try {
+  const created = await createAgent();
+  close = created.close;
+  const { agent } = created;
+  const result = await run(agent, prompt);
+  console.log(result.finalOutput);
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exitCode = 1;
+} finally {
+  await close?.();
+}
+=== tsconfig.json ===
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": [
+      "ES2023"
+    ],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "types": [
+      "node"
+    ],
+    "skipLibCheck": true
+  },
+  "include": [
+    "src",
+    "tools"
+  ]
+}
+=== report.json ===
+[
+  {
+    "path": "helper.instructions",
+    "verdict": "native",
+    "note": "the agent’s instructions"
+  },
+  {
+    "path": "helper.permissions.readFiles",
+    "verdict": "dropped",
+    "code": "permissions_unsupported",
+    "note": "the OpenAI Agents SDK has no file or shell tool; add one with tool() in src/agent.ts"
+  },
+  {
+    "path": "helper.permissions.writeFiles",
+    "verdict": "dropped",
+    "code": "permissions_unsupported",
+    "note": "the OpenAI Agents SDK has no file or shell tool; add one with tool() in src/agent.ts"
+  },
+  {
+    "path": "helper.permissions.runCommands",
+    "verdict": "dropped",
+    "code": "permissions_unsupported",
+    "note": "the OpenAI Agents SDK has no file or shell tool; add one with tool() in src/agent.ts"
+  },
+  {
+    "path": "helper.permissions.unrestrictedNetwork",
+    "verdict": "native",
+    "note": "nothing restricts the network of the process"
+  }
+]

@@ -1,0 +1,4 @@
+ALTER TABLE "agent_version_pointers" DROP CONSTRAINT "agent_version_pointers_environment_valid";--> statement-breakpoint
+ALTER TABLE "sessions" ADD COLUMN "agent_version_id" uuid;--> statement-breakpoint
+ALTER TABLE "sessions" ADD CONSTRAINT "sessions_agent_version_fk" FOREIGN KEY ("agent_version_id","agent_id","workspace_id") REFERENCES "public"."agent_versions"("id","agent_id","workspace_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "agent_version_pointers" ADD CONSTRAINT "agent_version_pointers_environment_valid" CHECK ("agent_version_pointers"."environment" in ('local', 'production'));

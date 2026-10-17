@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Workspace — UI specification</title>
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 48px 24px 90px; }
+  .screen-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+  .screen {
+    display: block; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); box-shadow: var(--shadow); color: inherit; text-decoration: none;
+  }
+  .screen:hover { border-color: var(--border-strong); text-decoration: none; }
+  .screen .n { font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+  .screen .f { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+  .screen .d { font-size: 12.5px; color: var(--text-2); margin-top: 7px; }
+  .screen .s { font-size: 11.5px; color: var(--muted); margin-top: 8px; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <div class="logo-lg" style="justify-content:flex-start"><div class="mark">M</div><b>Agent Workspace — UI specification</b></div>
+  <p class="muted" style="max-width:700px">
+    Every screen of the self-hosted control plane for the Claude Agent SDK, as clickable HTML. No build step,
+    no network, no framework — open any file directly. Section numbers refer to
+    <span class="mono">docs/spec.md</span>.
+  </p>
+
+  <div class="callout mt24">
+    <span class="ico">▶</span>
+    <div class="grow">
+      Suggested walk-through: <a href="setup.html">Setup</a> → <a href="home.html">Home (chat)</a> →
+      <a href="agent-new.html">New Agent</a> → <a href="agent.html">Agent detail</a> →
+      <a href="agent-run.html">Run</a> → <a href="run.html">Run history + Share</a> →
+      <a href="public-run.html">Public page</a>.
+    </div>
+  </div>
+
+  <div class="section-head"><h2>First run and access</h2></div>
+  <div class="screen-grid">
+    <a class="screen" href="setup.html">
+      <div class="n">Setup wizard</div><div class="f">setup.html</div>
+      <div class="d">Five questions: provider, credentials, runtime, administrator, first agent. Detects what the machine can actually deliver and defaults to the strongest isolation available.</div>
+      <div class="s">§2 · §30 · A.3</div>
+    </a>
+    <a class="screen" href="login.html">
+      <div class="n">Sign in</div><div class="f">login.html</div>
+      <div class="d">Generic OIDC plus the local bootstrap administrator, which stays usable after SSO is enabled.</div>
+      <div class="s">§21</div>
+    </a>
+  </div>
+
+  <div class="section-head"><h2>Working surface</h2></div>
+  <div class="screen-grid">
+    <a class="screen" href="home.html">
+      <div class="n">Home — general chat</div><div class="f">home.html</div>
+      <div class="d">The product opens on a place to type. Agent, files and connector pickers live inside the composer; the pickers narrow what the agent may use and never widen it.</div>
+      <div class="s">§19.5 · §44 · §45</div>
+    </a>
+    <a class="screen" href="agent-run.html">
+      <div class="n">Run / streaming chat</div><div class="f">agent-run.html</div>
+      <div class="d">Plain-language activity while the agent works, with “Show technical details” collapsed by default over SDK events, usage and runtime events. Interrupt, resume, output files.</div>
+      <div class="s">§19 · §20</div>
+    </a>
+    <a class="screen" href="projects.html">
+      <div class="n">Projects</div><div class="f">projects.html</div>
+      <div class="d">Containers for related work: instructions, files, a default agent, its sessions. Configuration reuse, never a runtime of its own.</div>
+      <div class="s">§20.5</div>
+    </a>
+    <a class="screen" href="project.html">
+      <div class="n">Project detail</div><div class="f">project.html</div>
+      <div class="d">Chats, files, project instructions and sharing for one project.</div>
+      <div class="s">§20.5 · §20.6</div>
+    </a>
+    <a class="screen" href="agents.html">
+      <div class="n">Agents</div><div class="f">agents.html</div>
+      <div class="d">Every agent with status, model, runtime, 7-day runs and cost.</div>
+      <div class="s">§17</div>
+    </a>
+    <a class="screen" href="agent-new.html">
+      <div class="n">New Agent wizard</div><div class="f">agent-new.html</div>
+      <div class="d">Agent → Model → Capabilities → Permissions → Runtime, then Deploy. Review step compares required against supported capabilities.</div>
+      <div class="s">§17 · §12 · §14.5</div>
+    </a>
+    <a class="screen" href="agent.html">
+      <div class="n">Agent detail</div><div class="f">agent.html</div>
+      <div class="d">Overview, Model, Files, Skills, Connectors, Permissions, Runtime, Runs — plus the Advanced disclosure showing the compiled SDK options, and the runtime-switch dialog.</div>
+      <div class="s">§18 · §5 · §6 · §14.9 · §43</div>
+    </a>
+    <a class="screen" href="files.html">
+      <div class="n">Files</div><div class="f">files.html</div>
+      <div class="d">A file tree over S3-compatible storage. Upload, assign to agents, read-only or read-write. No RAG, no embeddings, no index.</div>
+      <div class="s">§16</div>
+    </a>
+    <a class="screen" href="skills.html">
+      <div class="n">Skills</div><div class="f">skills.html</div>
+      <div class="d">Claude-native skills, importable and exportable as directories.</div>
+      <div class="s">§7</div>
+    </a>
+    <a class="screen" href="skill.html">
+      <div class="n">Skill editor</div><div class="f">skill.html</div>
+      <div class="d">Name, description, instructions, supporting files, allowed tools, assigned agents — over a real SKILL.md.</div>
+      <div class="s">§7</div>
+    </a>
+    <a class="screen" href="connectors.html">
+      <div class="n">Connectors</div><div class="f">connectors.html</div>
+      <div class="d">MCP servers with reachability, tool counts and the local-command warning.</div>
+      <div class="s">§8</div>
+    </a>
+    <a class="screen" href="connector-new.html">
+      <div class="n">Add Connector</div><div class="f">connector-new.html</div>
+      <div class="d">Name, type, URL or command, authentication, Test Connection. Raw MCP JSON only under Advanced, with the secret as a reference.</div>
+      <div class="s">§8 · §23</div>
+    </a>
+    <a class="screen" href="runs.html">
+      <div class="n">Runs</div><div class="f">runs.html</div>
+      <div class="d">Status, duration and cost. Deliberately not a trace viewer.</div>
+      <div class="s">§35</div>
+    </a>
+    <a class="screen" href="run.html">
+      <div class="n">Run detail + Share</div><div class="f">run.html</div>
+      <div class="d">Transcript, configuration used, output files, and the session publishing dialog with its redaction rules.</div>
+      <div class="s">§35 · §20.6.2</div>
+    </a>
+  </div>
+
+  <div class="section-head"><h2>Sharing and public pages</h2></div>
+  <div class="screen-grid">
+    <a class="screen" href="public-run.html">
+      <div class="n">Published conversation</div><div class="f">public-run.html</div>
+      <div class="d">What an unauthenticated visitor sees: a redacted snapshot, no tool arguments, no configuration, no files.</div>
+      <div class="s">§20.6.2</div>
+    </a>
+    <a class="screen" href="public-agent.html">
+      <div class="n">Published agent</div><div class="f">public-agent.html</div>
+      <div class="d">A runnable public link with its limits stated plainly, plus the definition a visitor can copy into their own workspace.</div>
+      <div class="s">§20.6.3</div>
+    </a>
+    <a class="screen" href="surface-chat.html">
+      <div class="n">Surface chat</div><div class="f">surface-chat.html</div>
+      <div class="d">The hosted chat page that defineSurface() serves at /p/s/&lt;name&gt;, same origin and loopback only in slice 1.</div>
+      <div class="s">ADR-0105</div>
+    </a>
+    <a class="screen" href="surface-widget.html">
+      <div class="n">Surface widget</div><div class="f">surface-widget.html</div>
+      <div class="d">The try page /p/s/&lt;name&gt;/try: a host page whose body is the one widget.js script tag; the loader adds a launcher in the brand colour and one iframe.</div>
+      <div class="s">ADR-0105</div>
+    </a>
+    <a class="screen" href="shares.html">
+      <div class="n">Shared links</div><div class="f">shares.html</div>
+      <div class="d">Every share in the workspace, the public-sharing policy switch, revoke and stop.</div>
+      <div class="s">§20.6.4</div>
+    </a>
+  </div>
+
+  <div class="section-head"><h2>Administration</h2></div>
+  <div class="screen-grid">
+    <a class="screen" href="workspaces.html">
+      <div class="n">Workspaces</div><div class="f">workspaces.html</div>
+      <div class="d">Switch, create, rename, archive and restore workspaces from the server-authorised directory.</div>
+      <div class="s">§21</div>
+    </a>
+    <a class="screen" href="models.html">
+      <div class="n">Models</div><div class="f">models.html</div>
+      <div class="d">Providers, the provider compatibility matrix, and gateway health and usage.</div>
+      <div class="s">§9 · §12 · §13 · §41</div>
+    </a>
+    <a class="screen" href="model-add.html">
+      <div class="n">Add Provider</div><div class="f">model-add.html</div>
+      <div class="d">Anthropic, Azure OpenAI, OpenAI, OpenAI-compatible, Advanced — each asking only its own fields, and warning honestly about what is lost.</div>
+      <div class="s">§10 · §13</div>
+    </a>
+    <a class="screen" href="users.html">
+      <div class="n">Users</div><div class="f">users.html</div>
+      <div class="d">Four roles, OIDC configuration, and the role capability matrix including sharing rights.</div>
+      <div class="s">§21</div>
+    </a>
+    <a class="screen" href="api-keys.html">
+      <div class="n">API Keys</div><div class="f">api-keys.html</div>
+      <div class="d">Create, show once, revoke. Only a hash is stored.</div>
+      <div class="s">§22</div>
+    </a>
+    <a class="screen" href="runtimes.html">
+      <div class="n">Runtimes</div><div class="f">runtimes.html</div>
+      <div class="d">Profiles, the driver picker with disabled reasons, Test Runtime, the capability matrix and the per-driver network policy mapping.</div>
+      <div class="s">§14 · §15 · A.10</div>
+    </a>
+    <a class="screen" href="settings.html">
+      <div class="n">Settings</div><div class="f">settings.html</div>
+      <div class="d">Workspace policy, secrets, sharing policy, observability and the audit log.</div>
+      <div class="s">§23 · §36 · §37 · §20.6.4</div>
+    </a>
+  </div>
+
+  <div class="section-head"><h2>Conventions this prototype fixes</h2></div>
+  <div class="card"><div class="card-body">
+    <table class="tbl">
+      <tbody>
+        <tr><td style="width:230px"><b>Progressive disclosure</b></td><td>Everything a normal operator needs is visible; <span class="mono">maxTurns</span>, <span class="mono">allowedTools</span>, raw MCP JSON, <span class="mono">driverConfig</span> and SDK options live behind an <b>Advanced</b> disclosure. (§43)</td></tr>
+        <tr><td><b>Honest capabilities</b></td><td>No screen claims parity. Model and runtime differences are stated as ✓ native / ~ approximated / — unsupported, in the same words in the picker, the review step and the matrix. (§12, §14.5)</td></tr>
+        <tr><td><b>Visible runtime</b></td><td>The top bar of every screen names the driver in force, and an unverified runtime cannot be assigned. (A.3, §14.8)</td></tr>
+        <tr><td><b>Secrets</b></td><td>Shown once at creation, never again; referenced by name in configuration; never in an export, a definition share or a published transcript. (§23, §20.6)</td></tr>
+        <tr><td><b>Sharing</b></td><td>Private → workspace → public link, on agents, chats, projects and skills. Snapshots are redacted at creation, links are revocable, runnable links are capped and killable. (§20.6)</td></tr>
+        <tr><td><b>No dashboard</b></td><td>The home page is a chat box. Numbers appear where a decision needs them, not as a landing page. (§45)</td></tr>
+      </tbody>
+    </table>
+  </div></div>
+
+  <p class="small muted mt24">
+    Light and dark themes follow the operating system setting. Files: 26 HTML pages,
+    <span class="mono">assets/app.css</span>, <span class="mono">assets/app.js</span>.
+  </p>
+
+</div>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

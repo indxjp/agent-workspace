@@ -1,0 +1,255 @@
+---
+title: "Design principles"
+description: "Why Agent Workspace is shaped the way it is — the three values a developer should get from it, the eight principles that keep them true in the code, and what each one still costs today."
+---
+
+<Info>
+
+- **Read this when:** you want to know why the platform is shaped the way it is, or whether a change
+  you have in mind fits it.
+- **You will learn:** the three values a developer should get, the eight principles that keep them
+  true, and what each still costs today.
+- **Used in:** every chapter; most directly [Chapter 5: Ship it to your servers](/path/ship) and
+  [Chapter 6: Run it for your team](/path/operate).
+
+</Info>
+
+Agent Workspace's concept, stated plainly: **Claude Managed Agents, self-hosted.** A developer
+who wants agents inside their own company should get the managed experience — agents, sessions,
+files, tools, sandboxes, nothing to operate — without the data ever leaving their own
+environment, on any of the three clouds a real company already runs on: AWS, Google Cloud,
+Azure. Two things follow from that sentence, and this page states them before anything else on
+the site does. First, **the data plane is the product**: where files go, how the database is
+reached, where skills live, and how the workspace is managed cannot be "whatever the operator
+wires up" — it has to be as designed, and as verified, as the agent experience itself. Second,
+**the SDK is complete only if it covers everything a managed product would**: every chore a
+managed agent cloud would absorb on the developer's behalf — storage, users, credentials,
+deployment, promotion, embedding — has to be a resource this SDK models, not a gap the developer
+fills in by hand.
+
+The three values below are what a developer should be able to say about Agent Workspace once it
+holds. The eight principles are what keeps each of them true in the code. The roadmap items
+linked throughout are the distance between here and there.
+
+## The three values
+
+### Managed agents, in your own cloud
+
+> "The Claude Managed Agents experience — agents, sessions, files, tools, sandboxes, nothing to
+> operate — but the data never leaves our account."
+
+**Why it matters:** a developer who wants "managed agents" inside their own company cannot be
+told to send the data to someone else's account; the whole pitch collapses if "self-hosted"
+secretly means "our cloud, white-labelled."
+
+**What keeps it true:** the same five services, the same images, the same agent definitions run
+unchanged on a laptop, one VM, or AWS, Google Cloud or Azure — and every store in the data plane
+maps to that cloud's own native service, backed by a live proof, not "S3-compatible."
+
+**Today:** this is the widest gap between concept and code. Placement is now stated once, as one
+validated [deployment profile](/concepts/data-plane#the-deployment-profile), and PostgreSQL and
+OIDC already accept any implementation. AWS object storage uses native S3, and AWS credentials can
+be encrypted under a deployment key wrapped by KMS; both AWS claims remain explicitly unverified
+until the live-service proof is recorded. GCP and Azure native stores and cloud key providers, plus
+most managed-cloud sandbox drivers, remain incomplete. See [The data plane](/concepts/data-plane) and
+[D-2](/concepts/roadmap#d-2-object-storage-on-every-cloud-natively) through
+[D-4](/concepts/roadmap#d-4-a-verified-managed-cloud-sandbox-per-cloud).
+
+### Build the agent; everything around it is one call
+
+> "I wrote the agent in an afternoon and never wrote a line for storage, users, credentials, or
+> deployment."
+
+**Why it matters:** the afternoon only stays an afternoon if every chore around the agent —
+files, people, a database, skills, tool credentials, model switching, deployment — is something
+the platform already modelled, not something the developer has to design.
+
+**What keeps it true:** every chore is a resource with a full lifecycle behind
+`aw.<resource>.*`; the SDK's vocabulary never names a bucket, a table or a key ring; and the
+first agent — with a document, a skill and a tool server — is one script against a control plane
+someone else stood up.
+
+[Time to first agent: one
+script](/concepts/what-is-agent-workspace#time-to-first-agent-one-script) compiles as written,
+at five calls — the agent's assignments composed into `create` rather than a second call.
+
+### Switch anything, embed anywhere, in minutes not sprints
+
+> "We moved the agent to Azure OpenAI and a gVisor sandbox in a ticket, promoted it to prod by
+> name, and it lives in our own product's UI."
+
+**Why it matters:** a platform that locks a team into one model, one cloud or one deployment
+target is not actually protecting them from an agent framework — it is just a different one.
+
+**What keeps it true:** model, sandbox, cloud and agent are all data, so switching any of them
+is an audited update, not a redeploy; promotion between environments is export and import by
+name; and embedding is one durable, resumable event stream behind an API that is itself the
+product — OpenAPI, webhooks, idempotency, version negotiation — with the TypeScript SDK as its
+first client, not its only one.
+
+**Today:** switching a model or a runtime already works, and so do embedding by browser token,
+promoting an agent with `agents.export`/`import`, and generating a client in any language from
+the [OpenAPI document](/building/http-api#generate-a-client-in-another-language); unattended
+webhooks do not yet. See [N-3](/concepts/roadmap#n-3-webhooks-for-run-outcomes).
+
+## The eight principles
+
+1. **The developer never sees a store.** The SDK's vocabulary is resources — files, skills,
+   connectors, agents, sessions, runs, people — never a bucket, a table, a key ring or a disk
+   path, in any SDK type or builder guide. That holds today. Where the store actually is — a
+   question the developer never has to ask and the operator answers once — is on [The data
+   plane](/concepts/data-plane).
+2. **Placement is configured once, by the operator, as profiles — never by a fork.** A storage
+   profile (relational database, objects, secrets), a runtime profile (where sandboxes run) and
+   an identity profile (the OIDC issuer, the bootstrap administrator) are the only three
+   decisions a deployment makes about where things live; the same images and the same agent
+   definitions run everywhere. For the operator this means one configuration surface instead of
+   a script per cloud; for the SDK it means a cloud's name never appears on a resource. See
+   [Self-host Agent Workspace](/building/self-hosting).
+3. **Managed on your cloud means native, and verified.** Each cell of store × cloud maps to that
+   cloud's own service — RDS, Cloud SQL or Azure Database for PostgreSQL; S3, GCS or Blob
+   Storage; KMS, Cloud KMS or Key Vault — and exists as a claim only once a live proof backs it.
+   "S3-compatible" is not a cloud strategy: the day GCS or Blob Storage changes its interop
+   behaviour, that promise breaks quietly, for a customer who trusted it. See [The data
+   plane](/concepts/data-plane).
+4. **Every resource is durable, owned, addressable, portable.** A resource has an identity, an
+   owner, every lifecycle verb — create, read, update, disable, delete, version — and moves
+   between environments by name. For the SDK this means no resource family stays half-built: a
+   skill with no delete, a connector with no field update, a file with no metadata-only read are
+   gaps against this principle, not conveniences. See [Ownership and
+   sharing](/concepts/ownership-and-sharing).
+5. **Reach is explicit: catalog → assignment → grant.** A resource is _in_ a workspace's catalog
+   because someone created it; it is _assigned_ to an agent because someone chose it for that
+   agent; an agent is _granted_ to a person because someone decided they may run it. Sharing
+   beyond a workspace is an explicit organisation catalog a resource is deliberately published
+   into — never "everyone in the workspace reads everything," and never "everyone in the
+   organisation" either. See [Ownership and sharing](/concepts/ownership-and-sharing).
+6. **Credentials cross the boundary once, inward.** A credential is stored through the cloud's
+   own secret service, substituted into a run, never visible to the agent, and never returned by
+   any API response — the write-only rule the conformance suite already enforces today. What is
+   missing is where the boundary itself sits: the key that protects every stored credential is a
+   deployment-wide environment variable, not the cloud's own key-management service. See [The
+   data plane](/concepts/data-plane) and [Choose models and
+   runtimes](/building/models-and-runtimes).
+7. **The API is the product; the TypeScript SDK is its first client.** Everything the SDK does
+   is generated from the same contracts an OpenAPI document would describe, carries webhooks for
+   outcomes a caller should not have to poll for, an idempotency key for the call that must only
+   happen once, and a version-negotiation header so a client can tell it is out of date before a
+   request fails strangely. The TypeScript SDK is the reference implementation of that API, not
+   a private channel into it. See [Call the API without the SDK](/building/http-api).
+8. **Time to deploy is the metric.** Self-host, first agent, switch, embed, promote — each has a
+   stated time budget on [Target
+   architecture](/concepts/target-architecture#time-to-deploy-as-a-design-goal), and each budget
+   is a roadmap item until the platform actually holds it, not a marketing claim. See [Target
+   architecture](/concepts/target-architecture).
+
+## Three people, three surfaces
+
+The same three values land differently depending on who is standing where. Three people, three
+surfaces, one platform underneath all of them:
+
+|                 | Operator (self-hosts)                                     | Builder (SDK / UI)   | Embedder (product team)           |
+| --------------- | --------------------------------------------------------- | -------------------- | --------------------------------- |
+| Configures once | cloud, storage profile, runtime profile, identity profile | —                    | —                                 |
+| Calls           | `create-agent-workspace`, Helm/Terraform                  | `aw.<resource>.*`    | backend on the SDK, browser token |
+| Never sees      | agent internals                                           | any store, any cloud | any credential                    |
+
+### Operator
+
+```sh title="target: self-host on your cloud (illustrative)" claim="illustrative"
+npx -p @indx-workspace/cli create-agent-workspace acme-ai --cloud gcp
+cd acme-ai && agent-workspace deploy
+```
+
+```yaml title="agent-workspace.yaml — the deployment profile (illustrative)" claim="illustrative"
+apiVersion: agentworkspace.dev/v1
+kind: Deployment
+cloud: gcp
+storage:
+  relational: cloud-sql # a postgres:// URL, or that cloud's managed PostgreSQL by name
+  objects: gcs://acme-ai-files
+  secrets: secret-manager
+runtime:
+  default: cloud-run-service
+identity:
+  oidc: https://accounts.google.com
+  bootstrapAdmin: ops@acme.example
+```
+
+**Today:** the profile and the `--cloud` flag are real, and the installer renders `.env`, the
+Compose file, Helm values and Terraform variables from them. Applying the rendered artefact is
+still your own `docker compose up -d`, `helm upgrade --install` or `terraform apply`; the single
+`agent-workspace deploy` above waits for a published release, tracked as
+[P-6](/concepts/roadmap#p-6-a-published-release-with-signed-images-and-the-installer).
+
+### Builder
+
+```ts title="target: the whole lifecycle (illustrative)" claim="illustrative"
+const me = await aw.me();
+const v2 = await aw.skills.publish('release-notes', { files }); // N-1
+await aw.skills.remove('old-skill');
+const meta = await aw.files.stat('handbook/release-process.md'); // S-11
+await aw.connectors.update(github.id, { url: newUrl });
+const agent = await aw.agents.create(input, {
+  assignments: {
+    files: [{ fileId: handbook.id, access: 'read' }],
+    skills: [{ name: 'release-notes', revision: 'latest' }],
+    connectorIds: [github.id],
+  },
+}); // N-1 (revision-pinned skills); the compound create itself is real
+await aw.agents.replaceGrants(agent.id, [viewer.principalId]);
+const definition = await aw.agents.export(agent.id);
+await staging.agents.import(definition);
+```
+
+**Today:** `agents.create(input, { assignments })`, `agents.replaceGrants` and `me()` are real;
+`agents.export`/`import` are real; every other line above is still target shape — no publish,
+remove, stat or field update. See
+[Time to first agent: one
+script](/concepts/what-is-agent-workspace#time-to-first-agent-one-script).
+
+### Embedder
+
+```ts title="the backend mints, the browser follows (illustrative)" claim="illustrative"
+// backend
+const { token } = await aw.tokens.mint({ kind: 'run', id: run.id }, { ttlSeconds: 900 });
+
+// browser
+const page = createClient({ baseUrl, auth: { kind: 'browser-token', token } });
+for await (const frame of page.runs.follow(run.id, { signal })) {
+  render(frame);
+}
+```
+
+**Today:** real, end to end — see [Browser token](/getting-started/authentication) and [Embed an
+agent in your product](/building/embedding).
+
+## What this changes
+
+| Principle                                 | What exists today                                                                                                                                                | Roadmap                                                                                                                                                                                                   |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. The developer never sees a store       | files, skills and connectors are already typed resources; their bytes still pass through the control plane                                                       | [N-4](/concepts/roadmap#n-4-presigned-file-transfer-for-browsers)                                                                                                                                         |
+| 2. Placement configured once, as profiles | one validated `agent-workspace.yaml` names storage, runtime and identity, and the installer renders `.env`, Compose, Helm values and Terraform variables from it | —                                                                                                                                                                                                         |
+| 3. Native, and verified, per cloud        | PostgreSQL and OIDC accept any implementation; object storage is S3-only; most managed-cloud sandbox drivers are unverified                                      | [D-2](/concepts/roadmap#d-2-object-storage-on-every-cloud-natively), [D-3](/concepts/roadmap#d-3-secret-backends-on-every-cloud), [D-4](/concepts/roadmap#d-4-a-verified-managed-cloud-sandbox-per-cloud) |
+| 4. Durable, owned, addressable, portable  | skills have no revisions; a file has no metadata-only read; agents already move by name with `agents.export`/`import`                                            | [N-1](/concepts/roadmap#n-1-skill-revisions), [S-11](/concepts/roadmap#s-11-file-metadata)                                                                                                                |
+| 5. Reach: catalog → assignment → grant    | catalog, assignment and Viewer grants are SDK-addressable; sharing stops at the workspace boundary                                                               | [N-2](/concepts/roadmap#n-2-an-organisation-catalog-above-workspaces)                                                                                                                                     |
+| 6. Credentials cross the boundary once    | already write-only everywhere; the key that protects them sits in an environment variable, not the cloud's key service                                           | [D-3](/concepts/roadmap#d-3-secret-backends-on-every-cloud)                                                                                                                                               |
+| 7. The API is the product                 | no webhooks; an OpenAPI 3.1 document is generated from the contracts; a browser credential exists (browser tokens)                                               | [N-3](/concepts/roadmap#n-3-webhooks-for-run-outcomes)                                                                                                                                                    |
+| 8. Time to deploy is the metric           | an agent moves between environments as one `AgentDefinition` file (`aw agents export`/`import`)                                                                  | —                                                                                                                                                                                                         |
+
+<CardGroup cols={2}>
+  <Card title="The data plane" icon="database" href="/concepts/data-plane">
+    The per-cell contract behind value one: which store, which cloud service, and what is verified
+    today.
+  </Card>
+  <Card title="Ownership and sharing" icon="users" href="/concepts/ownership-and-sharing">
+    Catalog, assignment, grant, and the organisation catalog target.
+  </Card>
+  <Card title="Call the API without the SDK" icon="plug" href="/building/http-api">
+    The HTTP contract behind the TypeScript client, and what a client in any other language needs.
+  </Card>
+  <Card title="Target architecture" icon="compass-drafting" href="/concepts/target-architecture">
+    The time budgets these principles are measured against, and the developer experience at the
+    destination.
+  </Card>
+</CardGroup>

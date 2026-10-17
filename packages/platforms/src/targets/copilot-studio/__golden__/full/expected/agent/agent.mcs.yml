@@ -1,0 +1,13 @@
+mcs.metadata:
+  componentName: support-triage
+  description: Triages customer support tickets and drafts replies.
+kind: GptComponentMetadata
+displayName: support-triage
+instructions: |-
+  You triage support tickets.
+
+  - Look up the order before answering.
+  - Hand billing questions to billing-specialist.
+gptCapabilities:
+  webBrowsing: true
+  codeInterpreter: true

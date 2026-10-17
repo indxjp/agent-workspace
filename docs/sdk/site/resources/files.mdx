@@ -1,0 +1,385 @@
+---
+title: "Files"
+description: "Upload, list, move and delete the files and folders a workspace's agents can read and write."
+---
+
+<Info>
+
+- **Read this when:** your agent needs documents to read or a place to write results, or you manage the workspace's files from code or `aw files`.
+- **You will learn:** how files are addressed by path, who may read and write them, and how each file operation reports success, partial progress and errors.
+- **Used in:** [Chapter 2 · Build your agent](/path/build) and [Chapter 4 · Put it in your product](/path/embed).
+
+</Info>
+
+What you can do with files:
+
+- [List](#list) one folder level, [upload](#upload) or overwrite a file (up to 64 MiB), and [create a folder](#createfolder).
+- [Download](#download) a file, or read a folder's metadata.
+- [Move](#move) a file or a whole folder subtree, and [remove](#remove) a file or folder.
+- Give an agent `read` or `read-write` access to a file through its [resource assignments](/resources/agents#replaceresourceassignments).
+
+`aw.files` is the workspace's file store: a flat tree of files and folders, addressed by a
+workspace-relative path (`reports/q3/summary.md`), that agents read from and write to at
+runtime. It wraps `/api/files/**` (API specification §5.6). Source:
+`packages/sdk/src/resources/files.ts`, contract: `packages/contracts/src/files.ts`.
+
+A file or folder is a `FileResource`:
+
+```ts title="illustrative" claim="illustrative"
+interface FileResource {
+  id: string; // opaque — never construct or parse it
+  path: string; // workspace-relative, forward slashes — the real address
+  kind: 'file' | 'folder';
+  sizeBytes: number | null; // null for a folder
+  contentType: string | null; // the uploader's declared type, or null
+  lastModified: string | null; // ISO 8601, null for a folder
+}
+```
+
+<Note>
+  **Today:** a file operation touches object storage and the database as separate steps. **Target:**
+  durable `StorageOperation` records that make the two steps recoverable
+  ([RF-304](/concepts/roadmap#rf-304-durable-storage-operations)); a metadata-only read of one file
+  ([S-11](/concepts/roadmap#s-11-file-metadata) — see the note under `download`).
+</Note>
+
+## Where the bytes live and who may read them
+
+A file's bytes live in the object store, under `storage_key` inside the `files/` prefix; a file's
+row — path, size, content type, owner — lives in the platform's relational store. Renaming never
+rewrites the object, only the row. Which cloud service actually backs each store, and how a
+credential reaches it, is the deployment's own choice — see
+[The data plane](/concepts/data-plane) for the contract per cloud.
+
+Every file row carries an `owner_principal_id`, the principal that uploaded or created it. A
+Builder reads any file in the workspace but writes or deletes only its own; an Admin reads,
+writes and deletes any file (ADR-0116); a Viewer has no `files` grant. An agent sees a file only once it
+is explicitly assigned, as `read` or `read-write` — see
+[Ownership and sharing](/concepts/ownership-and-sharing) for the full role table and the
+catalog → assignment → grant vocabulary that governs files the same way it governs skills and
+connectors.
+
+### Give an agent the files you upload
+
+Uploading a file does not show it to any agent. Grant the folder in the agent's definition; the
+run then finds the folder's files in its working directory, read-only:
+
+```ts title="agents/assistant.ts" claim="compile"
+import { defineAgent, files } from '@indx-workspace/sdk/define';
+
+export default defineAgent({
+  name: 'assistant',
+  instructions: 'Answer from the files in uploads/.',
+  engine: 'claude-agent-sdk',
+  model: 'default',
+  permissions: { readFiles: true },
+  files: [files('uploads')],
+});
+```
+
+The folder must exist in the workspace before `aw dev` syncs the agent. Chat and surface
+attachments are not supported: upload in **Files** or with `aw.files.upload`, then grant the folder.
+
+## Complete example
+
+```ts title="files-example.ts" claim="compile"
+import { createClient, ApiProblemError } from '@indx-workspace/sdk';
+
+const baseUrl = process.env.AGENT_WORKSPACE_URL;
+const apiKey = process.env.AGENT_WORKSPACE_API_KEY;
+if (baseUrl === undefined || apiKey === undefined) {
+  throw new Error('Set AGENT_WORKSPACE_URL and AGENT_WORKSPACE_API_KEY');
+}
+const aw = createClient({
+  baseUrl,
+  auth: { kind: 'api-key', apiKey },
+});
+
+async function main(): Promise<void> {
+  // One level of the root
+  const root = await aw.files.list();
+  console.log(root.map((f) => `${f.kind}\t${f.path}`));
+
+  // Write a file (creates it, or overwrites it if the path already exists)
+  const summary = await aw.files.upload(
+    'reports/q3/summary.md',
+    new TextEncoder().encode('# Q3 summary\n\nRevenue is up.\n'),
+    { contentType: 'text/markdown' },
+  );
+  console.log(`uploaded ${summary.path}, ${summary.sizeBytes} bytes`);
+
+  // Read it back
+  const downloaded = await aw.files.download('reports/q3/summary.md');
+  if (downloaded.kind === 'file') {
+    console.log(new TextDecoder().decode(downloaded.bytes));
+  }
+
+  // Rename it, then delete the folder it lived in
+  await aw.files.move('reports/q3/summary.md', 'reports/q3/summary-final.md');
+  try {
+    await aw.files.remove('reports/q3', { recursive: true });
+  } catch (error) {
+    if (error instanceof ApiProblemError) {
+      console.error(`could not delete reports/q3: ${error.code}`);
+    } else {
+      throw error;
+    }
+  }
+}
+
+main();
+```
+
+<Note>
+  `aw.files.list()` and every other method return the value directly — there is no envelope to
+  unwrap, except `download`'s `{ kind: 'file' | 'folder', … }` union (below).
+</Note>
+
+## The path-encoding header — the one unusual part of the wire
+
+Every other resource in this SDK addresses a row by an opaque `id` in the URL. Files are
+different: a file is addressed by its **path**, and a path can contain characters (`/`, non-ASCII
+text) that do not survive an HTTP header or a URL segment unmodified. The client handles two
+distinct encodings, and you never need to reproduce either by hand — this section exists so a
+`413`/`400` from a proxy or a hand-rolled request makes sense, not because you should build these
+values yourself.
+
+1. **`upload` and `createFolder`** send the path as a _header_, not in the URL (the URL is always
+   `POST /api/files`). `resourcePathHeaders(name, path)` (`packages/contracts/src/files.ts`) sets
+   `x-file-path` or `x-folder-path` to `encodeURIComponent(path)` and always adds
+   `x-resource-path-encoding: percent-utf8` (`RESOURCE_PATH_ENCODING_HEADER` /
+   `RESOURCE_PATH_ENCODING_PERCENT_UTF8`). Browser `Headers` values are limited to byte strings,
+   so percent-encoding is what keeps a UTF-8 file name valid there without touching the raw
+   upload body.
+2. **`download`, `move` and `remove`** address `GET`/`PATCH`/`DELETE /api/files/:id`, and the
+   `:id` segment is `fileRouteId(path)`: the path's UTF-8 bytes, base64url-encoded _without
+   padding_ — a different encoding from step 1, chosen so a path's own `/` characters can never be
+   mistaken for a URL segment boundary by a router in front of the API. A `FileResource.id` from a
+   `list()` response is a separate, opaque value (the resource catalog's row id, once a catalog is
+   configured) and is **not** interchangeable with `fileRouteId(path)` — a file is always
+   addressed by `path` through the client methods, never by reconstructing a route id yourself.
+
+## `list`
+
+Every entry one level under a folder — or the root, if you omit `path`. Unpaginated.
+
+**Route:** `GET /api/files?path=`
+
+```ts title="illustrative" claim="illustrative"
+const top = await aw.files.list();
+const underReports = await aw.files.list({ path: 'reports' });
+```
+
+This method raises no domain-specific problem codes beyond the ones every route shares
+(`401 unauthenticated`, `403 forbidden`, `503 files_runtime_not_configured`) — see
+[Errors](/guides/errors).
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw files list
+aw files list --path reports
+```
+
+</CodeGroup>
+
+See [`files.list`](/reference/sdk/files#list).
+
+## `upload`
+
+Write, or overwrite, one file. Accepts a `Uint8Array`, a `Blob`, or a `ReadableStream<Uint8Array>`
+as `UploadBody` — a stream is buffered into a `Blob` before it is sent, because a streaming
+request body is not something every browser (or HTTP/1.1) can send, and the server buffers the
+whole body up to `MAX_UPLOAD_BYTES` (64 MiB) before it acts anyway. `contentType` is stored with
+the file and reported back as `contentType`; omit it and the file is stored with `contentType:
+null`. A download never echoes an uploader's `contentType` as active content — the server serves
+only a closed table of inert types, everything else as `application/octet-stream`.
+
+<Note>
+  **Today:** every upload and download passes through the control plane; a customer frontend moves
+  bytes only via its own backend. **Target:** `files.createUploadUrl` and `files.createDownloadUrl`
+  return short-lived URLs directly on the object store, so a browser holding a browser token moves
+  bytes without a relay. Tracked as
+  [N-4](/concepts/roadmap#n-4-presigned-file-transfer-for-browsers).
+</Note>
+
+**Route:** `POST /api/files` (raw body, path in the `x-file-path` header)
+
+```ts title="illustrative" claim="illustrative"
+const file = await aw.files.upload('notes/todo.txt', new TextEncoder().encode('ship it\n'), {
+  contentType: 'text/plain',
+});
+```
+
+| Code                           | Status | Meaning                                                               |
+| ------------------------------ | ------ | --------------------------------------------------------------------- |
+| `invalid_path`                 | 400    | A `path` the server's key-safety check refuses.                       |
+| `reserved_path`                | 400    | `.claude/**` (runner state) or the internal empty-folder marker name. |
+| `missing_file_path`            | 400    | The `x-file-path` header was not sent.                                |
+| `unsupported_path_encoding`    | 400    | `x-resource-path-encoding` was sent but is not `percent-utf8`.        |
+| `invalid_path_encoding`        | 400    | The header value does not decode as valid percent-encoded UTF-8.      |
+| `store_inconsistent`           | 500    | The store could not settle the write.                                 |
+| `files_runtime_not_configured` | 503    | This deployment has no files backend configured.                      |
+
+Also `413 request_body_too_large` above `MAX_UPLOAD_BYTES` (64 MiB), refused while the body
+streams — this is the shared `COMMON_PROBLEM_CODES.request_body_too_large`, not a files-owned
+code. Source: `FILES_PROBLEM_CODES` in `packages/contracts/src/files.ts`.
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw files upload notes/todo.txt ./todo.txt
+```
+
+</CodeGroup>
+
+See [`files.upload`](/reference/sdk/files#upload) and
+[`FILES_PROBLEM_CODES`](/reference/contracts/files#files_problem_codes).
+
+## `createFolder`
+
+Create an explicitly empty folder. A path that already names a file or folder is a `409
+name_conflict`. `aw files mkdir` of an existing folder exits 0 and says "already exists"; a path
+that names a file stays a `409 name_conflict`.
+
+**Route:** `POST /api/files` (no body, path in the `x-folder-path` header)
+
+```ts title="illustrative" claim="illustrative"
+const folder = await aw.files.createFolder('archive/2026');
+```
+
+| Code                                                  | Status | Meaning                                          |
+| ----------------------------------------------------- | ------ | ------------------------------------------------ |
+| `invalid_path`                                        | 400    | Same rule as `upload`.                           |
+| `reserved_path`                                       | 400    | Same rule as `upload`.                           |
+| `unsupported_path_encoding` / `invalid_path_encoding` | 400    | Same rule as `upload`.                           |
+| `name_conflict`                                       | 409    | The path already exists.                         |
+| `files_runtime_not_configured`                        | 503    | This deployment has no files backend configured. |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw files mkdir archive/2026
+```
+
+</CodeGroup>
+
+See [`files.createFolder`](/reference/sdk/files#createfolder).
+
+## `download`
+
+Read a path back. `FileDownload` is a union: a path that names bytes answers the file's content;
+a path that names a **folder** answers the folder's own metadata instead, because there is
+nothing to stream. Branch on `kind`.
+
+There is no lighter read: getting a single file's metadata means calling `download` and
+discarding the bytes, because `files.stat` does not exist yet — see
+[S-11](/concepts/roadmap#s-11-file-metadata).
+
+**Route:** `GET /api/files/:id` (`:id` is `fileRouteId(path)`)
+
+```ts title="illustrative" claim="illustrative"
+const answer = await aw.files.download('reports/q3/summary.md');
+if (answer.kind === 'file') {
+  console.log(answer.filename, answer.contentType, answer.bytes.byteLength);
+} else {
+  console.log('that path is a folder:', answer.file.path);
+}
+```
+
+| Code                           | Status | Meaning                                                                                                                                                   |
+| ------------------------------ | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `file_not_found`               | 404    | Nothing at that path — also the answer for a route id the server never minted (never a `400`, so a malformed id is not distinguishable from "not found"). |
+| `files_runtime_not_configured` | 503    | This deployment has no files backend configured.                                                                                                          |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw files download reports/q3/summary.md ./summary.md
+aw files download reports/q3          # a folder path prints its metadata instead
+```
+
+</CodeGroup>
+
+See [`files.download`](/reference/sdk/files#download).
+
+## `move`
+
+Rename or move a file or a whole folder subtree. A file answers `{ file }`; a folder answers a
+`SubtreeMoveOutcome` — `{ status: 'ok', moved }` or, if the walk stopped partway,
+`{ status: 'partial', moved, total, remaining? }`. A `partial` outcome is a **declared state to
+retry**, not an error: every object already copied stays copied, so retrying the same move
+converges rather than duplicating work.
+
+**Route:** `PATCH /api/files/:id { newPath }`
+
+```ts title="illustrative" claim="illustrative"
+const outcome = await aw.files.move('reports/q3', 'archive/2026/q3');
+if ('status' in outcome && outcome.status === 'partial') {
+  console.log(`moved ${outcome.moved} of ${outcome.total}; retry to finish`);
+}
+```
+
+| Code                           | Status | Meaning                                                         |
+| ------------------------------ | ------ | --------------------------------------------------------------- |
+| `file_not_found`               | 404    | The source path does not exist.                                 |
+| `name_conflict`                | 409    | `newPath` already exists.                                       |
+| `self_descendant`              | 409    | A folder moved into itself or one of its own descendants.       |
+| `subtree_too_large`            | 413    | The folder holds more than `MAX_SUBTREE_OBJECTS` (500) objects. |
+| `rename_inconsistent`          | 500    | The store could not settle the rename.                          |
+| `files_runtime_not_configured` | 503    | This deployment has no files backend configured.                |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw files move reports/q3 archive/2026/q3
+```
+
+</CodeGroup>
+
+See [`files.move`](/reference/sdk/files#move) and
+[`SubtreeMoveOutcomeSchema`](/reference/contracts/files#subtreemoveoutcomeschema).
+
+## `remove`
+
+Delete a file or a folder. Deleting a plain file, or a path with nothing at or under it, answers
+`null` (a `204`). Deleting a **folder** — even one created empty — answers a
+`SubtreeDeleteOutcome` naming what was deleted (`{ status: 'ok', deleted }`) or, partway through a
+large subtree, `{ status: 'partial', deleted, remaining }`. `recursive: true` is required to
+delete a non-empty folder.
+
+**Route:** `DELETE /api/files/:id?recursive=true`
+
+```ts title="illustrative" claim="illustrative"
+await aw.files.remove('notes/todo.txt'); // 204, null
+const outcome = await aw.files.remove('archive/2026', { recursive: true });
+```
+
+| Code                           | Status | Meaning                                                         |
+| ------------------------------ | ------ | --------------------------------------------------------------- |
+| `folder_not_empty`             | 409    | `DELETE` on a non-empty folder without `?recursive=true`.       |
+| `subtree_too_large`            | 413    | The folder holds more than `MAX_SUBTREE_OBJECTS` (500) objects. |
+| `store_inconsistent`           | 500    | The store could not settle the delete.                          |
+| `files_runtime_not_configured` | 503    | This deployment has no files backend configured.                |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw files remove notes/todo.txt
+aw files remove archive/2026 --recursive
+```
+
+</CodeGroup>
+
+See [`files.remove`](/reference/sdk/files#remove) and
+[`RemoveFileResponseSchema`](/reference/contracts/files#removefileresponseschema).
+
+## See also
+
+- [FilesClient](/reference/sdk/files) — full method signatures.
+- [files](/reference/contracts/files) — every schema and constant,
+  including `FILES_PROBLEM_CODES`, `MAX_UPLOAD_BYTES`, `MAX_SUBTREE_OBJECTS`.
+- [Errors](/guides/errors) — how to branch on `ApiProblemError`, `ContractViolationError`
+  and `TransportError`.
+- `files.stat(path)` is planned but not built yet — a pending server change tracked in the API
+  specification §8 ([S-11](/concepts/roadmap#s-11-file-metadata): `HEAD`/`?metadata=true` on `GET /api/files/:id`).

@@ -1,0 +1,163 @@
+name: Publish packages
+
+# Publishes @indx-workspace/contracts, platforms, sdk, react, aw, cli, embedded and create to npm, in
+# lock-step at CONTRACTS_VERSION, from a `packages-v<version>` tag (issues #246, #364 and #450,
+# ADR-0082, ADR-0109).
+#
+# Authentication is npm Trusted Publishing: the publish job exchanges its GitHub OIDC token for a
+# short-lived npm credential, so there is no NPM_TOKEN secret anywhere. npm configures a trusted
+# publisher per package, naming this repository, this workflow file and the `npm-publish`
+# environment; renaming either breaks publishing on purpose.
+#
+# Two jobs, so the job that holds the OIDC token runs no third-party install script and no
+# runtime. `verify` (no id-token) builds, packs and verifies the eight tarballs, records their sha256
+# as a job output and uploads them before the smoke runs; only then does it smoke-test
+# them, and its boot smoke runs `npm rebuild` of @embedded-postgres/* and boots the local runtime,
+# which the publishing job must never do. The smoke re-packs into its own directory and must
+# produce byte-identical tarballs (pnpm pack is deterministic). `publish` downloads the uploaded
+# tarballs, refuses any whose sha256 is not the one recorded before the smoke, re-runs the tarball
+# checks at the version the tag names, and publishes them; it installs nothing but the pinned npm
+# CLI.
+#
+# Declared gap (ADR-0082 D5): npm configures a trusted publisher only for a package that exists, so
+# the Owner publishes a placeholder first version of each new package name by hand
+# (@indx-workspace/embedded, then @indx-workspace/react; docs/release/README.md). Until then
+# the publish job refuses the whole release before publishing anything (every package must already
+# exist on npm), so a tag never leaves a partial lock-step set; re-running the publish job after
+# the Owner's step (while the artifact is kept, 7 days) finishes the release.
+#
+# This is not the platform release (`release.yml`, `v*` tags), which ships signed images; the two
+# tag namespaces never overlap.
+
+on:
+  push:
+    tags: ['packages-v*']
+
+concurrency:
+  group: publish-packages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+# The one provenance switch (Owner decision 2026-09-30, ADR-0082 D5): 'false' while this repository
+# is internal, because npm's registry refuses a provenance bundle from a non-public repository.
+# Turn it on ('true') when the repository becomes public; the publish script refuses 'true' on a
+# non-public repository before anything is signed or published.
+env:
+  NPM_PROVENANCE: 'false'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      # A tag can be pushed on any commit; only a commit already on main is published.
+      - name: Refuse a tag whose commit is not on main
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_REF_NAME points at $GITHUB_SHA, which is not on main"
+            exit 1
+          fi
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+      # No dependency install script is needed to build the eight published packages: the build of
+      # @indx-workspace/embedded copies files and runs esbuild and next, and never starts PostgreSQL.
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      # Built from the tagged source in this job, never replayed from a cache: --skip-nx-cache skips
+      # the local cache, and this workflow never runs .github/actions/nx-remote-cache, so it holds no
+      # remote-cache credential and Nx has no remote cache to consult (docs/adr/0110).
+      - name: Build the published packages
+        run: pnpm nx run-many -t build -p @indx-workspace/contracts @indx-workspace/platforms @indx-workspace/sdk @indx-workspace/react @indx-workspace/aw @indx-workspace/cli @indx-workspace/embedded @indx-workspace/create --skip-nx-cache --output-style=static
+      # A generated project pulls the images release-images.json pins; publishing a generator whose
+      # images are not public yet ships a broken first start. Checked anonymously, as a user pulls.
+      - name: Refuse to publish before the pinned platform images are public
+        run: node scripts/release/images-published.mjs
+      # Packs all eight and verifies each tarball, running no third-party code. Stdout is the tarball
+      # list only; the list keeps basenames, which the publish job resolves against the list file's
+      # own directory. The sha256 of each tarball becomes a job output here, before the smoke runs,
+      # so nothing the smoke runs can change what the publish job accepts.
+      - name: Pack and verify the tarballs the tag names
+        id: pack
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          node scripts/release/pack-packages.mjs --expect-tag "$TAG" --out "$RUNNER_TEMP/packages" | xargs -n1 basename > "$RUNNER_TEMP/tarballs"
+          mv "$RUNNER_TEMP/tarballs" "$RUNNER_TEMP/packages/tarballs"
+          cd "$RUNNER_TEMP/packages"
+          sha256sum -- *.tgz > "$RUNNER_TEMP/digests"
+          {
+            echo 'digests<<END_OF_DIGESTS'
+            cat "$RUNNER_TEMP/digests"
+            echo 'END_OF_DIGESTS'
+          } >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: packages
+          path: |
+            ${{ runner.temp }}/packages/*.tgz
+            ${{ runner.temp }}/packages/tarballs
+          if-no-files-found: error
+          retention-days: 7
+      # Re-packs into its own directory, installs the tarballs into an empty project, then boots
+      # @indx-workspace/embedded from its tarball (ready, credential, GET /api/me 200, SIGINT). The
+      # smoked tarballs must be byte-identical to the uploaded ones.
+      - name: Smoke-test the tarballs, and require the uploaded bytes
+        run: |
+          set -euo pipefail
+          node scripts/release/pack-packages.mjs --smoke --out "$RUNNER_TEMP/smoke" > /dev/null
+          cd "$RUNNER_TEMP/smoke"
+          sha256sum --check --strict "$RUNNER_TEMP/digests"
+    outputs:
+      digests: ${{ steps.pack.outputs.digests }}
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      # Only for scripts/release/publish-packages.mjs and the module it imports; nothing is built
+      # or installed from the checkout, and no git credential is kept in it.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      # No `registry-url`: it would write an .npmrc that expects NODE_AUTH_TOKEN, and trusted
+      # publishing has no token to give it. npm's default registry is the public one. No pnpm cache:
+      # this job runs no pnpm install.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+      # Trusted publishing needs npm 11.5.1 or later; pin the exact CLI that publishes.
+      - name: Install the npm CLI that publishes
+        run: npm install --global npm@11.17.0
+      # The tarballs verify packed in this run, uploaded before its smoke ran, kept for 7 days.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: packages
+          path: ${{ runner.temp }}/packages
+      # Refuses a tarball whose sha256 is not the one verify recorded before its smoke, re-runs the
+      # tarball checks at the version the tag names, checks the order, the names and lock-step,
+      # refuses the whole release, before any npm publish, if npm has never served one of the eight
+      # packages or cannot be asked (a network error refuses, never proceeds), skips only a version
+      # npm already serves (a re-run finishes a partial release), publishes the rest in order with
+      # --provenance=$NPM_PROVENANCE, then polls npm for up to 15 minutes (it can lag a publish by
+      # minutes) and fails unless npm serves all eight.
+      - name: Publish, contracts first and create last, and confirm npm serves all eight
+        timeout-minutes: 25
+        env:
+          EXPECTED_DIGESTS: ${{ needs.verify.outputs.digests }}
+        run: node scripts/release/publish-packages.mjs "$RUNNER_TEMP/packages/tarballs"

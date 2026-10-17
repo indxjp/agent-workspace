@@ -1,0 +1,6 @@
+platform=linux node=v24.20.0
+DEFAULT_INHERITED_ENV_VARS (6) = ["HOME","LOGNAME","PATH","SHELL","TERM","USER"]
+this process has 10 environment variables
+  [no env declared] -> keys=2 PATH=present HOME=present API_KEY=absent CANARY=absent
+  [env: { API_KEY } only] -> keys=3 PATH=present HOME=present API_KEY=k CANARY=absent
+  [env: { ...process.env, API_KEY }] -> keys=11 PATH=present HOME=present API_KEY=k CANARY=inherited-from-parent

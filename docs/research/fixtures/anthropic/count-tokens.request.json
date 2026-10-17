@@ -1,0 +1,7 @@
+{
+  "model": "claude-opus-5",
+  "system": "You are a scientist",
+  "messages": [
+    { "role": "user", "content": "Hello, Claude" }
+  ]
+}

@@ -1,0 +1,278 @@
+---
+title: "setup"
+description: "The @indx-workspace/contracts/setup exports, sorted alphabetically."
+---
+
+<Note>This page is generated from `packages/contracts/src/setup.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## CompleteSetupAnswers
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `setup.theme` | `"knowledge" \| "support" \| "copilot" \| "automation" \| "review" \| "blank"` | Yes |  |
+| `admin.sandbox` | `"local" \| "auto" \| "sandbox-runtime"` | Yes |  |
+| `admin.modelProvider` | `"anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible"` | Yes |  |
+| `content.agentName` | `string` | Yes |  |
+| `content.engine` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
+| `content.internalTools` | `readonly ("none" \| "openapi" \| "postgres")[]` | Yes |  |
+| `content.permissions` | `readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[]` | Yes |  |
+| `embedder.surfaceTitle` | `string` | Yes |  |
+| `embedder.brandColour` | `string` | Yes |  |
+| `admin.platforms` | `readonly ("none" \| "aws-agentcore" \| "claude-managed-agents" \| "copilot-studio" \| "m365-declarative-agent" \| "microsoft-foundry" \| "gemini-enterprise")[]` | Yes |  |
+| `admin.modelBaseUrl` | `undefined \| string` | No |  |
+| `content.openapiDocument` | `undefined \| string` | No |  |
+
+## CompleteSetupAnswersSchema
+
+Every question that applies answered: what the renderer writes a project from.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `setup.theme` | `"knowledge" \| "support" \| "copilot" \| "automation" \| "review" \| "blank"` | Yes |  |
+| `admin.sandbox` | `"local" \| "auto" \| "sandbox-runtime"` | Yes |  |
+| `admin.modelProvider` | `"anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible"` | Yes |  |
+| `content.agentName` | `string` | Yes |  |
+| `content.engine` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
+| `content.internalTools` | `readonly ("none" \| "openapi" \| "postgres")[]` | Yes |  |
+| `content.permissions` | `readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[]` | Yes |  |
+| `embedder.surfaceTitle` | `string` | Yes |  |
+| `embedder.brandColour` | `string` | Yes |  |
+| `admin.platforms` | `readonly ("none" \| "aws-agentcore" \| "claude-managed-agents" \| "copilot-studio" \| "m365-declarative-agent" \| "microsoft-foundry" \| "gemini-enterprise")[]` | Yes |  |
+| `admin.modelBaseUrl` | `undefined \| string` | No |  |
+| `content.openapiDocument` | `undefined \| string` | No |  |
+
+## HEX_COLOUR_PATTERN
+
+A `#rrggbb` colour. Exported so a surface's theme colour (S1-02) accepts the same grammar.
+
+Value: `/^#[0-9a-fA-F]{6}$/u`
+
+## SETUP_AUDIENCES
+
+Issue #439 (S1-01): the setup questions of ADR-0107 — the things `aw init` (and later the
+browser setup) asks before it writes a project. Each question carries its own answer schema,
+so the prompt, `--yes`, `SetupAnswersSchema` and the renderer read one definition.
+
+Issue #525 (S2-01b) grows them to ten questions: setup starts from a theme (SD9), and a question
+may be a multi-select or be asked only when an earlier answer includes a choice.
+
+No answer is a secret: the model key is not a question (ADR-0107), so these answers may be
+logged, written to disk and shown back.
+
+- `'setup'`
+- `'admin'`
+- `'content'`
+- `'embedder'`
+
+## SETUP_FILE_PATHS
+
+The files an answer is written into. `<agentName>` stands for the `content.agentName` answer;
+`<name>` is the tool's name, derived by the renderer (S2-06a).
+
+- `'agent-workspace.yaml'`
+- `'agents/<agentName>.ts'`
+- `'surfaces/main.ts'`
+- `'tools/<name>.ts'`
+
+## SETUP_PLATFORM_CHOICES
+
+The platforms setup offers (ADR-0133): every hosted platform, and `none`, chosen alone. The
+eject-* ids are one-off exports (`aw platforms export`), not a project binding, so setup does not
+offer them.
+
+- `...HOSTED_PLATFORM_IDS`
+- `'none'`
+
+## SETUP_QUESTIONS
+
+The twelve setup questions, in the order they are asked; frozen throughout.
+
+Value: `Object.freeze([ frozenQuestion(themeQuestion), frozenQuestion(sandboxQuestion), frozenQuestion(modelProviderQuestion), frozenQuestion(modelBaseUrlQuestion), frozenQuestion(agentNameQuestion), frozenQuestion(engineQuestion), frozenQuestion(internalToolsQuestion), frozenQuestion(openapiDocumentQuestion), frozenQuestion(permissionsQuestion), frozenQuestion(surfaceTitleQuestion), frozenQuestion(brandColourQuestion), frozenQuestion(platformsQuestion), ] as const)`
+
+## SETUP_SANDBOX_CHOICES
+
+The sandbox answers setup accepts; `auto` lets `aw dev` pick and renders no `runtime` block.
+`sandbox-runtime` is deprecated (#818): it has no implementation, so it is still parsed but no
+longer offered (`SETUP_SANDBOX_OFFERED_CHOICES`) and renders as `local`.
+
+- `'auto'`
+- `'sandbox-runtime'`
+- `'local'`
+
+## SETUP_SANDBOX_OFFERED_CHOICES
+
+The sandbox choices setup offers: every accepted answer that is implemented.
+
+- `'auto'`
+- `'local'`
+
+## SETUP_THEMES
+
+The themes setup starts from (ADR-0107 SD9; issue #525); the `setup.theme` choices.
+
+- `'support'`
+- `'copilot'`
+- `'knowledge'`
+- `'automation'`
+- `'review'`
+- `'blank'`
+
+## SetupAnswerFormat
+
+How a question is answered: one of a fixed list, up to `max` of a fixed list (issue #525), or
+free text in a stated grammar.
+
+- `{ readonly kind: "choice"; readonly choices: readonly string[]; }`
+- `{ readonly kind: "multi"; readonly choices: readonly string[]; readonly max: number; }`
+- `{ readonly kind: "text"; readonly grammar: string; readonly pattern: RegExp; readonly maxLength: number; }`
+
+## SetupAnswers
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `setup.theme` | `undefined \| "knowledge" \| "support" \| "copilot" \| "automation" \| "review" \| "blank"` | No |  |
+| `admin.sandbox` | `undefined \| "local" \| "auto" \| "sandbox-runtime"` | No |  |
+| `admin.modelProvider` | `undefined \| "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible"` | No |  |
+| `admin.modelBaseUrl` | `undefined \| string` | No |  |
+| `content.agentName` | `undefined \| string` | No |  |
+| `content.engine` | `undefined \| "claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | No |  |
+| `content.internalTools` | `undefined \| readonly ("none" \| "openapi" \| "postgres")[]` | No |  |
+| `content.openapiDocument` | `undefined \| string` | No |  |
+| `content.permissions` | `undefined \| readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[]` | No |  |
+| `embedder.surfaceTitle` | `undefined \| string` | No |  |
+| `embedder.brandColour` | `undefined \| string` | No |  |
+| `admin.platforms` | `undefined \| readonly ("none" \| "aws-agentcore" \| "claude-managed-agents" \| "copilot-studio" \| "m365-declarative-agent" \| "microsoft-foundry" \| "gemini-enterprise")[]` | No |  |
+
+## SetupAnswersSchema
+
+Answers given so far, keyed by question id; any may be missing, an unknown id is refused.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `setup.theme` | `undefined \| "knowledge" \| "support" \| "copilot" \| "automation" \| "review" \| "blank"` | No |  |
+| `admin.sandbox` | `undefined \| "local" \| "auto" \| "sandbox-runtime"` | No |  |
+| `admin.modelProvider` | `undefined \| "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible"` | No |  |
+| `admin.modelBaseUrl` | `undefined \| string` | No |  |
+| `content.agentName` | `undefined \| string` | No |  |
+| `content.engine` | `undefined \| "claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | No |  |
+| `content.internalTools` | `undefined \| readonly ("none" \| "openapi" \| "postgres")[]` | No |  |
+| `content.openapiDocument` | `undefined \| string` | No |  |
+| `content.permissions` | `undefined \| readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[]` | No |  |
+| `embedder.surfaceTitle` | `undefined \| string` | No |  |
+| `embedder.brandColour` | `undefined \| string` | No |  |
+| `admin.platforms` | `undefined \| readonly ("none" \| "aws-agentcore" \| "claude-managed-agents" \| "copilot-studio" \| "m365-declarative-agent" \| "microsoft-foundry" \| "gemini-enterprise")[]` | No |  |
+
+## SetupAudience
+
+- `"admin"`
+- `"content"`
+- `"setup"`
+- `"embedder"`
+
+## SetupFilePath
+
+- `"agent-workspace.yaml"`
+- `"agents/<agentName>.ts"`
+- `"surfaces/main.ts"`
+- `"tools/<name>.ts"`
+
+## SetupQuestion
+
+One setup question: who it is for, how it is answered, what it recommends and writes.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `Id` | Yes | Dotted `<audience>.<name>`; also the key in `SetupAnswersSchema`. |
+| `flag` | `string` | Yes | The command-line flag that answers this question, without the dashes (`theme` is `--theme`). |
+| `audience` | `"admin" \| "content" \| "setup" \| "embedder"` | Yes |  |
+| `prompt` | `string` | Yes |  |
+| `answer` | `{ readonly kind: "choice"; readonly choices: readonly string[]; } \| { readonly kind: "multi"; readonly choices: readonly string[]; readonly max: number; } \| { readonly kind: "text"; readonly grammar: string; readonly pattern: RegExp; readonly maxLength: number; }` | Yes |  |
+| `recommended` | `z.core.output<Schema>` | Yes | The answer `--yes` takes; it always parses with `SetupQuestion.schema`. |
+| `writes` | `readonly ("agent-workspace.yaml" \| "agents/<agentName>.ts" \| "surfaces/main.ts" \| "tools/<name>.ts")[]` | Yes |  |
+| `schema` | `Schema` | Yes | The one schema of this question's answer. |
+| `when` | `undefined \| { readonly id: string; readonly includes: string; } \| { readonly id: string; readonly oneOf: readonly string[]; }` | No | Asked only when the multi answer of the earlier question `id` includes `includes`, or the choice answer of `id` is one of `oneOf` (issue #690); absent, the question is always asked (issue #525). Read through `setupQuestionApplies`. |
+| `placeholder` | `undefined \| string` | No | Set when `recommended` is only a placeholder the renderer refuses, so `--yes` cannot take it and the person must answer. The value is the answer's name in a usage line (`--flag <name>`). See `unansweredSetupFlags`. |
+
+## setupQuestionApplies
+
+Whether `question` is asked given the answers so far: always without a `when`, otherwise when
+the named multi answer includes `includes`, or the named choice answer equals one of `oneOf`. A
+string never matches an `includes` condition, so a substring cannot (issue #525). Pure.
+
+```ts
+setupQuestionApplies(question: { readonly when?: SetupQuestionCondition }, answers: Readonly<Record<string, unknown>>): boolean
+```
+
+## SetupQuestionCondition
+
+The condition of a conditional question: a multi answer includes a choice, or a choice is one of.
+
+- `{ readonly id: string; readonly includes: string; }`
+- `{ readonly id: string; readonly oneOf: readonly string[]; }`
+
+## SetupQuestionId
+
+- `"setup.theme"`
+- `"admin.sandbox"`
+- `"admin.modelProvider"`
+- `"admin.modelBaseUrl"`
+- `"content.agentName"`
+- `"content.engine"`
+- `"content.internalTools"`
+- `"content.openapiDocument"`
+- `"content.permissions"`
+- `"embedder.surfaceTitle"`
+- `"embedder.brandColour"`
+- `"admin.platforms"`
+
+## SetupSandboxChoice
+
+- `"local"`
+- `"auto"`
+- `"sandbox-runtime"`
+
+## SURFACE_TITLE_MAX_LENGTH
+
+The longest surface title, in characters.
+
+Value: `60`
+
+## SURFACE_TITLE_PATTERN
+
+A surface title: 1–60 characters, no whitespace at either end — a value that is already its own
+trimmed form, so nothing has to transform it — and nothing invisible or not text: no control
+(`Cc`) or format (`Cf`: zero-width and bidirectional controls) character, no lone surrogate
+(`Cs`) and no line or paragraph separator (`Zl`, `Zp`). A title is shown in a widget and written
+into `surfaces/main.ts`, so what the person reads is what the file holds.
+
+Value: `/^[^\s\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}](?:[^\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]{0,58}[^\s\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}])?$/u`
+
+## THEME_RECOMMENDATIONS
+
+Each theme's recommended answers and sample content (ADR-0107 SD9; issue #525), deep-frozen.
+`support` and `blank` keep every question's own recommendation; no theme recommends a tool or a
+permission, so the recommendations always produce a project that runs. `blank`'s instructions
+are the slice-1 starter text. `automation` is also a complete starter project (issue #696): the
+SDK adds a code tool, an OpenAPI tool with the fake API it calls, a README and an eval file.
+
+Value: `Object.freeze({ support: frozenTheme({ summary: 'Answers customer questions and hands over to a person', answers: {}, content: { instructions: 'You are a customer support assistant. Answer questions clearly and briefly, ask for ' + 'the details you need, and say so when you are not sure or when a person should take over.', greeting: 'Hi! How can I help you today?', prompts: [ 'I have a question about my account', 'Something is not working', 'How do I get started?', ], title: 'Assistant', }, }), copilot: frozenTheme({ summary: 'Drafts, summarises and plans for your team', answers: { 'content.agentName': 'copilot', 'embedder.surfaceTitle': 'Copilot' }, content: { instructions: 'You are a copilot for the people on this team. Help them draft, summarise and plan ' + 'their work, keep answers short, and ask before you assume.', greeting: 'Hi, what are you working on?', prompts: ['Summarise this for me', 'Draft a reply', 'Help me plan my week'], title: 'Copilot', }, }), knowledge: frozenTheme({ summary: 'Answers from your documentation and cites where', answers: { 'content.agentName': 'knowledge', 'embedder.surfaceTitle': 'Knowledge base' }, content: { instructions: 'You answer questions from the knowledge you have been given. Point to where each ' + 'answer comes from, and say so plainly when you do not know.', greeting: 'Ask me anything about our documentation.', prompts: [ 'Where do I find the setup guide?', 'What changed in the latest release?', 'Explain this term', ], title: 'Knowledge base', }, }), automation: frozenTheme({ summary: 'Runs routine tasks step by step (with example tools)', answers: { 'content.agentName': 'automation', 'embedder.surfaceTitle': 'Automation' }, content: { instructions: 'You carry out routine tasks step by step. Say what you are about to do before you do ' + 'it, report what you did, and stop to ask when a step is unclear.', greeting: 'Which task should I run?', prompts: [ 'Show me what you can automate', 'Run the daily report', 'Check what is waiting for me', ], title: 'Automation', }, }), review: frozenTheme({ summary: 'Reviews work for correctness and clarity', answers: { 'content.agentName': 'reviewer', 'embedder.surfaceTitle': 'Reviewer' }, content: { instructions: 'You review work for correctness and clarity. Point to each problem and where it is, ' + 'explain why it matters and suggest a fix; say so when you find nothing.', greeting: 'Paste what you want reviewed.', prompts: [ 'Review this change', 'Check this text for mistakes', 'What could go wrong here?', ], title: 'Reviewer', }, }), blank: frozenTheme({ summary: 'An empty starter with no sample content', answers: {}, content: { instructions: 'You are a helpful assistant. Answer clearly and briefly, and say so when you are not sure.', prompts: [], title: 'Assistant', }, }), })`
+
+## unansweredSetupFlags
+
+The usage forms (`--model-base-url <url>`) of the questions that apply to `answers` but have only
+a placeholder to fall back on, so a run that takes recommended answers (`--yes`, no terminal)
+cannot continue without them. Empty when nothing is missing. Unlike
+`withRecommendedAnswers` it never throws, so the interview can still prefill a default.
+
+```ts
+unansweredSetupFlags(answers: SetupAnswers): readonly string[]
+```
+
+## withRecommendedAnswers
+
+Fills every unanswered question that applies: first with the chosen theme's recommendations
+(`support` when no theme is given), then with each question's own. The input is not changed.
+
+```ts
+withRecommendedAnswers(answers: SetupAnswers): CompleteSetupAnswers
+```

@@ -1,0 +1,2197 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": true,
+    "requested": {"skillIds": [], "files": [], "connectorIds": []},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[],\"files\":[],\"skillIds\":[]},\"writeFiles\":true}",
+   "expected": {"kind": "updated", "assignments": {"skillIds": [], "files": [], "connectorIds": []}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": true,
+    "requested":
+    {"skillIds": [],
+     "files": [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"}],
+     "connectorIds": []},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": false},
+   "id":
+   "replace/{\"agentExists\":false,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[],\"files\":[{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"}],\"skillIds\":[]},\"writeFiles\":true}",
+   "expected": {"kind": "not-found"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": false,
+    "requested":
+    {"skillIds":
+     ["00000000-0000-4000-8000-000000000012",
+      "00000000-0000-4000-8000-000000000011",
+      "00000000-0000-4000-8000-000000000012"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000001", "access": "read-write"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000022", "00000000-0000-4000-8000-000000000021"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000022\",\"00000000-0000-4000-8000-000000000021\"],\"files\":[{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000003\"},{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000012\",\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"writeFiles\":false}",
+   "expected":
+   {"kind": "updated",
+    "assignments":
+    {"skillIds": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000003", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": true,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000012", "00000000-0000-4000-8000-000000000011"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000001", "access": "read-write"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000022"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000022\"],\"files\":[{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000003\"},{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000012\",\"00000000-0000-4000-8000-000000000011\"]},\"writeFiles\":true}",
+   "expected":
+   {"kind": "updated",
+    "assignments":
+    {"skillIds": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000022"]}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": true,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000019"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000009", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000029"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000029\"],\"files\":[{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"},{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000009\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000019\"]},\"writeFiles\":true}",
+   "expected": {"kind": "unknown-file", "id": "00000000-0000-4000-8000-000000000009"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": true,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000019"],
+     "files": [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000029"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000029\"],\"files\":[{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000019\"]},\"writeFiles\":true}",
+   "expected": {"kind": "unknown-skill", "id": "00000000-0000-4000-8000-000000000019"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": true,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000011"],
+     "files": [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000029"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000029\"],\"files\":[{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000011\"]},\"writeFiles\":true}",
+   "expected": {"kind": "unknown-connector", "id": "00000000-0000-4000-8000-000000000029"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": true,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000019"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000001", "access": "read-write"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000029"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000029\"],\"files\":[{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"},{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000019\"]},\"writeFiles\":true}",
+   "expected": {"kind": "unknown-file", "id": "00000000-0000-4000-8000-000000000001"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": false,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000012"],
+     "files": [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000021"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000021\"],\"files\":[{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000012\"]},\"writeFiles\":false}",
+   "expected":
+   {"kind": "updated",
+    "assignments":
+    {"skillIds": ["00000000-0000-4000-8000-000000000012"],
+     "files": [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021"]}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": false,
+    "requested":
+    {"skillIds": [],
+     "files": [{"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000021\"],\"files\":[{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000003\"}],\"skillIds\":[]},\"writeFiles\":false}",
+   "expected":
+   {"kind": "updated",
+    "assignments":
+    {"skillIds": [],
+     "files": [{"fileId": "00000000-0000-4000-8000-000000000003", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021"]}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": true,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000019"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"}],
+     "connectorIds":
+     ["00000000-0000-4000-8000-000000000022",
+      "00000000-0000-4000-8000-000000000021",
+      "00000000-0000-4000-8000-000000000029"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000022\",\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000029\"],\"files\":[{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000003\"},{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000019\"]},\"writeFiles\":true}",
+   "expected": {"kind": "unknown-skill", "id": "00000000-0000-4000-8000-000000000019"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": true,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000012", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000009", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000001", "access": "read-write"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000022"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000022\"],\"files\":[{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000009\"},{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000012\",\"00000000-0000-4000-8000-000000000012\"]},\"writeFiles\":true}",
+   "expected": {"kind": "unknown-file", "id": "00000000-0000-4000-8000-000000000009"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": false,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000011"],
+     "files": [{"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000021\"],\"files\":[{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000003\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000011\"]},\"writeFiles\":false}",
+   "expected":
+   {"kind": "updated",
+    "assignments":
+    {"skillIds": ["00000000-0000-4000-8000-000000000011"],
+     "files": [{"fileId": "00000000-0000-4000-8000-000000000003", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021"]}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": false,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000012"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000002", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"}],
+     "connectorIds":
+     ["00000000-0000-4000-8000-000000000022",
+      "00000000-0000-4000-8000-000000000021",
+      "00000000-0000-4000-8000-000000000029"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000022\",\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000029\"],\"files\":[{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"},{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000002\"},{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000003\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000012\"]},\"writeFiles\":false}",
+   "expected": {"kind": "unknown-connector", "id": "00000000-0000-4000-8000-000000000029"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": false,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000019"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000002", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"}],
+     "connectorIds":
+     ["00000000-0000-4000-8000-000000000021",
+      "00000000-0000-4000-8000-000000000022",
+      "00000000-0000-4000-8000-000000000021"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\",\"00000000-0000-4000-8000-000000000021\"],\"files\":[{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"},{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000002\"},{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000003\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000019\"]},\"writeFiles\":false}",
+   "expected": {"kind": "unknown-skill", "id": "00000000-0000-4000-8000-000000000019"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": false,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000012", "00000000-0000-4000-8000-000000000012"],
+     "files": [{"fileId": "00000000-0000-4000-8000-000000000002", "access": "read-write"}],
+     "connectorIds":
+     ["00000000-0000-4000-8000-000000000022",
+      "00000000-0000-4000-8000-000000000021",
+      "00000000-0000-4000-8000-000000000029"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000022\",\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000029\"],\"files\":[{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000002\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000012\",\"00000000-0000-4000-8000-000000000012\"]},\"writeFiles\":false}",
+   "expected": {"kind": "unknown-connector", "id": "00000000-0000-4000-8000-000000000029"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": true,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000012", "00000000-0000-4000-8000-000000000012"],
+     "files": [{"fileId": "00000000-0000-4000-8000-000000000002", "access": "read-write"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000022", "00000000-0000-4000-8000-000000000021"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000022\",\"00000000-0000-4000-8000-000000000021\"],\"files\":[{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000002\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000012\",\"00000000-0000-4000-8000-000000000012\"]},\"writeFiles\":true}",
+   "expected":
+   {"kind": "updated",
+    "assignments":
+    {"skillIds": ["00000000-0000-4000-8000-000000000012"],
+     "files": [{"fileId": "00000000-0000-4000-8000-000000000002", "access": "read-write"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": false,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000012"],
+     "files": [{"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"}],
+     "connectorIds":
+     ["00000000-0000-4000-8000-000000000021",
+      "00000000-0000-4000-8000-000000000022",
+      "00000000-0000-4000-8000-000000000021"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\",\"00000000-0000-4000-8000-000000000021\"],\"files\":[{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000003\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000012\"]},\"writeFiles\":false}",
+   "expected":
+   {"kind": "updated",
+    "assignments":
+    {"skillIds": ["00000000-0000-4000-8000-000000000012"],
+     "files": [{"fileId": "00000000-0000-4000-8000-000000000003", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": true,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000012"],
+     "files": [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000021\"],\"files\":[{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000012\"]},\"writeFiles\":true}",
+   "expected":
+   {"kind": "updated",
+    "assignments":
+    {"skillIds": ["00000000-0000-4000-8000-000000000012"],
+     "files": [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021"]}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": true,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000011"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000002", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000021"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000021\"],\"files\":[{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000002\"},{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000003\"},{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000011\"]},\"writeFiles\":true}",
+   "expected":
+   {"kind": "updated",
+    "assignments":
+    {"skillIds": ["00000000-0000-4000-8000-000000000011"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000002", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021"]}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": false,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000002", "access": "read-write"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000022"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000022\"],\"files\":[{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"},{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000002\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"writeFiles\":false}",
+   "expected":
+   {"kind": "updated",
+    "assignments":
+    {"skillIds": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000002", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000022"]}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": true,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000002", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000009", "access": "read"}],
+     "connectorIds":
+     ["00000000-0000-4000-8000-000000000021",
+      "00000000-0000-4000-8000-000000000021",
+      "00000000-0000-4000-8000-000000000022"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000002\"},{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000003\"},{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000009\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"writeFiles\":true}",
+   "expected": {"kind": "unknown-file", "id": "00000000-0000-4000-8000-000000000009"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": false,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000012", "00000000-0000-4000-8000-000000000011"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000002", "access": "read-write"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000003\"},{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"},{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000002\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000012\",\"00000000-0000-4000-8000-000000000011\"]},\"writeFiles\":false}",
+   "expected":
+   {"kind": "updated",
+    "assignments":
+    {"skillIds": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000002", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000003", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": true,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000019"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000009", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000021\"],\"files\":[{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000003\"},{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"},{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000009\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000019\"]},\"writeFiles\":true}",
+   "expected": {"kind": "unknown-file", "id": "00000000-0000-4000-8000-000000000009"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": true,
+    "requested":
+    {"skillIds":
+     ["00000000-0000-4000-8000-000000000011",
+      "00000000-0000-4000-8000-000000000012",
+      "00000000-0000-4000-8000-000000000012"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000002", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000009", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000029"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000029\"],\"files\":[{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"},{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000002\"},{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000009\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\",\"00000000-0000-4000-8000-000000000012\"]},\"writeFiles\":true}",
+   "expected": {"kind": "unknown-file", "id": "00000000-0000-4000-8000-000000000009"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": false,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000012", "00000000-0000-4000-8000-000000000012"],
+     "files": [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000021\"],\"files\":[{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000012\",\"00000000-0000-4000-8000-000000000012\"]},\"writeFiles\":false}",
+   "expected":
+   {"kind": "updated",
+    "assignments":
+    {"skillIds": ["00000000-0000-4000-8000-000000000012"],
+     "files": [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021"]}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": true,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000012", "00000000-0000-4000-8000-000000000011"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000009", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000022", "00000000-0000-4000-8000-000000000021"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000022\",\"00000000-0000-4000-8000-000000000021\"],\"files\":[{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000003\"},{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"},{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000009\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000012\",\"00000000-0000-4000-8000-000000000011\"]},\"writeFiles\":true}",
+   "expected": {"kind": "unknown-file", "id": "00000000-0000-4000-8000-000000000009"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": false,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000011"],
+     "files": [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"}],
+     "connectorIds": []},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[],\"files\":[{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000011\"]},\"writeFiles\":false}",
+   "expected":
+   {"kind": "updated",
+    "assignments":
+    {"skillIds": ["00000000-0000-4000-8000-000000000011"],
+     "files": [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"}],
+     "connectorIds": []}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": false,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000019"],
+     "files": [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000022"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000022\"],\"files\":[{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000019\"]},\"writeFiles\":false}",
+   "expected": {"kind": "unknown-skill", "id": "00000000-0000-4000-8000-000000000019"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": false,
+    "requested":
+    {"skillIds": [],
+     "files": [{"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000022", "00000000-0000-4000-8000-000000000021"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000022\",\"00000000-0000-4000-8000-000000000021\"],\"files\":[{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000003\"}],\"skillIds\":[]},\"writeFiles\":false}",
+   "expected":
+   {"kind": "updated",
+    "assignments":
+    {"skillIds": [],
+     "files": [{"fileId": "00000000-0000-4000-8000-000000000003", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": false,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000012", "00000000-0000-4000-8000-000000000011"],
+     "files": [],
+     "connectorIds":
+     ["00000000-0000-4000-8000-000000000021",
+      "00000000-0000-4000-8000-000000000022",
+      "00000000-0000-4000-8000-000000000029"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\",\"00000000-0000-4000-8000-000000000029\"],\"files\":[],\"skillIds\":[\"00000000-0000-4000-8000-000000000012\",\"00000000-0000-4000-8000-000000000011\"]},\"writeFiles\":false}",
+   "expected": {"kind": "unknown-connector", "id": "00000000-0000-4000-8000-000000000029"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": false,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000012"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000022", "00000000-0000-4000-8000-000000000021"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000022\",\"00000000-0000-4000-8000-000000000021\"],\"files\":[{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000003\"},{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000012\"]},\"writeFiles\":false}",
+   "expected":
+   {"kind": "updated",
+    "assignments":
+    {"skillIds": ["00000000-0000-4000-8000-000000000012"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000003", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": true,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000011"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000021"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000021\"],\"files\":[{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"},{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000003\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000011\"]},\"writeFiles\":true}",
+   "expected":
+   {"kind": "updated",
+    "assignments":
+    {"skillIds": ["00000000-0000-4000-8000-000000000011"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021"]}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": true,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000012"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000009", "access": "read"}],
+     "connectorIds":
+     ["00000000-0000-4000-8000-000000000022",
+      "00000000-0000-4000-8000-000000000021",
+      "00000000-0000-4000-8000-000000000029"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000022\",\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000029\"],\"files\":[{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"},{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000009\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000012\"]},\"writeFiles\":true}",
+   "expected": {"kind": "unknown-file", "id": "00000000-0000-4000-8000-000000000009"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": true,
+    "requested":
+    {"skillIds": [],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000002", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000009", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000022", "00000000-0000-4000-8000-000000000021"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000022\",\"00000000-0000-4000-8000-000000000021\"],\"files\":[{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000003\"},{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000002\"},{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000009\"}],\"skillIds\":[]},\"writeFiles\":true}",
+   "expected": {"kind": "unknown-file", "id": "00000000-0000-4000-8000-000000000009"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": true,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000011"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000009", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000003\"},{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"},{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000009\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000011\"]},\"writeFiles\":true}",
+   "expected": {"kind": "unknown-file", "id": "00000000-0000-4000-8000-000000000009"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": true,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000012"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000002", "access": "read-write"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000003\"},{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000002\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000012\"]},\"writeFiles\":true}",
+   "expected":
+   {"kind": "updated",
+    "assignments":
+    {"skillIds": ["00000000-0000-4000-8000-000000000012"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000002", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": false,
+    "requested":
+    {"skillIds": [],
+     "files": [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000021\"],\"files\":[{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"}],\"skillIds\":[]},\"writeFiles\":false}",
+   "expected":
+   {"kind": "updated",
+    "assignments":
+    {"skillIds": [],
+     "files": [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021"]}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": true,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000012", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000009", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000029"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000029\"],\"files\":[{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"},{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000003\"},{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000009\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000012\",\"00000000-0000-4000-8000-000000000012\"]},\"writeFiles\":true}",
+   "expected": {"kind": "unknown-file", "id": "00000000-0000-4000-8000-000000000009"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": false,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000012", "00000000-0000-4000-8000-000000000019"],
+     "files": [],
+     "connectorIds":
+     ["00000000-0000-4000-8000-000000000022",
+      "00000000-0000-4000-8000-000000000021",
+      "00000000-0000-4000-8000-000000000021"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000022\",\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000021\"],\"files\":[],\"skillIds\":[\"00000000-0000-4000-8000-000000000012\",\"00000000-0000-4000-8000-000000000019\"]},\"writeFiles\":false}",
+   "expected": {"kind": "unknown-skill", "id": "00000000-0000-4000-8000-000000000019"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": true,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000011"],
+     "files": [{"fileId": "00000000-0000-4000-8000-000000000002", "access": "read-write"}],
+     "connectorIds": []},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[],\"files\":[{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000002\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000011\"]},\"writeFiles\":true}",
+   "expected":
+   {"kind": "updated",
+    "assignments":
+    {"skillIds": ["00000000-0000-4000-8000-000000000011"],
+     "files": [{"fileId": "00000000-0000-4000-8000-000000000002", "access": "read-write"}],
+     "connectorIds": []}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": false,
+    "requested":
+    {"skillIds":
+     ["00000000-0000-4000-8000-000000000011",
+      "00000000-0000-4000-8000-000000000012",
+      "00000000-0000-4000-8000-000000000012",
+      "00000000-0000-4000-8000-000000000019"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000002", "access": "read-write"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000022"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000022\"],\"files\":[{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000003\"},{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"},{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000002\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\",\"00000000-0000-4000-8000-000000000012\",\"00000000-0000-4000-8000-000000000019\"]},\"writeFiles\":false}",
+   "expected": {"kind": "unknown-skill", "id": "00000000-0000-4000-8000-000000000019"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": false,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000012"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000002", "access": "read-write"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000022", "00000000-0000-4000-8000-000000000021"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000022\",\"00000000-0000-4000-8000-000000000021\"],\"files\":[{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000003\"},{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"},{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000002\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000012\"]},\"writeFiles\":false}",
+   "expected":
+   {"kind": "updated",
+    "assignments":
+    {"skillIds": ["00000000-0000-4000-8000-000000000012"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000002", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000003", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": true,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000012", "00000000-0000-4000-8000-000000000011"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000002", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000001", "access": "read-write"}],
+     "connectorIds":
+     ["00000000-0000-4000-8000-000000000021",
+      "00000000-0000-4000-8000-000000000021",
+      "00000000-0000-4000-8000-000000000022",
+      "00000000-0000-4000-8000-000000000029"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\",\"00000000-0000-4000-8000-000000000029\"],\"files\":[{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000003\"},{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000002\"},{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000012\",\"00000000-0000-4000-8000-000000000011\"]},\"writeFiles\":true}",
+   "expected": {"kind": "unknown-connector", "id": "00000000-0000-4000-8000-000000000029"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": true,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000012", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000009", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000021"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000021\"],\"files\":[{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"},{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000009\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000012\",\"00000000-0000-4000-8000-000000000012\"]},\"writeFiles\":true}",
+   "expected": {"kind": "unknown-file", "id": "00000000-0000-4000-8000-000000000009"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": false,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000011"],
+     "files": [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000022", "00000000-0000-4000-8000-000000000021"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000022\",\"00000000-0000-4000-8000-000000000021\"],\"files\":[{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000011\"]},\"writeFiles\":false}",
+   "expected":
+   {"kind": "updated",
+    "assignments":
+    {"skillIds": ["00000000-0000-4000-8000-000000000011"],
+     "files": [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": false,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000019"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000002", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000001", "access": "read-write"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000021\"],\"files\":[{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000002\"},{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000003\"},{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"},{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000019\"]},\"writeFiles\":false}",
+   "expected": {"kind": "unknown-file", "id": "00000000-0000-4000-8000-000000000001"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": true,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000012"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000002", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000009", "access": "read"}],
+     "connectorIds": []},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[],\"files\":[{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000002\"},{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000003\"},{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"},{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000009\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000012\"]},\"writeFiles\":true}",
+   "expected": {"kind": "unknown-file", "id": "00000000-0000-4000-8000-000000000009"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": false,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000002", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"}],
+     "connectorIds":
+     ["00000000-0000-4000-8000-000000000022",
+      "00000000-0000-4000-8000-000000000021",
+      "00000000-0000-4000-8000-000000000021"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000022\",\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000021\"],\"files\":[{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000002\"},{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"writeFiles\":false}",
+   "expected":
+   {"kind": "updated",
+    "assignments":
+    {"skillIds": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000002", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": true,
+    "requested":
+    {"skillIds": [],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000002", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000001", "access": "read-write"}],
+     "connectorIds": []},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": false},
+   "id":
+   "replace/{\"agentExists\":false,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[],\"files\":[{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000003\"},{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"},{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000002\"},{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"}],\"skillIds\":[]},\"writeFiles\":true}",
+   "expected": {"kind": "not-found"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": true,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000012"],
+     "files": [{"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000022", "00000000-0000-4000-8000-000000000021"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000022\",\"00000000-0000-4000-8000-000000000021\"],\"files\":[{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000003\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000012\"]},\"writeFiles\":true}",
+   "expected":
+   {"kind": "updated",
+    "assignments":
+    {"skillIds": ["00000000-0000-4000-8000-000000000012"],
+     "files": [{"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": false,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000012"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000002", "access": "read-write"}],
+     "connectorIds":
+     ["00000000-0000-4000-8000-000000000021",
+      "00000000-0000-4000-8000-000000000022",
+      "00000000-0000-4000-8000-000000000021"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": false},
+   "id":
+   "replace/{\"agentExists\":false,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\",\"00000000-0000-4000-8000-000000000021\"],\"files\":[{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"},{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000002\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000012\"]},\"writeFiles\":false}",
+   "expected": {"kind": "not-found"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": false,
+    "requested":
+    {"skillIds":
+     ["00000000-0000-4000-8000-000000000012",
+      "00000000-0000-4000-8000-000000000011",
+      "00000000-0000-4000-8000-000000000012"],
+     "files": [{"fileId": "00000000-0000-4000-8000-000000000002", "access": "read-write"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000022", "00000000-0000-4000-8000-000000000029"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000022\",\"00000000-0000-4000-8000-000000000029\"],\"files\":[{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000002\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000012\",\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"writeFiles\":false}",
+   "expected": {"kind": "unknown-connector", "id": "00000000-0000-4000-8000-000000000029"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": true,
+    "requested":
+    {"skillIds":
+     ["00000000-0000-4000-8000-000000000012",
+      "00000000-0000-4000-8000-000000000011",
+      "00000000-0000-4000-8000-000000000012"],
+     "files": [{"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"}],
+     "connectorIds":
+     ["00000000-0000-4000-8000-000000000021",
+      "00000000-0000-4000-8000-000000000022",
+      "00000000-0000-4000-8000-000000000021"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\",\"00000000-0000-4000-8000-000000000021\"],\"files\":[{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000003\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000012\",\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"writeFiles\":true}",
+   "expected":
+   {"kind": "updated",
+    "assignments":
+    {"skillIds": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files": [{"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": true,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000021\"],\"files\":[{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000003\"},{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"writeFiles\":true}",
+   "expected":
+   {"kind": "updated",
+    "assignments":
+    {"skillIds": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021"]}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": true,
+    "requested":
+    {"skillIds": [],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000002", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000009", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000022", "00000000-0000-4000-8000-000000000021"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000022\",\"00000000-0000-4000-8000-000000000021\"],\"files\":[{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000002\"},{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000009\"}],\"skillIds\":[]},\"writeFiles\":true}",
+   "expected": {"kind": "unknown-file", "id": "00000000-0000-4000-8000-000000000009"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": false,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000019"],
+     "files": [{"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000021"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000021\"],\"files\":[{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000003\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000019\"]},\"writeFiles\":false}",
+   "expected": {"kind": "unknown-skill", "id": "00000000-0000-4000-8000-000000000019"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": false,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000012", "00000000-0000-4000-8000-000000000019"],
+     "files": [],
+     "connectorIds":
+     ["00000000-0000-4000-8000-000000000021",
+      "00000000-0000-4000-8000-000000000021",
+      "00000000-0000-4000-8000-000000000022"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[],\"skillIds\":[\"00000000-0000-4000-8000-000000000012\",\"00000000-0000-4000-8000-000000000019\"]},\"writeFiles\":false}",
+   "expected": {"kind": "unknown-skill", "id": "00000000-0000-4000-8000-000000000019"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": true,
+    "requested":
+    {"skillIds":
+     ["00000000-0000-4000-8000-000000000012",
+      "00000000-0000-4000-8000-000000000012",
+      "00000000-0000-4000-8000-000000000011"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000021\"],\"files\":[{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000003\"},{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000012\",\"00000000-0000-4000-8000-000000000012\",\"00000000-0000-4000-8000-000000000011\"]},\"writeFiles\":true}",
+   "expected":
+   {"kind": "updated",
+    "assignments":
+    {"skillIds": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021"]}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": true,
+    "requested": {"skillIds": ["00000000-0000-4000-8000-000000000012"], "files": [], "connectorIds": []},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[],\"files\":[],\"skillIds\":[\"00000000-0000-4000-8000-000000000012\"]},\"writeFiles\":true}",
+   "expected":
+   {"kind": "updated",
+    "assignments": {"skillIds": ["00000000-0000-4000-8000-000000000012"], "files": [], "connectorIds": []}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": true,
+    "requested":
+    {"skillIds": [],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000002", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000009", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000021\"],\"files\":[{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000002\"},{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000003\"},{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"},{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000009\"}],\"skillIds\":[]},\"writeFiles\":true}",
+   "expected": {"kind": "unknown-file", "id": "00000000-0000-4000-8000-000000000009"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": true,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000019"],
+     "files": [{"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000022", "00000000-0000-4000-8000-000000000021"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000022\",\"00000000-0000-4000-8000-000000000021\"],\"files\":[{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000003\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000019\"]},\"writeFiles\":true}",
+   "expected": {"kind": "unknown-skill", "id": "00000000-0000-4000-8000-000000000019"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": false,
+    "requested":
+    {"skillIds": [],
+     "files": [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"}],\"skillIds\":[]},\"writeFiles\":false}",
+   "expected":
+   {"kind": "updated",
+    "assignments":
+    {"skillIds": [],
+     "files": [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": false,
+    "requested":
+    {"skillIds":
+     ["00000000-0000-4000-8000-000000000011",
+      "00000000-0000-4000-8000-000000000012",
+      "00000000-0000-4000-8000-000000000012"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000002", "access": "read-write"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000021"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000021\"],\"files\":[{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"},{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000002\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\",\"00000000-0000-4000-8000-000000000012\"]},\"writeFiles\":false}",
+   "expected":
+   {"kind": "updated",
+    "assignments":
+    {"skillIds": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000002", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021"]}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": false,
+    "requested":
+    {"skillIds": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000002", "access": "read-write"}],
+     "connectorIds":
+     ["00000000-0000-4000-8000-000000000021",
+      "00000000-0000-4000-8000-000000000021",
+      "00000000-0000-4000-8000-000000000022"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000003\"},{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"},{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000002\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"writeFiles\":false}",
+   "expected":
+   {"kind": "updated",
+    "assignments":
+    {"skillIds": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000002", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000003", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_assigns_only_catalogued_resources",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_never_widens_past_write_files",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_writes_each_resource_once",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_keeps_every_requested_id",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_answers_in_id_order",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_file",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_skill",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_reports_the_first_uncatalogued_connector",
+    "AgentWorkspace.Theorems.Invariants.ConceptCatalog.replace_checks_files_then_skills_then_connectors",
+    "AgentWorkspace.Theorems.Meta.ConceptCatalog.repeated_ids_are_treated_differently_by_kind"],
+   "input":
+   {"writeFiles": true,
+    "requested":
+    {"skillIds":
+     ["00000000-0000-4000-8000-000000000012",
+      "00000000-0000-4000-8000-000000000012",
+      "00000000-0000-4000-8000-000000000011"],
+     "files":
+     [{"fileId": "00000000-0000-4000-8000-000000000002", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000003", "access": "read-write"},
+      {"fileId": "00000000-0000-4000-8000-000000000001", "access": "read"},
+      {"fileId": "00000000-0000-4000-8000-000000000009", "access": "read"}],
+     "connectorIds": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000021"]},
+    "catalog":
+    {"skills": ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"],
+     "files":
+     ["00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"],
+     "connectors": ["00000000-0000-4000-8000-000000000021", "00000000-0000-4000-8000-000000000022"]},
+    "agentExists": true},
+   "id":
+   "replace/{\"agentExists\":true,\"catalog\":{\"connectors\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000022\"],\"files\":[\"00000000-0000-4000-8000-000000000001\",\"00000000-0000-4000-8000-000000000002\",\"00000000-0000-4000-8000-000000000003\"],\"skills\":[\"00000000-0000-4000-8000-000000000011\",\"00000000-0000-4000-8000-000000000012\"]},\"requested\":{\"connectorIds\":[\"00000000-0000-4000-8000-000000000021\",\"00000000-0000-4000-8000-000000000021\"],\"files\":[{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000002\"},{\"access\":\"read-write\",\"fileId\":\"00000000-0000-4000-8000-000000000003\"},{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000001\"},{\"access\":\"read\",\"fileId\":\"00000000-0000-4000-8000-000000000009\"}],\"skillIds\":[\"00000000-0000-4000-8000-000000000012\",\"00000000-0000-4000-8000-000000000012\",\"00000000-0000-4000-8000-000000000011\"]},\"writeFiles\":true}",
+   "expected": {"kind": "unknown-file", "id": "00000000-0000-4000-8000-000000000009"}}],
+ "family": "concept-catalog",
+ "description":
+ "AgentResourceRepository.replace: outcome for a fixed catalog over edge cases and a seeded sample of requests (answers in id order)"}

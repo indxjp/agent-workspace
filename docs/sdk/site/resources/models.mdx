@@ -1,0 +1,378 @@
+---
+title: "Models"
+description: "Store model-provider credentials as connections, and discover the models each one offers."
+---
+
+<Info>
+
+- **Read this when:** you connect a model provider (Anthropic, OpenAI, Azure OpenAI or a compatible endpoint), rotate its key, or need to know which models an agent can use.
+- **You will learn:** what a model connection holds and when it is `ready`, how credentials are written once and never returned, and how model discovery reports per-connection failures.
+- **Used in:** [Chapter 1 · Run your first agent](/path/first-agent) and [Chapter 2 · Build your agent](/path/build) (step-by-step: [Models and runtimes](/building/models-and-runtimes)).
+
+</Info>
+
+What you can do with models:
+
+- [Create](#connections-create) a model connection with its API key, and [list](#connections-list), [get](#connections-get) or [update](#connections-update) connections.
+- [Test](#connections-test) a connection against the provider, and [rotate](#connections-rotatecredential) its credential.
+- [Discover](#discover) every model each ready connection offers, with its capabilities.
+- [Remove](#connections-remove) a connection and see which agents fell back to the workspace default.
+
+`aw.models` manages a workspace's **model connections** — a provider plus a credential, given a
+name — and discovers which models each ready connection actually offers. It wraps
+`/api/model-connections/**` and `GET /api/models` (API specification §5.3). Source:
+`packages/sdk/src/resources/models.ts`, contract: `packages/contracts/src/models.ts`.
+
+A connection is a `ModelConnectionResource`; a discovered model is a separate, smaller shape from
+`discover()`:
+
+```ts title="illustrative" claim="illustrative"
+interface ModelConnectionResource {
+  id: string;
+  name: string;
+  provider: 'anthropic' | 'anthropic-compatible' | 'openai' | 'azure-openai' | 'openai-compatible';
+  config: { baseUrl?: string; deployment?: string; apiVersion?: string };
+  hasCredential: boolean; // never the credential itself
+  ready: boolean; // hasCredential + every config field the provider requires
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface DiscoveredModel {
+  connectionId: string;
+  providerModelId: string;
+  displayName: string; // the provider's own label; may be empty
+  capabilities: {
+    streaming: boolean;
+    toolUse: boolean;
+    thinking: boolean;
+    promptCaching: boolean;
+    structuredOutput: boolean;
+    contextManagement: boolean;
+    webSearch: boolean;
+    tokenCounting: boolean;
+  };
+}
+```
+
+`MODEL_PROVIDERS` (`packages/contracts/src/runs.ts`) is `['anthropic', 'anthropic-compatible',
+'openai', 'azure-openai', 'openai-compatible']`. `DISCOVERED_MODEL_CAPABILITY_KEYS`
+(`packages/contracts/src/models.ts`) is `['streaming', 'toolUse', 'thinking', 'promptCaching',
+'structuredOutput', 'contextManagement', 'webSearch', 'tokenCounting']`, the specification's own
+order for the flags above.
+
+Every provider accepts a different subset of `config` (`MODEL_PROVIDER_CONFIG_RULES`):
+
+| Provider               | `config` fields allowed               | Required for `ready`                  |
+| ---------------------- | ------------------------------------- | ------------------------------------- |
+| `anthropic`            | `baseUrl`                             | —                                     |
+| `anthropic-compatible` | `baseUrl`                             | —                                     |
+| `openai`               | `baseUrl`                             | —                                     |
+| `openai-compatible`    | `baseUrl`                             | `baseUrl`                             |
+| `azure-openai`         | `baseUrl`, `apiVersion`, `deployment` | `baseUrl`, `apiVersion`, `deployment` |
+
+A `baseUrl` must be an absolute URL the workspace's egress policy allows. Model choice anywhere in
+the platform — an agent, a project, a run override — is always the pair `(modelConnectionId,
+model)`, never a model id alone.
+
+<Note>
+  **Today:** a connection's credential is stored as a secret row the connection references;
+  ownership is by convention. **Target:** direct, transactional credential ownership, so rotating or
+  deleting a connection cannot leave a dangling secret. Tracked as
+  [RF-204](/concepts/roadmap#rf-204-typed-credential-ownership). Either way the credential is
+  write-only and never appears in a response.
+</Note>
+
+## Complete example
+
+```ts title="models-example.ts" claim="compile"
+import { createClient } from '@indx-workspace/sdk';
+
+const baseUrl = process.env.AGENT_WORKSPACE_URL;
+const apiKey = process.env.AGENT_WORKSPACE_API_KEY;
+if (baseUrl === undefined || apiKey === undefined) {
+  throw new Error('Set AGENT_WORKSPACE_URL and AGENT_WORKSPACE_API_KEY');
+}
+const aw = createClient({
+  baseUrl,
+  auth: { kind: 'api-key', apiKey },
+});
+
+async function main(): Promise<void> {
+  const providerKey = process.env.ANTHROPIC_API_KEY;
+  if (providerKey === undefined) throw new Error('Set ANTHROPIC_API_KEY');
+  const connection = await aw.models.connections.create({
+    name: 'anthropic-prod',
+    provider: 'anthropic',
+    apiKey: providerKey,
+  });
+  console.log(`${connection.name}: ready=${connection.ready}`);
+
+  const test = await aw.models.connections.test(connection.id);
+  console.log(test.ok ? `${test.latencyMs} ms` : `probe failed: ${test.message}`);
+
+  const { models, unavailable } = await aw.models.discover();
+  for (const model of models) {
+    console.log(`${model.connectionId} → ${model.providerModelId} (${model.displayName})`);
+  }
+  for (const failed of unavailable ?? []) {
+    console.log(`unavailable: ${failed.connectionName} — ${failed.reason}`);
+  }
+}
+
+main();
+```
+
+## `connections.list`
+
+Every model connection of the caller's workspace.
+
+**Route:** `GET /api/model-connections`
+
+```ts title="illustrative" claim="illustrative"
+const connections = await aw.models.connections.list();
+```
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw models connections list
+```
+
+</CodeGroup>
+
+See [`models.connections.list`](/reference/sdk/models#connections-list).
+
+## `connections.get`
+
+Read one connection.
+
+**Route:** `GET /api/model-connections/:id`
+
+```ts title="illustrative" claim="illustrative"
+const connection = await aw.models.connections.get(connectionId);
+```
+
+| Code                          | Status | Meaning                                       |
+| ----------------------------- | ------ | --------------------------------------------- |
+| `invalid_model_connection_id` | 400    | The `:id` in the path is not a UUID.          |
+| `model_connection_not_found`  | 404    | No connection with that id in this workspace. |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw models connections get <id>
+```
+
+</CodeGroup>
+
+See [`models.connections.get`](/reference/sdk/models#connections-get).
+
+## `connections.create`
+
+Store a connection and its credential in one step. `apiKey` is required and is written once here
+— after this call the only way to change it is `rotateCredential` below. `config` may be omitted
+for a provider that requires nothing.
+
+**Route:** `POST /api/model-connections`
+
+```ts title="illustrative" claim="illustrative"
+const providerKey = process.env.AZURE_OPENAI_API_KEY;
+if (providerKey === undefined) throw new Error('Set AZURE_OPENAI_API_KEY');
+const connection = await aw.models.connections.create({
+  name: 'azure-prod',
+  provider: 'azure-openai',
+  apiKey: providerKey,
+  config: {
+    baseUrl: 'https://my-resource.openai.azure.com',
+    apiVersion: '2024-10-21',
+    deployment: 'gpt-4o-prod',
+  },
+});
+```
+
+| Code                             | Status | Meaning                                                                                                                                           |
+| -------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `invalid_body`                   | 400    | A field the route refuses — wrong `config` keys for the provider, a missing required field, or a failed schema check. `details` names each field. |
+| `model_connection_name_conflict` | 409    | The workspace already has a connection with this name.                                                                                            |
+| `models_runtime_not_configured`  | 503    | This deployment has no models backend configured.                                                                                                 |
+
+Source: verified against `apps/web/server/models/handlers.ts`.
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+printf '%s' "$ANTHROPIC_API_KEY" | aw models connections create --file connection.json --value-stdin
+```
+
+</CodeGroup>
+
+See
+[`models.connections.create`](/reference/sdk/models#connections-create) and
+[`CreateModelConnectionInput`](/reference/contracts/models#createmodelconnectioninput).
+
+## `connections.update`
+
+Rename or reconfigure. The provider is immutable through this route. Omitted fields are left
+unchanged, and `apiKey` replaces the saved key. A new `config.baseUrl` on a connection with a saved
+key must carry a new `apiKey` in the same body, because the saved key never follows the connection
+to a new destination.
+
+**Route:** `PATCH /api/model-connections/:id`
+
+```ts title="illustrative" claim="illustrative"
+const renamed = await aw.models.connections.update(connectionId, { name: 'anthropic-prod-2' });
+```
+
+| Code                              | Status | Meaning                                                                      |
+| --------------------------------- | ------ | ---------------------------------------------------------------------------- |
+| `invalid_model_connection_id`     | 400    | The `:id` in the path is not a UUID.                                         |
+| `invalid_body`                    | 400    | Same validation as `create`, run against the connection's existing provider. |
+| `model_connection_not_found`      | 404    | No connection with that id in this workspace.                                |
+| `model_connection_name_conflict`  | 409    | Another connection already has this name.                                    |
+| `credential_required_on_retarget` | 409    | A new `config.baseUrl` came without a new `apiKey`; nothing changed.         |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw models connections update <id> --name anthropic-prod-2
+aw models connections update <id> --file patch.json
+```
+
+</CodeGroup>
+
+See
+[`models.connections.update`](/reference/sdk/models#connections-update).
+
+## `connections.remove`
+
+Delete the connection. The server does **not** refuse while agents reference it: every agent's
+`modelConnectionId` is cleared in the same transaction (falls back to the workspace default), and
+those agents are named in `referencedBy` so the caller can warn a user or re-point them.
+
+**Route:** `DELETE /api/model-connections/:id`
+
+```ts title="illustrative" claim="illustrative"
+const result = await aw.models.connections.remove(connectionId);
+console.log(
+  result.deleted,
+  result.referencedBy.map((a) => a.agentName),
+);
+```
+
+| Code                          | Status | Meaning                                       |
+| ----------------------------- | ------ | --------------------------------------------- |
+| `invalid_model_connection_id` | 400    | The `:id` in the path is not a UUID.          |
+| `model_connection_not_found`  | 404    | No connection with that id in this workspace. |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw models connections remove <id>
+```
+
+</CodeGroup>
+
+See
+[`models.connections.remove`](/reference/sdk/models#connections-remove) and
+[`DeleteModelConnectionResponseSchema`](/reference/contracts/models#deletemodelconnectionresponseschema).
+
+## `connections.rotateCredential`
+
+Replace the stored credential in place; everything else about the connection stays. Answers
+`204` with no body.
+
+**Route:** `POST /api/model-connections/:id/credential`
+
+```ts title="illustrative" claim="illustrative"
+await aw.models.connections.rotateCredential(connectionId, newApiKey);
+```
+
+| Code                          | Status | Meaning                                                                                   |
+| ----------------------------- | ------ | ----------------------------------------------------------------------------------------- |
+| `invalid_model_connection_id` | 400    | The `:id` in the path is not a UUID.                                                      |
+| `invalid_body`                | 400    | The body is not `{ apiKey: string }` with a non-empty `apiKey`, or carries another field. |
+| `model_connection_not_found`  | 404    | No connection with that id in this workspace.                                             |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+printf '%s' "$NEW_KEY" | aw models connections rotate-credential <id> --value-stdin
+```
+
+</CodeGroup>
+
+See
+[`models.connections.rotateCredential`](/reference/sdk/models#connections-rotatecredential).
+
+## `connections.test`
+
+Probe the provider's catalog endpoint with the stored credential. A failed probe resolves rather
+than throws: it is a `502` whose body is still the outcome shape (`ok: false`), not the error
+envelope, so the SDK returns it as a value. Only a missing connection or a genuinely refused
+request throws `ApiProblemError`.
+
+**Route:** `POST /api/model-connections/:id/test`
+
+```ts title="illustrative" claim="illustrative"
+const outcome = await aw.models.connections.test(connectionId);
+if (outcome.ok) {
+  console.log(`reachable in ${outcome.latencyMs} ms (status ${outcome.status})`);
+} else {
+  console.log(`${outcome.status ?? 'no response'}: ${outcome.message}`);
+}
+```
+
+| Code                          | Status | Meaning                                       |
+| ----------------------------- | ------ | --------------------------------------------- |
+| `invalid_model_connection_id` | 400    | The `:id` in the path is not a UUID.          |
+| `model_connection_not_found`  | 404    | No connection with that id in this workspace. |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw models connections test <id>
+```
+
+</CodeGroup>
+
+See [`models.connections.test`](/reference/sdk/models#connections-test) and
+[`ModelConnectionTestOutcomeSchema`](/reference/contracts/models#modelconnectiontestoutcomeschema).
+
+## `discover`
+
+Every model every **ready** connection offers — one row per `(connectionId, providerModelId)`. A
+connection that is not `ready` (no credential, or missing a required config field) is skipped
+silently; a ready connection whose discovery call itself failed is named in `unavailable` instead
+of being dropped without a trace.
+
+**Route:** `GET /api/models`
+
+```ts title="illustrative" claim="illustrative"
+const { models, unavailable } = await aw.models.discover();
+```
+
+No models-specific problem codes beyond `503 models_runtime_not_configured`; a failed provider
+call is reported per-connection in `unavailable`, not as a thrown error.
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw models discover
+```
+
+</CodeGroup>
+
+`aw models discover` also prints each `unavailable` entry as a warning line before the table. See
+[`models.discover`](/reference/sdk/models#discover) and
+[`DiscoveredModelsResponseSchema`](/reference/contracts/models#discoveredmodelsresponseschema).
+
+## See also
+
+- [ModelsClient](/reference/sdk/models) — full method signatures.
+- [models](/reference/contracts/models) — every schema and constant,
+  including `MODEL_PROVIDER_CONFIG_RULES`, `DISCOVERED_MODEL_CAPABILITY_KEYS`.
+- [Runs](/resources/runs) — where `(modelConnectionId, model)` is spent as a run
+  override.
+- [Runtimes](/resources/runtimes) — the equivalent connection/credential pattern for
+  where an agent executes, rather than which model it calls.

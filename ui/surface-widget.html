@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Invoice Help — surface widget</title>
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  /* The look baked into widget.js at serve time: theme.colour, its foreground and theme.radius. */
+  .host { --brand: #2f5fd0; --brand-fg: #ffffff; --brand-radius: 8px; min-height: 100vh; }
+  .host .inner { max-width: 760px; margin: 0 auto; padding: 30px 20px 80px; }
+  .host .snippet { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; overflow-x: auto; white-space: pre; }
+  .aw-panel { position: fixed; right: 20px; bottom: 88px; width: min(380px, calc(100vw - 40px)); height: min(600px, calc(100vh - 120px)); border: 1px solid var(--border); border-radius: var(--brand-radius); background: var(--surface); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18); display: flex; flex-direction: column; overflow: hidden; }
+  .aw-panel .head { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  .aw-panel .mark { width: 22px; height: 22px; border-radius: 6px; background: var(--brand); color: var(--brand-fg); display: grid; place-items: center; font-size: 11px; font-weight: 700; }
+  .aw-panel .body { flex: 1; padding: 14px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
+  .aw-panel .prompts { display: flex; flex-direction: column; gap: 6px; }
+  .aw-panel .prompt { text-align: left; border: 1px solid var(--border); border-radius: var(--brand-radius); background: var(--surface); padding: 8px 10px; font: inherit; font-size: 13px; cursor: pointer; }
+  .aw-panel .foot { border-top: 1px solid var(--border); padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; }
+  .aw-panel .input { border: 1px solid var(--border); border-radius: var(--brand-radius); padding: 8px 10px; color: var(--muted); font-size: 13px; }
+  .aw-panel .send { align-self: flex-end; background: var(--brand); color: var(--brand-fg); border: 0; border-radius: var(--brand-radius); padding: 6px 12px; font: inherit; font-size: 13px; }
+  .aw-launcher { position: fixed; right: 20px; bottom: 20px; width: 56px; height: 56px; border-radius: 50%; border: 0; background: var(--brand); color: var(--brand-fg); font-size: 22px; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2); cursor: pointer; }
+</style>
+</head>
+<body>
+
+<div class="host">
+  <div class="inner">
+    <h1>Try Invoice Help</h1>
+    <p class="muted">This page is a host page whose body is the one script tag below. Paste the same
+      tag into any page served from this machine to add the widget.</p>
+    <div class="snippet">&lt;script src="http://127.0.0.1:3000/p/s/main/widget.js" async&gt;&lt;/script&gt;</div>
+  </div>
+</div>
+
+<!-- What the loader inserts (layout: dock): one iframe in a fixed panel, shown here open. -->
+<div class="aw-panel" data-aw-surface="main" data-aw-surface-frame="main" title="Invoice Help">
+  <div class="head">
+    <div class="mark">I</div>
+    <div style="font-size:13px;font-weight:600">Invoice Help</div>
+  </div>
+  <div class="body">
+    <p class="mb0">Hi. Paste an invoice or ask about one, and I will tell you whether it can be paid.</p>
+    <div class="prompts" aria-label="Suggested prompts">
+      <button class="prompt" type="button">Is invoice 2026-0412 ready to pay?</button>
+      <button class="prompt" type="button">Which invoices are due this week?</button>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="input">Write a message…</div>
+    <button class="send" type="button" data-toast="Message sent">Send</button>
+    <div class="small muted">Answers come from an AI agent and can be wrong. Check before you pay.</div>
+  </div>
+</div>
+
+<!-- And one launcher in the brand colour, bottom-right. -->
+<button class="aw-launcher" type="button" data-aw-surface="main" data-aw-surface-launcher="main" aria-label="Close Invoice Help" aria-expanded="true">×</button>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

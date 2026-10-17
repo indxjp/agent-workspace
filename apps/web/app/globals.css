@@ -1,0 +1,192 @@
+@import 'tailwindcss';
+
+/* ============================================================
+   Agent Workspace — design tokens.
+
+   Every custom property in the two blocks below is copied from `ui/assets/app.css` in this
+   repository — the same names, the same values, the same order, the same light block and the
+   same `prefers-color-scheme: dark` block. That file is the design source for the twenty-five
+   static mockups the UI tasks transcribe (spec §43), and a token whose value drifts from it is
+   a defect, not a refinement. If a value here has to change, change `ui/assets/app.css` first
+   and copy the result.
+
+   The bytes are not identical, and pretending otherwise would be the wrong claim: Prettier
+   reformats this file (quote style, spacing inside `rgba()`, `.05` written as `0.05`, long
+   lists wrapped). Every one of those is a formatting change and none is a value change, and
+   that is checked by comparison rather than asserted — this task's acceptance parses both
+   files, normalises whitespace and leading zeros, and diffs the name/value pairs.
+
+   The mockups follow the operating system's theme and offer no in-app switch, so the dark
+   block is a media query and nothing else. There is no `[data-theme]` selector to port because
+   there is none to port.
+
+   THREE NAMES COLLIDE WITH TAILWIND'S OWN DEFAULT THEME — `--radius-sm`, `--shadow` and
+   `--shadow-lg`. `@import 'tailwindcss'` emits its defaults into `:root` above this block, so
+   these declarations win the cascade and the `rounded-sm` / `shadow` / `shadow-lg` utilities
+   take the design system's values inside this application. That is deliberate: the design
+   system is the source of truth for this product's surfaces. It is written down here because
+   it is the kind of thing that is otherwise discovered by someone wondering why a shadow looks
+   unfamiliar.
+   ============================================================ */
+
+:root {
+  --bg: #faf9f7;
+  --surface: #ffffff;
+  --surface-2: #f4f3f0;
+  --surface-3: #eceae5;
+  --border: #e3e0da;
+  --border-strong: #cfcbc2;
+  --text: #1b1a18;
+  --text-2: #4a4842;
+  --muted: #7d7a72;
+  --accent: #2f5fd0;
+  --accent-hover: #2249ab;
+  --accent-soft: #eaf0ff;
+  --ok: #1a7f4b;
+  --ok-soft: #e6f4ec;
+  --warn: #a8620a;
+  --warn-soft: #fdf1e0;
+  --danger: #b3261e;
+  --danger-soft: #fbeceb;
+  --info-soft: #edf1f7;
+  --shadow: 0 1px 2px rgba(24, 23, 20, 0.05), 0 4px 12px rgba(24, 23, 20, 0.05);
+  --shadow-lg: 0 12px 40px rgba(24, 23, 20, 0.16);
+  --radius: 8px;
+  --radius-sm: 6px;
+  --sidebar-w: 236px;
+  --font:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI',
+    Meiryo, Roboto, Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141416;
+    --surface: #1c1c1f;
+    --surface-2: #232327;
+    --surface-3: #2b2b30;
+    --border: #303036;
+    --border-strong: #43434b;
+    --text: #ececef;
+    --text-2: #c2c2c8;
+    --muted: #8e8e98;
+    --accent: #7ba1ff;
+    --accent-hover: #9db8ff;
+    --accent-soft: #1c2540;
+    --ok: #5dd39e;
+    --ok-soft: #14291f;
+    --warn: #e0a35a;
+    --warn-soft: #2e2216;
+    --danger: #ef8079;
+    --danger-soft: #331917;
+    --info-soft: #1e2229;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.55);
+  }
+}
+
+/* ------------------------------------------------------------
+   The same tokens, as Tailwind theme values.
+
+   `inline` matters. Without it Tailwind copies the *value* into its own variable at build time,
+   which would freeze the light palette into `--color-bg` and leave `bg-bg` unchanged when the
+   system switches to dark. With it, `bg-bg` compiles to `background-color: var(--bg)` and the
+   media query above does the work — one definition of each colour, two themes, no duplication.
+
+   Radius and shadow are deliberately NOT mapped here: `--radius-sm` and `--shadow-lg` are
+   Tailwind namespace names as well as design-token names, so a mapping would be a self
+   reference (`--radius-sm: var(--radius-sm)`). Components spend those tokens directly instead,
+   with `rounded-(--radius-sm)` and `shadow-(--shadow)`, which reads the same variable the
+   mockup reads. `--sidebar-w` belongs to no Tailwind namespace and is spent the same way.
+   ------------------------------------------------------------ */
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-text: var(--text);
+  --color-text-2: var(--text-2);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-info-soft: var(--info-soft);
+
+  --font-sans: var(--font);
+  --font-mono: var(--mono);
+}
+
+/* ------------------------------------------------------------
+   Base element styles, ported from the same file. Tailwind's preflight already resets margins
+   and box sizing; what is added here is the part of `ui/assets/app.css` that is a design
+   decision rather than a reset — the body type ramp, the link colour, the heading weight and
+   tracking, and the monospace size.
+   ------------------------------------------------------------ */
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 14px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  a:hover {
+    text-decoration: underline;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    margin: 0;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  p {
+    margin: 0 0 12px;
+  }
+
+  hr {
+    border: 0;
+    border-top: 1px solid var(--border);
+    margin: 24px 0;
+  }
+
+  code,
+  kbd,
+  pre {
+    font-family: var(--mono);
+    font-size: 12.5px;
+  }
+}

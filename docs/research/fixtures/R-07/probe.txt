@@ -1,0 +1,4 @@
+2026-09-08
+az account show: subscription "Azure subscription 1", state Enabled (subscription id elided)
+az provider show -n Microsoft.App --query registrationState: Registered
+No create was attempted: owner authorisation for billable resources was not granted.

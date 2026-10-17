@@ -1,0 +1,76 @@
+# The run_skill_script unit tests on Windows (issue #1095). Every other job runs on Linux, where
+# the `/`-joined containment check passed by accident; on Windows realpath returns `\` paths and
+# the same check refused every script. This job runs only the files that pin that behaviour, so
+# it cannot regress unseen. The tests resolve two workspace packages from dist, so the job builds
+# just those first.
+#
+# A separate workflow, not a ci.yml job: ci.yml is held to ubuntu-latest by
+# scripts/check-workflows.mjs, and a GitHub-hosted Windows VM is the only Windows runner this
+# repository uses (as in install-live.yml). Not required by ci-success on purpose, like
+# ci-nx-cache.yml: it is path-filtered, and a required check that a diff never triggers would
+# block that diff. Cost: one windows-latest VM, a filtered install and four test files per
+# matching pull request (a few minutes); nothing runs for a diff that cannot reach them.
+name: CI Windows unit
+
+on:
+  push:
+    branches: [main]
+    paths: &paths
+      - 'packages/engine/**'
+      - 'packages/engine-claude-agent-sdk/**'
+      - 'packages/engine-mastra/**'
+      - 'packages/engine-openai-agents/**'
+      - 'packages/sdk/**'
+      - 'tests/engine/**'
+      - 'tests/gallery/run-access.test.ts'
+      - 'vitest.config.ts'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/windows-unit.yml'
+  pull_request:
+    branches: [main]
+    paths: *paths
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-unit-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  skill-script:
+    name: skill-script unit tests · windows
+    runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        timeout-minutes: 8
+        run: pnpm install --frozen-lockfile
+
+      # The tests import the engine, its Claude adapter and the SDK by package name, which resolves to
+      # dist. Nx builds each project's dependencies first (`^build`), so naming three is enough.
+      - name: Build the packages the tests import
+        timeout-minutes: 10
+        run: pnpm nx run-many -t build --projects=@agent-workspace/engine,@agent-workspace/engine-claude-agent-sdk,@indx-workspace/sdk --output-style=static
+
+      - name: Run the skill-script tests
+        timeout-minutes: 10
+        shell: bash
+        run: pnpm exec vitest run tests/engine/run-skill-script.test.ts tests/engine/skill-script-windows-paths.test.ts tests/gallery/run-access.test.ts packages/engine/src/skill-script.test.ts

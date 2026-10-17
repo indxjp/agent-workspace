@@ -1,0 +1,124 @@
+{
+  "name": "@indx-workspace/sdk",
+  "version": "0.6.9",
+  "description": "The typed, isomorphic TypeScript client for the Agent Workspace API, with agents and surfaces as code at /define, the project file and starter project at /project, and a test double and contract-valid fixtures at /testing.",
+  "license": "Apache-2.0",
+  "homepage": "https://docs.agentworkspace.indx.jp",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/indxjp/agent-workspace.git",
+    "directory": "packages/sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/indxjp/agent-workspace/issues"
+  },
+  "keywords": [
+    "agent-workspace",
+    "claude",
+    "ai-agents",
+    "sdk",
+    "typescript"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./define": {
+      "types": "./src/define/index.ts",
+      "default": "./dist/define/index.js"
+    },
+    "./events": {
+      "types": "./src/events/index.ts",
+      "default": "./dist/events/index.js"
+    },
+    "./portable": {
+      "types": "./src/portable/index.ts",
+      "default": "./dist/portable/index.js"
+    },
+    "./project": {
+      "types": "./src/project/index.ts",
+      "default": "./dist/project/index.js"
+    },
+    "./testing": {
+      "types": "./src/testing.ts",
+      "default": "./dist/testing.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.map",
+    "CHANGELOG.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./define": {
+        "types": "./dist/define/index.d.ts",
+        "default": "./dist/define/index.js"
+      },
+      "./events": {
+        "types": "./dist/events/index.d.ts",
+        "default": "./dist/events/index.js"
+      },
+      "./portable": {
+        "types": "./dist/portable/index.d.ts",
+        "default": "./dist/portable/index.js"
+      },
+      "./project": {
+        "types": "./dist/project/index.d.ts",
+        "default": "./dist/project/index.js"
+      },
+      "./testing": {
+        "types": "./dist/testing.d.ts",
+        "default": "./dist/testing.js"
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node -e \"const fs = require('node:fs'); fs.rmSync('dist/project/starters', { recursive: true, force: true }); fs.cpSync('src/project/starters', 'dist/project/starters', { recursive: true, filter: (from) => !from.endsWith('tsconfig.json') })\"",
+    "typecheck": "tsc -p tsconfig.json && tsc -p src/project/starters/tsconfig.json"
+  },
+  "dependencies": {
+    "@indx-workspace/contracts": "workspace:*",
+    "zod": "4.6.6",
+    "yaml": "2.9.1"
+  },
+  "devDependencies": {
+    "@typescript/native": "npm:typescript@7.0.2",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
+    "vitest": "5.0.3"
+  },
+  "nx": {
+    "targets": {
+      "lint": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "eslint packages/sdk --max-warnings 0"
+        }
+      },
+      "test": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "vitest run --project @indx-workspace/sdk --reporter=default --reporter=json --outputFile={projectRoot}/.vitest-report.json",
+          "env": {
+            "NODE_OPTIONS": "--unhandled-rejections=strict",
+            "VITEST_MAX_WORKERS": "4"
+          }
+        }
+      }
+    }
+  }
+}

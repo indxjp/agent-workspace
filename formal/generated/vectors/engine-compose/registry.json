@@ -1,0 +1,31 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.EnginePort.unregistered_engine_emits_no_frame",
+    "AgentWorkspace.Theorems.Invariants.EnginePort.absent_and_unloadable_are_the_same_refusal",
+    "AgentWorkspace.Theorems.Invariants.EnginePort.healthz_reports_only_what_loaded"],
+   "input": {"table": [{"version": "0.3.278", "loads": true, "id": "claude-agent-sdk"}], "engine": "claude-agent-sdk"},
+   "id": "installed",
+   "expected": {"installed": [{"version": "0.3.278", "id": "claude-agent-sdk"}], "code": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.EnginePort.unregistered_engine_emits_no_frame",
+    "AgentWorkspace.Theorems.Invariants.EnginePort.absent_and_unloadable_are_the_same_refusal",
+    "AgentWorkspace.Theorems.Invariants.EnginePort.healthz_reports_only_what_loaded"],
+   "input": {"table": [{"version": "0.3.278", "loads": false, "id": "claude-agent-sdk"}], "engine": "claude-agent-sdk"},
+   "id": "package-absent",
+   "expected": {"installed": [], "code": "engine_not_installed"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.EnginePort.unregistered_engine_emits_no_frame",
+    "AgentWorkspace.Theorems.Invariants.EnginePort.absent_and_unloadable_are_the_same_refusal",
+    "AgentWorkspace.Theorems.Invariants.EnginePort.healthz_reports_only_what_loaded"],
+   "input": {"table": [{"version": "0.3.278", "loads": true, "id": "claude-agent-sdk"}], "engine": "openai-agents-sdk"},
+   "id": "no-row",
+   "expected": {"installed": [{"version": "0.3.278", "id": "claude-agent-sdk"}], "code": "engine_not_installed"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.EnginePort.unregistered_engine_emits_no_frame",
+    "AgentWorkspace.Theorems.Invariants.EnginePort.absent_and_unloadable_are_the_same_refusal",
+    "AgentWorkspace.Theorems.Invariants.EnginePort.healthz_reports_only_what_loaded"],
+   "input": {"table": [], "engine": "claude-agent-sdk"},
+   "id": "empty-image",
+   "expected": {"installed": [], "code": "engine_not_installed"}}],
+ "family": "engine-compose",
+ "description": "The runner's engine registry and what /healthz reports"}

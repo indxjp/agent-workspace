@@ -1,0 +1,46 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Refinement.SessionStateMigration.migration_preserves_the_history",
+    "AgentWorkspace.Theorems.Refinement.SessionStateMigration.a_migrated_session_reads_back_its_history"],
+   "input": {"deliveries": [{"sequence": 1, "position": 1, "payload": "first", "entryUuid": "u-1"}]},
+   "id": "one-entry",
+   "expected":
+   {"migrated": [{"payload": "first", "entryKey": "u-1"}], "legacyLoad": [{"payload": "first", "entryKey": "u-1"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Refinement.SessionStateMigration.migration_preserves_the_history",
+    "AgentWorkspace.Theorems.Refinement.SessionStateMigration.a_migrated_session_reads_back_its_history"],
+   "input":
+   {"deliveries":
+    [{"sequence": 1, "position": 1, "payload": "first", "entryUuid": "u-1"},
+     {"sequence": 2, "position": 2, "payload": "second", "entryUuid": "u-2"},
+     {"sequence": 3, "position": 3, "payload": "summary", "entryUuid": null},
+     {"sequence": 4, "position": 1, "payload": "redelivered", "entryUuid": "u-1"}]},
+   "id": "redelivery-and-a-keyless-entry",
+   "expected":
+   {"migrated":
+    [{"payload": "redelivered", "entryKey": "u-1"},
+     {"payload": "second", "entryKey": "u-2"},
+     {"payload": "summary", "entryKey": null}],
+    "legacyLoad":
+    [{"payload": "redelivered", "entryKey": "u-1"},
+     {"payload": "second", "entryKey": "u-2"},
+     {"payload": "summary", "entryKey": null}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Refinement.SessionStateMigration.migration_preserves_the_history",
+    "AgentWorkspace.Theorems.Refinement.SessionStateMigration.a_migrated_session_reads_back_its_history"],
+   "input":
+   {"deliveries":
+    [{"sequence": 1, "position": 1, "payload": "first", "entryUuid": "u-1"},
+     {"sequence": 2, "position": 1, "payload": "second", "entryUuid": "u-1"},
+     {"sequence": 3, "position": 1, "payload": "third", "entryUuid": "u-1"}]},
+   "id": "two-redeliveries-of-one-entry",
+   "expected":
+   {"migrated": [{"payload": "third", "entryKey": "u-1"}], "legacyLoad": [{"payload": "third", "entryKey": "u-1"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Refinement.SessionStateMigration.migration_preserves_the_history",
+    "AgentWorkspace.Theorems.Refinement.SessionStateMigration.a_migrated_session_reads_back_its_history"],
+   "input": {"deliveries": []},
+   "id": "empty-transcript",
+   "expected": {"migrated": [], "legacyLoad": []}}],
+ "family": "session-state",
+ "description": "Today's Claude delivery log, and where 0027 lands it"}

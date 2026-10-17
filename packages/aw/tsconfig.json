@@ -1,0 +1,16 @@
+{
+  // The type-checking view: the whole of `src`, tests included, emitting nothing. Unlike the SDK
+  // it wraps, the CLI is a Node program: it reads files, the environment and stdin, so `node`
+  // types are wanted, and `DOM` is still in `lib` because the SDK's surface is the Web platform's
+  // (`fetch`, `Response`, `ReadableStream`, `AbortSignal`).
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "noEmit": true,
+    // `aw deploy`'s `@indx-workspace/cli/deploy` resolves to the CLI's sources, which import with
+    // `.ts`.
+    "rewriteRelativeImportExtensions": true
+  },
+  "include": ["src"]
+}

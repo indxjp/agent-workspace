@@ -1,0 +1,119 @@
+{
+  "name": "agent-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "packageManager": "pnpm@11.28.2",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "typecheck": "nx run-many -t typecheck",
+    "lint": "nx run-many -t lint",
+    "package-exports:check": "node scripts/check-package-exports.mjs",
+    "package-exports:check:artifacts": "node scripts/check-package-exports.mjs --artifacts",
+    "architecture:check": "pnpm package-exports:check && depcruise --config dependency-cruiser.config.mjs apps packages",
+    "deadcode:check": "knip",
+    "duplication:check": "jscpd --config jscpd.json",
+    "workflows:check": "node scripts/check-workflows.mjs",
+    "format": "prettier --write \"apps/**/*.{ts,tsx,mjs,mts,css,json}\" \"packages/**/*.{ts,tsx,mjs,mts,json}\" \"scripts/**/*.{ts,mts,mjs,json}\" \"tests/**/*.{ts,tsx,mts,mjs,json}\" \".github/workflows/**/*.{yml,yaml}\" \"*.{json,mjs,ts}\" \"{AGENTS,CLAUDE,ENGINEERING_GUIDELINES,README}.md\" \"docs/architecture.md\" \".prettierrc.json\" \"pnpm-workspace.yaml\"",
+    "format:check": "prettier --check \"apps/**/*.{ts,tsx,mjs,mts,css,json}\" \"packages/**/*.{ts,tsx,mjs,mts,json}\" \"scripts/**/*.{ts,mts,mjs,json}\" \"tests/**/*.{ts,tsx,mts,mjs,json}\" \".github/workflows/**/*.{yml,yaml}\" \"*.{json,mjs,ts}\" \"{AGENTS,CLAUDE,ENGINEERING_GUIDELINES,README}.md\" \"docs/architecture.md\" \".prettierrc.json\" \"pnpm-workspace.yaml\"",
+    "test": "node scripts/test-with-services.mjs",
+    "test:unit": "vitest run",
+    "test:coverage": "vitest run --config vitest.coverage.config.ts --coverage",
+    "test:coverage:apps": "vitest run --config vitest.apps.coverage.config.ts --coverage",
+    "test:coverage:ui-cli": "vitest run --config vitest.ui-cli.coverage.config.ts --coverage",
+    "test:browser": "playwright test",
+    "build": "nx run-many -t build",
+    "db:generate": "pnpm --filter @agent-workspace/core run db:generate",
+    "db:migrate": "pnpm --filter @agent-workspace/core run db:migrate",
+    "db:seed": "pnpm --filter @agent-workspace/core run db:seed",
+    "e2e": "node tests/e2e/run.mjs",
+    "e2e:tool-sandbox": "node tests/e2e/tool-sandbox.e2e.mjs",
+    "e2e:harness-selftest": "node tests/e2e/run-harness-selftest.mjs",
+    "matrix": "node scripts/matrix/render.mjs --check",
+    "status:render": "node scripts/status/render.mjs",
+    "status:check": "node scripts/status/render.mjs --check",
+    "release:check": "node scripts/release/check.mjs",
+    "release:ready": "node scripts/release/ready.mjs",
+    "release:pack": "node scripts/release/pack-packages.mjs",
+    "start:embedded": "nx run @indx-workspace/embedded:build-contributor --output-style=static && node packages/embedded/dist/contributor/index.js",
+    "env:audit": "node scripts/environment-audit.mjs",
+    "docs:generate": "node scripts/docs/generate-sdk-reference.mjs --write && node scripts/docs/generate-openapi.mjs --write && node scripts/docs/generate-llms-txt.mjs --write && node packages/cli/scripts/generate-profile-schema.mjs --write && node tests/engine-matrix/run.mjs && node tests/platform-matrix/run.mjs && node scripts/docs/sync-platform-matrix.mjs --write",
+    "docs:check": "node scripts/docs/generate-sdk-reference.mjs --check && node scripts/docs/generate-openapi.mjs --check && node scripts/docs/generate-llms-txt.mjs --check && node packages/cli/scripts/generate-profile-schema.mjs --check && node scripts/docs/check-front-door.mjs && node scripts/docs/check-links.mjs && node tests/platform-matrix/run.mjs --check && node scripts/docs/sync-platform-matrix.mjs --check",
+    "formal:build": "node scripts/formal/lake.mjs build AgentWorkspace catalogue axioms imports vectors",
+    "formal:generate": "node scripts/formal/generate.mjs --write",
+    "formal:check": "node scripts/formal/check.mjs",
+    "check:fast": "pnpm workflows:check && pnpm format:check && pnpm typecheck && pnpm lint && pnpm architecture:check && pnpm deadcode:check && pnpm duplication:check && pnpm docs:check",
+    "check": "pnpm check:fast && pnpm test && pnpm build",
+    "check:ci": "pnpm check:fast && pnpm test && pnpm test:coverage && pnpm test:coverage:apps && pnpm test:coverage:ui-cli && pnpm build",
+    "sites:build": "node scripts/sites/build.mjs",
+    "sites:deploy": "node scripts/sites/build.mjs && npx --yes wrangler@4.147.0 deploy -c infra/cloudflare/lp.wrangler.jsonc && npx --yes wrangler@4.147.0 deploy -c infra/cloudflare/docs.wrangler.jsonc"
+  },
+  "devDependencies": {
+    "@indx-workspace/aw": "workspace:*",
+    "@indx-workspace/contracts": "workspace:*",
+    "@agent-workspace/core": "workspace:*",
+    "@agent-workspace/engine": "workspace:*",
+    "@agent-workspace/engine-claude-agent-sdk": "workspace:*",
+    "@agent-workspace/engine-mastra": "workspace:*",
+    "@agent-workspace/engine-openai-agents": "workspace:*",
+    "@agent-workspace/engine-pi": "workspace:*",
+    "@agent-workspace/gateway": "workspace:*",
+    "@agent-workspace/runtime": "workspace:*",
+    "@indx-workspace/sdk": "workspace:*",
+    "@cloudflare/containers": "0.3.7",
+    "@eslint/js": "10.0.1",
+    "@playwright/test": "1.64.0",
+    "@seriousme/openapi-schema-validator": "2.11.0",
+    "@types/node": "26.6.5",
+    "@types/pg": "8.23.1",
+    "@typescript/native": "npm:typescript@7.0.2",
+    "@vitest/coverage-v8": "5.0.3",
+    "dependency-cruiser": "18.6.0",
+    "drizzle-orm": "0.45.4",
+    "embedded-postgres": "17.10.0-beta.17",
+    "eslint": "10.12.0",
+    "eslint-config-prettier": "10.1.8",
+    "jscpd": "5.4.1",
+    "knip": "6.41.0",
+    "nx": "23.3.0",
+    "openapi-fetch": "0.17.0",
+    "openapi-typescript": "7.13.0",
+    "pg": "8.23.1",
+    "prettier": "3.9.10",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
+    "typescript-eslint": "8.71.1",
+    "vitest": "5.0.3"
+  },
+  "nx": {
+    "includedScripts": [],
+    "implicitDependencies": [
+      "*"
+    ],
+    "targets": {
+      "typecheck": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "tsc -p tsconfig.root.json"
+        }
+      },
+      "lint": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "eslint eslint.config.mjs playwright.config.ts playwright.journey.config.mjs playwright.generated-project.config.mjs playwright.azure-live.config.mjs vitest.config.ts vitest.coverage.config.ts vitest.apps.coverage.config.ts vitest.ui-cli.coverage.config.ts tests scripts sites/lp/assets/site.js --max-warnings 0"
+        }
+      },
+      "test": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "vitest run --project tests --reporter=default --reporter=json --outputFile={projectRoot}/.vitest-report.json",
+          "env": {
+            "NODE_OPTIONS": "--unhandled-rejections=strict"
+          }
+        }
+      }
+    }
+  }
+}

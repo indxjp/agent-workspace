@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Invoice Triage — shared agent</title>
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .ptop { border-bottom: 1px solid var(--border); background: var(--surface); }
+  .ptop .inner { max-width: 760px; margin: 0 auto; padding: 12px 20px; display: flex; align-items: center; gap: 10px; }
+  .ptop .mark { width: 24px; height: 24px; border-radius: 7px; background: var(--text); color: var(--surface); display: grid; place-items: center; font-size: 12px; font-weight: 700; }
+  .pwrap { max-width: 760px; margin: 0 auto; padding: 30px 20px 80px; }
+  .pfooter { max-width: 760px; margin: 0 auto; padding: 0 20px 60px; color: var(--muted); font-size: 12.5px; }
+</style>
+</head>
+<body>
+
+<div class="ptop">
+  <div class="inner">
+    <div class="mark">M</div>
+    <div>
+      <div style="font-size:13px;font-weight:600">Shared from Meridian Manufacturing</div>
+      <div class="small muted">Public agent link · runnable</div>
+    </div>
+    <span style="flex:1"></span>
+    <span class="badge ok">Accepting messages</span>
+  </div>
+</div>
+
+<div class="pwrap">
+
+  <h1 style="font-size:22px">Invoice Triage</h1>
+  <p class="muted mt8">Classifies an invoice, checks totals and tax treatment, and tells you whether it can be
+    paid automatically or needs a human.</p>
+
+  <div class="composer mt24">
+    <textarea placeholder="Paste an invoice or describe the problem…"></textarea>
+    <div class="tools">
+      <button class="btn sm ghost" data-toast="File picker opened">Attach file</button>
+      <span class="spacer"></span>
+      <span class="small muted">5 messages per hour</span>
+      <button class="btn primary sm" data-toast="Message sent — running in the publisher's sandbox">Send</button>
+    </div>
+  </div>
+
+  <div class="callout mt16">
+    <span class="ico">ℹ</span>
+    <div class="grow">
+      Messages you send run in <b>Meridian Manufacturing’s</b> workspace, in an isolated sandbox, on their
+      budget. Your conversation is private to you and is not resumable by anyone else. The publisher can
+      stop this link at any time.
+    </div>
+  </div>
+
+  <div class="section-head"><h2>How this agent is configured</h2></div>
+  <div class="card"><div class="card-body">
+    <dl class="kv">
+      <dt>Model</dt><dd>Claude Haiku 4.5 <span class="muted small">· Anthropic</span></dd>
+      <dt>Skills</dt><dd>Invoice Review</dd>
+      <dt>Connectors</dt><dd>None available on this public link</dd>
+      <dt>Permissions</dt><dd>Read files only <span class="muted small">· writes and shell disabled for public visitors</span></dd>
+      <dt>Runtime</dt><dd>Container sandbox · no outbound network except the model gateway</dd>
+    </dl>
+  </div></div>
+
+  <div class="section-head"><h2>Use this agent in your own workspace</h2></div>
+  <div class="card"><div class="card-body">
+    <p>You can copy this definition into your own Agent Workspace. Credentials and files are not included.</p>
+    <div class="label mb8">You will be asked to supply</div>
+    <table class="tbl">
+      <tbody>
+        <tr><td>A model connection</td><td class="num"><span class="badge outline">Any Claude-capable provider</span></td></tr>
+        <tr><td>Skill “Invoice Review”</td><td class="num"><span class="badge ok">Included</span></td></tr>
+        <tr><td>Files</td><td class="num"><span class="badge muted">Not included</span></td></tr>
+        <tr><td>Secrets and connector credentials</td><td class="num"><span class="badge muted">Never included</span></td></tr>
+      </tbody>
+    </table>
+    <div class="btn-row mt16">
+      <button class="btn primary" data-toast="Downloaded agent definition (JSON)">Copy definition</button>
+      <button class="btn" data-toast="Preview opened">Preview instructions</button>
+    </div>
+  </div></div>
+
+</div>
+
+<div class="pfooter">
+  Published with Agent Workspace, a self-hosted control plane for the Claude Agent SDK.
+</div>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

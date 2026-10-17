@@ -1,0 +1,66 @@
+---
+title: "SharesClient"
+description: "Every method of SharesClient, its parameters, return type, and route."
+---
+
+<Note>This page is generated from `packages/sdk/src/resources/shares.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+`/api/shares/**` — spec §5.13. A share is a snapshot of an agent, session, project or skill
+that the workspace, or the public through a `/p/<token>` link, may open. The workspace's
+sharing policy (`workspaces.sharingPolicy`) decides whether a public share may be published.
+
+## list
+
+The caller's own shares, or every share of the workspace for an Owner or Admin.
+
+```ts
+async list(options?: RequestOptions): Promise<readonly ShareListItem[]>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<readonly ShareListItem[]>`
+
+**Route:** `GET /api/shares`
+
+## publish
+
+Publish a share of a subject the caller may share. `400 invalid_share` names what the route
+refused: a field outside the contract, an option the subject type does not take, a public
+share while the workspace's policy has public sharing off, or `runnable` mode.
+
+The command is sent exactly as given — the server owns every default (`mode`, `expiry`, the
+runnable budget) and the share's content.
+
+```ts
+publish(command: PublishShareCommand, options?: RequestOptions): Promise<ShareResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `command` | `PublishShareCommand` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<ShareResource>`
+
+**Route:** `POST /api/shares`
+
+## revoke
+
+Revoke a share: its link stops resolving at once. `404 share_not_found` for an id the
+workspace does not hold; otherwise no body.
+
+```ts
+async revoke(shareId: string, options?: RequestOptions): Promise<void>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `shareId` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<void>`
+
+**Route:** `DELETE /api/shares/:shareId`

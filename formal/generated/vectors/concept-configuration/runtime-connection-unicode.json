@@ -1,0 +1,18 @@
+{"vectors":
+ [{"witnesses": ["AgentWorkspace.Theorems.Meta.ConceptConfiguration.connection_encoding_model_is_ascii_only"],
+   "input": {"label": "straße", "driver": "docker"},
+   "id": "unicode-label/\"straße\"",
+   "expected":
+   {"modelName": "RUNTIME_CONNECTION__DOCKER__STRA_E",
+    "codeName": "RUNTIME_CONNECTION__DOCKER__STRASSE",
+    "asciiLabel": false}},
+  {"witnesses": ["AgentWorkspace.Theorems.Meta.ConceptConfiguration.connection_encoding_model_is_ascii_only"],
+   "input": {"label": "ıd", "driver": "docker"},
+   "id": "unicode-label/\"ıd\"",
+   "expected": {"modelName": null, "codeName": "RUNTIME_CONNECTION__DOCKER__ID", "asciiLabel": false}},
+  {"witnesses": ["AgentWorkspace.Theorems.Meta.ConceptConfiguration.connection_encoding_model_is_ascii_only"],
+   "input": {"label": "ﬁle", "driver": "docker"},
+   "id": "unicode-label/\"ﬁle\"",
+   "expected": {"modelName": null, "codeName": "RUNTIME_CONNECTION__DOCKER__FILE", "asciiLabel": false}}],
+ "family": "concept-configuration",
+ "description": "Non-ASCII labels where the ASCII encoding model and the Unicode-aware code disagree"}

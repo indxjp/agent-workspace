@@ -1,0 +1,11 @@
+{"vectors":
+ [{"witnesses": ["AgentWorkspace.Theorems.Invariants.AzureGateway.dynamic_sessions_reach_configured_gateway"],
+   "input": {"dynamicSessionsEnabled": true},
+   "id": "dynamic-sessions",
+   "expected": {"ingress": "external"}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.AzureGateway.no_dynamic_sessions_keep_gateway_internal"],
+   "input": {"dynamicSessionsEnabled": false},
+   "id": "environment-only",
+   "expected": {"ingress": "internal"}}],
+ "family": "azure-gateway",
+ "description": "Gateway ingress selected for each Dynamic Sessions deployment mode"}

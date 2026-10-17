@@ -1,0 +1,30 @@
+apiVersion: agentworkspace.dev/v2
+kind: Project
+name: quality-defect
+engine: claude-agent-sdk
+# The past-trouble database is your own MCP server (mcp/defect-db.mjs). A project file names only
+# remote connectors, so run it over Streamable HTTP for `aw dev`, inside the plant network:
+#   MCP_TRANSPORT=http PORT=8790 node mcp/defect-db.mjs
+connectors:
+  defect-db:
+    url: http://127.0.0.1:8790/mcp
+    transport: http
+# Defect data is confidential. The ceiling is what no agent in this project can widen, whoever
+# pushes it: no network egress, no connector but the defect database, no file writes, a budget.
+# runCommands stays allowed so the eight-d skill can check its own draft with Node.
+policy:
+  permissions:
+    writeFiles: false
+    unrestrictedNetwork: false
+  limits:
+    maxTurns: 20
+    maxBudgetUsd: 1.5
+  tools:
+    - defect-db
+  promotion:
+    minEvalScore: 0.9
+environments:
+  local:
+    cloud: local
+    identity:
+      bootstrapAdmin: admin@localhost.test

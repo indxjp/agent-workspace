@@ -1,0 +1,344 @@
+# Agent Workspace — Simple Mode (spec §32), one machine, five services (§33).
+#
+#   docker compose up -d          →  http://localhost:3000
+#
+# Copy `.env.example` to `.env` and fill it in first. Compose reads `.env` from this directory
+# automatically; every value below that is not hard-coded comes from there. Six of them are the
+# application's (see `.env.example` for why six and not §37's four); two more are the object
+# store's key pair, which `web` and `seaweedfs` both read so the two ends cannot disagree.
+#
+# ## The five services, and why there are exactly five
+#
+# | Service | §33 name | What it is here |
+# | --- | --- | --- |
+# | `web` | web | Next.js control plane. The only service with a published port. |
+# | `runner` | runner | The §14.3 HTTP contract, `local` driver. Reachable only from `web`. |
+# | `gateway` | gateway | Anthropic-compatible model gateway. Not published. |
+# | `postgres` | postgres | `postgres:17`. Not published. |
+# | `seaweedfs` | storage | S3-compatible object storage. Not published. |
+#
+# §33: *"Five components are enough. Do not split things merely because 'microservices are
+# scalable.'"* There is no sixth long-running service and no sixth service to create a bucket.
+# A one-shot `migrate` container runs the migrations before `web` starts (ADR-0122) and exits;
+# `web`'s entry point still runs them as an idempotent no-op (see `Dockerfile`). The bucket is
+# created by `web`'s composition root on first boot (`ensureS3Bucket`, idempotent), so no
+# `mc`-style init container exists — a service that exists only to create a bucket is the sixth
+# service this section exists to prevent.
+#
+# Sandbox containers are not here either, and that is spec A.4's rule rather than an omission:
+# *"runtimes — created on demand by the docker driver, not declared in compose"*. Their image is
+# `runtime.Dockerfile`; Wave 1 has no `docker` driver, so nothing launches it yet.
+#
+# ## What is published, and what is not
+#
+# Only `web`, on 127.0.0.1:3000 (put a reverse proxy in front to serve other hosts, as
+# docs/deploy/single-vm.md does). `runner`, `postgres` and `seaweedfs` are reachable on the internal
+# `agent-workspace` network and from nowhere else. That is why the Postgres credentials below are
+# literals in this file rather than variables: they authenticate a service to a service across a
+# private bridge network, they are not the deployment's secrets, and promoting them to `.env`
+# would put two more values in a file spec §37 wants to stay small while protecting nothing.
+# The object store's key pair is the exception: `web` already read it from `.env`
+# (`OBJECT_STORAGE_ACCESS_KEY_ID` / `OBJECT_STORAGE_SECRET_ACCESS_KEY`), so `seaweedfs` reads the
+# same two variables rather than a second copy that could drift
+# (docs/adr/0067-the-bundled-object-store-is-seaweedfs.md). Publish those ports and the Postgres
+# reasoning stops holding — the header on each service says so.
+#
+# ## The one privileged capability that is deliberately absent
+#
+# Spec A.4: *"The runner needs access to the Docker socket to create sandboxes, and that is a
+# privileged capability: mount it only into the runner, never into the web container, and never
+# into a sandbox."* No socket is mounted anywhere in this file, because Wave 1's runner uses the
+# `local` driver and does not create containers. Whoever adds the `docker` driver adds the mount
+# to `runner` and to nothing else.
+
+name: agent-workspace
+
+services:
+  # ── web ───────────────────────────────────────────────────────────────────────────────────────
+  # The control plane. Starts after `migrate` has exited 0, then migrates (a no-op) and seeds the
+  # database and serves Next.js — see the `CMD` in `Dockerfile`, which explains why that ordering is
+  # `&&`-chained and why it is safe to re-run.
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: web
+    # Two tags off one Dockerfile, not two images. Spec A.2 ships ONE `control-plane` image whose
+    # process is chosen at start; today the `web` and `runner` targets differ only in working
+    # directory and command, and collapsing them into a single tag is a packaging change that
+    # belongs with the buildx work of W3-RT-05. The suffix says which target produced the tag.
+    image: agent-workspace/control-plane:dev-web
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      seaweedfs:
+        condition: service_healthy
+    environment:
+      # The four §37 values. `DATABASE_URL` and `OBJECT_STORAGE_ENDPOINT` name compose service
+      # hostnames, so a `.env` copied unedited works inside this network and nowhere else.
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env — copy .env.example}
+      MASTER_ENCRYPTION_KEY: ${MASTER_ENCRYPTION_KEY:-}
+      OBJECT_STORAGE_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:-http://seaweedfs:8333}
+      OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:-agent-workspace}
+      OBJECT_STORAGE_FORCE_PATH_STYLE: 'true'
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      # The same two variables create `seaweedfs`'s only S3 identity below; there is no literal
+      # fallback, so a `.env` without them is refused before anything starts.
+      AWS_ACCESS_KEY_ID: ${OBJECT_STORAGE_ACCESS_KEY_ID:?set OBJECT_STORAGE_ACCESS_KEY_ID in .env — copy .env.example}
+      AWS_SECRET_ACCESS_KEY: ${OBJECT_STORAGE_SECRET_ACCESS_KEY:?set OBJECT_STORAGE_SECRET_ACCESS_KEY in .env — copy .env.example}
+      BOOTSTRAP_ADMIN: ${BOOTSTRAP_ADMIN:?set BOOTSTRAP_ADMIN in .env — copy .env.example}
+      # The two W1-CP-06 requires. Absent, the web server answers 401 to every /api/** request and
+      # logs which variable is missing; `:?` turns that into a refusal to start at all, which is the
+      # same decision taken earlier and louder.
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env — at least 32 random characters}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:?set BOOTSTRAP_ADMIN_PASSWORD in .env — at least 12 characters}
+      # The §14.3 runtime this control plane relays runs to (W1-COMP-01). It is a literal with a
+      # default rather than a seventh line in `.env.example`, for the reason the header gives about
+      # the credentials below: `runner` is a service name in this file's own network and resolves
+      # nowhere else, so there is no decision for an operator to make inside this topology. Point
+      # it at an external runtime and this file's `runner` service becomes dead weight.
+      # Unset, the web app starts, serves sign-in and agent CRUD, and answers 503 on the three run
+      # routes by name — which is the truth about a deployment with no runtime.
+      RUNNER_URL: ${RUNNER_URL:-http://runner:8080}
+      RUNNER_MANAGER_URL: http://runner:8090
+      RUNNER_MANAGER_TOKEN: ${RUNNER_MANAGER_TOKEN:?set RUNNER_MANAGER_TOKEN in .env}
+      RUNTIME_DRIVER: ${RUNTIME_DRIVER:-docker}
+      # ENG-07 (ADR-0073): the engines this control plane offers are the engines it has a runtime
+      # image for. The same value the runner manager below starts sandboxes from.
+      AGENT_WORKSPACE_RUNTIME_IMAGE_CLAUDE_AGENT_SDK: ${RUNTIME_IMAGE:-agent-workspace/runtime:dev}
+      # ADR-0119: the same egress proxy image the runner manager below gets. Set, a run lowered to
+      # `restricted` is allowed; empty, it is refused with `network_policy_unenforceable`.
+      AGENT_WORKSPACE_EGRESS_PROXY_IMAGE: ${EGRESS_PROXY_IMAGE-agent-workspace/egress-proxy:dev}
+      # ADR-0118 TS8: the same tool host image the runner manager below gets. Set, a code-tool
+      # version may be promoted; empty, promote refuses it with `code_tool_needs_host`. Give both
+      # services the same value.
+      AGENT_WORKSPACE_TOOL_HOST_IMAGE: ${TOOL_HOST_IMAGE-}
+      MODEL_GATEWAY_URL: http://gateway:4000
+      # The existing operator-supplied encryption material signs short-lived internal tokens too;
+      # provider credentials themselves still travel only through the Models screen.
+      GATEWAY_TOKEN_SECRET: ${MASTER_ENCRYPTION_KEY:-}
+      AW_FILE_STORAGE_ROOT: /var/lib/agent-workspace/files
+      AW_SKILL_STORAGE_ROOT: /var/lib/agent-workspace/skills
+      AW_SESSION_TRANSCRIPT_ROOT: /var/lib/agent-workspace/sessions
+      AW_RUNTIME_VERIFICATION_FILE: /var/lib/agent-workspace/runtime-verifications.json
+      AW_SESSION_TRANSCRIPT_RETENTION_DAYS: '30'
+      AW_SESSION_RETENTION_DRY_RUN: 'false'
+    ports:
+      - '127.0.0.1:${WEB_PORT:-3000}:3000'
+    volumes:
+      - workspace-data:/var/lib/agent-workspace
+    networks:
+      - agent-workspace
+
+  # ── migrate ───────────────────────────────────────────────────────────────────────────────────
+  # One-shot (ADR-0122): applies pending migrations under the Postgres advisory lock and exits.
+  # `web` waits for it to exit 0, so a failed migration leaves `web` unstarted and visible in
+  # `docker compose ps -a`. It shares `web`'s build and tag, so it never pulls a missing image, and
+  # it needs only the database URL.
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: web
+    image: agent-workspace/control-plane:dev-web
+    restart: 'no'
+    command: ['node', '/srv/packages/core/dist/db/migrate.js']
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env — copy .env.example}
+    networks:
+      - agent-workspace
+
+  # ── runner ────────────────────────────────────────────────────────────────────────────────────
+  # Spec §14.3's complete five-endpoint runtime contract. No published port: §24's boundary is
+  # that a sandbox is
+  # reached by the control plane and by nobody else, and the fastest way to lose that is a
+  # `ports:` entry added for a debugging session and never removed. Use
+  # `docker compose exec runner …` instead.
+  runner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    image: agent-workspace/control-plane:dev-runner
+    restart: unless-stopped
+    environment:
+      AW_SESSION_MIRROR_URL: http://web:3000
+      NODE_ENV: development
+      PORT: '8090'
+      RUNNER_MANAGER_TOKEN: ${RUNNER_MANAGER_TOKEN:?set RUNNER_MANAGER_TOKEN in .env}
+      AGENT_WORKSPACE_RUNTIME_IMAGE_CLAUDE_AGENT_SDK: ${RUNTIME_IMAGE:-agent-workspace/runtime:dev}
+      RUNTIME_NETWORK: agent-workspace-runtime-control
+      # ADR-0117: `restricted` and `open` sandboxes go through a per-session egress proxy started
+      # from this image, which is built outside compose like the sandbox image itself:
+      #   docker build -f egress-proxy.Dockerfile -t agent-workspace/egress-proxy:dev .
+      # Set EGRESS_PROXY_IMAGE to an empty value for the earlier behaviour (`restricted` refused,
+      # `open` on Docker's bridge).
+      AGENT_WORKSPACE_EGRESS_PROXY_IMAGE: ${EGRESS_PROXY_IMAGE-agent-workspace/egress-proxy:dev}
+      # ADR-0118: a session's code tools run in a tool sandbox started from this image, built
+      # outside compose like the others:
+      #   docker build -f tool-host.Dockerfile --target tool-host -t agent-workspace/tool-host:dev .
+      # Off by default: unset, a run that needs one is refused by name. Known limit of this slice:
+      # every tool sandbox shares the internal `tool-sandbox` network with the gateway and this
+      # runner manager, so enable it (TOOL_HOST_IMAGE=agent-workspace/tool-host:dev) only for
+      # trusted tenants. Follow-up #841 adds per-session tool networks and turns it on by default.
+      AGENT_WORKSPACE_TOOL_HOST_IMAGE: ${TOOL_HOST_IMAGE-}
+      AGENT_WORKSPACE_TOOL_NETWORK: agent-workspace-tool-sandbox
+      # Hosts a sandbox reaches directly instead of through the proxy: the gateway.
+      RUNTIME_PROXY_BYPASS: gateway
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    group_add:
+      - ${DOCKER_GID:-0}
+    networks:
+      - agent-workspace
+      - runtime-control
+      - tool-sandbox
+
+  # ── gateway ───────────────────────────────────────────────────────────────────────────────────
+  # The gateway owns provider credentials and translates its four routes. It is reachable only on
+  # the two private networks: the control plane mints run tokens, and on-demand sandboxes can call
+  # it without receiving the provider master key.
+  gateway:
+    build:
+      context: .
+      dockerfile: gateway.Dockerfile
+      target: gateway
+    image: agent-workspace/model-gateway:dev
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env - copy .env.example}
+      MASTER_ENCRYPTION_KEY: ${MASTER_ENCRYPTION_KEY:-}
+      GATEWAY_TOKEN_SECRET: ${MASTER_ENCRYPTION_KEY:-}
+      GATEWAY_PRICING_JSON: ${GATEWAY_PRICING_JSON:?set an immutable provider:model price catalog in .env}
+    networks:
+      - agent-workspace
+      # A.4: on-demand sandbox containers join this network and can reach the gateway service;
+      # no other compose service is attached to it.
+      - agent-egress
+      - runtime-control
+      # ADR-0118 TS3: the gateway is the only caller of a tool sandbox and shares this network
+      # with the runner, which places the sandboxes. Agent sandboxes are not on it.
+      - tool-sandbox
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+
+  # ── postgres ──────────────────────────────────────────────────────────────────────────────────
+  # `postgres:17` per §28 and the task card. Not published; the credentials below are literals for
+  # the reason in this file's header. Point `DATABASE_URL` at an external server and this service
+  # becomes dead weight you can stop.
+  postgres:
+    image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: agent_workspace
+      POSTGRES_PASSWORD: agent_workspace
+      POSTGRES_DB: agent_workspace
+      # Deterministic collation, so an index built on one machine sorts the same on the next.
+      POSTGRES_INITDB_ARGS: '--locale-provider=icu --icu-locale=en-US --encoding=UTF8'
+    healthcheck:
+      # `-U`/`-d` are not decoration: without them `pg_isready` asks about the `root` user and a
+      # database named `root`, which does not exist here.
+      test: ['CMD-SHELL', 'pg_isready -U agent_workspace -d agent_workspace']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - agent-workspace
+
+  # ── seaweedfs ─────────────────────────────────────────────────────────────────────────────────
+  # §32's "Object Storage" and A.4's "storage". S3-compatible, so `OBJECT_STORAGE_ENDPOINT` can be
+  # repointed at real S3 with no code change (§31).
+  #
+  # SeaweedFS 4.47 (Apache-2.0), pinned by its multi-arch image index digest — the same digest the
+  # S3 contract suite runs against (ADR-0066). docs/adr/0067-the-bundled-object-store-is-seaweedfs.md
+  # records why it replaced MinIO, why `weed server -s3` rather than `weed mini`, and how to move an
+  # existing `minio-data` volume across.
+  #
+  # * `server -s3` runs master, volume server, filer and S3 gateway in one process; the image's
+  #   entry point adds `-dir=/data -volume.max=0 -master.volumeSizeLimitMB=1024`, so every piece of
+  #   state (volumes, filer metadata, master sequence) lives on `seaweedfs-data`.
+  # * `-ip=127.0.0.1 -ip.bind=127.0.0.1` keeps the master, volume and filer HTTP/gRPC ports on the
+  #   container's loopback: they take unauthenticated requests, so only the signed S3 gateway
+  #   (`-s3.ip.bind=0.0.0.0`, port 8333) is reachable from the network.
+  # * The Iceberg and Lance catalog ports are off (nothing here uses them) and so is the master's
+  #   anonymous usage telemetry — a self-hosted store does not report home by default.
+  # * `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` create SeaweedFS's only S3 identity, an admin.
+  #   They are the same `.env` variables `web` signs with. With an identity configured SeaweedFS
+  #   refuses an unsigned request with 403 and a wrongly signed one with SignatureDoesNotMatch.
+  #
+  # The web composition root provisions its configured bucket idempotently, then isolates public
+  # files and private skills beneath separate prefixes. No object-store credentials reach a browser.
+  seaweedfs:
+    # chrislusf/seaweedfs:4.47
+    image: chrislusf/seaweedfs@sha256:ce9e796f1fe6f06968f4c04bdaf8f678dad9c8acdfef3d244133d71bfa6bf882
+    restart: unless-stopped
+    command:
+      [
+        'server',
+        '-ip=127.0.0.1',
+        '-ip.bind=127.0.0.1',
+        '-s3',
+        '-s3.ip.bind=0.0.0.0',
+        '-s3.port.iceberg=0',
+        '-s3.port.lance=0',
+        '-master.telemetry=false',
+      ]
+    environment:
+      AWS_ACCESS_KEY_ID: ${OBJECT_STORAGE_ACCESS_KEY_ID:?set OBJECT_STORAGE_ACCESS_KEY_ID in .env — copy .env.example}
+      AWS_SECRET_ACCESS_KEY: ${OBJECT_STORAGE_SECRET_ACCESS_KEY:?set OBJECT_STORAGE_SECRET_ACCESS_KEY in .env — copy .env.example}
+    healthcheck:
+      # `/healthz` on the S3 port answers once the gateway serves requests; the image carries
+      # BusyBox `wget`.
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:8333/healthz']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    volumes:
+      - seaweedfs-data:/data
+    networks:
+      - agent-workspace
+
+volumes:
+  postgres-data:
+  seaweedfs-data:
+  workspace-data:
+
+networks:
+  agent-workspace:
+    driver: bridge
+  agent-egress:
+    name: agent-egress
+    driver: bridge
+  runtime-control:
+    name: agent-workspace-runtime-control
+    driver: bridge
+    internal: true
+  tool-sandbox:
+    name: agent-workspace-tool-sandbox
+    driver: bridge
+    internal: true
+    labels:
+      agent-workspace.runtime: docker-network

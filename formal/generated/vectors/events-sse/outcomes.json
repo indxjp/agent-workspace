@@ -1,0 +1,44 @@
+{"vectors":
+ [{"witnesses": ["AgentWorkspace.Theorems.Normative.EventsSse.classify_run_outcome_is_total"],
+   "input": {"status": null, "error": null},
+   "id": "missing",
+   "expected":
+   {"reason":
+    "run 99999999-9999-4999-8999-999999999999 is no longer readable; its outcome is unknown to this connection",
+    "kind": "indeterminate"}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.EventsSse.classify_run_outcome_is_total"],
+   "input": {"status": "queued", "error": null},
+   "id": "queued",
+   "expected":
+   {"reason":
+    "the stream for run 99999999-9999-4999-8999-999999999999 ended while the run was still queued; its outcome is unknown to this connection",
+    "kind": "indeterminate"}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.EventsSse.classify_run_outcome_is_total"],
+   "input": {"status": "running", "error": null},
+   "id": "running",
+   "expected":
+   {"reason":
+    "the stream for run 99999999-9999-4999-8999-999999999999 ended while the run was still running; its outcome is unknown to this connection",
+    "kind": "indeterminate"}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.EventsSse.classify_run_outcome_is_total"],
+   "input": {"status": "completed", "error": null},
+   "id": "completed",
+   "expected": {"kind": "succeeded"}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.EventsSse.classify_run_outcome_is_total"],
+   "input": {"status": "failed", "error": null},
+   "id": "failed-default",
+   "expected":
+   {"status": "failed",
+    "message": "run 99999999-9999-4999-8999-999999999999 failed and recorded no message",
+    "kind": "failed"}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.EventsSse.classify_run_outcome_is_total"],
+   "input": {"status": "failed", "error": "safe"},
+   "id": "failed-message",
+   "expected": {"status": "failed", "message": "safe", "kind": "failed"}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.EventsSse.classify_run_outcome_is_total"],
+   "input": {"status": "cancelled", "error": null},
+   "id": "cancelled",
+   "expected":
+   {"status": "cancelled", "message": "run 99999999-9999-4999-8999-999999999999 was cancelled", "kind": "failed"}}],
+ "family": "events-sse",
+ "description": "Run status to stream outcome"}

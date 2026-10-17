@@ -1,0 +1,219 @@
+---
+title: "policy-ceiling"
+description: "The @indx-workspace/contracts/policy-ceiling exports, sorted alphabetically."
+---
+
+<Note>This page is generated from `packages/contracts/src/policy-ceiling.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## EffectivePolicyConfiguration
+
+The configuration a ceiling judges at one step (C14, issue #524): an agent's permissions and
+limits, its engine, the one model id the caller can judge there and the connector names it uses.
+
+`model` is an explicit model, the deployment default, the model resolved at compose or a run's
+`modelOverride` — whichever the step knows (ADR-0102 SD6). `null` means there is no model to judge
+at this step, so none is refused.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `permissions` | `Readonly<{ readFiles: boolean; writeFiles: boolean; runCommands: boolean; unrestrictedNetwork: boolean; }>` | Yes |  |
+| `limits` | `Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>` | Yes |  |
+| `engine` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
+| `model` | `null \| string` | Yes |  |
+| `tools` | `readonly string[]` | Yes |  |
+
+## meetPolicyCeiling
+
+The configuration at or below both `effective` and `ceiling` (C14, issue #524, ADR-0102 SD6). It
+returns a frozen result and does not change its inputs:
+
+- each permission is on only when it is on in `effective` and the ceiling does not set it
+  `false`;
+- each limit is the smaller of the two, and a `null` limit composes at the ceiling's value;
+- `tools` keeps, in input order, only the connectors the ceiling's `tools` allows.
+
+The engine and the model are returned unchanged, because neither can be narrowed: the caller
+refuses them instead. So `policyWidenings(meetPolicyCeiling(e, c), c)` is exactly the `engine:`
+and `model:` entries of `policyWidenings(e, c)`. A `null` or absent ceiling returns `effective`
+itself.
+
+```ts
+meetPolicyCeiling(effective: EffectivePolicyConfiguration, ceiling: ProjectPolicy | null | undefined): EffectivePolicyConfiguration
+```
+
+## networkPolicyFloor
+
+The sandbox network policy a run gets (ADR-0117 decision 9, issue #785): without
+`unrestrictedNetwork` a sandbox gets at most `restricted`, so a profile's `open` is lowered to
+`restricted` with `connectorHosts` (the hosts of the run's remote connectors, which the sandbox
+itself reaches), or to `none` (the gateway only) when there is none. `none`, `restricted` and a
+granted `open` are returned unchanged. It never widens. Pure; the result is frozen.
+
+```ts
+networkPolicyFloor(input: { readonly networkPolicy: RuntimeNetworkPolicy; readonly allowedDomains?: readonly string[] | undefined; readonly unrestrictedNetwork: boolean; readonly connectorHosts: readonly string[]; }): NetworkPolicyFloor
+```
+
+## NetworkPolicyFloor
+
+What `networkPolicyFloor` resolves a sandbox's network policy to.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `networkPolicy` | `"none" \| "restricted" \| "open"` | Yes |  |
+| `allowedDomains` | `undefined \| readonly string[]` | No | Present only for `restricted`: the profile's own list, or the connector hosts it was lowered to. |
+| `lowered` | `false \| true` | Yes | Whether `open` was lowered because the permission is off. |
+
+## POLICY_CEILING_MODELS_MAX
+
+The most model ids a ceiling's `models` allowlist may name (issue #524).
+
+Value: `64`
+
+## POLICY_CEILING_TOOL_NAME_MAX_LENGTH
+
+The longest connector name a ceiling's `tools` allowlist may name: the catalogue's connector
+name bound (`CONNECTOR_NAME_MAX_LENGTH`), because a ceiling may name a connector made in the UI,
+not only one the project file declares (issue #524).
+
+Value: `200`
+
+## PolicyWidening
+
+One `details` entry of `403 policy_cannot_widen` (C14, issue #524): the field the configuration
+asks for above the ceiling.
+
+- `"permissions.readFiles"`
+- `"permissions.writeFiles"`
+- `"permissions.runCommands"`
+- `"permissions.unrestrictedNetwork"`
+- `"limits.maxTurns"`
+- `"limits.maxBudgetUsd"`
+- `"engine:claude-agent-sdk"`
+- `"engine:openai-agents"`
+- `"engine:pi"`
+- `"engine:mastra"`
+- ``model:${string}``
+- ``tool:${string}``
+
+## policyWidenings
+
+Where `effective` asks for more than `ceiling` allows, in C14's fixed order (issue #524,
+ADR-0102 SD6):
+
+1. `permissions.<key>`, in `AGENT_PERMISSION_KEYS` order, for each switch on where the ceiling
+   sets it `false`;
+2. `limits.maxTurns`, then `limits.maxBudgetUsd`, for an explicit limit above the ceiling's — a
+   `null` limit never refuses, because it composes at the ceiling;
+3. `engine:<id>` when the engine is outside `engines`;
+4. `model:<id>` when the model is not `null` and outside `models`;
+5. `tool:<name>` for each distinct connector outside `tools`, in ascending code-unit order, so the
+   answer does not depend on the order the tools were read in.
+
+An absent or `null` ceiling, or an absent key, gives no detail. Each field is named at most once.
+An empty result means nothing widens. Pure: the same inputs always give the same list.
+
+```ts
+policyWidenings(effective: EffectivePolicyConfiguration, ceiling: ProjectPolicy | null | undefined): readonly PolicyWidening[]
+```
+
+## ProjectPolicy
+
+A parsed `ProjectPolicySchema` (ADR-0102 SD6, issue #524).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `permissions` | `undefined \| ProjectPolicyPermissions` | No |  |
+| `limits` | `undefined \| ProjectPolicyLimits` | No |  |
+| `engines` | `undefined \| readonly ("claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra")[]` | No |  |
+| `models` | `undefined \| readonly string[]` | No |  |
+| `tools` | `undefined \| readonly string[]` | No |  |
+| `promotion` | `undefined \| ProjectPolicyPromotion` | No |  |
+| `maxCostPerDayUsd` | `undefined` | No |  |
+| `network` | `undefined` | No |  |
+| `approval` | `undefined` | No |  |
+
+## ProjectPolicyLimits
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `maxTurns` | `undefined \| number` | No |  |
+| `maxBudgetUsd` | `undefined \| number` | No |  |
+
+## ProjectPolicyLimitsSchema
+
+The per-run limits a ceiling caps. A ceiling names a number or nothing: `null` ("the engine's
+default" or "no cap") is an agent's value, never a ceiling's (ADR-0102 SD6, issue #524).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `maxTurns` | `undefined \| number` | No |  |
+| `maxBudgetUsd` | `undefined \| number` | No |  |
+
+## ProjectPolicyPermissions
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `readFiles` | `undefined \| false \| true` | No |  |
+| `writeFiles` | `undefined \| false \| true` | No |  |
+| `runCommands` | `undefined \| false \| true` | No |  |
+| `unrestrictedNetwork` | `undefined \| false \| true` | No |  |
+
+## ProjectPolicyPermissionsSchema
+
+The permission switches a ceiling may turn off, one optional boolean per
+`AGENT_PERMISSION_KEYS` key. `false` caps the switch off; `true` or absent leaves it to the
+agent (ADR-0102 SD6, issue #524).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `readFiles` | `undefined \| false \| true` | No |  |
+| `writeFiles` | `undefined \| false \| true` | No |  |
+| `runCommands` | `undefined \| false \| true` | No |  |
+| `unrestrictedNetwork` | `undefined \| false \| true` | No |  |
+
+## ProjectPolicyPromotion
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `minEvalScore` | `number` | Yes |  |
+
+## ProjectPolicyPromotionSchema
+
+The promotion gate's bar (issue #619): the least share of an evaluation's cases, from 0 to 1, a
+version must pass before `production` may point at it. It judges no agent configuration, so
+neither `policyWidenings` nor `meetPolicyCeiling` reads it.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `minEvalScore` | `number` | Yes |  |
+
+## ProjectPolicySchema
+
+A project's policy ceiling (ADR-0102 SD6, C13, C14, issue #524). Every key is optional, and an
+absent key caps nothing:
+
+- `permissions` — a switch set to `false` may not be on in any agent.
+- `limits` — `maxTurns` and `maxBudgetUsd` no agent may exceed.
+- `engines` — the engines an agent may run on, at least one, none twice.
+- `models` — the **model ids** an agent may name, never connection names (a connection carries no
+  model id, C11). At least one, none twice, at most `POLICY_CEILING_MODELS_MAX`, and no
+  control character (a ceiling is printed, as `tools` is).
+- `tools` — the connector names an agent may use, none twice. An empty list means no tools.
+- `promotion` — `minEvalScore`, the bar promotion to `production` must reach (issue #619). It is
+  not a widening of any agent: unset, promotion needs no evaluation.
+
+`maxCostPerDayUsd`, `network` and `approval` are not built yet and are each refused at their own
+path. `connections` has no field: an allowlist of connections is out of scope in slice 2, so the
+strict object refuses it as an unknown key.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `permissions` | `undefined \| ProjectPolicyPermissions` | No |  |
+| `limits` | `undefined \| ProjectPolicyLimits` | No |  |
+| `engines` | `undefined \| readonly ("claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra")[]` | No |  |
+| `models` | `undefined \| readonly string[]` | No |  |
+| `tools` | `undefined \| readonly string[]` | No |  |
+| `promotion` | `undefined \| ProjectPolicyPromotion` | No |  |
+| `maxCostPerDayUsd` | `undefined` | No |  |
+| `network` | `undefined` | No |  |
+| `approval` | `undefined` | No |  |

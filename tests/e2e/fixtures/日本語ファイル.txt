@@ -1,0 +1,2 @@
+JAPANESE_FILENAME_SENTINEL=sakura-cloud-915
+Chrome upload regression fixture for a UTF-8 filename.

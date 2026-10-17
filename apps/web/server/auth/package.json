@@ -1,0 +1,6 @@
+{
+  "//": "Not a workspace member and not published. pnpm-workspace.yaml globs apps/* and packages/*, neither of which matches this directory, so nothing installs, builds or licence-checks it. It exists for one reason: `type: module`. `apps/web/package.json` declares no type, so under the repository's NodeNext settings every file below it is a CommonJS module, and `verbatimModuleSyntax` then rejects `export` (TS1287) in any of these files the moment tests/auth.test.ts pulls them into the root type-check program. Declaring the format here makes them ES modules for TypeScript and changes nothing for Turbopack, which compiles them either way. See docs/adr/W1-CP-06-auth-modules-are-standalone-es-modules.md.",
+  "name": "@agent-workspace/web-auth",
+  "private": true,
+  "type": "module"
+}

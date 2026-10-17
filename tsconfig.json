@@ -1,0 +1,34 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "NodeNext",
+    "moduleResolution": "nodenext",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noUncheckedSideEffectImports": true,
+    "allowUnreachableCode": false,
+    "allowUnusedLabels": false,
+    "noEmitOnError": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  // Options only. This config compiles nothing and deliberately carries no
+  // `exclude`: keeping compiled tests out of dist/ is an *emit* concern and now
+  // lives in each package's tsconfig.build.json, which is the only config that
+  // emits. A package's tsconfig.json therefore sees its whole `src` - tests
+  // included - so `tsc`, the editor and type-aware ESLint all agree on one
+  // project graph per package. See docs/adr/W0-INF-01-typescript-project-layout.md.
+  "include": []
+}

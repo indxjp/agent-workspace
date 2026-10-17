@@ -1,0 +1,121 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.EngineSkills.claude_places_every_skill_inside_its_own_directory",
+    "AgentWorkspace.Theorems.Invariants.EngineSkills.a_placement_outside_the_declared_directory_is_refused",
+    "AgentWorkspace.Theorems.Invariants.EngineSkills.a_dropped_skill_is_refused_and_an_empty_request_is_not"],
+   "input":
+   {"placements":
+    [{"skill": "invoice-review", "path": ".claude/skills/invoice-review/SKILL.md"},
+     {"skill": "invoice-review", "path": ".claude/skills/invoice-review/reference/rates.md"},
+     {"skill": "document-writer", "path": ".claude/skills/document-writer/SKILL.md"}],
+    "grants": [{"name": "invoice-review", "files": 2}, {"name": "document-writer", "files": 1}],
+    "configDirectory": ".claude"},
+   "id": "claude-layout",
+   "expected": {"refusal": null, "files": 3}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.EngineSkills.claude_places_every_skill_inside_its_own_directory",
+    "AgentWorkspace.Theorems.Invariants.EngineSkills.a_placement_outside_the_declared_directory_is_refused",
+    "AgentWorkspace.Theorems.Invariants.EngineSkills.a_dropped_skill_is_refused_and_an_empty_request_is_not"],
+   "input":
+   {"placements":
+    [{"skill": "invoice-review", "path": ".scripted-engine/skills/invoice-review/SKILL.md"},
+     {"skill": "invoice-review", "path": ".scripted-engine/skills/invoice-review/reference/rates.md"},
+     {"skill": "document-writer", "path": ".scripted-engine/skills/document-writer/SKILL.md"}],
+    "grants": [{"name": "invoice-review", "files": 2}, {"name": "document-writer", "files": 1}],
+    "configDirectory": ".scripted-engine"},
+   "id": "second-engine-layout",
+   "expected": {"refusal": null, "files": 3}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.EngineSkills.claude_places_every_skill_inside_its_own_directory",
+    "AgentWorkspace.Theorems.Invariants.EngineSkills.a_placement_outside_the_declared_directory_is_refused",
+    "AgentWorkspace.Theorems.Invariants.EngineSkills.a_dropped_skill_is_refused_and_an_empty_request_is_not"],
+   "input":
+   {"placements":
+    [{"skill": "invoice-review", "path": ".scripted-engine/skills/invoice-review/SKILL.md"},
+     {"skill": "invoice-review", "path": ".scripted-engine/skills/invoice-review/reference/rates.md"},
+     {"skill": "document-writer", "path": ".scripted-engine/skills/document-writer/SKILL.md"}],
+    "grants": [{"name": "invoice-review", "files": 2}, {"name": "document-writer", "files": 1}],
+    "configDirectory": ".claude"},
+   "id": "wrong-engines-directory",
+   "expected": {"refusal": "outside_config_directory", "files": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.EngineSkills.claude_places_every_skill_inside_its_own_directory",
+    "AgentWorkspace.Theorems.Invariants.EngineSkills.a_placement_outside_the_declared_directory_is_refused",
+    "AgentWorkspace.Theorems.Invariants.EngineSkills.a_dropped_skill_is_refused_and_an_empty_request_is_not"],
+   "input":
+   {"placements": [{"skill": "document-writer", "path": "skills/document-writer/SKILL.md"}],
+    "grants": [{"name": "document-writer", "files": 1}],
+    "configDirectory": ".claude"},
+   "id": "sandbox-root",
+   "expected": {"refusal": "outside_config_directory", "files": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.EngineSkills.claude_places_every_skill_inside_its_own_directory",
+    "AgentWorkspace.Theorems.Invariants.EngineSkills.a_placement_outside_the_declared_directory_is_refused",
+    "AgentWorkspace.Theorems.Invariants.EngineSkills.a_dropped_skill_is_refused_and_an_empty_request_is_not"],
+   "input":
+   {"placements": [{"skill": "document-writer", "path": ".claude-backup/SKILL.md"}],
+    "grants": [{"name": "document-writer", "files": 1}],
+    "configDirectory": ".claude"},
+   "id": "sibling-directory",
+   "expected": {"refusal": "outside_config_directory", "files": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.EngineSkills.claude_places_every_skill_inside_its_own_directory",
+    "AgentWorkspace.Theorems.Invariants.EngineSkills.a_placement_outside_the_declared_directory_is_refused",
+    "AgentWorkspace.Theorems.Invariants.EngineSkills.a_dropped_skill_is_refused_and_an_empty_request_is_not"],
+   "input":
+   {"placements": [{"skill": "document-writer", "path": ".claude"}],
+    "grants": [{"name": "document-writer", "files": 1}],
+    "configDirectory": ".claude"},
+   "id": "the-directory-itself",
+   "expected": {"refusal": "outside_config_directory", "files": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.EngineSkills.claude_places_every_skill_inside_its_own_directory",
+    "AgentWorkspace.Theorems.Invariants.EngineSkills.a_placement_outside_the_declared_directory_is_refused",
+    "AgentWorkspace.Theorems.Invariants.EngineSkills.a_dropped_skill_is_refused_and_an_empty_request_is_not"],
+   "input":
+   {"placements": [{"skill": "document-writer", "path": ".claude/../../etc/SKILL.md"}],
+    "grants": [{"name": "document-writer", "files": 1}],
+    "configDirectory": ".claude"},
+   "id": "climbs-out",
+   "expected": {"refusal": "unusable_path", "files": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.EngineSkills.claude_places_every_skill_inside_its_own_directory",
+    "AgentWorkspace.Theorems.Invariants.EngineSkills.a_placement_outside_the_declared_directory_is_refused",
+    "AgentWorkspace.Theorems.Invariants.EngineSkills.a_dropped_skill_is_refused_and_an_empty_request_is_not"],
+   "input":
+   {"placements": [{"skill": "not-assigned", "path": ".claude/skills/not-assigned/SKILL.md"}],
+    "grants": [{"name": "document-writer", "files": 1}],
+    "configDirectory": ".claude"},
+   "id": "ungranted-skill",
+   "expected": {"refusal": "unknown_skill", "files": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.EngineSkills.claude_places_every_skill_inside_its_own_directory",
+    "AgentWorkspace.Theorems.Invariants.EngineSkills.a_placement_outside_the_declared_directory_is_refused",
+    "AgentWorkspace.Theorems.Invariants.EngineSkills.a_dropped_skill_is_refused_and_an_empty_request_is_not"],
+   "input":
+   {"placements":
+    [{"skill": "document-writer", "path": ".claude/skills/w/SKILL.md"},
+     {"skill": "document-writer", "path": ".claude/skills/w/./SKILL.md"}],
+    "grants": [{"name": "document-writer", "files": 1}],
+    "configDirectory": ".claude"},
+   "id": "duplicate-path",
+   "expected": {"refusal": "duplicate_path", "files": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.EngineSkills.claude_places_every_skill_inside_its_own_directory",
+    "AgentWorkspace.Theorems.Invariants.EngineSkills.a_placement_outside_the_declared_directory_is_refused",
+    "AgentWorkspace.Theorems.Invariants.EngineSkills.a_dropped_skill_is_refused_and_an_empty_request_is_not"],
+   "input":
+   {"placements": [],
+    "grants": [{"name": "invoice-review", "files": 2}, {"name": "document-writer", "files": 1}],
+    "configDirectory": ".claude"},
+   "id": "dropped-skill",
+   "expected": {"refusal": "skill_dropped", "files": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.EngineSkills.claude_places_every_skill_inside_its_own_directory",
+    "AgentWorkspace.Theorems.Invariants.EngineSkills.a_placement_outside_the_declared_directory_is_refused",
+    "AgentWorkspace.Theorems.Invariants.EngineSkills.a_dropped_skill_is_refused_and_an_empty_request_is_not"],
+   "input": {"placements": [], "grants": [], "configDirectory": ".claude"},
+   "id": "nothing-granted",
+   "expected": {"refusal": null, "files": 0}}],
+ "family": "engine-compose",
+ "description": "Where an adapter may place a skill, and what the runner refuses"}

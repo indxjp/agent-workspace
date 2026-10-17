@@ -1,0 +1,50 @@
+{"vectors":
+ [{"witnesses": ["AgentWorkspace.Theorems.Normative.EngineImages.runner_manager_requires_digests_in_production"],
+   "input":
+   {"env":
+    {"NODE_ENV": "production",
+     "AGENT_WORKSPACE_RUNTIME_IMAGE_CLAUDE_AGENT_SDK":
+     "registry.example/agent-workspace/runtime-claude-agent-sdk@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},
+   "id": "production-digest",
+   "expected":
+   {"ok": true,
+    "images":
+    [["claude-agent-sdk",
+      "registry.example/agent-workspace/runtime-claude-agent-sdk@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]]}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.EngineImages.runner_manager_requires_digests_in_production"],
+   "input":
+   {"env":
+    {"NODE_ENV": "production",
+     "AGENT_WORKSPACE_RUNTIME_IMAGE_CLAUDE_AGENT_SDK":
+     "registry.example/secret-project-7/runtime-claude-agent-sdk:v1"}},
+   "id": "production-tag-refused",
+   "expected":
+   {"unpinned": ["claude-agent-sdk"],
+    "unknown": [],
+    "ok": false,
+    "malformed": [],
+    "keys": ["claude-agent-sdk"],
+    "duplicates": []}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.EngineImages.runner_manager_requires_digests_in_production"],
+   "input":
+   {"env": {"NODE_ENV": "production", "AGENT_WORKSPACE_RUNTIME_IMAGE_CLAUDE_AGENT_SDK": "agent-workspace/runtime:dev"}},
+   "id": "production-compose-default-refused",
+   "expected":
+   {"unpinned": ["claude-agent-sdk"],
+    "unknown": [],
+    "ok": false,
+    "malformed": [],
+    "keys": ["claude-agent-sdk"],
+    "duplicates": []}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.EngineImages.runner_manager_requires_digests_in_production"],
+   "input":
+   {"env":
+    {"NODE_ENV": "development", "AGENT_WORKSPACE_RUNTIME_IMAGE_CLAUDE_AGENT_SDK": "agent-workspace/runtime:dev"}},
+   "id": "development-tag",
+   "expected": {"ok": true, "images": [["claude-agent-sdk", "agent-workspace/runtime:dev"]]}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.EngineImages.runner_manager_requires_digests_in_production"],
+   "input": {"env": {"NODE_ENV": "development"}},
+   "id": "nothing-configured-refused",
+   "expected": {"unpinned": [], "unknown": [], "ok": false, "malformed": [], "keys": [], "duplicates": []}}],
+ "family": "engine-images",
+ "description": "engineImagesFor: digests in production, and no image at all refuses start-up"}

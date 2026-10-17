@@ -1,0 +1,134 @@
+---
+title: "EndpointClientsClient"
+description: "Every method of EndpointClientsClient, its parameters, return type, and route."
+---
+
+<Note>This page is generated from `packages/sdk/src/resources/endpointClients.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+`/api/endpoint-clients/**` — issue #949, ADR-0134. An endpoint client names the one resource an
+external platform may reach (an MCP project endpoint or one agent's A2A endpoint); its
+endpoint-scoped API keys are the static bearer the platform presents.
+
+Problem codes: `endpoint_client_not_found` 404, `endpoint_client_name_taken` 409,
+`endpoint_client_revoked` 409, `endpoint_client_agent_not_runnable` 403,
+`endpoint_client_invalid` 400; `create` is also `403 api_key_not_permitted` for an API key.
+
+## list
+
+Every endpoint client of the workspace, revoked ones included.
+
+```ts
+async list(options?: RequestOptions): Promise<readonly EndpointClientResource[]>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<readonly EndpointClientResource[]>`
+
+**Route:** `GET /api/endpoint-clients`
+
+## get
+
+```ts
+async get(id: string, options?: RequestOptions): Promise<EndpointClientResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `id` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<EndpointClientResource>`
+
+**Route:** `GET /api/endpoint-clients/:id`
+
+## create
+
+Every listed agent must be runnable by the caller, else `403 endpoint_client_agent_not_runnable`.
+
+```ts
+async create(input: CreateEndpointClientRequest, options?: RequestOptions): Promise<EndpointClientResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `input` | `CreateEndpointClientRequest` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<EndpointClientResource>`
+
+**Route:** `POST /api/endpoint-clients`
+
+## update
+
+```ts
+async update(id: string, patch: UpdateEndpointClientRequest, options?: RequestOptions): Promise<EndpointClientResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `id` | `string` | Yes |
+| `patch` | `UpdateEndpointClientRequest` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<EndpointClientResource>`
+
+**Route:** `PATCH /api/endpoint-clients/:id`
+
+## revoke
+
+Revoke the client and every key bound to it. Idempotent; the next request with a key is a `401`.
+
+```ts
+async revoke(id: string, options?: RequestOptions): Promise<EndpointClientResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `id` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<EndpointClientResource>`
+
+**Route:** `DELETE /api/endpoint-clients/:id`
+
+## mintKey
+
+Mint an endpoint-scoped key. `key` in the answer is the whole credential and this is the only
+time it exists outside the caller's hands. `409 endpoint_client_revoked` for a revoked client.
+
+```ts
+mintKey(id: string, input: MintEndpointKeyRequest, options?: RequestOptions): Promise<MintedApiKeyResponse>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `id` | `string` | Yes |
+| `input` | `MintEndpointKeyRequest` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<MintedApiKeyResponse>`
+
+**Route:** `POST /api/endpoint-clients/:id/keys`
+
+## rotateSecret
+
+Mint or rotate the OAuth client secret (ADR-0134 part 3). `clientSecret` in the answer is the
+whole credential and this is the only time it exists outside the caller's hands; the old
+secret stops working at once. `409 endpoint_client_revoked` for a revoked client,
+`403 api_key_not_permitted` for an API key.
+
+```ts
+rotateSecret(id: string, options?: RequestOptions): Promise<RotateEndpointClientSecretResponse>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `id` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<RotateEndpointClientSecretResponse>`
+
+**Route:** `POST /api/endpoint-clients/:id/secret`

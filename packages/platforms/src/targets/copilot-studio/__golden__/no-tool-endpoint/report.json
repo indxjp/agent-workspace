@@ -1,0 +1,146 @@
+[
+  {
+    "path": "support-triage.description",
+    "verdict": "mapped",
+    "note": "agent.mcs.yml mcs.metadata.description"
+  },
+  {
+    "path": "support-triage.instructions",
+    "verdict": "native",
+    "note": "agent.mcs.yml instructions"
+  },
+  {
+    "path": "support-triage.model",
+    "verdict": "mapped",
+    "note": "environment default model; set extensions.platforms.copilot-studio.modelNameHint to pin"
+  },
+  {
+    "path": "support-triage.permissions.readFiles",
+    "verdict": "dropped",
+    "code": "permissions_unsupported",
+    "note": "the standard harness has no file system, shell or open network egress to grant"
+  },
+  {
+    "path": "support-triage.permissions.writeFiles",
+    "verdict": "mapped",
+    "note": "false holds by construction on the standard harness"
+  },
+  {
+    "path": "support-triage.permissions.runCommands",
+    "verdict": "mapped",
+    "note": "false holds by construction on the standard harness"
+  },
+  {
+    "path": "support-triage.permissions.unrestrictedNetwork",
+    "verdict": "mapped",
+    "note": "false holds by construction on the standard harness"
+  },
+  {
+    "path": "support-triage.tools.0",
+    "verdict": "mapped",
+    "note": "agent/actions/zendesk.mcs.yml and connectors/zendesk/; secret ZENDESK_TOKEN: enter 'Bearer <token>' when creating the connection"
+  },
+  {
+    "path": "support-triage.tools.1",
+    "verdict": "dropped",
+    "code": "stdio_mcp_unsupported",
+    "note": "Copilot Studio is hosted and cannot start a local process"
+  },
+  {
+    "path": "support-triage.tools.2",
+    "verdict": "dropped",
+    "code": "code_tool_needs_public_mcp",
+    "note": "a code tool needs the project tool endpoint (a public MCP server) to run on"
+  },
+  {
+    "path": "support-triage.tools.3",
+    "verdict": "dropped",
+    "code": "field_unsupported",
+    "note": "a Power Platform connector needs the operations, which a pure translator cannot read from specRef; expose the tool through the project public MCP endpoint or build the connector by hand"
+  },
+  {
+    "path": "support-triage.tools.4",
+    "verdict": "mapped",
+    "note": "agent.mcs.yml gptCapabilities.webBrowsing"
+  },
+  {
+    "path": "support-triage.tools.5",
+    "verdict": "mapped",
+    "note": "agent.mcs.yml gptCapabilities.codeInterpreter"
+  },
+  {
+    "path": "support-triage.skills.0",
+    "verdict": "dropped",
+    "code": "skills_unsupported",
+    "note": "skills exist only on the GitHub Copilot harness, by UI upload; upload skills/<name>/SKILL.md by hand"
+  },
+  {
+    "path": "support-triage.knowledge.0",
+    "verdict": "native",
+    "note": "copied to agent/knowledge/files/; uploaded when the workspace is applied"
+  },
+  {
+    "path": "support-triage.knowledge.1",
+    "verdict": "mapped",
+    "note": "a public-website knowledge source: a Bing-scoped site search, not a crawl"
+  },
+  {
+    "path": "support-triage.subagents.0",
+    "verdict": "mapped",
+    "note": "agent/agents/billing-specialist/agent.mcs.yml"
+  },
+  {
+    "path": "support-triage.limits.maxTurns",
+    "verdict": "dropped",
+    "code": "limits_unsupported",
+    "note": "Copilot Studio has no per-run turn or budget limit"
+  },
+  {
+    "path": "support-triage.limits.maxBudgetUsd",
+    "verdict": "dropped",
+    "code": "limits_unsupported",
+    "note": "Copilot Studio has no per-run turn or budget limit"
+  },
+  {
+    "path": "billing-specialist.description",
+    "verdict": "mapped",
+    "note": "the beginDialog description of the child agent"
+  },
+  {
+    "path": "billing-specialist.instructions",
+    "verdict": "mapped",
+    "note": "settings.instructions of the child agent"
+  },
+  {
+    "path": "billing-specialist.model",
+    "verdict": "mapped",
+    "note": "child agents run on the parent's model"
+  },
+  {
+    "path": "billing-specialist.permissions.readFiles",
+    "verdict": "dropped",
+    "code": "permissions_unsupported",
+    "note": "the standard harness has no file system, shell or open network egress to grant"
+  },
+  {
+    "path": "billing-specialist.permissions.writeFiles",
+    "verdict": "mapped",
+    "note": "false holds by construction on the standard harness"
+  },
+  {
+    "path": "billing-specialist.permissions.runCommands",
+    "verdict": "mapped",
+    "note": "false holds by construction on the standard harness"
+  },
+  {
+    "path": "billing-specialist.permissions.unrestrictedNetwork",
+    "verdict": "mapped",
+    "note": "false holds by construction on the standard harness"
+  },
+  {
+    "path": "billing-specialist.skills.0",
+    "verdict": "dropped",
+    "code": "subagents_unsupported",
+    "note": "child-scoped skills are not emitted"
+  }
+]

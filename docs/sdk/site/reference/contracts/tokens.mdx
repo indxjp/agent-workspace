@@ -1,0 +1,116 @@
+---
+title: "tokens"
+description: "The @indx-workspace/contracts/tokens exports, sorted alphabetically."
+---
+
+<Note>This page is generated from `packages/contracts/src/tokens.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## BROWSER_TOKEN_DEFAULT_TTL_SECONDS
+
+Value: `300`
+
+## BROWSER_TOKEN_ID_LENGTH
+
+Same anchored fixed-length halves as an API key: 16 bytes / 32 bytes, base64url.
+
+Value: `22`
+
+## BROWSER_TOKEN_MAX_TTL_SECONDS
+
+Value: `3600`
+
+## BROWSER_TOKEN_MIN_TTL_SECONDS
+
+§3.1's TTL bounds: 60 seconds through one hour, default five minutes.
+
+Value: `60`
+
+## BROWSER_TOKEN_PATTERN
+
+A whole presented browser token — `awt_live_<id>_<secret>` — the shape the mint response's
+`token` carries and the shape `Authorization: Bearer` expects.
+
+Value: ``new RegExp( `^${BROWSER_TOKEN_PREFIX}[A-Za-z0-9_-]{${String(BROWSER_TOKEN_ID_LENGTH)}}_[A-Za-z0-9_-]{${String(BROWSER_TOKEN_SECRET_LENGTH)}}$`, 'u', )``
+
+## BROWSER_TOKEN_PREFIX
+
+Issue #236 (SDK-04, S-1): a short-lived, run- or session-scoped bearer a customer's own backend
+mints for its own frontend. `awt_live_` — distinct from `import`
+`ak_live_` — is what lets `apps/web/proxy.ts` recognise the credential by shape without verifying
+it, and what lets this module pin a pattern the same way `api-keys.ts` pins `ak_live_`'s.
+
+Value: `'awt_live_'`
+
+## BROWSER_TOKEN_SECRET_LENGTH
+
+Value: `43`
+
+## MintTokenRequest
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `scope` | `TokenScope` | Yes |  |
+| `ttlSeconds` | `undefined \| number` | No |  |
+
+## MintTokenRequestSchema
+
+The body of `POST /api/tokens`. `ttlSeconds` omitted means the default above.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `scope` | `TokenScope` | Yes |  |
+| `ttlSeconds` | `undefined \| number` | No |  |
+
+## MintTokenResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `token` | `string` | Yes |  |
+| `scope` | `TokenScope` | Yes |  |
+| `expiresAt` | `string` | Yes |  |
+| `warning` | `string` | Yes |  |
+
+## MintTokenResponseSchema
+
+The `201` of `POST /api/tokens` — the only response body in the platform besides
+`MintedApiKeyResponseSchema` that carries a bearer credential's plaintext. `token` is the whole
+credential the caller forwards to its frontend; there is nowhere on this type to put a hash.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `token` | `string` | Yes |  |
+| `scope` | `TokenScope` | Yes |  |
+| `expiresAt` | `string` | Yes |  |
+| `warning` | `string` | Yes |  |
+
+## TOKEN_SCOPE_KINDS
+
+The two shapes a browser token may be scoped to (spec §3.1).
+
+- `'run'`
+- `'session'`
+
+## TokenScope
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"run" \| "session"` | Yes |  |
+| `id` | `string` | Yes |  |
+
+## TokenScopeKind
+
+- `"run"`
+- `"session"`
+
+## TokenScopeSchema
+
+Which run or session a token may act on, and nothing else. `id` is the scoped row's id — a
+`UuidSchema` for the same reason `StartRunRequestSchema.sessionId` is one: every run and session
+id the control plane issues is a `uuid` column, so the SDK and the CLI refuse a malformed one
+before it is sent rather than learning about it from the server. The grammar each kind may reach
+is fixed by §3.1 and enforced server-side by `decide()`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"run" \| "session"` | Yes |  |
+| `id` | `string` | Yes |  |

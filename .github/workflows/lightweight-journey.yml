@@ -1,0 +1,200 @@
+name: Lightweight journey
+
+# The lightweight deploy-the-agent-app journey (issue #832, E7 AC2): per lane, create a project, add a
+# code tool that reads a secret, evaluate it, deploy the whole app to Vercel or Cloudflare, push and
+# promote past the eval gate, chat through the API, the hosted page and the widget, serve the frontend,
+# and roll back. One job per target x sandbox: Vercel + Vercel Sandbox, Vercel + E2B, Cloudflare +
+# Cloudflare Sandbox, Cloudflare + E2B. See tests/e2e/lightweight-journey/README.md.
+#
+# Never runs on pull requests: it creates real projects, Workers and database branches in third-party
+# accounts, then deletes them in the `Teardown` step (teardown.mjs, by names derived from the run id).
+# A lane whose credential is not configured reads `skipped` on every row and the summary job goes red;
+# a skipped row is never green. No model key: the eval runs a scripted model and the deployment is set
+# up with a fake key, as the Z1 journey does. The Cloudflare sandbox lane's bridge runs the runtime
+# image this run builds, pushed to Cloudflare's registry by digest. The E2B lanes build their runtime
+# template from this checkout (`aw-runtime-journey-<lane key>`), so every sandbox lane proves the
+# commit under test; `vars.E2B_RUNTIME_TEMPLATE` is the production pin and the journey ignores it.
+#
+# The Cloudflare lanes are expected to fail at the `deploy` row until the API token has Containers:
+# Edit (and Workers Scripts: Edit). That is a `fail`, not a skip, and is not hidden.
+#
+# The Cloudflare sandbox lane deploys, then its first run is refused with the typed
+# `network_policy_unsupported` (ADR-0131); `chat-api` and `hosted-chat` read `n/a` with that proof.
+on:
+  schedule:
+    - cron: '17 5 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: lightweight-journey
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  lane:
+    name: ${{ matrix.lane }}
+    runs-on: ubuntu-latest
+    # The two E2B lanes share one E2B account with a 20-sandbox cap (a lane that hit it failed with a 429
+    # in run 38201083183), so they run one after the other; every other lane has a group of its own.
+    concurrency:
+      group: lightweight-journey-${{ endsWith(matrix.lane, '-e2b') && 'e2b' || matrix.lane }}
+      cancel-in-progress: false
+    environment: providers-live
+    # The journey step is bounded at 90 minutes, then Teardown (15), Upload (5) and the disk report (2)
+    # still fit with the checkout, install and build (about 15) before it.
+    timeout-minutes: 130
+    strategy:
+      fail-fast: false
+      matrix:
+        lane:
+          - vercel-vercel-sandbox
+          - vercel-e2b
+          - cloudflare-cloudflare-sandbox
+          - cloudflare-e2b
+    env:
+      LJ_LANE: ${{ matrix.lane }}
+      LJ_RUN_ID: ${{ github.run_id }}
+      LJ_RESULTS: ${{ github.workspace }}/results/results-${{ matrix.lane }}.json
+    steps:
+      # The repo build, the pnpm store, three image builds and the local registry do not fit next to the
+      # runner's preinstalled toolchains (run 37871130400: `no space left on device` before any row).
+      - name: Free disk
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # No Buildx setup on purpose: the journey pushes its images to the registry on 127.0.0.1:5000 on
+      # this runner, so they are built with the default `docker` driver (BuildKit inside dockerd, host
+      # network), as journey-live.yml's build-deploy job does. A docker-container builder has its own
+      # network and cannot reach that registry.
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      # `agent-workspace deploy` runs the host's CLI from PATH; these are the pinned versions its
+      # doctor advice and the deploy guide give (docs/sdk/site/guides/deploy.mdx).
+      - name: Install the host CLI
+        timeout-minutes: 5
+        run: |
+          case "$LJ_LANE" in
+            vercel-*) npm install --global vercel@63.1.0 && vercel --version ;;
+            cloudflare-*) npm install --global wrangler@4.147.0 && wrangler --version ;;
+          esac
+        env:
+          LJ_LANE: ${{ matrix.lane }}
+
+      - name: Run the journey
+        timeout-minutes: 90
+        run: |
+          mkdir -p results
+          node tests/e2e/lightweight-journey/journey.e2e.mjs
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          E2B_API_KEY: ${{ secrets.E2B_API_KEY }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_PROJECT_ID: ${{ secrets.NEON_PROJECT_ID }}
+
+      # Runs after a failed, cancelled or half-way journey as well; a 404 is already gone, a refused
+      # deletion is a leftover and fails this step. It also sweeps this lane's older leaked resources.
+      # Teardown and Upload come before the disk report so nothing that can hang runs ahead of them.
+      - name: Teardown
+        if: always()
+        timeout-minutes: 15
+        run: node tests/e2e/lightweight-journey/teardown.mjs
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_PROJECT_ID: ${{ secrets.NEON_PROJECT_ID }}
+
+      - name: Upload results
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: lightweight-results-${{ matrix.lane }}
+          path: results/results-${{ matrix.lane }}.json
+          if-no-files-found: warn
+
+      # `docker system df` hung for minutes on run 37876751956 and killed the job (exit 143) before
+      # Teardown and Upload could run; it is last, bounded, and never fails the job.
+      - name: Disk after the journey
+        if: always()
+        timeout-minutes: 2
+        run: |
+          df -h /
+          timeout 30 docker system df || true
+
+  summary:
+    name: summary
+    needs: [lane]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+
+      - name: Download results
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          pattern: lightweight-results-*
+          path: results
+          merge-multiple: true
+
+      # Lanes are columns, chapters are rows. The isolation summary reads skipped, fail and a missing
+      # file as not clean, so this step exits 1 over any of them.
+      - name: Table
+        run: |
+          set +e
+          node infra/tests/isolation/summary.mjs \
+            vercel-vercel-sandbox=results/results-vercel-vercel-sandbox.json \
+            vercel-e2b=results/results-vercel-e2b.json \
+            cloudflare-cloudflare-sandbox=results/results-cloudflare-cloudflare-sandbox.json \
+            cloudflare-e2b=results/results-cloudflare-e2b.json > summary.md
+          status=$?
+          cat summary.md
+          {
+            echo '## Lightweight deploy-the-agent-app journey'
+            echo
+            cat summary.md
+            echo
+            echo '`skipped` means a credential the lane needs is not configured. It is not a pass.'
+            echo 'The Cloudflare lanes fail at `deploy` until the API token has Containers: Edit.'
+            echo '`n/a` on the Cloudflare Sandbox lane is the typed `network_policy_unsupported` refusal of its runs (ADR-0131).'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"

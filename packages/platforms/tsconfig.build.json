@@ -1,0 +1,16 @@
+{
+  // The emit view. The only config in this package that writes to dist/, and
+  // therefore the only one that needs to exclude tests. It ships `./testing`, so it re-includes the
+  // kit and, like `tsconfig.test.json`, needs Node types for `src/testing/golden.ts`.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "noEmit": false,
+    "rootDir": "src",
+    "outDir": "dist",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true
+  },
+  "exclude": ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"]
+}

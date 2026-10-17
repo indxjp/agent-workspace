@@ -1,0 +1,2 @@
+ALTER TABLE "run_usage_records" ADD COLUMN "wire_protocol" text DEFAULT 'anthropic-messages' NOT NULL;--> statement-breakpoint
+ALTER TABLE "run_usage_records" ADD CONSTRAINT "run_usage_records_wire_protocol_known" CHECK ("run_usage_records"."wire_protocol" in ('anthropic-messages', 'openai-responses', 'openai-chat-completions'));

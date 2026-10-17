@@ -1,0 +1,35 @@
+subscription_id         = "00000000-0000-0000-0000-000000000000"
+resource_group_name     = "rg-agent-workspace-abc123"
+container_registry_name = "cragentworkspaceabc123"
+container_registry_resource_group_name = "rg-agent-workspace-bootstrap-abc123"
+name                    = "agent-workspace"
+bootstrap_admin_email   = "owner@example.com"
+
+# The https origin (no path) external platforms reach web at; A2A agent cards (ADR-0135) use it.
+# Leave it out to set no AW_PUBLIC_URL.
+# public_url = "https://aw.example.com"
+
+# Mutable image tags and the all-zero digest are rejected. Build and push these four images first, then
+# copy their ACR digest references from `az acr repository show`.
+images = {
+  web     = "cragentworkspaceabc123.azurecr.io/agent-workspace/web@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+  gateway = "cragentworkspaceabc123.azurecr.io/agent-workspace/gateway@sha256:2222222222222222222222222222222222222222222222222222222222222222"
+  runner  = "cragentworkspaceabc123.azurecr.io/agent-workspace/runner@sha256:3333333333333333333333333333333333333333333333333333333333333333"
+  runtime = "cragentworkspaceabc123.azurecr.io/agent-workspace/runtime@sha256:4444444444444444444444444444444444444444444444444444444444444444"
+}
+
+enable_dynamic_sessions               = true
+session_pool_generation               = ""
+session_pool_ready_instances          = 1
+session_pool_max_concurrent_sessions  = 4
+session_pool_cooldown_seconds         = 600
+
+# Dynamic Sessions has one all-or-nothing egress switch. EgressEnabled is required for the current
+# runtime to reach the internal model gateway. Set EgressDisabled only after a real network probe
+# proves the required endpoints remain reachable.
+session_pool_network_status = "EgressEnabled"
+
+tags = {
+  owner       = "platform-team"
+  cost-center = "development"
+}

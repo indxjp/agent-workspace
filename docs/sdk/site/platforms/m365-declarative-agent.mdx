@@ -1,0 +1,125 @@
+---
+title: "Microsoft 365 declarative agent"
+description: "Export an agent as a Microsoft 365 Copilot declarative agent app package with plugins for its MCP servers, learn what Microsoft 365 Copilot drops, and provision it with the Agents Toolkit."
+---
+
+<Info>
+**Chapter 7 · Run it on other platforms — step 4 of 9** · [the chapter map](/path/platforms)
+
+- **You will:** export `assistant` as an app package for Microsoft 365 Copilot.
+- **You will learn:** that no option is required, that Microsoft 365 Copilot chooses the model, and how authentication for tools is set up by hand.
+- **You need:** [step 1](/platforms/overview); to publish, the Microsoft 365 Agents Toolkit CLI `atk`.
+</Info>
+
+## What you can do
+
+A declarative agent is an agent that lives inside Microsoft 365 Copilot and uses its model. This is
+the platform step 1 exported, because it needs no options. You can export the agent as an app
+package and provision it with the Agents Toolkit.
+
+## Before you start
+
+No option is required: a fresh project exports as it is. All of these are optional:
+
+| Option                       | What it does                                                                      |
+| ---------------------------- | --------------------------------------------------------------------------------- |
+| `appVersion`                 | The app package version, default `1.0.0`                                          |
+| `developer`                  | `name`, `websiteUrl`, `privacyUrl`, `termsOfUseUrl`; left out, the manifest carries placeholders |
+| `accentColor`                | A `#RRGGBB` colour, default `#5B5FC7`                                             |
+| `conversationStarters`       | Up to 12 entries, each with a `text` and an optional `title`                      |
+| `disclaimer`                 | Up to 500 characters                                                              |
+| `defaultResponseMode`        | `Auto`, `Quick response` or `Think deeper`                                        |
+| `discourageModelKnowledge`   | `true` to prefer your sources over the model's own knowledge                      |
+
+```yaml title="agent-workspace.yaml (illustrative)" claim="illustrative"
+platforms:
+  m365-declarative-agent:
+    enabled: true
+    options:
+      developer:
+        name: Acme
+        websiteUrl: https://acme.example.com
+        privacyUrl: https://acme.example.com/privacy
+        termsOfUseUrl: https://acme.example.com/terms
+```
+
+To publish you need the Microsoft 365 Agents Toolkit CLI `atk`. Install it with
+`npm install -g @microsoft/m365agentstoolkit-cli`; it uses its own Microsoft 365 login.
+
+## Export
+
+```sh title="Export to Microsoft 365 (illustrative)" claim="illustrative"
+npx aw platforms export --platform m365-declarative-agent
+```
+
+| Path                                  | What it is                                                                         |
+| ------------------------------------- | ---------------------------------------------------------------------------------- |
+| `appPackage/manifest.json`            | The Teams app manifest                                                             |
+| `appPackage/declarativeAgent.json`    | The agent: instructions, capabilities and actions                                  |
+| `appPackage/ai-plugin.<server>.json`  | One plugin per remote MCP server, and one for the project's tool endpoint          |
+| `appPackage/color.png`, `outline.png` | Placeholder icons; replace them with your own                                      |
+| `m365agents.yml`                      | The Agents Toolkit steps that provision the app                                    |
+| `env/.env.dev`                        | The variables those steps read                                                     |
+
+An app holds one declarative agent, so only the root agent is exported.
+
+## What maps and what is dropped
+
+These are the verdicts the Microsoft 365 compiler writes to the export report, with the reason for
+each. The [platform compatibility matrix](/platforms/matrix) shows what the platform supports, so
+a cell there can differ from the verdict a field gets here:
+
+| Your agent has…                    | On Microsoft 365 Copilot                                                               |
+| ---------------------------------- | -------------------------------------------------------------------------------------- |
+| Instructions, description          | `native`                                                                               |
+| A description over 80 characters   | `mapped`; the app's short description is cut to 80 characters                          |
+| Model                              | dropped, `field_unsupported`; Microsoft 365 Copilot selects it                         |
+| Engine                             | dropped, `field_unsupported`; the platform's own orchestrator runs the agent           |
+| Web search, code interpreter       | `native`, as capabilities                                                              |
+| Web fetch, file access             | dropped, `builtin_unsupported`; Microsoft 365 has no such capability                   |
+| Remote MCP servers                 | `native` as a plugin when it needs no notes; `mapped` when it needs a credential, is renamed or uses SSE |
+| Code tools                         | `mapped` to a plugin at the project's tool endpoint; dropped, `code_tool_needs_public_mcp`, when there is no endpoint |
+| OpenAPI tools                      | `mapped` to an OpenAPI plugin, its spec narrowed to the operations `allow` admits; dropped, `field_unsupported`, when the spec is neither bundled nor an `https` URL, or `permissions_unsupported` when it cannot be narrowed; a credential is not carried |
+| Permissions                        | any permission you grant is dropped, `permissions_unsupported`; one you leave off holds, because the platform has no such tool |
+| Subagents                          | dropped, `subagents_unsupported`                                                       |
+| Skills                             | dropped, `skills_unsupported`                                                          |
+| Knowledge files                    | dropped, `knowledge_unsupported`; upload them to SharePoint and add them by hand       |
+| Knowledge URLs                     | `mapped` to a site of the web search capability (covered by it when web search is unrestricted); dropped, `knowledge_unsupported`, for a URL with a query or more than two path segments, or past four sites |
+| Knowledge connectors               | dropped, `knowledge_unsupported`; add Graph connectors by hand                         |
+| Local (stdio) MCP servers          | dropped, `stdio_mcp_unsupported`                                                       |
+| Turn and budget limits             | dropped, `limits_unsupported`                                                          |
+
+The limits are 8,000 characters of instructions (and at least one character), 1,000 of description
+and 10 actions; going over any of them is a `platform_limit_exceeded` refusal.
+
+## Publish
+
+```sh title="Validate and package, then provision (illustrative)" claim="illustrative"
+npx aw platforms publish --platform m365-declarative-agent
+npx aw platforms publish --platform m365-declarative-agent --yes
+```
+
+The Agents Toolkit has no diff, so the plan is local: `atk validate` and `atk package`, and it
+always reports a change. With `--yes` it runs `atk provision`, which registers the app and makes it
+available to your own account. Submitting it to your organization's catalog, which needs an admin's
+approval, is a next step the command prints: `atk publish`. The default environment is `dev`.
+
+## Your tools
+
+Each remote MCP server becomes a plugin with dynamic tool discovery. A credential is not carried.
+The report tells you to register an OAuth or Microsoft Entra sign-in for each plugin in the Teams
+Developer Portal and to put its reference id in `env/.env.dev`.
+
+To reach your code tools, add `publicBaseUrl` and `toolAuth`
+([how that works](/platforms/overview#your-code-tools-on-another-platform)); the project's tool
+endpoint becomes one more plugin.
+
+## What is not there yet
+
+- Sign-in for a plugin that needs a credential is set up by hand in the Teams Developer Portal.
+- Subagents, skills and knowledge files are dropped; only the root agent is exported.
+- `aw` provisions the app for your own account; submitting it to the catalog is your `atk publish`.
+
+<Card title="Next: Microsoft Foundry" icon="arrow-right" href="/platforms/microsoft-foundry">
+  Export to Azure.
+</Card>

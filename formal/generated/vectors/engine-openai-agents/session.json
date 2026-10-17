@@ -1,0 +1,29 @@
+{"vectors":
+ [{"witnesses": ["AgentWorkspace.Theorems.Refinement.OpenAiAgents.the_session_refines_the_store"],
+   "input":
+   {"ops":
+    [{"op": "add", "items": ["u1", "a1"]},
+     {"op": "get", "limit": null},
+     {"op": "add", "items": ["u2"]},
+     {"op": "get", "limit": null},
+     {"op": "get", "limit": 2}]},
+   "id": "two-runs-see-each-other",
+   "expected": {"results": [null, ["u1", "a1"], null, ["u1", "a1", "u2"], ["a1", "u2"]]}},
+  {"witnesses": ["AgentWorkspace.Theorems.Refinement.OpenAiAgents.the_session_refines_the_store"],
+   "input":
+   {"ops":
+    [{"op": "add", "items": ["u1", "a1", "u2"]},
+     {"op": "pop"},
+     {"op": "get", "limit": null},
+     {"op": "clear"},
+     {"op": "get", "limit": null},
+     {"op": "pop"},
+     {"op": "get", "limit": null}]},
+   "id": "pop-and-clear",
+   "expected": {"results": [null, "u2", ["u1", "a1"], null, [], null, []]}},
+  {"witnesses": ["AgentWorkspace.Theorems.Refinement.OpenAiAgents.the_session_refines_the_store"],
+   "input": {"ops": [{"op": "add", "items": []}, {"op": "get", "limit": null}, {"op": "pop"}]},
+   "id": "empty-add-writes-nothing",
+   "expected": {"results": [null, [], null]}}],
+ "family": "engine-openai-agents",
+ "description": "EngineStoreSession over a list store, operation by operation"}

@@ -1,0 +1,14 @@
+[Unit]
+Description=Agent Workspace application-consistent backup
+Requires=agent-workspace.service
+After=agent-workspace.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/agent-workspace/backup
+Nice=10
+IOSchedulingClass=idle
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/agent-workspace/backups
+NoNewPrivileges=true

@@ -1,0 +1,193 @@
+---
+title: "Client"
+description: "createClient, ClientOptions, ClientAuth, RequestOptions, and the SDK error types."
+---
+
+<Note>This page is generated from `packages/sdk/src/index.ts`, `packages/sdk/src/http.ts`, `packages/sdk/src/errors.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## createClient
+
+```ts
+createClient(options: ClientOptions): AgentWorkspaceClient
+```
+
+## AgentWorkspaceClient
+
+One authenticated connection to a control plane, with a client per resource family — and one
+operation of its own, `AgentWorkspaceClient.me`, which belongs to no family.
+
+One property per resource family.
+
+| Family | Type |
+| --- | --- |
+| [`workspaces`](/reference/sdk/workspaces) | `WorkspacesClient` |
+| [`agents`](/reference/sdk/agents) | `AgentsClient` |
+| [`runs`](/reference/sdk/runs) | `RunsClient` |
+| [`sessions`](/reference/sdk/sessions) | `SessionsClient` |
+| [`projects`](/reference/sdk/projects) | `ProjectsClient` |
+| [`secrets`](/reference/sdk/secrets) | `SecretsClient` |
+| [`runtimes`](/reference/sdk/runtimes) | `RuntimesClient` |
+| [`models`](/reference/sdk/models) | `ModelsClient` |
+| [`files`](/reference/sdk/files) | `FilesClient` |
+| [`skills`](/reference/sdk/skills) | `SkillsClient` |
+| [`toolBundles`](/reference/sdk/toolBundles) | `ToolBundlesClient` |
+| [`connectors`](/reference/sdk/connectors) | `ConnectorsClient` |
+| [`engines`](/reference/sdk/engines) | `EnginesClient` |
+| [`platforms`](/reference/sdk/platforms) | `PlatformsClient` |
+| [`endpointClients`](/reference/sdk/endpointClients) | `EndpointClientsClient` |
+| [`team`](/reference/sdk/team) | `TeamClient` |
+| [`shares`](/reference/sdk/shares) | `SharesClient` |
+| [`observability`](/reference/sdk/observability) | `ObservabilityClient` |
+| [`tokens`](/reference/sdk/tokens) | `TokensClient` |
+| [`auth`](/reference/sdk/auth) | `AuthClient` |
+
+### Methods
+
+Operations on the client itself, belonging to no resource family.
+
+#### me
+
+Who this credential is: `{ principalId, kind, role, workspaceId, userId, label }`.
+
+Every consumer's first call. An API key is bound to one workspace and carries no membership
+to list, so this is the only way it can name the workspace and role it was authorised under;
+a session caller additionally learns its `userId` and a human label. `userId` is `null` for
+exactly an API-key principal.
+
+```ts
+me(options?: RequestOptions): Promise<MeResponse>
+```
+
+## ClientOptions
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `baseUrl` | `string \| URL` | Yes | The control plane's origin, optionally with a path prefix: `https://aw.example.com`. |
+| `auth` | `{ readonly kind: "api-key"; readonly apiKey: string; } \| { readonly kind: "session"; } \| { readonly kind: "browser-token"; readonly token: string; } \| { readonly kind: "user-token"; readonly token: string; }` | Yes |  |
+| `fetch` | `undefined \| (input: RequestInfo \| URL, init?: RequestInit) => Promise<Response>` | No | Injected for tests and for runtimes that wrap `fetch`; defaults to the global. |
+| `headers` | `undefined \| Readonly<Record<string, string>>` | No | Extra headers on every request, e.g. a trace id. Never used for credentials, and never the contracts version: `X-Agent-Workspace-Contracts` is always the version this SDK was built against. |
+| `timeoutMs` | `undefined \| number` | No | Abort a request that has produced no response headers within this many milliseconds. |
+| `workspace` | `undefined \| string` | No | Select this workspace (id or slug) before the first request — issue #236 (SDK-04, S-2). Honoured only for `auth: { kind: 'session' }`; the constructor throws for any other kind, since an API key and a browser token are each already bound to one fixed workspace. The switch itself runs once, memoised, the first time any request is sent, and every concurrent first caller awaits that same attempt rather than each triggering their own. |
+
+## RequestOptions
+
+Per-call options every operation accepts.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `signal` | `undefined \| AbortSignal` | No |  |
+
+## ClientAuth
+
+How the client proves who it is.
+
+`api-key` sends a workspace API key (`ak_live_…`) as `Authorization: Bearer`; it is the
+credential a customer's backend holds. `session` sends nothing and asks `fetch` to include the
+browser's cookies, which is how a browser page on the control plane's own origin calls the API.
+`browser-token` (issue #236, SDK-04, S-1) sends a short-lived, run- or session-scoped bearer a
+customer's own backend minted for its own frontend (`aw.tokens.mint`); it sends `Authorization:
+Bearer` exactly as `api-key` does and, like it, never sets `credentials: 'include'` — the
+workspace API key must never reach a browser, but this token was minted *for* one.
+`user-token` (issue #242, SDK-10, S-22) sends the `awu_live_…` token `aw login` holds: a person,
+admitted only on the person-facing routes (`me`, `workspaces`, `team.invitations`, the sharing
+policy, `auth.revoke` and `workspaces.select`; ADR-0083), and like the other two bearers never
+`credentials: 'include'`.
+
+One of:
+
+**`{ readonly kind: "api-key"; readonly apiKey: string; }`**
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"api-key"` | Yes |  |
+| `apiKey` | `string` | Yes |  |
+
+**`{ readonly kind: "session"; }`**
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"session"` | Yes |  |
+
+**`{ readonly kind: "browser-token"; readonly token: string; }`**
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"browser-token"` | Yes |  |
+| `token` | `string` | Yes |  |
+
+**`{ readonly kind: "user-token"; readonly token: string; }`**
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"user-token"` | Yes |  |
+| `token` | `string` | Yes |  |
+
+## AgentWorkspaceError
+
+The base of every failure this SDK raises, so a caller can catch the family in one clause.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"problem" \| "contract" \| "transport" \| "argument"` | Yes |  |
+
+## ApiProblemError
+
+The server answered with a non-2xx status. When the body is the platform's error envelope,
+`code` and `message` are exactly what it said; when it is not — a proxy page, an empty body —
+`code` is `unrecognised_error_body` and `status` is still the fact to branch on.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"problem"` | Yes |  |
+| `status` | `number` | Yes |  |
+| `code` | `string` | Yes |  |
+| `details` | `readonly string[]` | Yes |  |
+| `retryAfterSeconds` | `number \| null` | Yes | Seconds the server asked the client to wait, from `Retry-After`, when it sent one. |
+
+## ContractsVersionUnsupportedError
+
+The server refused this client's contracts version: `426 contracts_version_unsupported`. It is an
+`ApiProblemError`, so a handler that already branches on `status`/`code` keeps working;
+`skew` adds both versions and the side to upgrade, read from the served-range response headers.
+`skew` is `null` when the `426` carries no readable served range (the headers are missing or
+unparsable), or one that, by this client's reading, serves it — something between the client and
+the control plane answered, or the two disagree. `null` does not mean "not the control plane".
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `skew` | `ContractsVersionSkew \| null` | Yes |  |
+
+## ContractViolationError
+
+The server answered successfully but the body does not satisfy the contract this SDK was built
+against. Either side has drifted; the response is refused rather than half-read. The message and
+`contractsVersion` name the contracts version this SDK was built against.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"contract"` | Yes |  |
+| `status` | `number` | Yes |  |
+| `issues` | `readonly string[]` | Yes |  |
+| `contractsVersion` | `string` | Yes |  |
+
+## TransportError
+
+The request never produced a response: network failure, abort, or timeout.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"transport"` | Yes |  |
+| `aborted` | `boolean` | Yes |  |
+
+## InvalidArgumentError
+
+The SDK refused an argument before making any request, so the server never saw it. Retrying
+cannot help: fix the argument. `code` names the rule it broke — `invalid_path_segment` for an id
+that is empty, `.` or `..`, which would otherwise address a different route (issue #488), or
+that holds a lone UTF-16 surrogate, which cannot be percent-encoded.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"argument"` | Yes |  |
+| `code` | `"invalid_path_segment"` | Yes |  |
+| `value` | `string` | Yes | The refused value: `''`, `'.'`, `'..'` or a string holding a lone surrogate. |

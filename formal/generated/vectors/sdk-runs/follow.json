@@ -1,0 +1,31 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.SdkRuns.reconnect_count_increments",
+    "AgentWorkspace.Theorems.Invariants.SdkRuns.follow_never_exceeds_reconnect_budget"],
+   "input": {"reconnects": 0, "maxReconnects": 2, "callerAborted": false, "after": "7"},
+   "id": "drop/0",
+   "expected": {"reconnects": 1, "kind": "reconnect", "after": "7"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.SdkRuns.reconnect_count_increments",
+    "AgentWorkspace.Theorems.Invariants.SdkRuns.follow_never_exceeds_reconnect_budget"],
+   "input": {"reconnects": 1, "maxReconnects": 2, "callerAborted": false, "after": "7"},
+   "id": "drop/1",
+   "expected": {"reconnects": 2, "kind": "reconnect", "after": "7"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.SdkRuns.reconnect_count_increments",
+    "AgentWorkspace.Theorems.Invariants.SdkRuns.follow_never_exceeds_reconnect_budget"],
+   "input": {"reconnects": 2, "maxReconnects": 2, "callerAborted": false, "after": "7"},
+   "id": "drop/2",
+   "expected": {"kind": "stop"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.SdkRuns.reconnect_count_increments",
+    "AgentWorkspace.Theorems.Invariants.SdkRuns.follow_never_exceeds_reconnect_budget"],
+   "input": {"reconnects": 5, "maxReconnects": 2, "callerAborted": false, "after": "7"},
+   "id": "drop/5",
+   "expected": {"kind": "stop"}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.SdkRuns.follow_never_reconnects_after_caller_abort"],
+   "input": {"reconnects": 0, "maxReconnects": 5, "callerAborted": true, "after": "7"},
+   "id": "abort",
+   "expected": {"kind": "stop"}}],
+ "family": "sdk-runs",
+ "description": "Cumulative reconnect decisions"}

@@ -1,0 +1,67 @@
+name: Restore the workspace build
+description: >-
+  Unpacks the `workspace-build` artifact that ci.yml's `build` job uploads (every workspace's Nx
+  build outputs but embedded's: each `dist/`, and apps/web's `.next` without its cache) and, with
+  `embedded: 'true'`, `embedded-build` from `build-embedded`. A caller may run beside those jobs
+  instead of after them, so it can do its own slow, build-independent work (Docker images) first:
+  this waits for each artifact to appear in the run and fails as soon as the job that uploads it
+  has failed. The caller needs `actions: read`. A job that uses this must not run an Nx build
+  itself; it runs its own targets with `--excludeTaskDependencies` so Nx does not rebuild what is
+  already on disk.
+
+inputs:
+  embedded:
+    description: "'true' also restores @indx-workspace/embedded's build (dist/ and publish/)."
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    - name: Wait for the build artifacts
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        EMBEDDED: ${{ inputs.embedded }}
+      run: |
+        set -euo pipefail
+        run="repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+        # artifact name, then the name prefix of the ci.yml job that uploads it
+        wanted=("workspace-build|build · every workspace")
+        [ "$EMBEDDED" = true ] && wanted+=("embedded-build|build · embedded")
+        for entry in "${wanted[@]}"; do
+          artifact="${entry%%|*}"
+          producer="${entry#*|}"
+          for attempt in $(seq 181); do
+            count="$(gh api "$run/artifacts?name=$artifact" --jq '.total_count')"
+            [ "$count" -gt 0 ] && break
+            if [ "$attempt" = 181 ]; then
+              echo "::error::the $artifact artifact did not appear within 30 minutes"
+              exit 1
+            fi
+            conclusion="$(gh api --paginate "$run/attempts/$GITHUB_RUN_ATTEMPT/jobs" \
+              --jq ".jobs[] | select(.name | startswith(\"$producer\")) | .conclusion // \"\"")"
+            case "$conclusion" in
+              success | '') sleep 10 ;;
+              *) echo "::error::'$producer' ended '$conclusion' without the $artifact artifact"; exit 1 ;;
+            esac
+          done
+        done
+
+    - name: Download the workspace build
+      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+      with:
+        name: workspace-build
+        path: ${{ runner.temp }}/workspace-build
+
+    - name: Download the embedded build
+      if: inputs.embedded == 'true'
+      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+      with:
+        name: embedded-build
+        path: ${{ runner.temp }}/workspace-build
+
+    - name: Unpack the workspace build
+      shell: bash
+      run: |
+        set -euo pipefail
+        for archive in "$RUNNER_TEMP"/workspace-build/*.tar.zst; do tar --zstd -xf "$archive"; done

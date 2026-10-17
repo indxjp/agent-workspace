@@ -1,0 +1,13 @@
+{
+  "agents": [
+    {
+      "name": "projects/123456789/locations/global/collections/default_collection/engines/acme-support-app/assistants/default_assistant/agents/7071113322",
+      "displayName": "support-triage",
+      "description": "Triages customer support tickets and drafts replies.",
+      "a2aAgentDefinition": {
+        "jsonAgentCard": "{\"protocolVersion\":\"0.3.0\",\"name\":\"support-triage\",\"description\":\"Triages customer support tickets and drafts replies.\",\"url\":\"https://aw.example.com/api/a2a/agents/support-triage\",\"preferredTransport\":\"JSONRPC\",\"version\":\"0.9.0\",\"capabilities\":{\"streaming\":true,\"pushNotifications\":false},\"defaultInputModes\":[\"text/plain\"],\"defaultOutputModes\":[\"text/plain\"],\"skills\":[{\"id\":\"support-triage\",\"name\":\"support-triage\",\"description\":\"Triages customer support tickets and drafts replies.\",\"tags\":[\"agent-workspace\"]}],\"securitySchemes\":{\"awBearer\":{\"type\":\"http\",\"scheme\":\"bearer\"}},\"security\":[{\"awBearer\":[]}]}"
+      },
+      "state": "ENABLED"
+    }
+  ]
+}

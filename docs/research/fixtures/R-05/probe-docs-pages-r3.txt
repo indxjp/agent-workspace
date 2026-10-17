@@ -1,0 +1,95 @@
+node: v24.19.0   pages fetched 2026-09-05
+
+### 0. the four page files this probe reads
+  page-api-version-lifecycle.html  75832 bytes  sha256 43f1205f34ba8f48…
+  page-switching-endpoints.html  84671 bytes  sha256 de656404fef5528f…
+  page-endpoints.html  73263 bytes  sha256 2b79e00319b0f1e4…
+  page-howto-responses.html  236148 bytes  sha256 264531b67ee76265…
+
+### 1. api-version-lifecycle: which code tabs carry https://ai.azure.com/.default  (frozen item N3)
+  tab panels on the page, in order: ["group1:python","group1:dotnet","group1:javascript","group1:go","group1:Java","group1:rest","group2:python","group2:dotnet","group2:javascript","group2:go","group2:Java","group2:rest"]
+  "ai.azure.com/.default" -> {"group1:python":1,"group1:dotnet":1,"group1:javascript":1,"group1:Java":1,"group2:python":1,"group2:dotnet":1,"group2:javascript":1}
+  "cognitiveservices.azure.com/.default" -> {}
+  "WithTokenCredential" -> {"group1:go":1,"group2:go":1}
+  the Go tab, verbatim:
+    tokenCredential, err := azidentity.NewDefaultAzureCredential(nil)
+    client := openai.NewClient(
+    option.WithBaseURL("https://YOUR-RESOURCE-NAME.openai.azure.com/openai/v1/"),
+    azure.WithTokenCredential(tokenCredential)
+    )
+    <
+
+### 2. switching-endpoints: which language zone pivots carry the cognitiveservices scope  (frozen item N3)
+  zone pivots present: ["python","dotnet","javascript","java","golang"]
+  "cognitiveservices.azure.com/.default" -> {"python":1,"dotnet":1,"javascript":1,"java":1}
+  "ai.azure.com/.default" -> {}
+  "WithTokenCredential" -> {"golang":1}
+  the golang pivot, verbatim:
+    client := openai.NewClient(
+    option.WithBaseURL("https://YOUR-RESOURCE-NAME.openai.azure.com/openai/v1/"),
+    azure.WithTokenCredential(cred),
+    )
+    </pr
+
+### 3. endpoints page: is the Authorization-bearer-with-resource-key form documented?  (frozen item N6)
+  verbatim:
+    Pass your key in the Authorization header as a bearer token:
+    curl -X POST https://<resource>.openai.azure.com/openai/v1/responses \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer $AZURE_INFERENCE_CREDENTIAL" \
+    -d '{
+    "model": "deepseek-v3-0324",
+
+### 4. Responses how-to page: what it does and does not say about source_type  (frozen items B2 / N1 / N5)
+  occurrences of "source_type": 5
+  the field table, verbatim:
+    Each entry describes one filter result.
+    Field
+    Description
+    blocked
+    Whether the content was blocked.
+    source_type
+    Whether the result applies to the prompt (input) or the completion (output).
+    content_filter_results
+    The category results, such as hate , sexual , violence , and self_harm with severity levels, plus optional categories such as jailbreak , indirect_attack , protected_material_text , and protected_material_code .
+    content_filter_offsets
+    The character offsets that the result applies to.
+    Note
+    The content_filters array is a Microsoft Foundry extension that isn't part of the base OpenAI response schema, so the SDKs don't expose a typ
+  occurrences of the literal '"source_type": "prompt"'      : 1
+  occurrences of the literal '"source_type": "completion"' : 0
+  occurrences of "task_adherence"                           : 0
+  occurrences of "content_filter_offsets"                   : 1
+  the REST tab sample response body, verbatim:
+    {
+      "id": "resp_<id>",
+      "content_filters": [
+        {
+          "source_type": "prompt",
+          "blocked": false,
+          "content_filter_results": {
+            "hate": { "filtered": false, "severity": "safe" },
+            "self_harm": { "filtered": false, "severity": "safe" },
+            "sexual": { "filtered": false, "severity": "safe" },
+            "violence": { "filtered": false, "severity": "safe" }
+          }
+        }
+      ]
+    }
+    
+
+### 5. Responses REST reference: the rows for the three disputed fields  (frozen items B1 / B2 / N5)
+   https://learn.microsoft.com/en-us/rest/api/microsoft-foundry/azureopenai/responses?view=rest-microsoft-foundry-v1
+  page-responses-rest.html  541378 bytes  sha256 a667bfb27c89ac39…
+  page title: Microsoft Foundry REST Reference - Azure OpenAI - Responses | Microsoft Learn
+  Name=parallel_tool_calls  Type=boolean or null  Required=No  Default=(none)
+    Description: (empty)
+  Name=parallel_tool_calls  Type=boolean  Required=Yes  Default=True
+    Description: Whether to allow the model to run tool calls in parallel.
+  Name=source_type  Type=string  Required=Yes  Default=(none)
+    Description: The name of the source type of the message.
+  Name=jailbreak  Type=AzureContentFilterDetectionResult  Required=Yes  Default=(none)
+    Description: A labeled content filter result item that indicates whether the content was detected and whether the content wasfiltered.
+  Name=task_adherence  Type=AzureContentFilterDetectionResult  Required=Yes  Default=(none)
+    Description: A labeled content filter result item that indicates whether the content was detected and whether the content wasfiltered.
+  (columns are the reference table headers: Name, Type, Description, Required, Default)

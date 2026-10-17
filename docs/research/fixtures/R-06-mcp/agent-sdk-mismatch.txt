@@ -1,0 +1,40 @@
+== transport mis-selection, @modelcontextprotocol/sdk ==
+[mcp-sdk] http-transport -> streamable-http endpoint (correct): connected to {"name":"r06-probe-http","version":"0.0.1"}
+[mcp-sdk] http-transport -> legacy SSE endpoint (wrong): StreamableHTTPError code=404 :: Streamable HTTP error: Error POSTing to endpoint: not found
+[mcp-sdk] sse-transport -> legacy SSE endpoint (correct): connected to {"name":"r06-probe-sse","version":"0.0.1"}
+[mcp-sdk] sse-transport -> streamable-http endpoint (wrong): SseError code=405 :: SSE error: Non-200 status code (405)
+
+== the same four pairings through the Agent SDK ==
+[
+  {
+    "name": "http_to_http_ok",
+    "status": "connected",
+    "serverInfo": {
+      "name": "r06-probe-http",
+      "version": "0.0.1"
+    }
+  },
+  {
+    "name": "http_to_sse_wrong",
+    "status": "failed",
+    "error": "MCP endpoint not found at http://127.0.0.1:8972. Check the URL in your MCP config."
+  },
+  {
+    "name": "sse_to_sse_ok",
+    "status": "connected",
+    "serverInfo": {
+      "name": "r06-probe-sse",
+      "version": "0.0.1"
+    }
+  },
+  {
+    "name": "sse_to_http_wrong",
+    "status": "failed",
+    "error": "SSE error: Non-200 status code (405)"
+  },
+  {
+    "name": "sse_wrong_token",
+    "status": "failed",
+    "error": "Server rejected the configured Authorization header (HTTP 401). Check that the token is valid for this MCP endpoint — OAuth fallback is disabled when headers.Authorization is set."
+  }
+]

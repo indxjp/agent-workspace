@@ -1,0 +1,198 @@
+---
+title: "local-runtime"
+description: "The @indx-workspace/contracts/local-runtime exports, sorted alphabetically."
+---
+
+<Note>This page is generated from `packages/contracts/src/local-runtime.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## LOCAL_RUNTIME_MESSAGE_TYPES
+
+Issue #439 (S1-01), ADR-0109: the messages `aw dev` and the local runtime it forks exchange over
+the child process's IPC channel. Nothing here is served over HTTP.
+
+`start` travels parent → child (`aw` → runtime); `ready`, `credential` and `failed` travel child
+→ parent. Each side parses with its own direction's union, so a message travelling the wrong way
+is refused rather than acted on.
+
+- `'start'`
+- `'ready'`
+- `'credential'`
+- `'failed'`
+
+## LOCAL_RUNTIME_MODEL_SECRETS_MAX_ENTRIES
+
+The most names `environment.modelSecrets` may hold: a project file's `models` map's bound.
+
+Value: `PROJECT_RESOURCE_MAP_MAX_ENTRIES`
+
+## LOCAL_RUNTIME_WITHHELD_MAX_ENTRIES
+
+The most names a `start` message's `environment.withheld` may hold (issue #564): generous next
+to two project maps of at most 64 entries plus TypeScript `secret()` calls, and a bound on IPC
+input.
+
+Value: `256`
+
+## LocalRuntimeChildMessage
+
+- `LocalRuntimeReadyMessage`
+- `LocalRuntimeCredentialMessage`
+- `LocalRuntimeFailedMessage`
+
+## LocalRuntimeChildMessageSchema
+
+What `aw` accepts from the runtime: `ready`, `credential` or `failed`.
+
+- `LocalRuntimeReadyMessage`
+- `LocalRuntimeCredentialMessage`
+- `LocalRuntimeFailedMessage`
+
+## LocalRuntimeCredentialMessage
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `type` | `"credential"` | Yes |  |
+| `token` | `string` | Yes |  |
+| `expiresAt` | `string` | Yes |  |
+| `workspaceId` | `string` | Yes |  |
+| `workspaceSlug` | `string` | Yes |  |
+
+## LocalRuntimeCredentialMessageSchema
+
+Runtime → `aw`: the local runtime's one credential for `aw` (ADR-0109 as amended by S1-21,
+issue #500). `token` is a whole workspace API key (`ak_live_…`) for the local workspace, minted
+in process for the bootstrap admin at a role no higher than theirs, expiring 12 hours after it
+was minted and revoked when the runtime stops. It is a bearer token: an API key is admitted on
+every control-plane route with default security, which the person-facing CLI token is not.
+
+The key travels only over the IPC channel. Neither side ever prints or logs it; `aw` keeps it
+only in its own `0600` credentials file, keyed by the runtime's URL. This is the only
+local-runtime message that carries a credential.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `type` | `"credential"` | Yes |  |
+| `token` | `string` | Yes |  |
+| `expiresAt` | `string` | Yes |  |
+| `workspaceId` | `string` | Yes |  |
+| `workspaceSlug` | `string` | Yes |  |
+
+## LocalRuntimeEnvironment
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `port` | `number` | Yes |  |
+| `bootstrapAdmin` | `string` | Yes |  |
+| `runtimeDriver` | `undefined \| "local" \| "sandbox-runtime" \| "docker" \| "kubernetes" \| "aca-sessions" \| "cloud-run-service"` | No | Absent means the runtime picks its own default driver. |
+| `policy` | `undefined \| Readonly<{ permissions?: Readonly<{ readFiles?: boolean \| undefined; writeFiles?: boolean \| undefined; runCommands?: boolean \| undefined; unrestrictedNetwork?: boolean \| undefined; }> \| undefined; limits?: Readonly<{ maxTurns?: number \| undefined; maxBudgetUsd?: number \| undefined; }> \| undefined; engines?: readonly ("claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra")[] \| undefined; models?: readonly string[] \| undefined; tools?: readonly string[] \| undefined; promotion?: Readonly<{ minEvalScore: number; }> \| undefined; maxCostPerDayUsd?: undefined; network?: undefined; approval?: undefined; }>` | No | The project file's policy ceiling (C13, ADR-0102 SD6, issue #524). `aw` sends it only when the file has a `policy`, so a `start` message from a file without one is unchanged; a runtime older than this key refuses it as an unknown key rather than running unbounded. |
+| `withheld` | `undefined \| readonly string[]` | No | The names, never the values, of the secrets the project references (C10, SD17; ADR-0109 slice-2 amendment, issue #564): each a `SecretNameSchema`, so a reserved name such as `PATH` is refused here too, unique, at most `LOCAL_RUNTIME_WITHHELD_MAX_ENTRIES`. A `start` message without it starts as before; a runtime older than this key refuses it as an unknown key. The runtime refuses to start when, after `loadDotEnv`, its environment holds a withheld name in any case (S2-04a). |
+| `modelSecrets` | `undefined \| readonly string[]` | No | The names, never the values, of the secrets the model connections the project runs on are made from (issue #661): each connection's `credential.secret`, or `ANTHROPIC_API_KEY` for the `default` connection of a project with no `models`. The try page names them in the fix for a missing or rejected key. Unique, at most `LOCAL_RUNTIME_MODEL_SECRETS_MAX_ENTRIES`; a runtime older than this key refuses it as an unknown key. |
+
+## LocalRuntimeEnvironmentSchema
+
+The environment `aw dev` resolved from the project file, passed whole so the runtime reads no file of its own for it.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `port` | `number` | Yes |  |
+| `bootstrapAdmin` | `string` | Yes |  |
+| `runtimeDriver` | `undefined \| "local" \| "sandbox-runtime" \| "docker" \| "kubernetes" \| "aca-sessions" \| "cloud-run-service"` | No | Absent means the runtime picks its own default driver. |
+| `policy` | `undefined \| Readonly<{ permissions?: Readonly<{ readFiles?: boolean \| undefined; writeFiles?: boolean \| undefined; runCommands?: boolean \| undefined; unrestrictedNetwork?: boolean \| undefined; }> \| undefined; limits?: Readonly<{ maxTurns?: number \| undefined; maxBudgetUsd?: number \| undefined; }> \| undefined; engines?: readonly ("claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra")[] \| undefined; models?: readonly string[] \| undefined; tools?: readonly string[] \| undefined; promotion?: Readonly<{ minEvalScore: number; }> \| undefined; maxCostPerDayUsd?: undefined; network?: undefined; approval?: undefined; }>` | No | The project file's policy ceiling (C13, ADR-0102 SD6, issue #524). `aw` sends it only when the file has a `policy`, so a `start` message from a file without one is unchanged; a runtime older than this key refuses it as an unknown key rather than running unbounded. |
+| `withheld` | `undefined \| readonly string[]` | No | The names, never the values, of the secrets the project references (C10, SD17; ADR-0109 slice-2 amendment, issue #564): each a `SecretNameSchema`, so a reserved name such as `PATH` is refused here too, unique, at most `LOCAL_RUNTIME_WITHHELD_MAX_ENTRIES`. A `start` message without it starts as before; a runtime older than this key refuses it as an unknown key. The runtime refuses to start when, after `loadDotEnv`, its environment holds a withheld name in any case (S2-04a). |
+| `modelSecrets` | `undefined \| readonly string[]` | No | The names, never the values, of the secrets the model connections the project runs on are made from (issue #661): each connection's `credential.secret`, or `ANTHROPIC_API_KEY` for the `default` connection of a project with no `models`. The try page names them in the fix for a missing or rejected key. Unique, at most `LOCAL_RUNTIME_MODEL_SECRETS_MAX_ENTRIES`; a runtime older than this key refuses it as an unknown key. |
+
+## LocalRuntimeFailedMessage
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `type` | `"failed"` | Yes |  |
+| `message` | `string` | Yes |  |
+
+## LocalRuntimeFailedMessageSchema
+
+Runtime → `aw`: the runtime could not start. `message` is safe to show the person: it carries no
+control character but a line feed or a tab, so printing it cannot inject a terminal escape.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `type` | `"failed"` | Yes |  |
+| `message` | `string` | Yes |  |
+
+## LocalRuntimeMessage
+
+- `LocalRuntimeReadyMessage`
+- `LocalRuntimeCredentialMessage`
+- `LocalRuntimeFailedMessage`
+- `LocalRuntimeParentMessage`
+
+## LocalRuntimeMessageSchema
+
+Every local-runtime message, in either direction.
+
+- `LocalRuntimeReadyMessage`
+- `LocalRuntimeCredentialMessage`
+- `LocalRuntimeFailedMessage`
+- `LocalRuntimeParentMessage`
+
+## LocalRuntimeMessageType
+
+- `"failed"`
+- `"credential"`
+- `"ready"`
+- `"start"`
+
+## LocalRuntimeParentMessage
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `type` | `"start"` | Yes |  |
+| `projectDir` | `string` | Yes |  |
+| `environment` | `LocalRuntimeEnvironment` | Yes |  |
+
+## LocalRuntimeParentMessageSchema
+
+What the runtime accepts from `aw`: `start` only.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `type` | `"start"` | Yes |  |
+| `projectDir` | `string` | Yes |  |
+| `environment` | `LocalRuntimeEnvironment` | Yes |  |
+
+## LocalRuntimeReadyMessage
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `type` | `"ready"` | Yes |  |
+| `url` | `string` | Yes |  |
+| `contractsVersion` | `string` | Yes |  |
+
+## LocalRuntimeReadyMessageSchema
+
+Runtime → `aw`: the runtime is serving. `url` must be a loopback `http(s)` URL — stricter than
+ADR-0109's text, so a local runtime can never point `aw` at another host. `contractsVersion` is
+the runtime's own contracts version, for `aw` to judge skew.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `type` | `"ready"` | Yes |  |
+| `url` | `string` | Yes |  |
+| `contractsVersion` | `string` | Yes |  |
+
+## LocalRuntimeStartMessage
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `type` | `"start"` | Yes |  |
+| `projectDir` | `string` | Yes |  |
+| `environment` | `LocalRuntimeEnvironment` | Yes |  |
+
+## LocalRuntimeStartMessageSchema
+
+`aw` → runtime: start serving the project in `projectDir` with this environment.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `type` | `"start"` | Yes |  |
+| `projectDir` | `string` | Yes |  |
+| `environment` | `LocalRuntimeEnvironment` | Yes |  |

@@ -1,0 +1,40 @@
+{
+  "data": [
+    {
+      "type": "agent",
+      "id": "agent_011CZkYpogX7uDKUyvBTophP",
+      "name": "awpt-123",
+      "archived_at": null,
+      "created_at": "2026-10-01T09:00:00Z",
+      "updated_at": "2026-10-01T09:00:00Z",
+      "version": 1
+    },
+    {
+      "type": "agent",
+      "id": "agent_011CZkYpogX7uDKUyvBTophQ",
+      "name": "awpt-1234",
+      "archived_at": null,
+      "created_at": "2026-10-01T09:00:00Z",
+      "updated_at": "2026-10-01T09:00:00Z",
+      "version": 1
+    },
+    {
+      "type": "agent",
+      "id": "agent_011CZkYpogX7uDKUyvBTophR",
+      "name": "awpt-125",
+      "archived_at": "2026-10-09T12:00:00Z",
+      "created_at": "2026-10-01T09:00:00Z",
+      "updated_at": "2026-10-09T12:00:00Z",
+      "version": 2
+    },
+    {
+      "type": "agent",
+      "id": "agent_011CZkYpogX7uDKUyvBTophS",
+      "name": "support-bot",
+      "archived_at": null,
+      "created_at": "2026-10-01T09:00:00Z",
+      "updated_at": "2026-10-01T09:00:00Z",
+      "version": 3
+    }
+  ]
+}

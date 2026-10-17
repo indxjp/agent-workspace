@@ -1,0 +1,25 @@
+// The bridge Worker of the `cloudflare-sandbox` driver (ADR-0120 LC2). Not deployed by any release
+// pipeline; see README.md. The two REPLACE_* values are filled in by the operator or by the opt-in
+// live test. BRIDGE_SECRET is a Worker secret and never appears in this file.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "agent-workspace-sandbox-bridge",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "vars": {
+    "RUNTIME_IMAGE": "REPLACE_RUNTIME_IMAGE",
+    "GATEWAY_HOST": "REPLACE_GATEWAY_HOST"
+  },
+  "containers": [
+    { "class_name": "SandboxNone", "image": "REPLACE_RUNTIME_IMAGE", "max_instances": 10, "instance_type": "standard-1" },
+    { "class_name": "SandboxOpen", "image": "REPLACE_RUNTIME_IMAGE", "max_instances": 10, "instance_type": "standard-1" }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "SANDBOX_NONE", "class_name": "SandboxNone" },
+      { "name": "SANDBOX_OPEN", "class_name": "SandboxOpen" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["SandboxNone", "SandboxOpen"] }]
+}

@@ -1,0 +1,30 @@
+apiVersion: agentworkspace.dev/v2
+kind: Project
+name: maintenance-troubleshooting
+engine: claude-agent-sdk
+# Two of your own MCP servers. A project file names only remote connectors, so run them over
+# Streamable HTTP for `aw dev`:
+#   MCP_TRANSPORT=http PORT=8791 TROUBLE_LOG_STORE=./trouble-log.store.json node mcp/trouble-log.mjs
+#   MCP_TRANSPORT=http PORT=8792 MANUALS_DIR=./data/manuals node ../manual-search/mcp/manual-index.mjs
+connectors:
+  trouble-log:
+    url: http://127.0.0.1:8791/mcp
+    transport: http
+  equipment-manual:
+    url: http://127.0.0.1:8792/mcp
+    transport: http
+policy:
+  permissions:
+    readFiles: false
+    writeFiles: false
+    runCommands: false
+    unrestrictedNetwork: false
+  limits:
+    maxBudgetUsd: 0.5
+  promotion:
+    minEvalScore: 0.9
+environments:
+  local:
+    cloud: local
+    identity:
+      bootstrapAdmin: admin@localhost.test

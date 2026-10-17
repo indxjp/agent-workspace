@@ -1,0 +1,55 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Refinement.AuthzRunToken.current_refines_read_target",
+    "AgentWorkspace.Theorems.Refinement.AuthzRunToken.terminal_run_read_diverges"],
+   "input":
+   {"workspaceFound": true,
+    "tokenFound": true,
+    "targetFound": true,
+    "sessionArchived": false,
+    "scope": "run",
+    "runTerminal": false,
+    "minterFound": true},
+   "id": "live-run",
+   "expected": {"readTarget": true, "current": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Refinement.AuthzRunToken.current_refines_read_target",
+    "AgentWorkspace.Theorems.Refinement.AuthzRunToken.terminal_run_read_diverges"],
+   "input":
+   {"workspaceFound": true,
+    "tokenFound": true,
+    "targetFound": true,
+    "sessionArchived": false,
+    "scope": "run",
+    "runTerminal": true,
+    "minterFound": true},
+   "id": "terminal-run",
+   "expected": {"readTarget": true, "current": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Refinement.AuthzRunToken.current_refines_read_target",
+    "AgentWorkspace.Theorems.Refinement.AuthzRunToken.terminal_run_read_diverges"],
+   "input":
+   {"workspaceFound": true,
+    "tokenFound": true,
+    "targetFound": true,
+    "sessionArchived": false,
+    "scope": "session",
+    "runTerminal": false,
+    "minterFound": true},
+   "id": "active-session",
+   "expected": {"readTarget": true, "current": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Refinement.AuthzRunToken.current_refines_read_target",
+    "AgentWorkspace.Theorems.Refinement.AuthzRunToken.terminal_run_read_diverges"],
+   "input":
+   {"workspaceFound": true,
+    "tokenFound": true,
+    "targetFound": true,
+    "sessionArchived": true,
+    "scope": "session",
+    "runTerminal": false,
+    "minterFound": true},
+   "id": "archived-session",
+   "expected": {"readTarget": false, "current": false}}],
+ "family": "authz-run-token",
+ "description": "Browser token current and documented read behavior"}

@@ -1,0 +1,5 @@
+{
+  "success": true,
+  "dryRun": true,
+  "changes": [{ "resource": "harness/support", "action": "create" }]
+}

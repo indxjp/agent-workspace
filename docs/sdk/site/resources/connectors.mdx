@@ -1,0 +1,425 @@
+---
+title: "Connectors"
+description: "Register, test and rotate credentials for the MCP servers an agent can call."
+---
+
+<Info>
+
+- **Read this when:** you register an MCP server for your agents from code or `aw connectors`, test it, change where it points, or rotate its credential.
+- **You will learn:** the two connector shapes (`stdio` and `http`/`sse`), how credentials are sealed and never returned, and how a connection test reports failure.
+- **Used in:** [Chapter 2 · Build your agent](/path/build) (step-by-step: [MCP servers](/building/mcp-servers)).
+
+</Info>
+
+What you can do with connectors:
+
+- [Test a draft](#testdraft) before saving it, then [create](#create) the connector; [list](#list) and [get](#get) connectors.
+- [Test](#test) a saved connector's MCP handshake and see how many tools it offers.
+- [Update](#update) its name, target or auth type, disable it, or [rotate its credential](#rotatecredential).
+- [Remove](#remove) a connector, and give an agent one through its [resource assignments](/resources/agents#replaceresourceassignments).
+
+`aw.connectors` manages a workspace's MCP connectors. MCP (the Model Context Protocol) is an open
+protocol for exposing tools to an agent over a standard interface; a connector is this platform's
+saved configuration for reaching one MCP server — how to launch or dial it, and its credential.
+`aw.connectors` wraps `/api/connectors/**` (API specification §5.8). Source:
+`packages/sdk/src/resources/connectors.ts`, contract: `packages/contracts/src/connectors.ts`.
+
+A connector is a `ConnectorResource`:
+
+```ts title="illustrative" claim="illustrative"
+interface ConnectorResource {
+  id: string;
+  workspaceId: string;
+  name: string;
+  transport: 'stdio' | 'http' | 'sse';
+  command: string | null; // stdio only
+  args: readonly string[] | null; // stdio only
+  url: string | null; // http/sse only
+  authType: 'none' | 'api-key' | 'bearer' | 'oauth';
+  hasCredential: boolean; // the credential itself never appears in a response
+  enabled: boolean;
+  createdBy: string | null;
+  ownerPrincipalId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+`CONNECTOR_TRANSPORTS` is `['stdio', 'http', 'sse']` and `CONNECTOR_AUTH_TYPES` is
+`['none', 'api-key', 'bearer', 'oauth']` (`packages/contracts/src/connectors.ts`). The create body
+is one of two disjoint shapes:
+
+```ts title="illustrative" claim="illustrative"
+// stdio — launches a command inside a runtime. Never a `url`.
+interface CreateStdioConnectorInput {
+  name: string;
+  transport: 'stdio';
+  command: string;
+  args?: readonly string[];
+  authType?: 'none' | 'api-key' | 'bearer' | 'oauth';
+  credential?: string;
+}
+
+// http / sse — connects to a URL. Never a `command` or `args`.
+interface CreateRemoteConnectorInput {
+  name: string;
+  transport: 'http' | 'sse';
+  url: string;
+  authType?: 'none' | 'api-key' | 'bearer' | 'oauth';
+  credential?: string;
+}
+```
+
+## Complete example
+
+```ts title="connectors-example.ts" claim="compile"
+import { createClient, ApiProblemError } from '@indx-workspace/sdk';
+
+const baseUrl = process.env.AGENT_WORKSPACE_URL;
+const apiKey = process.env.AGENT_WORKSPACE_API_KEY;
+if (baseUrl === undefined || apiKey === undefined) {
+  throw new Error('Set AGENT_WORKSPACE_URL and AGENT_WORKSPACE_API_KEY');
+}
+const aw = createClient({
+  baseUrl,
+  auth: { kind: 'api-key', apiKey },
+});
+
+async function main(): Promise<void> {
+  const token = process.env.INTERNAL_MCP_TOKEN;
+  if (token === undefined) throw new Error('Set INTERNAL_MCP_TOKEN');
+  const draft = {
+    name: 'internal-search',
+    transport: 'http' as const,
+    url: 'https://mcp.internal.example.com',
+    authType: 'bearer' as const,
+    credential: token,
+  };
+
+  // Try before you save
+  const dryRun = await aw.connectors.testDraft(draft);
+  if (!dryRun.ok) {
+    throw new Error(`draft connector failed: ${dryRun.kind} — ${dryRun.message}`);
+  }
+
+  const connector = await aw.connectors.create(draft);
+  console.log(
+    `saved ${connector.name} (${connector.id}), credential on file: ${connector.hasCredential}`,
+  );
+
+  const probe = await aw.connectors.test(connector.id);
+  console.log(
+    probe.ok ? `${probe.serverName ?? 'server'}: ${probe.toolCount} tools` : probe.message,
+  );
+
+  try {
+    await aw.connectors.remove(connector.id);
+  } catch (error) {
+    if (error instanceof ApiProblemError) console.error(error.code);
+    else throw error;
+  }
+}
+
+main();
+```
+
+## `list`
+
+Every connector of the caller's workspace. `hasCredential` says whether a credential is on file;
+the value itself is never returned by any method.
+
+**Route:** `GET /api/connectors`
+
+```ts title="illustrative" claim="illustrative"
+const connectors = await aw.connectors.list();
+```
+
+No connectors-specific problem codes; see [Errors](/guides/errors) and
+`503 connectors_runtime_not_configured` below.
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw connectors list
+```
+
+</CodeGroup>
+
+See [`connectors.list`](/reference/sdk/connectors#list).
+
+## `get`
+
+Read one connector.
+
+**Route:** `GET /api/connectors/:id`
+
+```ts title="illustrative" claim="illustrative"
+const connector = await aw.connectors.get(connectorId);
+```
+
+| Code                                | Status | Meaning                                               |
+| ----------------------------------- | ------ | ----------------------------------------------------- |
+| `connector_not_found`               | 404    | No connector with that id in this workspace.          |
+| `connectors_runtime_not_configured` | 503    | This deployment has no connectors backend configured. |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw connectors get <id>
+```
+
+</CodeGroup>
+
+See [`connectors.get`](/reference/sdk/connectors#get).
+
+## `create`
+
+Save a connector. `dryRun` is not part of this method — `testDraft` (below) sends the same shape
+with `dryRun: true` set internally and never persists anything. The credential, when given, is
+sealed as a secret immediately and is never returned by `create` or by any later read.
+
+**Route:** `POST /api/connectors`
+
+```ts title="illustrative" claim="illustrative"
+const connector = await aw.connectors.create({
+  name: 'local-fs-tools',
+  transport: 'stdio',
+  command: 'npx',
+  args: ['-y', '@example/mcp-fs-server'],
+});
+```
+
+<Note>
+  In the published `runner` and `runtime-<engine>` images, `npx` is served by `pnpm dlx`: the images
+  carry no npm. `npx [-y|--yes] [-p|--package <pkg>] [--] <package>[@version] [args…]`
+  works as usual, also with the empty environment and read-only filesystem connectors run in; any
+  other npx option is refused with exit status 2, and the connector fails to start with that
+  message. The package may be named from the registry (`name@version`), by an alias
+  (`alias@npm:name`), a git host (`github:org/repo`), a directory or a tarball URL. Differences from
+  npm's npx: a package named from the registry runs its own install scripts, but the install
+  (build) scripts of its dependencies, and of a package named any other way, do not run, so a
+  package that relies on one will not work; under the Docker driver the package cache sits on a
+  `noexec` `/tmp`, so neither a bin that is a native binary nor a native addon (`.node`) can be
+  loaded from it; and the working directory's `.npmrc` applies, while a `packageManager` pin there
+  is ignored.
+</Note>
+
+| Code                                | Status | Meaning                                                                                                                                                                                          |
+| ----------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `invalid_body`                      | 400    | A field the route refuses — wrong shape for the transport (`url` on `stdio`, `command`/`args` on a remote transport), a bad `dryRun` type, or a failed schema check. `details` names each field. |
+| `connector_name_conflict`           | 409    | The workspace already has a connector with this name.                                                                                                                                            |
+| `connectors_runtime_not_configured` | 503    | This deployment has no connectors backend configured.                                                                                                                                            |
+
+Also `413 request_body_too_large` above `CONNECTOR_REQUEST_BODY_MAX_BYTES` (64 KiB) — the shared
+`COMMON_PROBLEM_CODES` code, not a connectors-owned one. Source: verified against
+`apps/web/server/connectors/handlers.ts`.
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw connectors create --file connector.json
+printf '%s' "$MCP_TOKEN" | aw connectors create --file connector.json --value-stdin
+```
+
+</CodeGroup>
+
+`--value-stdin` overlays `credential` onto the JSON body read from `--file`, so the credential
+never sits in the file or in shell history. See
+[`connectors.create`](/reference/sdk/connectors#create) and
+[`CreateConnectorInput`](/reference/contracts/connectors#createconnectorinput).
+
+## `remove`
+
+Delete a connector.
+
+**Route:** `DELETE /api/connectors/:id`
+
+```ts title="illustrative" claim="illustrative"
+await aw.connectors.remove(connectorId);
+```
+
+| Code                  | Status | Meaning                                      |
+| --------------------- | ------ | -------------------------------------------- |
+| `connector_not_found` | 404    | No connector with that id in this workspace. |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw connectors remove <id>
+```
+
+</CodeGroup>
+
+See [`connectors.remove`](/reference/sdk/connectors#remove).
+
+## `rotateCredential`
+
+Replace the saved credential in place — the connector's id and every other field stay. The one
+write path to a connector's credential after creation.
+
+**Route:** `PATCH /api/connectors/:id { credential }`
+
+```ts title="illustrative" claim="illustrative"
+const rotated = await aw.connectors.rotateCredential(connectorId, newToken);
+```
+
+| Code                        | Status | Meaning                                                                       |
+| --------------------------- | ------ | ----------------------------------------------------------------------------- |
+| `invalid_body`              | 400    | The body carries a field other than `credential`, or more than one field.     |
+| `invalid_credential`        | 400    | `credential` is missing, not a string, or blank.                              |
+| `connector_not_found`       | 404    | No connector with that id in this workspace.                                  |
+| `credential_not_configured` | 409    | The connector's `authType` is `none` — there is no credential slot to rotate. |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+printf '%s' "$NEW_TOKEN" | aw connectors rotate-credential <id> --value-stdin
+```
+
+</CodeGroup>
+
+See
+[`connectors.rotateCredential`](/reference/sdk/connectors#rotatecredential).
+
+## `test`
+
+Run the MCP handshake against a **saved** connector, using its stored credential resolved
+server-side. A failed probe is still a `200` whose `ok` is `false` — the request succeeded, the
+connection did not — classified by `TestConnectionOutcome`'s `kind`
+(`TEST_CONNECTION_FAILURE_KINDS`: `auth-required`, `credential-rejected`,
+`credential-insufficient-scope`, `unreachable`, `endpoint-not-mcp`, `tls-error`,
+`command-not-found`, `process-died`, `timeout`, `protocol-version-unsupported`, `server-error`,
+`rate-limited`, `http-error`, `server-refused`, `sse-stream-failed`, `unknown-failure`,
+`stdio-probe-unavailable`). A `stdio` connector always answers `stdio-probe-unavailable`: the
+control plane never launches a caller-supplied command itself, so there is no sandboxed
+runner to probe from yet — this is a declared refusal, never a fake success.
+
+**Route:** `POST /api/connectors/:id/test-connection`
+
+```ts title="illustrative" claim="illustrative"
+const outcome = await aw.connectors.test(connectorId);
+if (outcome.ok) {
+  console.log(
+    `${outcome.serverName ?? 'unnamed'} v${outcome.serverVersion ?? '?'}, ${outcome.toolCount} tools`,
+  );
+} else {
+  console.log(`${outcome.kind}: ${outcome.message}`);
+}
+```
+
+| Code                  | Status | Meaning                                                                                        |
+| --------------------- | ------ | ---------------------------------------------------------------------------------------------- |
+| `connector_not_found` | 404    | No connector with that id in this workspace — the one refusal; every other outcome is a `200`. |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw connectors test <id>
+```
+
+</CodeGroup>
+
+See [`connectors.test`](/reference/sdk/connectors#test) and
+[`TestConnectionOutcomeSchema`](/reference/contracts/connectors#testconnectionoutcomeschema).
+
+## `testDraft`
+
+Test a connector's configuration **before** saving it. Sends the same body `create` would, with
+`dryRun: true`; the route validates it exactly as a create (`400 invalid_body` on the same rules)
+and then probes without persisting anything. The credential is used for this one probe and then
+discarded.
+
+**Route:** `POST /api/connectors { …, dryRun: true }`
+
+```ts title="illustrative" claim="illustrative"
+const token = process.env.INTERNAL_MCP_TOKEN;
+if (token === undefined) throw new Error('Set INTERNAL_MCP_TOKEN');
+const outcome = await aw.connectors.testDraft({
+  name: 'internal-search',
+  transport: 'http',
+  url: 'https://mcp.internal.example.com',
+  authType: 'bearer',
+  credential: token,
+});
+```
+
+| Code           | Status | Meaning                      |
+| -------------- | ------ | ---------------------------- |
+| `invalid_body` | 400    | Same validation as `create`. |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+printf '%s' "$MCP_TOKEN" | aw connectors test-draft --file connector.json --value-stdin
+```
+
+</CodeGroup>
+
+See [`connectors.testDraft`](/reference/sdk/connectors#testdraft).
+
+## `update`
+
+Change a connector's fields in place: `name`, `enabled`, `url` (an `http`/`sse` connector) or
+`command`/`args` (a `stdio` one; `args: null` clears them), and `authType` with `credential`. At
+least one field is required. The owner and the transport never change — a body naming
+`ownerPrincipalId`, `workspaceId`, `createdBy` or `transport` is `400 invalid_body`; recreate the
+connector to change its transport.
+
+- Switching `authType` from `none` to an authenticated type requires a `credential`; switching to
+  `none` drops the saved one. Between two authenticated types the saved credential is kept unless a
+  new one is sent.
+- A body that is exactly `{ credential }` is the same rotation as `rotateCredential`.
+- A saved credential never follows the connector to a new destination. A new `url`, or a new
+  `command` or `args` on a `stdio` connector, must come with a new `credential` in the same body,
+  or the update is `409 credential_required_on_retarget` and nothing changes. An Admin can edit a
+  member's connector, but only an Owner can read or move a secret, so an Admin cannot point a
+  Builder's connector at another server and have the Builder's credential sent there. A
+  connector without a credential, or a body that switches `authType` to `none`, needs none.
+- `enabled: false` keeps the connector, but a run of an agent it is assigned to — or a session in
+  a project it is associated with — fails to compose with the stable code `connector_disabled`.
+  Enable it again, or remove it from the agent or the project.
+
+The answer is the updated connector: `hasCredential`, never the credential.
+
+**Route:** `PATCH /api/connectors/:id`
+
+```ts title="illustrative" claim="illustrative"
+const v2Token = process.env.INTERNAL_MCP_TOKEN_V2;
+if (v2Token === undefined) throw new Error('Set INTERNAL_MCP_TOKEN_V2');
+const updated = await aw.connectors.update(connectorId, {
+  name: 'GitHub (org)',
+  url: 'https://mcp.example.com/v2',
+  credential: v2Token, // required: a new url moves where the credential is sent
+});
+await aw.connectors.update(connectorId, { enabled: false });
+```
+
+| Code                              | Status | Meaning                                                                                              |
+| --------------------------------- | ------ | ---------------------------------------------------------------------------------------------------- |
+| `invalid_body`                    | 400    | An unknown key, an empty patch, or a field the connector's transport does not have.                  |
+| `connector_not_found`             | 404    | No connector with that id in this workspace.                                                         |
+| `connector_name_conflict`         | 409    | The workspace already has a connector with the new name.                                             |
+| `credential_not_configured`       | 409    | A `credential` on a connector whose `authType` stays `none`.                                         |
+| `credential_required_on_retarget` | 409    | A new `url`, `command` or `args` on a connector with a saved credential, without a new `credential`. |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw connectors update <id> --name "GitHub (org)"
+printf '%s' "$MCP_TOKEN" | aw connectors update <id> --file patch.json --value-stdin
+```
+
+</CodeGroup>
+
+See [`connectors.update`](/reference/sdk/connectors#update).
+
+## See also
+
+- [ConnectorsClient](/reference/sdk/connectors) — full method signatures.
+- [connectors](/reference/contracts/connectors) — every schema and
+  constant, including `CONNECTOR_TRANSPORTS`, `CONNECTOR_AUTH_TYPES`,
+  `TEST_CONNECTION_FAILURE_KINDS`.
+- [Skills](/resources/skills) — the other Claude Agent SDK-adjacent resource an agent
+  assigns alongside connectors.
+- Connector item routes enforce the same per-row authorisation as files and skills: Builders may
+  read any connector, but may update, delete, or test only connectors they own.

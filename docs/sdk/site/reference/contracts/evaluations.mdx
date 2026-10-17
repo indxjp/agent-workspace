@@ -1,0 +1,313 @@
+---
+title: "evaluations"
+description: "The @indx-workspace/contracts/evaluations exports, sorted alphabetically."
+---
+
+<Note>This page is generated from `packages/contracts/src/evaluations.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## AdvanceEvaluationRunRequest
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `evaluationId` | `string` | Yes |  |
+
+## AdvanceEvaluationRunRequestSchema
+
+The body of `POST /api/agents/:id/evaluation-advance` (issue #799): the run to advance.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `evaluationId` | `string` | Yes |  |
+
+## CreateEvaluationRequest
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `version` | `number` | Yes |  |
+| `cases` | `readonly EvalCase[]` | Yes |  |
+
+## CreateEvaluationRequestSchema
+
+The body of `POST /api/agents/:id/evaluations`: the version to score and its cases.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `version` | `number` | Yes |  |
+| `cases` | `readonly EvalCase[]` | Yes |  |
+
+## CreateEvaluationRunRequest
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `version` | `number` | Yes |  |
+| `cases` | `readonly EvalCase[]` | Yes |  |
+
+## CreateEvaluationRunRequestSchema
+
+The body of `POST /api/agents/:id/evaluation-runs` (issue #799): the version to score and its
+cases, up to `EVALUATION_RUN_CASE_LIMIT`. Nothing runs until the run is advanced.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `version` | `number` | Yes |  |
+| `cases` | `readonly EvalCase[]` | Yes |  |
+
+## EvalCase
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `input` | `string` | Yes |  |
+| `expect` | `EvalExpect` | Yes |  |
+| `fromRun` | `undefined \| string` | No |  |
+
+## EvalCaseFile
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `cases` | `readonly EvalCase[]` | Yes |  |
+
+## EvalCaseFileSchema
+
+`evals/<agent>.yaml`: the cases of one agent, 1 to `EVALUATION_RUN_CASE_LIMIT`, unique
+names. `aw eval` runs them as an evaluation run; up to `EVALUATION_CASE_LIMIT` also fit one request.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `cases` | `readonly EvalCase[]` | Yes |  |
+
+## EvalCaseSchema
+
+One case: a name, the input its run is started with, and what the answer must satisfy.
+`fromRun` names the rated run the case was made from (`aw eval add-case`, issue #620); it is
+kept for traceability and never scored.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `input` | `string` | Yes |  |
+| `expect` | `EvalExpect` | Yes |  |
+| `fromRun` | `undefined \| string` | No |  |
+
+## EvalExpect
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `contains` | `undefined \| readonly string[]` | No |  |
+| `notContains` | `undefined \| readonly string[]` | No |  |
+| `tool` | `undefined \| string` | No |  |
+| `toolInput` | `undefined \| Record<string, unknown>` | No |  |
+| `judge` | `undefined \| string` | No |  |
+
+## EvalExpectSchema
+
+What a case's answer must satisfy (issue #618). Four checks and nothing else: `contains` and
+`notContains` are case-sensitive substrings of the final answer, `tool` is the exact name of a
+tool the run called, and `judge` is a rubric a model grades the answer against. At least one.
+
+`toolInput` (issue #799) narrows `tool`: some call to that tool must pass every key listed here
+with an equal value (a subset match; keys the call also passes are ignored). It needs `tool`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `contains` | `undefined \| readonly string[]` | No |  |
+| `notContains` | `undefined \| readonly string[]` | No |  |
+| `tool` | `undefined \| string` | No |  |
+| `toolInput` | `undefined \| EvalExpect` | No |  |
+| `judge` | `undefined \| string` | No |  |
+
+## EVALUATION_CASE_FAILURE_CODES
+
+The machine-readable case failures the server mints itself (issue #618): the case ran out of
+the request's deadline, its run's stream could not be read, or its judge could not be reached or
+read.
+
+- `'deadline_exceeded'`
+- `'run_stream_failed'`
+- `'judge_unavailable'`
+- `'judge_unparseable'`
+
+## EVALUATION_CASE_LIMIT
+
+The most cases one evaluation runs (issue #618). The server runs them one after another inside a
+single request, so this bounds the request's length: see `agents.evaluate` in `./routes.ts`.
+
+Value: `20`
+
+## EVALUATION_INPUT_MAX_LENGTH
+
+The longest case input, in characters: the prompt the case's run is started with.
+
+Value: `8192`
+
+## EVALUATION_NEEDLE_MAX_LENGTH
+
+Value: `200`
+
+## EVALUATION_NEEDLES_MAX
+
+The most strings one `contains` or `notContains` check lists, and the longest of them.
+
+Value: `10`
+
+## EVALUATION_PROBLEM_CODES
+
+The refusals of `POST /api/agents/:id/evaluations`. A refused start of the first case answers
+that start's refusal and stores nothing: a code from `RUN_START_PROBLEM_CODES` (`./runs.ts`), or
+one of the two below that a fresh session's start can also answer. `session_engine_mismatch`
+cannot happen, since every case opens a fresh session.
+
+| Key | Value |
+| --- | --- |
+| `invalid_body` | `400` |
+| `invalid_agent_id` | `400` |
+| `agent_not_found` | `404` |
+| `agent_version_not_found` | `404` |
+| `agent_policy_not_configured` | `503` |
+| `run_api_not_configured` | `503` |
+| `engine_not_installed` | `422` |
+| `session_not_usable` | `409` |
+| `evaluation_not_found` | `404` |
+| `evaluation_run_busy` | `409` |
+
+## EVALUATION_RUBRIC_MAX_LENGTH
+
+The longest `judge` rubric, in characters.
+
+Value: `2048`
+
+## EVALUATION_RUN_CASE_LIMIT
+
+The most cases one asynchronous evaluation run holds (issue #799). A run is advanced by a series
+of requests, each running a few cases, so this is not bounded by one request's length: see
+`agents.evaluationRuns.advance` in `./routes.ts`. An `evals/<agent>.yaml` file takes up to this
+many; `aw eval` sends every file as a run, whatever its size, so each case gets its own deadline.
+
+Value: `200`
+
+## EVALUATION_RUN_STATUSES
+
+Where an evaluation run is: `running` until every case has a result, then `completed`.
+
+- `'running'`
+- `'completed'`
+
+## EVALUATION_TOOL_INPUT_MAX_LENGTH
+
+The longest `toolInput`, as JSON text, in characters.
+
+Value: `2048`
+
+## EvaluationCaseFailureCode
+
+- `"deadline_exceeded"`
+- `"run_stream_failed"`
+- `"judge_unavailable"`
+- `"judge_unparseable"`
+
+## EvaluationCaseResult
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `passed` | `false \| true` | Yes |  |
+| `runId` | `null \| string` | Yes |  |
+| `failures` | `readonly string[]` | Yes |  |
+
+## EvaluationCaseResultSchema
+
+One case's outcome. `runId` is the run the case started, or `null` when none was started (the
+start was refused, or the deadline had passed). `failures` is empty exactly when `passed`.
+
+A failure is one of `EVALUATION_CASE_FAILURE_CODES`; `run_<status>` for a run that ended
+other than `completed` (`run_failed`, `run_cancelled`, …); the code a failed run's error carries,
+when it carries one (`model_credential_rejected`, …), in place of `run_failed`; a refused start's
+problem code, verbatim (`model_unavailable`, …); or a sentence: `contains: …`, `notContains: …`,
+`tool: …` or `judge: <the judge's reason>`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `passed` | `false \| true` | Yes |  |
+| `runId` | `null \| string` | Yes |  |
+| `failures` | `readonly string[]` | Yes |  |
+
+## EvaluationProblemCode
+
+- `"invalid_body"`
+- `"invalid_agent_id"`
+- `"agent_not_found"`
+- `"agent_policy_not_configured"`
+- `"agent_version_not_found"`
+- `"engine_not_installed"`
+- `"run_api_not_configured"`
+- `"session_not_usable"`
+- `"evaluation_not_found"`
+- `"evaluation_run_busy"`
+
+## EvaluationResource
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `agentId` | `string` | Yes |  |
+| `version` | `number` | Yes |  |
+| `score` | `number` | Yes | `passed / total`, from 0 to 1. |
+| `passed` | `number` | Yes |  |
+| `total` | `number` | Yes |  |
+| `results` | `readonly EvaluationCaseResult[]` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+
+## EvaluationResourceSchema
+
+One stored evaluation: every case of one request, scored against one version.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `agentId` | `string` | Yes |  |
+| `version` | `number` | Yes |  |
+| `score` | `number` | Yes | `passed / total`, from 0 to 1. |
+| `passed` | `number` | Yes |  |
+| `total` | `number` | Yes |  |
+| `results` | `readonly EvaluationCaseResult[]` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+
+## EvaluationRunResource
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `status` | `"completed" \| "running"` | Yes |  |
+| `id` | `string` | Yes |  |
+| `agentId` | `string` | Yes |  |
+| `version` | `number` | Yes |  |
+| `score` | `number` | Yes | `passed / total`, from 0 to 1. |
+| `passed` | `number` | Yes |  |
+| `total` | `number` | Yes |  |
+| `results` | `readonly EvaluationCaseResult[]` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+
+## EvaluationRunResourceSchema
+
+An evaluation run (issue #799): an evaluation with its progress. While `running`, `results`
+holds the cases finished so far in case order, `passed` counts the passing ones among them and
+`total` is every case of the run, so `results.length` of `total` have run; `score` is
+`passed / total` and final only once `completed`, when the run is the stored evaluation that the
+promotion gate reads.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `status` | `"completed" \| "running"` | Yes |  |
+| `id` | `string` | Yes |  |
+| `agentId` | `string` | Yes |  |
+| `version` | `number` | Yes |  |
+| `score` | `number` | Yes | `passed / total`, from 0 to 1. |
+| `passed` | `number` | Yes |  |
+| `total` | `number` | Yes |  |
+| `results` | `readonly EvaluationCaseResult[]` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+
+## EvaluationRunStatus
+
+- `"completed"`
+- `"running"`

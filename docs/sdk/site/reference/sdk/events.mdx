@@ -1,0 +1,237 @@
+---
+title: "Events"
+description: "The `@indx-workspace/sdk/events` exports: the SSE parser and the neutral AgentEvent view."
+---
+
+<Note>This page is generated from `packages/sdk/src/events/index.ts`, `packages/sdk/src/events/sse.ts`, `packages/sdk/src/events/run-events.ts`, `packages/sdk/src/events/agent-event.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## AgentEvent
+
+One neutral event: a validated `agent.*` frame.
+
+Discriminate on `frame`. Every variant carries `engine` — which engine produced it — and `raw`,
+the engine-native message it was derived from, so nothing is lost by reading the neutral view
+first.
+
+- `Readonly<{ engineSessionId: string; model: string | null; engine: "claude-agent-sdk" | "openai-agents" | "pi" | "mastra"; raw: unknown; frame: "agent.session"; }>`
+- `Readonly<{ messageId: string | null; role: "assistant" | "user"; blocks: readonly (Readonly<{ type: "text"; text: string; }> | Readonly<{ type: "reasoning"; text: string; }>)[]; engine: "claude-agent-sdk" | "openai-agents" | "pi" | "mastra"; raw: unknown; frame: "agent.message"; }>`
+- `Readonly<{ messageId: string | null; block: "text" | "reasoning"; text: string; engine: "claude-agent-sdk" | "openai-agents" | "pi" | "mastra"; raw: unknown; frame: "agent.message.delta"; }>`
+- `Readonly<{ toolCallId: string; name: string; kind: "read" | "edit" | "delete" | "move" | "search" | "execute" | "fetch" | "mcp" | "other"; input: unknown; engine: "claude-agent-sdk" | "openai-agents" | "pi" | "mastra"; raw: unknown; frame: "agent.tool.call"; }>`
+- `Readonly<{ toolCallId: string; status: "completed" | "failed"; output: string; isError: boolean; engine: "claude-agent-sdk" | "openai-agents" | "pi" | "mastra"; raw: unknown; frame: "agent.tool.result"; }>`
+- `Readonly<{ inputTokens: number; outputTokens: number; cacheReadInputTokens: number | null; cacheCreationInputTokens: number | null; reasoningTokens: number | null; engine: "claude-agent-sdk" | "openai-agents" | "pi" | "mastra"; raw: unknown; frame: "agent.usage"; }>`
+- `Readonly<{ stopReason: "error" | "end_turn" | "max_turns" | "max_budget" | "refusal" | "cancelled"; turns: number | null; engineCostUsd: number | null; engine: "claude-agent-sdk" | "openai-agents" | "pi" | "mastra"; raw: unknown; frame: "agent.result"; }>`
+- `Readonly<{ type: string; payload: unknown; engine: "claude-agent-sdk" | "openai-agents" | "pi" | "mastra"; raw: unknown; frame: "agent.native"; }>`
+- `Readonly<{ reason: string; engine: "claude-agent-sdk" | "openai-agents" | "pi" | "mastra"; raw: unknown; frame: "agent.malformed"; }>`
+
+## AgentMalformedFrame
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `reason` | `string` | Yes |  |
+| `engine` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
+| `raw` | `unknown` | Yes | The engine-native message, verbatim, capped by `capAgentFrameRaw`. Typed `unknown` deliberately: it is another vendor's shape and this contract makes no promise about it. |
+| `frame` | `"agent.malformed"` | Yes |  |
+
+## AgentMessageDeltaFrame
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `messageId` | `null \| string` | Yes |  |
+| `block` | `"text" \| "reasoning"` | Yes |  |
+| `text` | `string` | Yes |  |
+| `engine` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
+| `raw` | `unknown` | Yes | The engine-native message, verbatim, capped by `capAgentFrameRaw`. Typed `unknown` deliberately: it is another vendor's shape and this contract makes no promise about it. |
+| `frame` | `"agent.message.delta"` | Yes |  |
+
+## AgentMessageFrame
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `messageId` | `null \| string` | Yes |  |
+| `role` | `"assistant" \| "user"` | Yes |  |
+| `blocks` | `readonly (Readonly<{ type: "text"; text: string; }> \| Readonly<{ type: "reasoning"; text: string; }>)[]` | Yes |  |
+| `engine` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
+| `raw` | `unknown` | Yes | The engine-native message, verbatim, capped by `capAgentFrameRaw`. Typed `unknown` deliberately: it is another vendor's shape and this contract makes no promise about it. |
+| `frame` | `"agent.message"` | Yes |  |
+
+## AgentNativeFrame
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `type` | `string` | Yes |  |
+| `payload` | `unknown` | Yes |  |
+| `engine` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
+| `raw` | `unknown` | Yes | The engine-native message, verbatim, capped by `capAgentFrameRaw`. Typed `unknown` deliberately: it is another vendor's shape and this contract makes no promise about it. |
+| `frame` | `"agent.native"` | Yes |  |
+
+## AgentResultFrame
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `stopReason` | `"error" \| "end_turn" \| "max_turns" \| "max_budget" \| "refusal" \| "cancelled"` | Yes |  |
+| `turns` | `null \| number` | Yes |  |
+| `engineCostUsd` | `null \| number` | Yes |  |
+| `engine` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
+| `raw` | `unknown` | Yes | The engine-native message, verbatim, capped by `capAgentFrameRaw`. Typed `unknown` deliberately: it is another vendor's shape and this contract makes no promise about it. |
+| `frame` | `"agent.result"` | Yes |  |
+
+## AgentSessionFrame
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `engineSessionId` | `string` | Yes |  |
+| `model` | `null \| string` | Yes |  |
+| `engine` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
+| `raw` | `unknown` | Yes | The engine-native message, verbatim, capped by `capAgentFrameRaw`. Typed `unknown` deliberately: it is another vendor's shape and this contract makes no promise about it. |
+| `frame` | `"agent.session"` | Yes |  |
+
+## AgentToolCallFrame
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `toolCallId` | `string` | Yes |  |
+| `name` | `string` | Yes |  |
+| `kind` | `"read" \| "edit" \| "delete" \| "move" \| "search" \| "execute" \| "fetch" \| "mcp" \| "other"` | Yes |  |
+| `input` | `unknown` | Yes |  |
+| `engine` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
+| `raw` | `unknown` | Yes | The engine-native message, verbatim, capped by `capAgentFrameRaw`. Typed `unknown` deliberately: it is another vendor's shape and this contract makes no promise about it. |
+| `frame` | `"agent.tool.call"` | Yes |  |
+
+## AgentToolResultFrame
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `toolCallId` | `string` | Yes |  |
+| `status` | `"completed" \| "failed"` | Yes |  |
+| `output` | `string` | Yes |  |
+| `isError` | `false \| true` | Yes |  |
+| `engine` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
+| `raw` | `unknown` | Yes | The engine-native message, verbatim, capped by `capAgentFrameRaw`. Typed `unknown` deliberately: it is another vendor's shape and this contract makes no promise about it. |
+| `frame` | `"agent.tool.result"` | Yes |  |
+
+## AgentUsageFrame
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `inputTokens` | `number` | Yes |  |
+| `outputTokens` | `number` | Yes |  |
+| `cacheReadInputTokens` | `null \| number` | Yes |  |
+| `cacheCreationInputTokens` | `null \| number` | Yes |  |
+| `reasoningTokens` | `null \| number` | Yes |  |
+| `engine` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
+| `raw` | `unknown` | Yes | The engine-native message, verbatim, capped by `capAgentFrameRaw`. Typed `unknown` deliberately: it is another vendor's shape and this contract makes no promise about it. |
+| `frame` | `"agent.usage"` | Yes |  |
+
+## AssistantResponse
+
+The user-facing text carried by one assistant turn.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes | The engine's message id, used to replace a repeated snapshot instead of duplicating it. |
+| `text` | `readonly string[]` | Yes | Text blocks in the order the model returned them. |
+
+## assistantResponseFromAgentEvent
+
+Read the assistant's visible answer from one neutral event, or `null` when it carries none.
+
+The boundary is deliberately strict, and it is the same rule the browser's run view has always
+applied: only an assistant message with an engine message id and at least one non-blank text
+block becomes a chat turn. Reasoning blocks, tool calls, usage and results cannot leak into the
+conversation — the answer is product content, while the rest is telemetry and belongs in
+Technical details.
+
+```ts
+assistantResponseFromAgentEvent(event: AgentEvent): AssistantResponse | null
+```
+
+## classifyRunEventFrame
+
+Classify one parsed frame. Platform-owned frames are validated against their contract and a
+malformed one is a `ContractViolationError` — the platform wrote it, so a mismatch is
+drift, not user data. Relayed runtime events are passed through.
+
+```ts
+classifyRunEventFrame(frame: SseFrame): RunEventFrame
+```
+
+## parseSseFrame
+
+Parse one frame's raw text (already split on the blank-line boundary) into `{ event, id, at?, data }`,
+or `null` for a frame with no `event:` field.
+
+The platform never sends an unnamed frame, so `null` here means text this parser could not read
+as this wire format at all, and the caller drops it rather than guessing a name for it.
+
+```ts
+parseSseFrame(raw: string): SseFrame | null
+```
+
+## readSseFrames
+
+Read a response body as a sequence of parsed frames until the body ends or `signal` aborts.
+Frames with no `event:` name are dropped, as `parseSseFrame` documents.
+
+```ts
+async readSseFrames(body: ReadableStream<Uint8Array>, signal?: AbortSignal): AsyncGenerator<SseFrame, void, void>
+```
+
+## RunEventFrame
+
+One frame of a run's event stream, classified.
+
+  * `run-status`   — the platform's durable lifecycle event; `id` is a resume cursor.
+  * `runtime`      — a durable event the runtime produced; `id` is a resume cursor. Since ENG-03
+                     (#302) `name` is one of `@indx-workspace/contracts`' `AGENT_FRAME_NAMES` and
+                     `data` is that frame — one engine-neutral vocabulary, normalised by the
+                     engine's adapter in the runner. `toAgentEvent` (`./agent-event.ts`) is the
+                     parser that validates it; nothing else should read `data`.
+  * `run-failed`   — this connection could not deliver a successful run (see the contract).
+  * `stream-reset` — what follows is not contiguous with what the client already has.
+  * `done`         — the stream is over. It says nothing about whether the run succeeded.
+
+`at` on the two durable variants is when the control plane recorded the event, not when the
+engine produced it. It is absent when the server sent none (a server before the `at:` field).
+
+`data` is left `unknown` here and validated by the parser rather than by this classifier, so that
+the frame's *kind* and the frame's *payload* fail separately: a payload that does not satisfy its
+schema must not make the stream unreadable for a consumer that only wanted the resume cursor.
+
+- `{ readonly kind: "run-status"; readonly id: string | null; readonly at?: string; readonly data: RunStatusEventData; }`
+- `{ readonly kind: "runtime"; readonly id: string | null; readonly at?: string; readonly name: string; readonly data: unknown; }`
+- `{ readonly kind: "run-failed"; readonly data: RunFailedFrameData; }`
+- `{ readonly kind: "stream-reset"; readonly data: StreamResetFrameData; }`
+- `{ readonly kind: "done"; }`
+
+## splitSseFrames
+
+Split a growing buffer on the blank-line frame boundary HTML §9.2 defines. A trailing CR stays
+in the remainder until the next chunk tells us whether it belongs to CRLF or stands alone.
+
+```ts
+splitSseFrames(buffer: string): { readonly frames: readonly string[]; readonly rest: string; }
+```
+
+## SseFrame
+
+One parsed SSE frame: the `event:` name, its `id:` when the server sent one, and its payload.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `event` | `string` | Yes |  |
+| `id` | `null \| string` | Yes | `null` for every control frame — the platform never gives one an `id:`, because none of them may move a client's resume cursor. |
+| `at` | `undefined \| string` | No | The `at:` field: when the control plane recorded a durable event, as the server wrote it. Absent on control frames and on servers that predate the field; `classifyRunEventFrame` validates it. |
+| `data` | `unknown` | Yes | The `data:` field(s), joined and JSON-parsed. Kept as the raw joined string when it does not parse — the platform only promises JSON for the frames it writes itself, and a frame this parser cannot make sense of is still worth surfacing verbatim rather than dropping silently. |
+
+## toAgentEvent
+
+The neutral event one frame carries, or `null` for the platform's own frames.
+
+`run-status`, `run-failed`, `stream-reset` and `done` are already typed on `RunEventFrame`
+and are not agent events: they are the *platform* speaking about the run and the stream, not the
+engine speaking about the turn. Conflating the two is how a failed run gets rendered as a
+finished one, so they stay apart.
+
+```ts
+toAgentEvent(frame: RunEventFrame): AgentEvent | null
+```

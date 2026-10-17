@@ -1,0 +1,16 @@
+{
+  // The contributor emit view (`build-contributor`, run by `pnpm start:embedded`): the sources
+  // compiled one to one into dist/contributor, so the contributor path runs Next development
+  // mode from apps/web. The published build is `src/packaging/main.ts` (a directory not named
+  // `build/`, which the root .gitignore ignores); this view excludes it and the tests.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "rootDir": "src",
+    "outDir": "dist/contributor",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true
+  },
+  "exclude": ["src/packaging/**", "**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"]
+}

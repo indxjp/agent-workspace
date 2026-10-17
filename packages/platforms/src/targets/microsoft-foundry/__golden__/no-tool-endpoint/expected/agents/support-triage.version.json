@@ -1,0 +1,35 @@
+{
+  "description": "Triages customer support tickets and drafts replies.",
+  "metadata": {
+    "aw.apiVersion": "agentworkspace.dev/v1",
+    "aw.model": "anthropic/claude-sonnet-4-6"
+  },
+  "definition": {
+    "kind": "prompt",
+    "model": "claude-sonnet-4-6",
+    "instructions": "You triage support tickets.\n\n- Look up the order before answering.\n- Hand billing questions to billing-specialist.",
+    "tools": [
+      {
+        "type": "mcp",
+        "server_label": "zendesk",
+        "server_url": "https://mcp.example.com/zendesk",
+        "require_approval": "always",
+        "project_connection_id": "aw-zendesk"
+      },
+      {
+        "type": "web_search"
+      },
+      {
+        "type": "code_interpreter",
+        "container": {
+          "type": "auto"
+        }
+      },
+      {
+        "type": "a2a",
+        "a2a_version": "1.0",
+        "project_connection_id": "aw-agent-billing-specialist"
+      }
+    ]
+  }
+}

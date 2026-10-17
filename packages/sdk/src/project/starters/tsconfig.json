@@ -1,0 +1,13 @@
+{
+  // The starter files are a project's files, so they are checked the way a project checks them:
+  // Node's types (the fake API and the run files are plain Node) and `.ts` import specifiers.
+  // `../tsconfig.json` leaves this directory out, and the build copies it instead of compiling it.
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "rewriteRelativeImportExtensions": true
+  },
+  "include": ["."],
+  "exclude": []
+}

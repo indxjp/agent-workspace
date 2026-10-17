@@ -1,0 +1,39 @@
+---
+title: "TokensClient"
+description: "Every method of TokensClient, its parameters, return type, and route."
+---
+
+<Note>This page is generated from `packages/sdk/src/resources/tokens.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+`/api/tokens` — issue #236 (SDK-04, S-1): mint a short-lived, run- or session-scoped bearer for
+a customer's own frontend. Minting is a backend operation — `auth: { kind: 'api-key' }` or
+`{ kind: 'session' }`, Owner/Admin/Builder — and its result is what a frontend then presents as
+`auth: { kind: 'browser-token', token }`. A browser token cannot mint another one: `tokens` is
+in no scope's grammar, so calling this with a browser-token client answers `403
+token_out_of_scope`.
+
+## mint
+
+Mint a token scoped to `scope`. Refused for a target the caller may not itself reach.
+
+```ts
+mint(scope: TokenScope, options?: MintTokenOptions): Promise<MintTokenResponse>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `scope` | `TokenScope` | Yes |
+| `options` | `MintTokenOptions` | No |
+
+**Returns:** `Promise<MintTokenResponse>`
+
+**Route:** `POST /api/tokens`
+
+## MintTokenOptions
+
+`TokensClient.mint`'s options: the ordinary per-call ones, plus §3.1's TTL override.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `ttlSeconds` | `undefined \| number` | No | Seconds until the token expires; omit for the server's default (300). Bounded 60–3600. |
+| `signal` | `undefined \| AbortSignal` | No |  |

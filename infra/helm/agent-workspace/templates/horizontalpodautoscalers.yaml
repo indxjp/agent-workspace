@@ -1,0 +1,28 @@
+{{- if .Values.autoscaling.enabled }}
+# The runner manager is not scaled: its allocation registry lives in the process, so a second replica
+# would not know the sandboxes the first one made.
+{{- range $name := list "web" "gateway" }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: agent-workspace-{{ $name }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: agent-workspace-{{ $name }}
+  minReplicas: {{ $.Values.autoscaling.minReplicas }}
+  maxReplicas: {{ $.Values.autoscaling.maxReplicas }}
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ $.Values.autoscaling.targetCPUUtilizationPercentage }}
+---
+{{- end }}
+{{- end }}

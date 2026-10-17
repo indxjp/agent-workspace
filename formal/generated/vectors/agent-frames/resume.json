@@ -1,0 +1,22 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.AgentFrames.wire_ids_follow_the_documented_grammar",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.row_positions_are_a_range"],
+   "input": null,
+   "id": "mixed-log",
+   "expected": {"increasing": true, "ids": ["1", "2.0", "2.1", "2.2", "3"]}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.AgentFrames.resume_within_row_loses_and_repeats_nothing"],
+   "input": {"subIndex": 0, "sequence": 2},
+   "id": "resume-inside-row",
+   "expected":
+   {"whole": ["agent.message", "agent.tool.call", "agent.tool.call"], "tail": ["agent.tool.call", "agent.tool.call"]}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.AgentFrames.resume_serves_a_different_row_whole"],
+   "input": {"subIndex": 1, "sequence": 2},
+   "id": "resume-other-row",
+   "expected": {"tail": ["agent.message", "agent.tool.call", "agent.tool.call"]}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.AgentFrames.resume_serves_a_one_to_one_row_whole"],
+   "input": {"subIndex": 0, "sequence": 2},
+   "id": "resume-one-to-one-row",
+   "expected": {"tail": ["agent.result"]}}],
+ "family": "agent-frames",
+ "description": "The (sequence, sub-index) ids and resume"}

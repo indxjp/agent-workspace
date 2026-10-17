@@ -1,0 +1,983 @@
+---
+title: "agents"
+description: "The @indx-workspace/contracts/agents exports, sorted alphabetically."
+---
+
+<Note>This page is generated from `packages/contracts/src/agents.ts`, `packages/contracts/src/agents/definition.ts`, `packages/contracts/src/agents/engine-switch.ts`, `packages/contracts/src/agents/permissions.ts`, `packages/contracts/src/agents/policy.ts`, `packages/contracts/src/agents/resource.ts`, `packages/contracts/src/agents/tool-rules.ts`, `packages/contracts/src/engine-catalogue.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## AGENT_DEFINITION_API_VERSION
+
+The `apiVersion` every portable agent definition carries. It is a stable file-format version,
+not the contracts package's release number: a definition written today stays readable by every
+release that still accepts `agentworkspace.dev/v1`, and a breaking change to the shape — to
+`AgentPolicySchema` or `AgentPermissionsSchema` included, since a definition embeds
+both — is a new version string rather than a silent reinterpretation. It is the group the
+workspace-as-code files of the developer platform's Phase 2 share. ADR-0076 records the choice.
+
+Value: `'agentworkspace.dev/v1'`
+
+## AGENT_DEFINITION_FILE_PATH_MAX_LENGTH
+
+Bound on one file grant's workspace path, so a hostile file cannot carry an unbounded string.
+
+Value: `1_024`
+
+## AGENT_DEFINITION_KIND
+
+Value: `'AgentDefinition'`
+
+## AGENT_DEFINITION_MAX_REFERENCES
+
+Bound on each name list, so a hostile file cannot make an import fan out without limit.
+
+Value: `1_000`
+
+## AGENT_DEFINITION_ON_MISSING
+
+What `agents.import` does with a name the destination does not have: `'fail'` (the default)
+refuses before anything is written; `'skip'` drops the reference — the assignment, the
+policy's allowlist entry, or the model connection / runtime profile, which falls back to the
+deployment default.
+
+- `'fail'`
+- `'skip'`
+
+## AGENT_DEFINITION_ORPHAN_DETAIL_PREFIX
+
+The `details` prefix naming an agent an import created but could not remove again.
+
+Value: `'agent:'`
+
+## AGENT_DEFINITION_PROBLEM_CODES
+
+Problem codes `agents.export`/`agents.import` raise **themselves** — the two operations are a
+client-side composition of existing routes (no route answers them), so the SDK raises these as
+an `ApiProblemError` in the one error envelope, with the status each travels under. Each code
+documents its `details` shape, so a caller lists the offending references without parsing the
+message. Nothing is written when an import refusal other than the last is raised.
+
+If import has created the agent, a later step fails, and removing the agent again fails too, the
+error is the **original** refusal — same status and code — with one more `details` entry,
+`agent:<id>` (`AGENT_DEFINITION_ORPHAN_DETAIL_PREFIX`), naming the agent left behind. A
+failure that was not an `ApiProblemError` (an abort, a network error) becomes
+`agent_definition_import_incomplete`, with the original failure as its `cause`.
+
+| Key | Value |
+| --- | --- |
+| `invalid_agent_definition` | `400` |
+| `unsupported_engine` | `400` |
+| `agent_definition_references_missing` | `422` |
+| `agent_definition_reference_ambiguous` | `409` |
+| `agent_definition_reference_unresolvable` | `409` |
+| `agent_definition_import_incomplete` | `409` |
+
+## AGENT_DEFINITION_REFERENCE_KINDS
+
+The kinds of reference a definition resolves, as they prefix each `details` entry.
+
+- `'skill'`
+- `'connector'`
+- `'file'`
+- `'model-connection'`
+- `'runtime-profile'`
+
+## AGENT_INSTRUCTIONS_MAX_LENGTH
+
+Value: `100_000`
+
+## AGENT_MODEL_MAX_LENGTH
+
+Value: `200`
+
+## AGENT_MUTABLE_FIELDS
+
+The keys `PATCH` accepts and `POST` requires, kept in one shared vocabulary.
+
+- `'name'`
+- `'instructions'`
+- `'modelConnectionId'`
+- `'model'`
+- `'runtimeProfileId'`
+- `'permissions'`
+
+## AGENT_NAME_MAX_LENGTH
+
+Value: `200`
+
+## AGENT_PERMISSION_KEYS
+
+The complete permission set carried by every agent request and response, in the specification's
+order. `apps/web/server/agents/contract.test.ts` keeps this list aligned with the database schema.
+
+- `'readFiles'`
+- `'writeFiles'`
+- `'runCommands'`
+- `'unrestrictedNetwork'`
+
+## AGENT_POLICY_PROBLEM_CODES
+
+Problem codes the two policy routes (`GET`/`PUT /api/agents/:id/policy`) own, with the status each
+one travels under. `engine_capability_unsupported` is also answered by the one-call
+`POST /api/agents` with `assignments`, which saves an agent on the default engine and so runs the
+same capability check before anything is written.
+
+| Key | Value |
+| --- | --- |
+| `invalid_policy` | `400` |
+| `invalid_body` | `400` |
+| `unsupported_engine` | `400` |
+| `dangerous_permission_mode_refused` | `400` |
+| `agent_not_found` | `404` |
+| `skill_not_assigned` | `409` |
+| `engine_capability_unsupported` | `422` |
+| `engine_switch_would_widen` | `422` |
+| `policy_cannot_widen` | `403` |
+| `agent_policy_not_configured` | `503` |
+
+## AGENT_POLICY_SOURCES
+
+Where the policy `GET`/`PUT /api/agents/:id/policy` answers comes from: `'stored'` when a `PUT`
+has written one (it is then fixed until the next `PUT`), `'compiled'` when none has and the
+server derived it from the agent's permission checkboxes and its assigned, enabled skills (it
+then follows every later change to either). ADR-0076 D2 records why a client needs it: an export
+must not turn a compiled policy into a stored one.
+
+- `'stored'`
+- `'compiled'`
+
+## AGENT_TOOL_PERMISSION_MODES
+
+The SDK's `PermissionMode`, verbatim from `sdk.d.ts` (R-01 §3, §10). The only copy of the list;
+`tests/sdk-surface.test.ts` pins it to the installed `sdk.d.ts`.
+
+- `'default'`
+- `'acceptEdits'`
+- `'bypassPermissions'`
+- `'plan'`
+- `'dontAsk'`
+- `'auto'`
+
+## AgentDefinition
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `apiVersion` | `"agentworkspace.dev/v1"` | Yes |  |
+| `kind` | `"AgentDefinition"` | Yes |  |
+| `agent` | `AgentDefinitionAgent` | Yes |  |
+| `policy` | `Readonly<{ engine: "claude-agent-sdk"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; tools: Readonly<{ base: readonly string[] \| "claude_code_preset"; autoApprove: readonly string[]; deny: readonly string[]; permissionMode: "default" \| "acceptEdits" \| "bypassPermissions" \| "plan" \| "dontAsk" \| "auto"; allowDangerouslySkipPermissions: boolean; }>; }> \| Readonly<{ engine: "openai-agents"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; reasoningEffort?: "minimal" \| "low" \| "medium" \| "high" \| undefined; parallelToolCalls?: boolean \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "pi"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; thinkingLevel?: "minimal" \| "low" \| "medium" \| "high" \| "off" \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "mastra"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; toolCallConcurrency?: number \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }>` | Yes |  |
+| `policySource` | `"stored" \| "compiled"` | Yes |  |
+| `resources` | `AgentDefinitionResources` | Yes |  |
+
+## AgentDefinitionAgent
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `instructions` | `string` | Yes |  |
+| `permissions` | `AgentPermissions` | Yes |  |
+| `model` | `null \| string` | Yes |  |
+| `modelConnectionName` | `null \| string` | Yes | The model connection's name, or `null` for the deployment default. |
+| `runtimeProfileName` | `null \| string` | Yes | The runtime profile's name, or `null` for the workspace's default runtime profile (none: runs are refused until the agent names one). |
+
+## AgentDefinitionAgentSchema
+
+The agent record of a definition: every field that describes the agent, with each reference to
+another resource replaced by that resource's **name** in the destination workspace. No id,
+workspace, owner or timestamp — those belong to the workspace the agent lives in, not to it.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `instructions` | `string` | Yes |  |
+| `permissions` | `AgentPermissions` | Yes |  |
+| `model` | `null \| string` | Yes |  |
+| `modelConnectionName` | `null \| string` | Yes | The model connection's name, or `null` for the deployment default. |
+| `runtimeProfileName` | `null \| string` | Yes | The runtime profile's name, or `null` for the workspace's default runtime profile (none: runs are refused until the agent names one). |
+
+## AgentDefinitionOnMissing
+
+- `"fail"`
+- `"skip"`
+
+## AgentDefinitionProblemCode
+
+- `"unsupported_engine"`
+- `"agent_definition_references_missing"`
+- `"agent_definition_reference_ambiguous"`
+- `"invalid_agent_definition"`
+- `"agent_definition_reference_unresolvable"`
+- `"agent_definition_import_incomplete"`
+
+## AgentDefinitionReferenceKind
+
+- `"file"`
+- `"connector"`
+- `"model-connection"`
+- `"skill"`
+- `"runtime-profile"`
+
+## AgentDefinitionResources
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `files` | `readonly Readonly<{ path: string; access: "read" \| "read-write"; }>[]` | Yes |  |
+| `skills` | `readonly string[]` | Yes |  |
+| `connectors` | `readonly string[]` | Yes |  |
+
+## AgentDefinitionResourcesSchema
+
+The agent's resource assignments, by workspace path and by name — never by id.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `files` | `readonly Readonly<{ path: string; access: "read" \| "read-write"; }>[]` | Yes |  |
+| `skills` | `readonly string[]` | Yes |  |
+| `connectors` | `readonly string[]` | Yes |  |
+
+## AgentDefinitionSchema
+
+K-1: one agent as a portable file (`agent.json`) — what `aw.agents.export(id)` produces and
+`aw.agents.import(definition)` recreates in any workspace.
+
+- **Name-keyed.** Skills, connectors, the model connection, the runtime profile and files are
+  referenced by name (files by workspace path), and resolved inside the destination at import.
+- **Carries no secret and no bytes.** There is no credential field anywhere in the shape, and
+  `.strict()` refuses a file that smuggles one in under any key; a connector's or a model
+  connection's credential stays in the workspace it was entered into. A skill travels by name
+  only — its bytes move with `skills.export`/`skills.import`, never with an agent.
+- **Not carried:** run grants (`/grants`) name principals of one workspace and mean nothing in
+  another, so they are left for the destination to decide.
+
+`policy` is `AgentPolicySchema` verbatim: its skill allowlist and tool rules already speak
+in names, and an allowlist may only name skills `resources.skills` assigns. The agent's engine
+is `policy.engine`. `policySource` records whether the source agent's policy was stored
+(`'stored'`, the default when a hand-written file leaves it out) or compiled from its
+permissions and skills (`'compiled'`); import stores only a stored one, so a compiled policy
+stays compiled in the destination. See ADR-0076 and spec 04 §6.2.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `apiVersion` | `"agentworkspace.dev/v1"` | Yes |  |
+| `kind` | `"AgentDefinition"` | Yes |  |
+| `agent` | `AgentDefinitionAgent` | Yes |  |
+| `policy` | `Readonly<{ engine: "claude-agent-sdk"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; tools: Readonly<{ base: readonly string[] \| "claude_code_preset"; autoApprove: readonly string[]; deny: readonly string[]; permissionMode: "default" \| "acceptEdits" \| "bypassPermissions" \| "plan" \| "dontAsk" \| "auto"; allowDangerouslySkipPermissions: boolean; }>; }> \| Readonly<{ engine: "openai-agents"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; reasoningEffort?: "minimal" \| "low" \| "medium" \| "high" \| undefined; parallelToolCalls?: boolean \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "pi"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; thinkingLevel?: "minimal" \| "low" \| "medium" \| "high" \| "off" \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "mastra"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; toolCallConcurrency?: number \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }>` | Yes |  |
+| `policySource` | `"stored" \| "compiled"` | Yes |  |
+| `resources` | `AgentDefinitionResources` | Yes |  |
+
+## AgentGrants
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `principalIds` | `readonly string[]` | Yes |  |
+
+## AgentGrantsSchema
+
+The complete set of membership principals permitted to run one agent.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `principalIds` | `readonly string[]` | Yes |  |
+
+## AgentListResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `agents` | `readonly AgentResource[]` | Yes |  |
+
+## AgentListResponseSchema
+
+The body of `GET /api/agents`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `agents` | `readonly AgentResource[]` | Yes |  |
+
+## AgentPermissionKey
+
+- `"readFiles"`
+- `"writeFiles"`
+- `"runCommands"`
+- `"unrestrictedNetwork"`
+
+## AgentPermissions
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `readFiles` | `false \| true` | Yes |  |
+| `writeFiles` | `false \| true` | Yes |  |
+| `runCommands` | `false \| true` | Yes |  |
+| `unrestrictedNetwork` | `false \| true` | Yes |  |
+
+## AgentPermissionsSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `readFiles` | `false \| true` | Yes |  |
+| `writeFiles` | `false \| true` | Yes |  |
+| `runCommands` | `false \| true` | Yes |  |
+| `unrestrictedNetwork` | `false \| true` | Yes |  |
+
+## AgentPolicy
+
+`AgentPolicy` collapses to `never` unless the arms above name exactly the ids of `ENGINE_IDS`, so
+an engine added to the list without an arm (or an arm for an id the list lacks) fails typecheck
+(ADR-0136).
+
+- `Readonly<{ engine: "claude-agent-sdk"; skills: Readonly<{ mode: "all"; }> | Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number | null; maxBudgetUsd: number | null; }>; tools: Readonly<{ base: readonly string[] | "claude_code_preset"; autoApprove: readonly string[]; deny: readonly string[]; permissionMode: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "dontAsk" | "auto"; allowDangerouslySkipPermissions: boolean; }>; }>`
+- `Readonly<{ engine: "openai-agents"; skills: Readonly<{ mode: "all"; }> | Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number | null; maxBudgetUsd: number | null; }>; reasoningEffort?: "minimal" | "low" | "medium" | "high" | undefined; parallelToolCalls?: boolean | undefined; withheldPermissions?: readonly ("readFiles" | "writeFiles" | "runCommands" | "unrestrictedNetwork")[] | undefined; }>`
+- `Readonly<{ engine: "pi"; skills: Readonly<{ mode: "all"; }> | Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number | null; maxBudgetUsd: number | null; }>; thinkingLevel?: "minimal" | "low" | "medium" | "high" | "off" | undefined; withheldPermissions?: readonly ("readFiles" | "writeFiles" | "runCommands" | "unrestrictedNetwork")[] | undefined; }>`
+- `Readonly<{ engine: "mastra"; skills: Readonly<{ mode: "all"; }> | Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number | null; maxBudgetUsd: number | null; }>; toolCallConcurrency?: number | undefined; withheldPermissions?: readonly ("readFiles" | "writeFiles" | "runCommands" | "unrestrictedNetwork")[] | undefined; }>`
+
+## AgentPolicyLimits
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `maxTurns` | `null \| number` | Yes | `null` means "the SDK's own default", not "unlimited". |
+| `maxBudgetUsd` | `null \| number` | Yes | `null` means "no per-run cap", which §20.6.3 budgets sit above. |
+
+## AgentPolicyLimitsSchema
+
+`maxTurns` / `maxBudgetUsd`, transcribed from `packages/core/src/schemas.ts`'s `AgentConfig`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `maxTurns` | `null \| number` | Yes | `null` means "the SDK's own default", not "unlimited". |
+| `maxBudgetUsd` | `null \| number` | Yes | `null` means "no per-run cap", which §20.6.3 budgets sit above. |
+
+## AgentPolicyProblemCode
+
+- `"invalid_body"`
+- `"unsupported_engine"`
+- `"dangerous_permission_mode_refused"`
+- `"agent_not_found"`
+- `"agent_policy_not_configured"`
+- `"engine_capability_unsupported"`
+- `"engine_switch_would_widen"`
+- `"policy_cannot_widen"`
+- `"invalid_policy"`
+- `"skill_not_assigned"`
+
+## AgentPolicyResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `policy` | `Readonly<{ engine: "claude-agent-sdk"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; tools: Readonly<{ base: readonly string[] \| "claude_code_preset"; autoApprove: readonly string[]; deny: readonly string[]; permissionMode: "default" \| "acceptEdits" \| "bypassPermissions" \| "plan" \| "dontAsk" \| "auto"; allowDangerouslySkipPermissions: boolean; }>; }> \| Readonly<{ engine: "openai-agents"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; reasoningEffort?: "minimal" \| "low" \| "medium" \| "high" \| undefined; parallelToolCalls?: boolean \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "pi"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; thinkingLevel?: "minimal" \| "low" \| "medium" \| "high" \| "off" \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "mastra"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; toolCallConcurrency?: number \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }>` | Yes |  |
+| `source` | `undefined \| "stored" \| "compiled"` | No |  |
+| `connectorNames` | `undefined \| Record<string, string>` | No |  |
+
+## AgentPolicyResponseSchema
+
+The body of `GET`/`PUT /api/agents/:id/policy`. `source` is additive (ADR-0076 D2): a server
+older than SDK unit 7 (#239) does not send it, so it is optional here, and a reader treats an
+absent value as `'stored'` — the reading that never loses a policy.
+
+`connectorNames` is for a person reading the policy, and is never read back (ADR-0113 SD13): a
+rule stored as `mcp__connector-<id>__<tool>` has its server `connector-<id>` mapped to the
+connector's current key, so a view can show `mcp__connector-<id>__<tool> (<key>)`. It is
+omitted when no rule names a connector that still exists with a key other than
+`connector-<id>`, and `policy` is the stored value either way.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `policy` | `Readonly<{ engine: "claude-agent-sdk"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; tools: Readonly<{ base: readonly string[] \| "claude_code_preset"; autoApprove: readonly string[]; deny: readonly string[]; permissionMode: "default" \| "acceptEdits" \| "bypassPermissions" \| "plan" \| "dontAsk" \| "auto"; allowDangerouslySkipPermissions: boolean; }>; }> \| Readonly<{ engine: "openai-agents"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; reasoningEffort?: "minimal" \| "low" \| "medium" \| "high" \| undefined; parallelToolCalls?: boolean \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "pi"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; thinkingLevel?: "minimal" \| "low" \| "medium" \| "high" \| "off" \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "mastra"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; toolCallConcurrency?: number \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }>` | Yes |  |
+| `source` | `undefined \| "stored" \| "compiled"` | No |  |
+| `connectorNames` | `undefined \| Record<string, string>` | No |  |
+
+## AgentPolicySchema
+
+The `GET`/`PUT /api/agents/:id/policy` payload (S-13). `engine` is the discriminant — the harness
+that runs the agent loop, never the model provider (`runs.provider`, `MODEL_PROVIDERS`). There are
+four arms — `'claude-agent-sdk'`; since ENG-09 (#308), `'openai-agents'`, whose engine-native
+fields are two model settings and no tool grammar; since ENG-08 (#307), `'pi'`, whose only
+engine-native field is a thinking level; and since ENG-10 (#309), `'mastra'`, whose only
+engine-native field is a tool-call concurrency — and a route refuses any other value as
+`400 unsupported_engine` rather than accepting and ignoring it.
+
+The discriminant was called `provider` before ADR-0065, which is why a body carrying `provider`
+is refused outright (`400 invalid_body`) rather than read as this shape: `provider` now means the
+model provider everywhere else on the wire, and silently accepting it here would make one word
+mean two things in the same request.
+
+A `PUT`'d policy is **strictly narrowing**: the server unions the agent's permission-derived
+tool denials and read-only file denials into `tools.deny` rather than replacing them, and
+intersects `skills` with the agent's current skill assignments, so this policy can restrict an
+agent past its permission checkboxes but never widen it past them. See
+`docs/adr/SDK-02-AGENT-POLICY-234-stored-policy-is-a-narrowing-jsonb-column.md`.
+
+**`GET` answers the base policy, not the effective one.** The body is the policy as stored, or —
+for an agent nobody has `PUT` one onto — the policy derived from its permission checkboxes. Two
+further layers are applied on top when a run is composed and are *not* reflected here: an
+`mcp__<server>__*` auto-approval for every connector assigned to the agent, and
+`Write(…)`/`Edit(…)`/`NotebookEdit(…)`/`Bash` denials for every read-only file grant. So
+`tools.autoApprove` and `tools.deny` in this body are the base lists a run starts from, never
+the full set a run ends up with; reading `autoApprove: []` does not mean no tool is
+auto-approved at run time.
+
+- `Readonly<{ engine: "claude-agent-sdk"; skills: Readonly<{ mode: "all"; }> | Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number | null; maxBudgetUsd: number | null; }>; tools: Readonly<{ base: readonly string[] | "claude_code_preset"; autoApprove: readonly string[]; deny: readonly string[]; permissionMode: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "dontAsk" | "auto"; allowDangerouslySkipPermissions: boolean; }>; }>`
+- `Readonly<{ engine: "openai-agents"; skills: Readonly<{ mode: "all"; }> | Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number | null; maxBudgetUsd: number | null; }>; reasoningEffort?: "minimal" | "low" | "medium" | "high" | undefined; parallelToolCalls?: boolean | undefined; withheldPermissions?: readonly ("readFiles" | "writeFiles" | "runCommands" | "unrestrictedNetwork")[] | undefined; }>`
+- `Readonly<{ engine: "pi"; skills: Readonly<{ mode: "all"; }> | Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number | null; maxBudgetUsd: number | null; }>; thinkingLevel?: "minimal" | "low" | "medium" | "high" | "off" | undefined; withheldPermissions?: readonly ("readFiles" | "writeFiles" | "runCommands" | "unrestrictedNetwork")[] | undefined; }>`
+- `Readonly<{ engine: "mastra"; skills: Readonly<{ mode: "all"; }> | Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number | null; maxBudgetUsd: number | null; }>; toolCallConcurrency?: number | undefined; withheldPermissions?: readonly ("readFiles" | "writeFiles" | "runCommands" | "unrestrictedNetwork")[] | undefined; }>`
+
+## AgentPolicySource
+
+- `"stored"`
+- `"compiled"`
+
+## AgentResource
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `workspaceId` | `string` | Yes |  |
+| `name` | `string` | Yes |  |
+| `instructions` | `string` | Yes |  |
+| `modelConnectionId` | `null \| string` | Yes |  |
+| `model` | `null \| string` | Yes |  |
+| `runtimeProfileId` | `null \| string` | Yes |  |
+| `permissions` | `AgentPermissions` | Yes |  |
+| `createdBy` | `null \| string` | Yes | Legacy human creator attribution, or `null` when an API-key principal created the row. |
+| `ownerPrincipalId` | `string` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+| `updatedAt` | `string` | Yes |  |
+
+## AgentResourceAssignments
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `files` | `readonly Readonly<{ fileId: string; access: "read" \| "read-write"; }>[]` | Yes |  |
+| `skillIds` | `readonly string[]` | Yes |  |
+| `connectorIds` | `readonly string[]` | Yes |  |
+
+## AgentResourceAssignmentsResponseSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `assignments` | `AgentResourceAssignments` | Yes |  |
+
+## AgentResourceAssignmentsSchema
+
+The `GET`/`PUT /api/agents/:id/resources` payload: what the agent is allowed to reach.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `files` | `readonly Readonly<{ fileId: string; access: "read" \| "read-write"; }>[]` | Yes |  |
+| `skillIds` | `readonly string[]` | Yes |  |
+| `connectorIds` | `readonly string[]` | Yes |  |
+
+## AgentResourceSchema
+
+One agent as it crosses the HTTP boundary — the body of `GET /api/agents/:id`, the `201` of
+`POST /api/agents`, the `200` of `PATCH /api/agents/:id`, and every item of the list. Dates are
+ISO-8601 strings.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `workspaceId` | `string` | Yes |  |
+| `name` | `string` | Yes |  |
+| `instructions` | `string` | Yes |  |
+| `modelConnectionId` | `null \| string` | Yes |  |
+| `model` | `null \| string` | Yes |  |
+| `runtimeProfileId` | `null \| string` | Yes |  |
+| `permissions` | `AgentPermissions` | Yes |  |
+| `createdBy` | `null \| string` | Yes | Legacy human creator attribution, or `null` when an API-key principal created the row. |
+| `ownerPrincipalId` | `string` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+| `updatedAt` | `string` | Yes |  |
+
+## AgentSkillPolicy
+
+- `Readonly<{ mode: "all"; }>`
+- `Readonly<{ mode: "allowlist"; names: readonly string[]; }>`
+
+## AgentSkillPolicySchema
+
+§17 Step 3 (skills): the tenant's skill surface. `{ mode: 'allowlist', names: [] }` is the
+lever that lets an agent invoke none — `{ mode: 'all' }` is a distinct, wider choice, never the
+default an absent policy implies. `names` reuses `SKILL_NAME_PATTERN`: a policy may only
+name a skill whose name this platform could ever create.
+
+Either mode is bounded by the agent's own skill assignments when a run is composed:
+`{ mode: 'all' }` means "every skill *currently assigned* to this agent", not every skill on the
+image, and an allowlist loses any name whose assignment has since been revoked. See
+`AgentPolicySchema`.
+
+- `Readonly<{ mode: "all"; }>`
+- `Readonly<{ mode: "allowlist"; names: readonly string[]; }>`
+
+## AgentToolPermissionMode
+
+- `"default"`
+- `"acceptEdits"`
+- `"bypassPermissions"`
+- `"plan"`
+- `"dontAsk"`
+- `"auto"`
+
+## AgentToolPermissionModeSchema
+
+- `"default"`
+- `"acceptEdits"`
+- `"bypassPermissions"`
+- `"plan"`
+- `"dontAsk"`
+- `"auto"`
+
+## AgentToolPolicy
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `base` | `readonly string[] \| "claude_code_preset"` | Yes |  |
+| `autoApprove` | `readonly string[]` | Yes |  |
+| `deny` | `readonly string[]` | Yes |  |
+| `permissionMode` | `"default" \| "acceptEdits" \| "bypassPermissions" \| "plan" \| "dontAsk" \| "auto"` | Yes |  |
+| `allowDangerouslySkipPermissions` | `false \| true` | Yes |  |
+
+## AgentToolPolicySchema
+
+§17 Step 4's SDK-facing detail. The four checkboxes are only the human-facing summary, and spec
+§6's mapping table is incomplete where it says "Tool permissions → `allowedTools`": R-01 §10
+established that `allowedTools` only auto-approves — it does not restrict, and it does not
+constrain `bypassPermissions`. Restriction requires `base` and/or `deny`, and the locked-down
+pairing is an allow-list plus `permissionMode: 'dontAsk'`; the correction is recorded in
+`docs/adr/W1-CORE-01-tool-permissions-correct-spec-6.md`.
+
+  * `base` is the SDK's `tools`: the surface the model can see at all, and the field that
+    restricts. `'claude_code_preset'` compiles to the Claude adapter's `CLAUDE_PRESET_TOOLS`
+    allow-list, not the SDK's whole `claude_code` preset (BH061-010).
+  * `autoApprove` is its `allowedTools`: auto-approvals. Grants no tool that `base` does not
+    expose.
+  * `deny` is its `disallowedTools`: hard removals — the definition never reaches the model.
+
+R-01 §10: `bypassPermissions` additionally requires `allowDangerouslySkipPermissions: true`,
+and nothing else may set that flag. This is the only copy of the cross-field rule.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `base` | `readonly string[] \| "claude_code_preset"` | Yes |  |
+| `autoApprove` | `readonly string[]` | Yes |  |
+| `deny` | `readonly string[]` | Yes |  |
+| `permissionMode` | `"default" \| "acceptEdits" \| "bypassPermissions" \| "plan" \| "dontAsk" \| "auto"` | Yes |  |
+| `allowDangerouslySkipPermissions` | `false \| true` | Yes |  |
+
+## CLAUDE_GRANT_SHELL_DENIALS
+
+The Claude shell tools a read-only file grant removes: a redirect writes past any path rule.
+
+- `'Bash'`
+- `'BashOutput'`
+- `'KillShell'`
+
+## CLAUDE_PERMISSION_TOOL_DENIALS
+
+Which Claude tools each of §17 Step 4's four switches removes when it is off.
+
+§6 maps "Tool permissions → allowedTools", and R-01 §10 established that this is incomplete:
+`allowedTools` **auto-approves**, it does not restrict, so an agent whose `readFiles` is false
+but whose tool surface still exposes `Read` can read files the moment a permission prompt is
+answered — and a run with no interactive user has no one to answer it. So a switch that is off
+maps onto `deny` (the SDK's `disallowedTools`), which removes the definition rather than
+withholding an approval. `docs/adr/W1-COMP-01-permissions-map-onto-deny-not-allow.md` records it.
+
+**This is a floor, not the finished §17 Step 4 mapping.** `AgentPermissionsSchema` is four
+booleans and the SDK's surface is much larger; a fifth capability added to the checkbox set and
+not here would be ungoverned. The compiler will not catch that — the record below is keyed by
+`AgentPermissionKey`, so it *will* catch a key added to the permission set and not to this
+table, which is the half a type can hold.
+
+## Why this table is in `packages/contracts` and not in the Claude adapter (ENG-04b, #325)
+
+The tool *names* are `@anthropic-ai/claude-agent-sdk`'s, so the natural home would be
+`packages/engine-claude-agent-sdk` — and ENG-04b moved everything else about the Claude tool
+mapping there. This table cannot follow, because it has a second caller the adapter cannot
+serve: `GET /api/agents/:id/policy` answers the Claude arm of `AgentPolicySchema` for an
+agent whose `policy` column is NULL, and `apps/web` may never import an engine adapter
+(`dependency-cruiser.config.mjs`). A restatement in the control plane would be two spellings of
+one security decision, which is the drift this repository refuses. So the table lives beside the
+Claude arm whose grammar it is written in, and both the control plane and the adapter read the
+same one. `docs/adr/0072-the-claude-tool-mapping-and-skills-live-in-the-claude-adapter.md`
+records it; ADR-0136 moved the table into the catalogue's Claude section.
+
+| Key | Value |
+| --- | --- |
+| `readFiles` | `['Read', 'Glob', 'Grep']` |
+| `writeFiles` | `['Write', 'Edit', 'NotebookEdit']` |
+| `runCommands` | `['Bash', 'BashOutput', 'KillShell']` |
+| `unrestrictedNetwork` | `['WebFetch', 'WebSearch']` |
+
+## claudeBaseToolPolicyFor
+
+The Claude tool policy an agent with **no stored policy** runs under: the permission floor, and
+nothing else.
+
+`base` stays the Claude Code preset because §5 makes the SDK's own tool surface the product, and
+`permissionMode` stays `default` because every other mode is a decision a screen has to offer
+before anything may take it. `allowDangerouslySkipPermissions` is never set — R-01 §10 makes it
+the one flag `bypassPermissions` additionally requires, and nothing in this platform has a
+reason to reach for either.
+
+`autoApprove` is empty here on purpose: the `mcp__<server>__*` approvals a run gets for its
+assigned connectors are a *run-time* layer applied by the engine adapter, not a property of the
+agent's stored policy. See `AgentPolicySchema`'s note about what `GET` does not show.
+
+```ts
+claudeBaseToolPolicyFor(permissions: AgentPermissions): AgentToolPolicy
+```
+
+## claudeDeniedToolsFor
+
+The Claude tools this permission set removes, in `AGENT_PERMISSION_KEYS`' order.
+
+The order is part of the answer and not an incidental: the compiled `disallowedTools` array is
+compared byte for byte against what the platform produced before ENG-04b
+(`formal/AgentWorkspace/Theorems/Refinement/EngineToolPolicy.lean`), so iterating the declared
+key order rather than `Object.keys` is what makes that comparison stable.
+
+```ts
+claudeDeniedToolsFor(permissions: AgentPermissions): readonly string[]
+```
+
+## claudeReadOnlyGrantDenials
+
+The Claude denials that make read-only file grants read-only, for the run whose working
+directory is `cwd`: one `Edit(//<cwd>/<path>)` rule per grant (`/**` added for a directory),
+then `CLAUDE_GRANT_SHELL_DENIALS`.
+
+Claude Code checks file writes against `Edit(path)` rules only — a `Write(path)` or
+`NotebookEdit(path)` rule is accepted, never consulted, and warned about at startup — and only
+`//path` is absolute: a single leading `/` anchors at the rule's settings source, so a rule
+written as `Edit(<absolute cwd>/x)` would mean `<cwd>/<cwd>/x` and match nothing
+(code.claude.com/docs/en/permissions, "Read and Edit"; R-01 §10). A Windows `cwd` is written in
+the POSIX form Claude Code matches against, `C:\w` as `/c/w`.
+
+Shared by the control plane's compose-side guard and the Claude adapter, which de-duplicate the
+two into one list; both pass only the grants whose access is `read`.
+
+```ts
+claudeReadOnlyGrantDenials(cwd: string, readOnly: readonly { readonly path: string; readonly kind: 'file' | 'directory' }[]): readonly string[]
+```
+
+## claudeRulePath
+
+An absolute path in the POSIX form Claude Code matches rules against, without a trailing `/`.
+
+```ts
+claudeRulePath(absolute: string): string
+```
+
+## CreateAgentInput
+
+Normalized body accepted by `POST /api/agents`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `instructions` | `string` | Yes |  |
+| `modelConnectionId` | `null \| string` | Yes |  |
+| `model` | `null \| string` | Yes |  |
+| `runtimeProfileId` | `undefined \| null \| string` | No |  |
+| `permissions` | `AgentPermissions` | Yes |  |
+
+## CreateAgentOptions
+
+K-2: the body `agents.create(input, { assignments })` posts to `POST /api/agents` in one
+request, and the `201` it gets back — the same rows `create` followed by
+`replaceResourceAssignments` would have produced, written atomically by the server.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `assignments` | `undefined \| AgentResourceAssignments` | No |  |
+
+## CreateAgentWithAssignmentsResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `agent` | `AgentResource` | Yes |  |
+| `assignments` | `AgentResourceAssignments` | Yes |  |
+
+## CreateAgentWithAssignmentsResponseSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `agent` | `AgentResource` | Yes |  |
+| `assignments` | `AgentResourceAssignments` | Yes |  |
+
+## DenyingToolRuleSchema
+
+A rule that is allowed to *remove* something: `disallowedTools`. The wildcard arm is legitimate here.
+
+`string`
+
+## engineSettingsOf
+
+The engine-native settings `policy` carries: the subset of its keys the engine's catalogue entry
+lists as `settings`, in the catalogue's order. Absent keys stay absent, and `skills`, `limits`,
+`tools` and `withheldPermissions` are never part of the answer. `{}` for no stored policy.
+
+```ts
+engineSettingsOf(policy: AgentPolicy | null): Readonly<Record<string, unknown>>
+```
+
+## EngineSwitchCarriedItem
+
+One narrowing the old arm carried, and how the new arm says it.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `from` | `string` | Yes | What the old arm said: a `tools.deny` rule verbatim, `tools.base`, `permissionMode: <mode>`, or `withheldPermissions: <key>`. |
+| `tools` | `readonly string[]` | Yes | The new engine's tools it removes, by the names that engine declares. |
+
+## EngineSwitchTranslation
+
+The outcome of `translatePolicyForEngineSwitch`. `absent` lists old denials whose tool the
+new engine does not have at all, so there is nothing to deny: they stay absent. `refused` lists
+old denials the new arm cannot express; a switch with any is `engine_switch_would_widen`.
+
+- `{ readonly ok: true; readonly policy: AgentPolicy; readonly carried: readonly EngineSwitchCarriedItem[]; readonly absent: readonly string[]; }`
+- `{ readonly ok: false; readonly refused: readonly string[]; readonly carried: readonly EngineSwitchCarriedItem[]; readonly absent: readonly string[]; }`
+
+## GrantingToolRuleSchema
+
+A rule that is allowed to *grant* something: `tools` and `allowedTools`. Rejects an unanchored
+wildcard — R-01 §10: the SDK ignores it in an allow list with a startup warning, so it grants
+nothing, and storing one would be storing a permission nobody actually has.
+
+`string`
+
+## MASTRA_TOOL_CALL_CONCURRENCY_MAX
+
+The largest `toolCallConcurrency` the Mastra arm accepts (ENG-10, #309). Mastra's own default is
+10; the ceiling only keeps a stored policy from asking for an unbounded fan-out of tool calls.
+
+Value: `16`
+
+## MASTRA_TOOL_NAMES
+
+Every Mastra workspace tool the Mastra adapter can offer, in the order its plan lists them
+(ENG-10, #309).
+
+Mastra's own names (`WORKSPACE_TOOLS` in `@mastra/core/workspace`), kept rather than renamed so
+a transcript names the tool Mastra's documentation describes. They live here for the reason
+`PI_TOOL_NAMES` does: the control plane names them when it carries an engine switch's
+narrowing across, and `apps/web` may never import an adapter. The skill tools Mastra adds for a
+workspace with skills (`skill`, `skill_search`, `skill_read`) are not listed: no permission
+switch governs them, and they read only the skills the platform placed.
+
+- `'mastra_workspace_read_file'`
+- `'mastra_workspace_list_files'`
+- `'mastra_workspace_grep'`
+- `'mastra_workspace_file_stat'`
+- `'mastra_workspace_write_file'`
+- `'mastra_workspace_edit_file'`
+- `'mastra_workspace_mkdir'`
+- `'mastra_workspace_delete'`
+- `'mastra_workspace_execute_command'`
+- `'mastra_workspace_get_process_output'`
+- `'mastra_workspace_kill_process'`
+
+## MASTRA_TOOL_PERMISSION
+
+Which of §17 Step 4's switches grants each Mastra workspace tool.
+
+| Key | Value |
+| --- | --- |
+| `mastra_workspace_read_file` | `'readFiles'` |
+| `mastra_workspace_list_files` | `'readFiles'` |
+| `mastra_workspace_grep` | `'readFiles'` |
+| `mastra_workspace_file_stat` | `'readFiles'` |
+| `mastra_workspace_write_file` | `'writeFiles'` |
+| `mastra_workspace_edit_file` | `'writeFiles'` |
+| `mastra_workspace_mkdir` | `'writeFiles'` |
+| `mastra_workspace_delete` | `'writeFiles'` |
+| `mastra_workspace_execute_command` | `'runCommands'` |
+| `mastra_workspace_get_process_output` | `'runCommands'` |
+| `mastra_workspace_kill_process` | `'runCommands'` |
+
+## MastraToolName
+
+- `"mastra_workspace_read_file"`
+- `"mastra_workspace_list_files"`
+- `"mastra_workspace_grep"`
+- `"mastra_workspace_file_stat"`
+- `"mastra_workspace_write_file"`
+- `"mastra_workspace_edit_file"`
+- `"mastra_workspace_mkdir"`
+- `"mastra_workspace_delete"`
+- `"mastra_workspace_execute_command"`
+- `"mastra_workspace_get_process_output"`
+- `"mastra_workspace_kill_process"`
+
+## OPENAI_AGENTS_REASONING_EFFORTS
+
+The reasoning efforts the OpenAI Agents arm accepts (ENG-09, #308).
+
+- `'minimal'`
+- `'low'`
+- `'medium'`
+- `'high'`
+
+## OPENAI_AGENTS_TOOL_NAMES
+
+Every function tool the OpenAI Agents adapter can offer, in the order its plan lists them
+(ENG-09, #308).
+
+The names are the adapter's (`packages/engine-openai-agents/src/tools.ts` builds one SDK function
+tool per name), and they live here for the reason `CLAUDE_PERMISSION_TOOL_DENIALS` does:
+the control plane has to name them when it carries an engine switch's narrowing across
+(`translatePolicyForEngineSwitch`), and `apps/web` may never import an engine adapter. The
+adapter reads these two constants rather than restating them.
+
+- `'read_file'`
+- `'list_files'`
+- `'search_files'`
+- `'apply_patch'`
+- `'shell'`
+
+## OPENAI_AGENTS_TOOL_PERMISSION
+
+Which of §17 Step 4's switches grants each OpenAI Agents tool.
+
+| Key | Value |
+| --- | --- |
+| `read_file` | `'readFiles'` |
+| `list_files` | `'readFiles'` |
+| `search_files` | `'readFiles'` |
+| `apply_patch` | `'writeFiles'` |
+| `shell` | `'runCommands'` |
+
+## OpenAiAgentsReasoningEffort
+
+- `"minimal"`
+- `"low"`
+- `"medium"`
+- `"high"`
+
+## OpenAiAgentsToolName
+
+- `"read_file"`
+- `"list_files"`
+- `"search_files"`
+- `"apply_patch"`
+- `"shell"`
+
+## PI_THINKING_LEVELS
+
+The thinking levels the pi arm accepts (ENG-08, #307): pi's own `ThinkingLevel`, minus `xhigh`,
+which pi clamps to the model and which no model reached through the gateway exposes.
+
+- `'off'`
+- `'minimal'`
+- `'low'`
+- `'medium'`
+- `'high'`
+
+## PI_TOOL_NAMES
+
+Every built-in pi tool the pi adapter can offer, in the order its plan lists them (ENG-08, #307).
+
+pi's own names (`read`, `write`, `edit`, `bash` — `createAgentSession`'s `tools` allowlist). They
+live here for the reason `OPENAI_AGENTS_TOOL_NAMES` does: the control plane names them when
+it carries an engine switch's narrowing across, and `apps/web` may never import an adapter.
+
+- `'read'`
+- `'write'`
+- `'edit'`
+- `'bash'`
+
+## PI_TOOL_PERMISSION
+
+Which of §17 Step 4's switches grants each pi tool.
+
+| Key | Value |
+| --- | --- |
+| `read` | `'readFiles'` |
+| `write` | `'writeFiles'` |
+| `edit` | `'writeFiles'` |
+| `bash` | `'runCommands'` |
+
+## PiThinkingLevel
+
+- `"minimal"`
+- `"low"`
+- `"medium"`
+- `"high"`
+- `"off"`
+
+## PiToolName
+
+- `"read"`
+- `"write"`
+- `"edit"`
+- `"bash"`
+
+## policyNarrowedPermissions
+
+The permissions a run composes: the agent's, with every switch the stored `openai-agents`, `pi`
+or `mastra` arm withholds turned off. Only ever narrows.
+
+```ts
+policyNarrowedPermissions(permissions: AgentPermissions, policy: AgentPolicy | null): AgentPermissions
+```
+
+## PortablePolicyBase
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `skills` | `Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>` | Yes |  |
+| `limits` | `AgentPolicyLimits` | Yes |  |
+
+## PortablePolicyBaseSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `skills` | `Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>` | Yes |  |
+| `limits` | `AgentPolicyLimits` | Yes |  |
+
+## translatePolicyForEngineSwitch
+
+Carry an engine switch's narrowing across (ADR-0074 D12, the Owner's decision on PR #339).
+
+`previous` is the stored policy, `next` the one replacing it. When the two name the same engine
+nothing is translated: a `PUT` replaces the policy, which is how an owner widens on purpose. When
+the engine changes, whatever the old arm withheld is written into the new arm, so a switch can
+never hand the agent a tool its owner took away:
+
+| `claude-agent-sdk` said                                     | `openai-agents`, `pi` or `mastra` withholds |
+| ----------------------------------------------------------- | --------------------------------- |
+| `deny` of `Read`, `Glob` or `Grep` (bare or scoped)         | `readFiles`: the readers          |
+| `deny` of `Write`, `Edit` or `NotebookEdit` (bare or scoped)| `writeFiles`: `apply_patch` / `write`, `edit` |
+| `deny` of `Bash`, `BashOutput` or `KillShell` (bare or scoped) | `runCommands`: `shell` / `bash` |
+| a `base` list missing any tool a switch governs             | that switch                     |
+| `permissionMode: 'plan'`                                    | `writeFiles` and `runCommands`  |
+| `permissionMode: 'dontAsk'`, a switch's tools not all in `autoApprove` | that switch          |
+| `deny` of a tool this engine does not have (`WebFetch`, …)  | nothing: it stays absent        |
+| `deny` of an MCP tool, an MCP glob or a wildcard            | **refused**                     |
+
+A scoped denial (`Bash(git push:*)`) withholds the whole tool: this engine has no specifier
+grammar, and the narrower reading is the safe one. The reverse switch writes each withheld
+switch's `CLAUDE_PERMISSION_TOOL_DENIALS` into `tools.deny`, which is exact. Between
+`openai-agents`, `pi` (ENG-08, #307) and `mastra` (ENG-10, #309) `withheldPermissions` is carried
+verbatim.
+
+The result never allows a tool the old arm denied: the Lean theorem
+`AgentWorkspace.Theorems.Invariants.EngineSwitch.the_switch_never_widens_the_tool_plan` states
+it, and `tests/formal/engine-openai-agents.test.ts` replays its `engine-switch.json` vectors
+against this function. It is pure, so the route enforces it and `aw agents update --engine` can
+show it before applying it.
+
+```ts
+translatePolicyForEngineSwitch(previous: AgentPolicy, next: AgentPolicy): EngineSwitchTranslation
+```
+
+## UpdateAgentPatch
+
+Normalized body accepted by `PATCH /api/agents/:id`; omitted fields remain unchanged.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `undefined \| string` | No |  |
+| `instructions` | `undefined \| string` | No |  |
+| `modelConnectionId` | `undefined \| null \| string` | No |  |
+| `model` | `undefined \| null \| string` | No |  |
+| `runtimeProfileId` | `undefined \| null \| string` | No |  |
+| `permissions` | `undefined \| AgentPermissions` | No |  |

@@ -1,0 +1,19 @@
+#!/bin/sh
+set -eu
+umask 077
+
+exec 9>/run/lock/agent-workspace-backup.lock
+flock -n 9 || { echo 'backup already running' >&2; exit 1; }
+stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+root=/var/lib/agent-workspace/backups
+staging="$(mktemp -d "$root/.staging-$stamp-XXXXXX")"
+cleanup() { rm -rf "$staging"; }
+trap cleanup EXIT INT TERM
+
+compose='docker compose --env-file /etc/agent-workspace/images.env -f /etc/agent-workspace/compose.yaml'
+$compose exec -T postgres pg_dump --username agent_workspace --dbname agent_workspace --format=custom --no-owner --file=- >"$staging/postgres.dump"
+tar --one-file-system --numeric-owner -C /var/lib/agent-workspace -czf "$staging/workspace.tar.gz" workspace
+printf '{"schemaVersion":1,"createdAt":"%s","source":"%s"}\n' "$stamp" "$(hostname)" >"$staging/metadata.json"
+(cd "$staging" && sha256sum metadata.json postgres.dump workspace.tar.gz >SHA256SUMS)
+gcloud storage cp --recursive "$staging" "gs://${backup_bucket}/application/$stamp"
+printf 'backup uploaded: gs://${backup_bucket}/application/%s\n' "$stamp"

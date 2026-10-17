@@ -1,0 +1,838 @@
+---
+title: "agent-versions"
+description: "The @indx-workspace/contracts/agent-versions exports, sorted alphabetically."
+---
+
+<Note>This page is generated from `packages/contracts/src/agent-versions.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## AGENT_ENVIRONMENTS
+
+The environments a pointer may name (ADR-0101, ADR-0108; issues #440, #612). `local` is the
+working draft `aw push` moves; `production` is what public surfaces serve. Moving `production`
+rewrites nothing but its pointer. `preview` is not an environment (P-6).
+
+- `'local'`
+- `'production'`
+
+## AGENT_POINTER_MOVE_REASONS
+
+Why a pointer moved (issue #615): `set` is `PUT /pointers` (`aw push`) and an agent's first
+version, `promote` and `rollback` are their own routes.
+
+- `'set'`
+- `'promote'`
+- `'rollback'`
+
+## AGENT_POINTER_MOVES_LISTED
+
+How many pointer moves a version listing carries, newest first (issue #615).
+
+Value: `10`
+
+## AGENT_VERSION_NUMBER_MAX
+
+The largest version number: PostgreSQL's `integer` maximum, so a number the contract accepts is
+one S1-04's version store can hold and look up — a larger one is refused as a bad request here
+rather than overflowing the column as a `500` (ADR-0101; issue #440).
+
+Value: `2_147_483_647`
+
+## AGENT_VERSION_PROBLEM_CODES
+
+Problem codes the version routes (S1-05, S1-06) answer, with the status each travels under
+(ADR-0101, ADR-0108; issue #440). A code another table already owns keeps that table's status,
+read from it rather than retyped. RBAC's `forbidden` stays in `COMMON_PROBLEM_CODES`.
+
+| Key | Value |
+| --- | --- |
+| `invalid_agent_id` | `400` |
+| `invalid_agent_version` | `400` |
+| `unsupported_engine` | `AGENT_POLICY_PROBLEM_CODES.unsupported_engine` |
+| `dangerous_permission_mode_refused` | `AGENT_POLICY_PROBLEM_CODES.dangerous_permission_mode_refused` |
+| `agent_not_found` | `AGENT_POLICY_PROBLEM_CODES.agent_not_found` |
+| `agent_policy_not_configured` | `AGENT_POLICY_PROBLEM_CODES.agent_policy_not_configured` |
+| `agent_version_not_found` | `404` |
+| `no_pointer` | `409` |
+| `nothing_to_roll_back` | `409` |
+| `promotion_not_evaluated` | `409` |
+| `promotion_gate_failed` | `409` |
+| `code_tool_needs_host` | `422` |
+| `network_policy_unsupported` | `422` |
+| `stdio_connector_needs_tool_sandbox` | `422` |
+| `tool_bundle_unknown` | `422` |
+| `tool_bundles_not_configured` | `TOOL_BUNDLE_PROBLEM_CODES.tool_bundles_not_configured` |
+| `agent_definition_references_missing` | `AGENT_DEFINITION_PROBLEM_CODES.agent_definition_references_missing` |
+| `agent_definition_reference_ambiguous` | `AGENT_DEFINITION_PROBLEM_CODES.agent_definition_reference_ambiguous` |
+| `engine_capability_unsupported` | `AGENT_POLICY_PROBLEM_CODES.engine_capability_unsupported` |
+| `agent_subagent_unusable` | `422` |
+| `engine_switch_would_widen` | `AGENT_POLICY_PROBLEM_CODES.engine_switch_would_widen` |
+| `policy_cannot_widen` | `AGENT_POLICY_PROBLEM_CODES.policy_cannot_widen` |
+| `surface_name_taken` | `409` |
+| `agent_name_conflict` | `409` |
+
+## AGENT_VERSION_SUMMARY_MAX_LENGTH
+
+The longest version summary, in characters (ADR-0101; issue #440).
+
+Value: `200`
+
+## AGENT_VERSION_SURFACES_MAX
+
+The most surfaces one version may carry (ADR-0101, ADR-0108; issue #440).
+
+Value: `16`
+
+## AGENT_VERSION_VIAS
+
+Issue #440 (S1-02): the vocabulary of agent versions (ADR-0101). A version is an immutable,
+numbered snapshot of one agent's definition and its surfaces (ADR-0108); an environment's
+pointer names the version it runs. `aw push` (`via: 'aw-push'`), the browser (`via: 'ui'`) and
+a plain API client (`via: 'api'`) all save one the same way. The routes arrive with S1-05 and
+S1-06; this module is their shared shape.
+
+- `'ui'`
+- `'aw-push'`
+- `'api'`
+
+## AgentEnvironment
+
+- `"local"`
+- `"production"`
+
+## AgentEnvironmentSchema
+
+`AGENT_ENVIRONMENTS` as a schema (ADR-0101; issue #440).
+
+- `"local"`
+- `"production"`
+
+## AgentPointerMove
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `environment` | `"local" \| "production"` | Yes |  |
+| `number` | `number` | Yes |  |
+| `reason` | `"set" \| "promote" \| "rollback"` | Yes |  |
+| `movedByPrincipalId` | `null \| string` | Yes |  |
+| `movedAt` | `string` | Yes |  |
+
+## AgentPointerMoveReason
+
+- `"set"`
+- `"promote"`
+- `"rollback"`
+
+## AgentPointerMoveResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `environment` | `"local" \| "production"` | Yes |  |
+| `from` | `null \| number` | Yes |  |
+| `to` | `number` | Yes |  |
+| `saved` | `false \| true` | Yes |  |
+| `bar` | `null \| number` | Yes |  |
+
+## AgentPointerMoveResponseSchema
+
+The `200` of a promote or a rollback (issue #615): the environment's version before and after
+the move, and whether it was saved (`false` for a dry run). `from` is `null` when the environment
+had no pointer. `bar` is the promotion gate's bar the move passed (issue #619): `null` when the
+deployment sets none, and always on a rollback, which is never gated. An older server omits it.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `environment` | `"local" \| "production"` | Yes |  |
+| `from` | `null \| number` | Yes |  |
+| `to` | `number` | Yes |  |
+| `saved` | `false \| true` | Yes |  |
+| `bar` | `null \| number` | Yes |  |
+
+## AgentPointerMoveSchema
+
+One entry of an environment's pointer history (issue #615). `movedByPrincipalId` is `null` only
+for a move recorded from a pointer that predates the history.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `environment` | `"local" \| "production"` | Yes |  |
+| `number` | `number` | Yes |  |
+| `reason` | `"set" \| "promote" \| "rollback"` | Yes |  |
+| `movedByPrincipalId` | `null \| string` | Yes |  |
+| `movedAt` | `string` | Yes |  |
+
+## AgentVersionBody
+
+A parsed version body; `surfaces` is always present (ADR-0101; issue #440).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `definition` | `Readonly<{ apiVersion: "agentworkspace.dev/v1"; kind: "AgentDefinition"; agent: Readonly<{ name: string; instructions: string; permissions: Readonly<{ readFiles: boolean; writeFiles: boolean; runCommands: boolean; unrestrictedNetwork: boolean; }>; model: string \| null; modelConnectionName: string \| null; runtimeProfileName: string \| null; }>; policy: Readonly<{ engine: "claude-agent-sdk"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; tools: Readonly<{ base: readonly string[] \| "claude_code_preset"; autoApprove: readonly string[]; deny: readonly string[]; permissionMode: "default" \| "acceptEdits" \| "bypassPermissions" \| "plan" \| "dontAsk" \| "auto"; allowDangerouslySkipPermissions: boolean; }>; }> \| Readonly<{ engine: "openai-agents"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; reasoningEffort?: "minimal" \| "low" \| "medium" \| "high" \| undefined; parallelToolCalls?: boolean \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "pi"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; thinkingLevel?: "minimal" \| "low" \| "medium" \| "high" \| "off" \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "mastra"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; toolCallConcurrency?: number \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }>; policySource: "stored" \| "compiled"; resources: Readonly<{ files: readonly Readonly<{ path: string; access: "read" \| "read-write"; }>[]; skills: readonly string[]; connectors: readonly string[]; }>; }>` | Yes |  |
+| `surfaces` | `readonly Readonly<{ name: string; agent: string; title?: string \| undefined; theme?: Readonly<{ colour?: string \| undefined; radius?: number \| undefined; mode?: "light" \| "dark" \| "system" \| undefined; density?: "compact" \| "comfortable" \| undefined; locale?: "en" \| "ja" \| undefined; logo?: Readonly<{ text: string; }> \| Readonly<{ url: string; }> \| undefined; }> \| undefined; layout?: "dock" \| "side" \| "page" \| "inline" \| undefined; parts?: Readonly<{ greeting?: string \| undefined; suggestedPrompts?: readonly string[] \| undefined; disclaimer?: string \| undefined; toolTrace?: "hidden" \| "collapsed" \| "full" \| undefined; history?: boolean \| undefined; feedback?: boolean \| undefined; agentSwitcher?: Readonly<{ agents: readonly string[]; }> \| undefined; }> \| undefined; toolResults?: Readonly<Record<string, "text" \| "card" \| "table">> \| undefined; allowedOrigins?: readonly string[] \| undefined; limits?: Readonly<{ turnsPerConversation?: number \| undefined; }> \| undefined; }>[]` | Yes |  |
+| `toolBundles` | `undefined \| readonly AgentVersionToolBundle[]` | No |  |
+| `description` | `undefined \| string` | No | ADR-0133 D2: what the agent is for, shown to platforms and to a parent agent choosing it. |
+| `subagents` | `undefined \| readonly Readonly<{ name: string; }>[]` | No | ADR-0133 D14: other agents of this workspace this agent may delegate to, by name; one level. |
+| `knowledge` | `undefined \| readonly (Readonly<{ kind: "files"; paths: readonly string[]; }> \| Readonly<{ kind: "connector"; name: string; }>)[]` | No | ADR-0133 D2: knowledge sources. Agent Workspace honours `files` and `connector`; `url` is not accepted in a body. |
+
+## AgentVersionBodyInput
+
+What `AgentVersionBodySchema` accepts; `surfaces` and `policySource` may be left out.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `definition` | `Readonly<{ apiVersion: "agentworkspace.dev/v1"; kind: "AgentDefinition"; agent: Readonly<{ name: string; instructions: string; permissions: Readonly<{ readFiles: boolean; writeFiles: boolean; runCommands: boolean; unrestrictedNetwork: boolean; }>; model: string \| null; modelConnectionName: string \| null; runtimeProfileName: string \| null; }>; policy: Readonly<{ engine: "claude-agent-sdk"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; tools: Readonly<{ base: readonly string[] \| "claude_code_preset"; autoApprove: readonly string[]; deny: readonly string[]; permissionMode: "default" \| "acceptEdits" \| "bypassPermissions" \| "plan" \| "dontAsk" \| "auto"; allowDangerouslySkipPermissions?: boolean \| undefined; }>; }> \| Readonly<{ engine: "openai-agents"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; reasoningEffort?: "minimal" \| "low" \| "medium" \| "high" \| undefined; parallelToolCalls?: boolean \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "pi"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; thinkingLevel?: "minimal" \| "low" \| "medium" \| "high" \| "off" \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "mastra"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; toolCallConcurrency?: number \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }>; resources: Readonly<{ files: readonly Readonly<{ path: string; access: "read" \| "read-write"; }>[]; skills: readonly string[]; connectors: readonly string[]; }>; policySource?: "stored" \| "compiled" \| undefined; }>` | Yes |  |
+| `surfaces` | `undefined \| readonly Readonly<{ name: string; agent: string; title?: string \| undefined; theme?: Readonly<{ colour?: string \| undefined; radius?: number \| undefined; mode?: "light" \| "dark" \| "system" \| undefined; density?: "compact" \| "comfortable" \| undefined; locale?: "en" \| "ja" \| undefined; logo?: Readonly<{ text: string; }> \| Readonly<{ url: string; }> \| undefined; }> \| undefined; layout?: "dock" \| "side" \| "page" \| "inline" \| undefined; parts?: Readonly<{ greeting?: string \| undefined; suggestedPrompts?: readonly string[] \| undefined; disclaimer?: string \| undefined; toolTrace?: "hidden" \| "collapsed" \| "full" \| undefined; history?: boolean \| undefined; feedback?: boolean \| undefined; agentSwitcher?: Readonly<{ agents: readonly string[]; }> \| undefined; }> \| undefined; toolResults?: Readonly<Record<string, "text" \| "card" \| "table">> \| undefined; allowedOrigins?: readonly string[] \| undefined; limits?: Readonly<{ turnsPerConversation?: number \| undefined; }> \| undefined; }>[]` | No |  |
+| `toolBundles` | `undefined \| readonly AgentVersionToolBundle[]` | No |  |
+| `description` | `undefined \| string` | No | ADR-0133 D2: what the agent is for, shown to platforms and to a parent agent choosing it. |
+| `subagents` | `undefined \| readonly Readonly<{ name: string; }>[]` | No | ADR-0133 D14: other agents of this workspace this agent may delegate to, by name; one level. |
+| `knowledge` | `undefined \| readonly (Readonly<{ kind: "files"; paths: readonly string[]; }> \| Readonly<{ kind: "connector"; name: string; }>)[]` | No | ADR-0133 D2: knowledge sources. Agent Workspace honours `files` and `connector`; `url` is not accepted in a body. |
+
+## AgentVersionBodySchema
+
+What a version holds: the agent's portable definition and its surfaces (ADR-0101, ADR-0108;
+issue #440). `surfaces` defaults to `[]`, so an agent with no surface saves without one.
+`toolBundles` is absent unless the agent has code tools (issue #790), so every earlier body is
+unchanged. `description`, `subagents` and `knowledge` (ADR-0133) are absent unless the agent sets
+them, for the same reason.
+
+These rules hold across the body, each refused at the offending entry's path:
+
+- surface names are unique within the body (`['surfaces', i, 'name']`);
+- every surface names this body's agent, `definition.agent.name` (`['surfaces', i, 'agent']`) —
+  a surface naming a different agent would otherwise be saved and silently attached to this one;
+- a tool has at most one bundle (`['toolBundles', i, 'tool']`);
+- subagent names are unique and none is the agent itself (`['subagents', i, 'name']`);
+- knowledge is a label on resources the agent already reaches: every `files` path is granted in
+  `definition.resources.files` (`['knowledge', i, 'paths', j]`) and every `connector` is in
+  `definition.resources.connectors` (`['knowledge', i, 'name']`).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `definition` | `Readonly<{ apiVersion: "agentworkspace.dev/v1"; kind: "AgentDefinition"; agent: Readonly<{ name: string; instructions: string; permissions: Readonly<{ readFiles: boolean; writeFiles: boolean; runCommands: boolean; unrestrictedNetwork: boolean; }>; model: string \| null; modelConnectionName: string \| null; runtimeProfileName: string \| null; }>; policy: Readonly<{ engine: "claude-agent-sdk"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; tools: Readonly<{ base: readonly string[] \| "claude_code_preset"; autoApprove: readonly string[]; deny: readonly string[]; permissionMode: "default" \| "acceptEdits" \| "bypassPermissions" \| "plan" \| "dontAsk" \| "auto"; allowDangerouslySkipPermissions: boolean; }>; }> \| Readonly<{ engine: "openai-agents"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; reasoningEffort?: "minimal" \| "low" \| "medium" \| "high" \| undefined; parallelToolCalls?: boolean \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "pi"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; thinkingLevel?: "minimal" \| "low" \| "medium" \| "high" \| "off" \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "mastra"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; toolCallConcurrency?: number \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }>; policySource: "stored" \| "compiled"; resources: Readonly<{ files: readonly Readonly<{ path: string; access: "read" \| "read-write"; }>[]; skills: readonly string[]; connectors: readonly string[]; }>; }>` | Yes |  |
+| `surfaces` | `readonly Readonly<{ name: string; agent: string; title?: string \| undefined; theme?: Readonly<{ colour?: string \| undefined; radius?: number \| undefined; mode?: "light" \| "dark" \| "system" \| undefined; density?: "compact" \| "comfortable" \| undefined; locale?: "en" \| "ja" \| undefined; logo?: Readonly<{ text: string; }> \| Readonly<{ url: string; }> \| undefined; }> \| undefined; layout?: "dock" \| "side" \| "page" \| "inline" \| undefined; parts?: Readonly<{ greeting?: string \| undefined; suggestedPrompts?: readonly string[] \| undefined; disclaimer?: string \| undefined; toolTrace?: "hidden" \| "collapsed" \| "full" \| undefined; history?: boolean \| undefined; feedback?: boolean \| undefined; agentSwitcher?: Readonly<{ agents: readonly string[]; }> \| undefined; }> \| undefined; toolResults?: Readonly<Record<string, "text" \| "card" \| "table">> \| undefined; allowedOrigins?: readonly string[] \| undefined; limits?: Readonly<{ turnsPerConversation?: number \| undefined; }> \| undefined; }>[]` | Yes |  |
+| `toolBundles` | `undefined \| readonly AgentVersionToolBundle[]` | No |  |
+| `description` | `undefined \| string` | No | ADR-0133 D2: what the agent is for, shown to platforms and to a parent agent choosing it. |
+| `subagents` | `undefined \| readonly Readonly<{ name: string; }>[]` | No | ADR-0133 D14: other agents of this workspace this agent may delegate to, by name; one level. |
+| `knowledge` | `undefined \| readonly (Readonly<{ kind: "files"; paths: readonly string[]; }> \| Readonly<{ kind: "connector"; name: string; }>)[]` | No | ADR-0133 D2: knowledge sources. Agent Workspace honours `files` and `connector`; `url` is not accepted in a body. |
+
+## AgentVersionCheckResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `ok` | `true` | Yes |  |
+| `number` | `number` | Yes |  |
+
+## AgentVersionCheckResponseSchema
+
+The `200` of every dry run: the body would be saved, as version `number` (ADR-0101; C8;
+issue #440).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `ok` | `true` | Yes |  |
+| `number` | `number` | Yes |  |
+
+## AgentVersionDraft
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `body` | `AgentVersionBody` | Yes |  |
+| `summary` | `string` | Yes |  |
+| `via` | `"ui" \| "aw-push" \| "api"` | Yes |  |
+
+## AgentVersionDraftInput
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `body` | `AgentVersionBodyInput` | Yes |  |
+| `summary` | `string` | Yes |  |
+| `via` | `"ui" \| "aw-push" \| "api"` | Yes |  |
+
+## AgentVersionDraftSchema
+
+A version as a client submits it: the body, a summary and how it was saved (ADR-0101; #440).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `body` | `AgentVersionBody` | Yes |  |
+| `summary` | `string` | Yes |  |
+| `via` | `"ui" \| "aw-push" \| "api"` | Yes |  |
+
+## AgentVersionEvaluation
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `version` | `number` | Yes |  |
+| `score` | `number` | Yes |  |
+| `passed` | `number` | Yes |  |
+| `total` | `number` | Yes |  |
+
+## AgentVersionEvaluationSchema
+
+The newest evaluation of one version (issue #714): what the promotion gate reads before it
+judges the version (issue #619), so the score shown is the score gated. `score` is
+`passed / total` rounded to four places.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `version` | `number` | Yes |  |
+| `score` | `number` | Yes |  |
+| `passed` | `number` | Yes |  |
+| `total` | `number` | Yes |  |
+
+## AgentVersionListResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `items` | `readonly AgentVersionResource[]` | Yes |  |
+| `pointers` | `readonly AgentVersionPointer[]` | Yes | At most one pointer per environment, as S1-04's `(agent_id, environment)` key holds them. |
+| `materialised` | `null \| number` | Yes | The version the agent was last written from, or `null` once it was edited outside versions (the UI's `PATCH`, `PUT /policy` or `PUT /resources`). `aw push` reads the agent as edited since its `local` pointer moved when this differs from that pointer's `number` (issue #613). |
+| `moves` | `readonly AgentPointerMove[]` | Yes | The last `AGENT_POINTER_MOVES_LISTED` pointer moves of every environment, newest first (issue #615). A server older than the history omits it, which reads as `[]`. |
+| `evaluations` | `readonly AgentVersionEvaluation[]` | Yes | The newest evaluation of every version that has one, oldest version first; a version with none is absent (issue #714). A server older than this field omits it, which reads as `[]`. |
+
+## AgentVersionListResponseSchema
+
+An agent's versions and its environment pointers. Slice 1 has no pagination (ADR-0101;
+issue #440).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `items` | `readonly AgentVersionResource[]` | Yes |  |
+| `pointers` | `readonly AgentVersionPointer[]` | Yes | At most one pointer per environment, as S1-04's `(agent_id, environment)` key holds them. |
+| `materialised` | `null \| number` | Yes | The version the agent was last written from, or `null` once it was edited outside versions (the UI's `PATCH`, `PUT /policy` or `PUT /resources`). `aw push` reads the agent as edited since its `local` pointer moved when this differs from that pointer's `number` (issue #613). |
+| `moves` | `readonly AgentPointerMove[]` | Yes | The last `AGENT_POINTER_MOVES_LISTED` pointer moves of every environment, newest first (issue #615). A server older than the history omits it, which reads as `[]`. |
+| `evaluations` | `readonly AgentVersionEvaluation[]` | Yes | The newest evaluation of every version that has one, oldest version first; a version with none is absent (issue #714). A server older than this field omits it, which reads as `[]`. |
+
+## AgentVersionPointer
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `environment` | `"local" \| "production"` | Yes |  |
+| `number` | `number` | Yes |  |
+| `updatedAt` | `string` | Yes |  |
+
+## AgentVersionPointerSchema
+
+Which version an environment runs, and when that last changed (ADR-0101; issue #440).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `environment` | `"local" \| "production"` | Yes |  |
+| `number` | `number` | Yes |  |
+| `updatedAt` | `string` | Yes |  |
+
+## AgentVersionProblemCode
+
+- `"invalid_agent_id"`
+- `"invalid_agent_version"`
+- `"unsupported_engine"`
+- `"dangerous_permission_mode_refused"`
+- `"agent_not_found"`
+- `"agent_policy_not_configured"`
+- `"agent_version_not_found"`
+- `"no_pointer"`
+- `"nothing_to_roll_back"`
+- `"promotion_not_evaluated"`
+- `"promotion_gate_failed"`
+- `"code_tool_needs_host"`
+- `"network_policy_unsupported"`
+- `"stdio_connector_needs_tool_sandbox"`
+- `"tool_bundle_unknown"`
+- `"tool_bundles_not_configured"`
+- `"agent_definition_references_missing"`
+- `"agent_definition_reference_ambiguous"`
+- `"engine_capability_unsupported"`
+- `"agent_subagent_unusable"`
+- `"engine_switch_would_widen"`
+- `"policy_cannot_widen"`
+- `"surface_name_taken"`
+- `"agent_name_conflict"`
+
+## AgentVersionResource
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `agentId` | `string` | Yes |  |
+| `workspaceId` | `string` | Yes |  |
+| `number` | `number` | Yes |  |
+| `summary` | `string` | Yes |  |
+| `via` | `"ui" \| "aw-push" \| "api"` | Yes |  |
+| `body` | `AgentVersionBody` | Yes |  |
+| `createdByPrincipalId` | `string` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+
+## AgentVersionResourceSchema
+
+One saved version as it crosses the HTTP boundary — and the columns S1-04's version store keeps.
+A version is immutable: it has a `createdAt` and no `updatedAt` (ADR-0101; issue #440).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `agentId` | `string` | Yes |  |
+| `workspaceId` | `string` | Yes |  |
+| `number` | `number` | Yes |  |
+| `summary` | `string` | Yes |  |
+| `via` | `"ui" \| "aw-push" \| "api"` | Yes |  |
+| `body` | `AgentVersionBody` | Yes |  |
+| `createdByPrincipalId` | `string` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+
+## AgentVersionSummarySchema
+
+A one-line description of what a version changed: 1–200 characters, no control (`Cc`), format
+(`Cf`), lone surrogate (`Cs`) or line or paragraph separator (`Zl`, `Zp`) character, and no
+whitespace at either end, so a summary of spaces alone is refused. The length check aborts
+before the patterns run (ADR-0101; issue #440).
+
+`string`
+
+## AgentVersionToolBundle
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `tool` | `string` | Yes |  |
+| `digest` | `string` | Yes |  |
+| `description` | `undefined \| string` | No |  |
+| `inputSchema` | `undefined \| Readonly<Record<string, unknown>>` | No |  |
+| `outputSchema` | `undefined \| Readonly<Record<string, unknown>>` | No |  |
+| `timeoutMs` | `undefined \| number` | No |  |
+| `secrets` | `undefined \| readonly string[]` | No |  |
+| `allowedDomains` | `undefined \| readonly string[]` | No |  |
+
+## AgentVersionToolBundleSchema
+
+The bundle a version pins for one code tool: the tool's name and the digest of the one ESM file
+`aw push` built from its run file (ADR-0118 TS1; issue #790). A rollback to an earlier version
+therefore also rolls the tool's code back.
+
+A hosted tool sandbox is made from the version alone (issue #791), so the entry also records the
+declaration the tool host serves: `description`, `inputSchema`, `outputSchema` and `timeoutMs`,
+and the `secrets` and `allowedDomains` the tool needs (ADR-0118 TS4, TS5). All are optional so an
+entry `aw push` wrote before the sandbox existed still parses; such a tool is not served by a
+hosted sandbox.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `tool` | `string` | Yes |  |
+| `digest` | `string` | Yes |  |
+| `description` | `undefined \| string` | No |  |
+| `inputSchema` | `undefined \| Readonly<Record<string, unknown>>` | No |  |
+| `outputSchema` | `undefined \| Readonly<Record<string, unknown>>` | No |  |
+| `timeoutMs` | `undefined \| number` | No |  |
+| `secrets` | `undefined \| readonly string[]` | No |  |
+| `allowedDomains` | `undefined \| readonly string[]` | No |  |
+
+## AgentVersionVia
+
+- `"ui"`
+- `"aw-push"`
+- `"api"`
+
+## AgentVersionViaSchema
+
+`AGENT_VERSION_VIAS` as a schema (ADR-0101; issue #440).
+
+- `"ui"`
+- `"aw-push"`
+- `"api"`
+
+## CreateAgentFromVersionRequest
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `version` | `AgentVersionDraft` | Yes |  |
+| `dryRun` | `undefined \| true` | No |  |
+
+## CreateAgentFromVersionRequestInput
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `version` | `AgentVersionDraftInput` | Yes |  |
+| `dryRun` | `undefined \| true` | No |  |
+
+## CreateAgentFromVersionRequestSchema
+
+Creates an agent from its first version. The agent's name is `version.body.definition.agent.name`;
+the strict object refuses the legacy `CreateAgentInput` keys (`name`, `instructions`, …), so the
+two request shapes never overlap (ADR-0101; issue #440).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `version` | `AgentVersionDraft` | Yes |  |
+| `dryRun` | `undefined \| true` | No |  |
+
+## CreateAgentFromVersionResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `agent` | `Readonly<{ id: string; workspaceId: string; name: string; instructions: string; modelConnectionId: string \| null; model: string \| null; runtimeProfileId: string \| null; permissions: Readonly<{ readFiles: boolean; writeFiles: boolean; runCommands: boolean; unrestrictedNetwork: boolean; }>; createdBy: string \| null; ownerPrincipalId: string; createdAt: string; updatedAt: string; }>` | Yes |  |
+| `version` | `AgentVersionResource` | Yes |  |
+
+## CreateAgentFromVersionResponseSchema
+
+The `201` of a create-from-version: the agent and its version `1` (ADR-0101; issue #440).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `agent` | `Readonly<{ id: string; workspaceId: string; name: string; instructions: string; modelConnectionId: string \| null; model: string \| null; runtimeProfileId: string \| null; permissions: Readonly<{ readFiles: boolean; writeFiles: boolean; runCommands: boolean; unrestrictedNetwork: boolean; }>; createdBy: string \| null; ownerPrincipalId: string; createdAt: string; updatedAt: string; }>` | Yes |  |
+| `version` | `AgentVersionResource` | Yes |  |
+
+## CreateAgentVersionRequest
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `body` | `AgentVersionBody` | Yes |  |
+| `summary` | `string` | Yes |  |
+| `via` | `"ui" \| "aw-push" \| "api"` | Yes |  |
+| `dryRun` | `undefined \| true` | No |  |
+
+## CreateAgentVersionRequestInput
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `body` | `AgentVersionBodyInput` | Yes |  |
+| `summary` | `string` | Yes |  |
+| `via` | `"ui" \| "aw-push" \| "api"` | Yes |  |
+| `dryRun` | `undefined \| true` | No |  |
+
+## CreateAgentVersionRequestSchema
+
+The body of a create-version request (S1-05). `dryRun: true` runs the whole save pipeline and
+writes nothing (C8); `dryRun: false` is refused rather than meaning "save", so a client cannot
+believe it asked for a dry run when it did not (ADR-0101; issue #440).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `body` | `AgentVersionBody` | Yes |  |
+| `summary` | `string` | Yes |  |
+| `via` | `"ui" \| "aw-push" \| "api"` | Yes |  |
+| `dryRun` | `undefined \| true` | No |  |
+
+## PromoteAgentRequest
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `version` | `undefined \| number` | No |  |
+| `dryRun` | `undefined \| true` | No |  |
+
+## PromoteAgentRequestSchema
+
+Points `production` at `local`'s version, or at `version` when given (issue #615). `dryRun: true`
+decides and validates the move and writes nothing; `dryRun: false` is refused, as on a version
+save. When the deployment's policy sets `promotion.minEvalScore`, the version's latest evaluation
+must reach it (issue #619): otherwise `409 promotion_not_evaluated` or `409 promotion_gate_failed`,
+and a dry run answers the same.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `version` | `undefined \| number` | No |  |
+| `dryRun` | `undefined \| true` | No |  |
+
+## RollbackAgentRequest
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `environment` | `"local" \| "production"` | Yes |  |
+| `dryRun` | `undefined \| true` | No |  |
+
+## RollbackAgentRequestInput
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `environment` | `undefined \| "local" \| "production"` | No |  |
+| `dryRun` | `undefined \| true` | No |  |
+
+## RollbackAgentRequestSchema
+
+Points `environment` (default `production`) back at the version before its pointer's (issue
+#615). A rollback steps back past the version it left, so rolling back twice goes two versions
+back, never forward again. `dryRun` is as on `PromoteAgentRequestSchema`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `environment` | `"local" \| "production"` | Yes |  |
+| `dryRun` | `undefined \| true` | No |  |
+
+## SetAgentPointerRequest
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `environment` | `"local" \| "production"` | Yes |  |
+| `version` | `number` | Yes |  |
+
+## SetAgentPointerRequestSchema
+
+Points an environment at a saved version (S1-06; ADR-0101; issue #440).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `environment` | `"local" \| "production"` | Yes |  |
+| `version` | `number` | Yes |  |
+
+## SetAgentPointerResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `agent` | `Readonly<{ id: string; workspaceId: string; name: string; instructions: string; modelConnectionId: string \| null; model: string \| null; runtimeProfileId: string \| null; permissions: Readonly<{ readFiles: boolean; writeFiles: boolean; runCommands: boolean; unrestrictedNetwork: boolean; }>; createdBy: string \| null; ownerPrincipalId: string; createdAt: string; updatedAt: string; }>` | Yes |  |
+| `pointer` | `AgentVersionPointer` | Yes |  |
+
+## SetAgentPointerResponseSchema
+
+The `200` of a pointer move: the agent as it now runs, and the pointer (ADR-0101; #440).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `agent` | `Readonly<{ id: string; workspaceId: string; name: string; instructions: string; modelConnectionId: string \| null; model: string \| null; runtimeProfileId: string \| null; permissions: Readonly<{ readFiles: boolean; writeFiles: boolean; runCommands: boolean; unrestrictedNetwork: boolean; }>; createdBy: string \| null; ownerPrincipalId: string; createdAt: string; updatedAt: string; }>` | Yes |  |
+| `pointer` | `AgentVersionPointer` | Yes |  |
+
+## TOOL_BUNDLE_DIGEST_PATTERN
+
+A bundle's address: the lower-case hex SHA-256 of its bytes (ADR-0118 TS1; issue #790).
+
+Value: `/^[0-9a-f]{64}$/`
+
+## TOOL_BUNDLE_MAX_BYTES
+
+The most bytes one code-tool bundle may hold (ADR-0118 TS1; issue #790).
+
+Value: `8 * 1024 * 1024`
+
+## TOOL_BUNDLE_PROBLEM_CODES
+
+The problem codes the tool-bundle routes own (ADR-0118 TS1; issue #790). The common vocabulary
+(`malformed_body`, `request_body_too_large`, …) is `COMMON_PROBLEM_CODES`.
+
+| Key | Value |
+| --- | --- |
+| `invalid_tool_bundle` | `400` |
+| `tool_bundle_too_large` | `413` |
+| `tool_bundle_not_found` | `404` |
+| `tool_bundles_not_configured` | `503` |
+
+## TOOL_BUNDLE_TIMEOUT_MAX_MS
+
+The longest a code tool's `timeoutMs` may be (ADR-0118 TS1).
+
+Value: `600_000`
+
+## TOOL_SANDBOX_DECLARATION_MAX
+
+The most secrets, and the most domains, one code tool may declare (ADR-0118 TS4, TS5).
+
+Value: `32`
+
+## TOOL_SANDBOX_TOOLS_MAX
+
+The most tools one session's tool sandbox serves.
+
+Value: `64`
+
+## ToolAllowedDomainsSchema
+
+The hosts a code tool may reach (ADR-0118 TS5): names or `*.suffix`, each once.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `length` | `number` | Yes | Gets the length of the array. This is a number one higher than the highest element defined in an array. |
+| `toString` | `() => string` | Yes | Returns a string representation of an array. |
+| `toLocaleString` | `{ (): string; (locales: string \| string[], options?: Intl.NumberFormatOptions & Intl.DateTimeFormatOptions): string; }` | Yes | Returns a string representation of an array. The elements are converted to string using their toLocaleString methods. |
+| `concat` | `{ (...items: ConcatArray<string>[]): string[]; (...items: (string \| ConcatArray<string>)[]): string[]; }` | Yes | Combines two or more arrays. |
+| `join` | `(separator?: string) => string` | Yes | Adds all the elements of an array separated by the specified separator string. |
+| `slice` | `(start?: number, end?: number) => string[]` | Yes | Returns a section of an array. |
+| `indexOf` | `(searchElement: string, fromIndex?: number) => number` | Yes | Returns the index of the first occurrence of a value in an array. |
+| `lastIndexOf` | `(searchElement: string, fromIndex?: number) => number` | Yes | Returns the index of the last occurrence of a specified value in an array. |
+| `every` | `{ <S extends string>(predicate: (value: string, index: number, array: readonly string[]) => value is S, thisArg?: any): this is readonly S[]; (predicate: (value: string, index: number, array: readonly string[]) => unknown, thisArg?: any): boolean; }` | Yes | Determines whether all the members of an array satisfy the specified test. |
+| `some` | `(predicate: (value: string, index: number, array: readonly string[]) => unknown, thisArg?: any) => boolean` | Yes | Determines whether the specified callback function returns true for any element of an array. |
+| `forEach` | `(callbackfn: (value: string, index: number, array: readonly string[]) => void, thisArg?: any) => void` | Yes | Performs the specified action for each element in an array. |
+| `map` | `<U>(callbackfn: (value: string, index: number, array: readonly string[]) => U, thisArg?: any) => U[]` | Yes | Calls a defined callback function on each element of an array, and returns an array that contains the results. |
+| `filter` | `{ <S extends string>(predicate: (value: string, index: number, array: readonly string[]) => value is S, thisArg?: any): S[]; (predicate: (value: string, index: number, array: readonly string[]) => unknown, thisArg?: any): string[]; }` | Yes | Returns the elements of an array that meet the condition specified in a callback function. |
+| `reduce` | `{ (callbackfn: (previousValue: string, currentValue: string, currentIndex: number, array: readonly string[]) => string): string; (callbackfn: (previousValue: string, currentValue: string, currentIndex: number, array: readonly string[]) => string, initialValue: string): string; <U>(callbackfn: (previousValue: U, currentValue: string, currentIndex: number, array: readonly string[]) => U, initialValue: U): U; }` | Yes | Calls the specified callback function for all the elements in an array. The return value of the callback function is the accumulated result, and is provided as an argument in the next call to the callback function. |
+| `reduceRight` | `{ (callbackfn: (previousValue: string, currentValue: string, currentIndex: number, array: readonly string[]) => string): string; (callbackfn: (previousValue: string, currentValue: string, currentIndex: number, array: readonly string[]) => string, initialValue: string): string; <U>(callbackfn: (previousValue: U, currentValue: string, currentIndex: number, array: readonly string[]) => U, initialValue: U): U; }` | Yes | Calls the specified callback function for all the elements in an array, in descending order. The return value of the callback function is the accumulated result, and is provided as an argument in the next call to the callback function. |
+| `find` | `{ <S extends string>(predicate: (value: string, index: number, obj: readonly string[]) => value is S, thisArg?: any): S \| undefined; (predicate: (value: string, index: number, obj: readonly string[]) => unknown, thisArg?: any): string \| undefined; }` | Yes | Returns the value of the first element in the array where predicate is true, and undefined otherwise. |
+| `findIndex` | `(predicate: (value: string, index: number, obj: readonly string[]) => unknown, thisArg?: any) => number` | Yes | Returns the index of the first element in the array where predicate is true, and -1 otherwise. |
+| `entries` | `() => ArrayIterator<[number, string]>` | Yes | Returns an iterable of key, value pairs for every entry in the array |
+| `keys` | `() => ArrayIterator<number>` | Yes | Returns an iterable of keys in the array |
+| `values` | `() => ArrayIterator<string>` | Yes | Returns an iterable of values in the array |
+| `includes` | `(searchElement: string, fromIndex?: number) => boolean` | Yes | Determines whether an array includes a certain element, returning true or false as appropriate. |
+| `flatMap` | `<U, This = undefined>(callback: (this: This, value: string, index: number, array: string[]) => U \| readonly U[], thisArg?: This \| undefined) => U[]` | Yes | Calls a defined callback function on each element of an array. Then, flattens the result into a new array. This is identical to a map followed by flat with depth 1. |
+| `flat` | `<A, D extends number = 1>(this: A, depth?: D \| undefined) => FlatArray<A, D>[]` | Yes | Returns a new array with all sub-array elements concatenated into it recursively up to the specified depth. |
+| `at` | `(index: number) => string \| undefined` | Yes | Returns the item located at the specified index. |
+| `findLast` | `{ <S extends string>(predicate: (value: string, index: number, array: readonly string[]) => value is S, thisArg?: any): S \| undefined; (predicate: (value: string, index: number, array: readonly string[]) => unknown, thisArg?: any): string \| undefined; }` | Yes | Returns the value of the last element in the array where predicate is true, and undefined otherwise. |
+| `findLastIndex` | `(predicate: (value: string, index: number, array: readonly string[]) => unknown, thisArg?: any) => number` | Yes | Returns the index of the last element in the array where predicate is true, and -1 otherwise. |
+| `toReversed` | `() => string[]` | Yes | Copies the array and returns the copied array with all of its elements reversed. |
+| `toSorted` | `(compareFn?: ((a: string, b: string) => number) \| undefined) => string[]` | Yes | Copies and sorts the array. |
+| `toSpliced` | `{ (start: number, deleteCount: number, ...items: string[]): string[]; (start: number, deleteCount?: number): string[]; }` | Yes | Copies an array and removes elements while, if necessary, inserting new elements in their place, returning the remaining elements. |
+| `with` | `(index: number, value: string) => string[]` | Yes | Copies an array, then overwrites the value at the provided index with the given value. If the index is negative, then it replaces from the end of the array |
+| `[Symbol.iterator]` | `() => ArrayIterator<string>` | Yes | Iterator of values in the array. |
+| `[Symbol.unscopables]` | `{ readonly [x: number]: boolean \| undefined; readonly length?: boolean; toString?: boolean; toLocaleString?: boolean; concat?: boolean; join?: boolean; slice?: boolean; indexOf?: boolean; lastIndexOf?: boolean; every?: boolean; some?: boolean; forEach?: boolean; map?: boolean; filter?: boolean; reduce?: boolean; reduceRight?: boolean; find?: boolean; findIndex?: boolean; entries?: boolean; keys?: boolean; values?: boolean; includes?: boolean; flatMap?: boolean; flat?: boolean; at?: boolean; findLast?: boolean; findLastIndex?: boolean; toReversed?: boolean; toSorted?: boolean; toSpliced?: boolean; with?: boolean; [Symbol.iterator]?: boolean; readonly [Symbol.unscopables]?: boolean; }` | Yes | Is an object whose properties have the value 'true' when they will be absent when used in a 'with' statement. |
+
+## ToolBundle
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `digest` | `string` | Yes |  |
+| `sizeBytes` | `number` | Yes |  |
+
+## ToolBundleDigestSchema
+
+`TOOL_BUNDLE_DIGEST_PATTERN` as a schema.
+
+`string`
+
+## ToolBundleProblemCode
+
+- `"tool_bundles_not_configured"`
+- `"invalid_tool_bundle"`
+- `"tool_bundle_too_large"`
+- `"tool_bundle_not_found"`
+
+## ToolBundleResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `bundle` | `ToolBundle` | Yes |  |
+
+## ToolBundleResponseSchema
+
+What `GET /api/tool-bundles/:digest` answers.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `bundle` | `ToolBundle` | Yes |  |
+
+## ToolBundleSchema
+
+One stored bundle: its address and size. The bytes are never served back.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `digest` | `string` | Yes |  |
+| `sizeBytes` | `number` | Yes |  |
+
+## ToolSandboxManifest
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `tools` | `readonly Readonly<{ name: string; description: string; inputSchema: Readonly<Record<string, unknown>>; timeoutMs: number; digest: string; bundleBase64: string; }>[]` | Yes |  |
+| `stdioServers` | `readonly Readonly<{ name: string; command: "npx"; args: readonly string[]; timeoutMs: number; }>[]` | Yes |  |
+| `env` | `Readonly<Record<string, string>>` | Yes |  |
+
+## ToolSandboxManifestSchema
+
+What the runner hands a tool sandbox (ADR-0118 TS2, TS4, TS6): the tools and `stdio` servers to
+serve and `env`, which is the sandbox's whole environment, exactly the secrets the session's
+tools and servers declared. It is written into the sandbox as a file, never passed as an
+argument or an image environment variable.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `tools` | `readonly Readonly<{ name: string; description: string; inputSchema: Readonly<Record<string, unknown>>; timeoutMs: number; digest: string; bundleBase64: string; }>[]` | Yes |  |
+| `stdioServers` | `readonly Readonly<{ name: string; command: "npx"; args: readonly string[]; timeoutMs: number; }>[]` | Yes |  |
+| `env` | `Readonly<Record<string, string>>` | Yes |  |
+
+## ToolSandboxRequest
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `key` | `string` | Yes |  |
+| `manifest` | `ToolSandboxManifest` | Yes |  |
+| `allowedDomains` | `readonly string[]` | Yes |  |
+| `run` | `Readonly<{ runId: string; token: string; }>` | Yes |  |
+
+## ToolSandboxRequestSchema
+
+What a run request tells the runner about its session's tool sandbox (ADR-0118 TS2, TS3, TS4,
+TS5): `key` identifies the session's tool set (a changed key replaces the sandbox), `manifest` is
+what to serve, `allowedDomains` the union the sandbox may reach, and `run` the run and the
+per-run bearer token the gateway will present for it.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `key` | `string` | Yes |  |
+| `manifest` | `ToolSandboxManifest` | Yes |  |
+| `allowedDomains` | `readonly string[]` | Yes |  |
+| `run` | `Readonly<{ runId: string; token: string; }>` | Yes |  |
+
+## ToolSandboxToolSchema
+
+One tool of a session's sandbox: what the tool host serves, and the bundle it runs.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `description` | `string` | Yes |  |
+| `inputSchema` | `Readonly<Record<string, unknown>>` | Yes |  |
+| `timeoutMs` | `number` | Yes |  |
+| `digest` | `string` | Yes |  |
+| `bundleBase64` | `string` | Yes |  |
+
+## ToolSecretNamesSchema
+
+The secrets a code tool declares (ADR-0118 TS4): names only, each once.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `length` | `number` | Yes | Gets the length of the array. This is a number one higher than the highest element defined in an array. |
+| `toString` | `() => string` | Yes | Returns a string representation of an array. |
+| `toLocaleString` | `{ (): string; (locales: string \| string[], options?: Intl.NumberFormatOptions & Intl.DateTimeFormatOptions): string; }` | Yes | Returns a string representation of an array. The elements are converted to string using their toLocaleString methods. |
+| `concat` | `{ (...items: ConcatArray<string>[]): string[]; (...items: (string \| ConcatArray<string>)[]): string[]; }` | Yes | Combines two or more arrays. |
+| `join` | `(separator?: string) => string` | Yes | Adds all the elements of an array separated by the specified separator string. |
+| `slice` | `(start?: number, end?: number) => string[]` | Yes | Returns a section of an array. |
+| `indexOf` | `(searchElement: string, fromIndex?: number) => number` | Yes | Returns the index of the first occurrence of a value in an array. |
+| `lastIndexOf` | `(searchElement: string, fromIndex?: number) => number` | Yes | Returns the index of the last occurrence of a specified value in an array. |
+| `every` | `{ <S extends string>(predicate: (value: string, index: number, array: readonly string[]) => value is S, thisArg?: any): this is readonly S[]; (predicate: (value: string, index: number, array: readonly string[]) => unknown, thisArg?: any): boolean; }` | Yes | Determines whether all the members of an array satisfy the specified test. |
+| `some` | `(predicate: (value: string, index: number, array: readonly string[]) => unknown, thisArg?: any) => boolean` | Yes | Determines whether the specified callback function returns true for any element of an array. |
+| `forEach` | `(callbackfn: (value: string, index: number, array: readonly string[]) => void, thisArg?: any) => void` | Yes | Performs the specified action for each element in an array. |
+| `map` | `<U>(callbackfn: (value: string, index: number, array: readonly string[]) => U, thisArg?: any) => U[]` | Yes | Calls a defined callback function on each element of an array, and returns an array that contains the results. |
+| `filter` | `{ <S extends string>(predicate: (value: string, index: number, array: readonly string[]) => value is S, thisArg?: any): S[]; (predicate: (value: string, index: number, array: readonly string[]) => unknown, thisArg?: any): string[]; }` | Yes | Returns the elements of an array that meet the condition specified in a callback function. |
+| `reduce` | `{ (callbackfn: (previousValue: string, currentValue: string, currentIndex: number, array: readonly string[]) => string): string; (callbackfn: (previousValue: string, currentValue: string, currentIndex: number, array: readonly string[]) => string, initialValue: string): string; <U>(callbackfn: (previousValue: U, currentValue: string, currentIndex: number, array: readonly string[]) => U, initialValue: U): U; }` | Yes | Calls the specified callback function for all the elements in an array. The return value of the callback function is the accumulated result, and is provided as an argument in the next call to the callback function. |
+| `reduceRight` | `{ (callbackfn: (previousValue: string, currentValue: string, currentIndex: number, array: readonly string[]) => string): string; (callbackfn: (previousValue: string, currentValue: string, currentIndex: number, array: readonly string[]) => string, initialValue: string): string; <U>(callbackfn: (previousValue: U, currentValue: string, currentIndex: number, array: readonly string[]) => U, initialValue: U): U; }` | Yes | Calls the specified callback function for all the elements in an array, in descending order. The return value of the callback function is the accumulated result, and is provided as an argument in the next call to the callback function. |
+| `find` | `{ <S extends string>(predicate: (value: string, index: number, obj: readonly string[]) => value is S, thisArg?: any): S \| undefined; (predicate: (value: string, index: number, obj: readonly string[]) => unknown, thisArg?: any): string \| undefined; }` | Yes | Returns the value of the first element in the array where predicate is true, and undefined otherwise. |
+| `findIndex` | `(predicate: (value: string, index: number, obj: readonly string[]) => unknown, thisArg?: any) => number` | Yes | Returns the index of the first element in the array where predicate is true, and -1 otherwise. |
+| `entries` | `() => ArrayIterator<[number, string]>` | Yes | Returns an iterable of key, value pairs for every entry in the array |
+| `keys` | `() => ArrayIterator<number>` | Yes | Returns an iterable of keys in the array |
+| `values` | `() => ArrayIterator<string>` | Yes | Returns an iterable of values in the array |
+| `includes` | `(searchElement: string, fromIndex?: number) => boolean` | Yes | Determines whether an array includes a certain element, returning true or false as appropriate. |
+| `flatMap` | `<U, This = undefined>(callback: (this: This, value: string, index: number, array: string[]) => U \| readonly U[], thisArg?: This \| undefined) => U[]` | Yes | Calls a defined callback function on each element of an array. Then, flattens the result into a new array. This is identical to a map followed by flat with depth 1. |
+| `flat` | `<A, D extends number = 1>(this: A, depth?: D \| undefined) => FlatArray<A, D>[]` | Yes | Returns a new array with all sub-array elements concatenated into it recursively up to the specified depth. |
+| `at` | `(index: number) => string \| undefined` | Yes | Returns the item located at the specified index. |
+| `findLast` | `{ <S extends string>(predicate: (value: string, index: number, array: readonly string[]) => value is S, thisArg?: any): S \| undefined; (predicate: (value: string, index: number, array: readonly string[]) => unknown, thisArg?: any): string \| undefined; }` | Yes | Returns the value of the last element in the array where predicate is true, and undefined otherwise. |
+| `findLastIndex` | `(predicate: (value: string, index: number, array: readonly string[]) => unknown, thisArg?: any) => number` | Yes | Returns the index of the last element in the array where predicate is true, and -1 otherwise. |
+| `toReversed` | `() => string[]` | Yes | Copies the array and returns the copied array with all of its elements reversed. |
+| `toSorted` | `(compareFn?: ((a: string, b: string) => number) \| undefined) => string[]` | Yes | Copies and sorts the array. |
+| `toSpliced` | `{ (start: number, deleteCount: number, ...items: string[]): string[]; (start: number, deleteCount?: number): string[]; }` | Yes | Copies an array and removes elements while, if necessary, inserting new elements in their place, returning the remaining elements. |
+| `with` | `(index: number, value: string) => string[]` | Yes | Copies an array, then overwrites the value at the provided index with the given value. If the index is negative, then it replaces from the end of the array |
+| `[Symbol.iterator]` | `() => ArrayIterator<string>` | Yes | Iterator of values in the array. |
+| `[Symbol.unscopables]` | `{ readonly [x: number]: boolean \| undefined; readonly length?: boolean; toString?: boolean; toLocaleString?: boolean; concat?: boolean; join?: boolean; slice?: boolean; indexOf?: boolean; lastIndexOf?: boolean; every?: boolean; some?: boolean; forEach?: boolean; map?: boolean; filter?: boolean; reduce?: boolean; reduceRight?: boolean; find?: boolean; findIndex?: boolean; entries?: boolean; keys?: boolean; values?: boolean; includes?: boolean; flatMap?: boolean; flat?: boolean; at?: boolean; findLast?: boolean; findLastIndex?: boolean; toReversed?: boolean; toSorted?: boolean; toSpliced?: boolean; with?: boolean; [Symbol.iterator]?: boolean; readonly [Symbol.unscopables]?: boolean; }` | Yes | Is an object whose properties have the value 'true' when they will be absent when used in a 'with' statement. |
+
+## UploadToolBundleRequest
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `contentBase64` | `string` | Yes |  |
+
+## UploadToolBundleRequestSchema
+
+The body of `POST /api/tool-bundles`: the bundle's bytes, standard padded base64.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `contentBase64` | `string` | Yes |  |
+
+## UploadToolBundleResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `bundle` | `ToolBundle` | Yes |  |
+| `created` | `false \| true` | Yes |  |
+
+## UploadToolBundleResponseSchema
+
+What `POST /api/tool-bundles` answers: `201` with `created: true` when the bytes were new, `200`
+with `created: false` when the workspace already held that digest and nothing was written.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `bundle` | `ToolBundle` | Yes |  |
+| `created` | `false \| true` | Yes |  |

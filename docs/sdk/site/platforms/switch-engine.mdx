@@ -1,0 +1,73 @@
+---
+title: "Switch the engine"
+description: "Change the agent loop an agent runs on, from the Claude Agent SDK to the OpenAI Agents SDK, pi or Mastra, and keep the platform; learn what changes per engine and which switches are refused."
+---
+
+<Info>
+**Chapter 7 · Run it on other platforms — step 9 of 9** · [the chapter map](/path/platforms)
+
+- **You will:** move `assistant` to another engine and see what the move changes.
+- **You will learn:** the difference between an engine, a platform and a deploy target, and which switches are refused.
+- **You need:** an Agent Workspace deployment to switch on ([Chapter 5](/path/ship) or `aw dev`).
+</Info>
+
+Three words are easy to mix up in this chapter, and they mean three different things:
+
+| Word              | What it is                                                    | You choose it with                         |
+| ----------------- | ------------------------------------------------------------- | ------------------------------------------ |
+| **engine**        | The agent loop that runs the agent, in a sandbox you operate  | `--engine`, or `engine` in the policy      |
+| **platform**      | Someone else's service you export or publish the agent to     | `--platform` on `aw platforms`             |
+| **deploy target** | Where Agent Workspace itself runs                             | `aw deploy`                                |
+
+Switching the engine changes the first only. The agent stays on your deployment, and the platform
+you export it to stays the same.
+
+## Switch
+
+```sh title="Switch an agent to another engine (illustrative)" claim="illustrative"
+aw engines list
+aw agents update <id> --engine mastra
+```
+
+`aw engines list` shows which engines your deployment offers. `aw agents update --engine` prints
+the translated policy before it applies it. The engines are `claude-agent-sdk` (the default),
+`openai-agents`, `pi` and `mastra`. The full commands, the SDK call and each engine's settings are in
+[Run it on another engine](/building/agents#run-it-on-another-engine) and
+[Choosing an engine for an agent](/resources/engines#choosing-an-engine-for-an-agent).
+
+In a portable agent definition, `engine` is a preference. It is the one field a hosted platform can
+never carry, so every platform export reports it as dropped (`field_unsupported`), except Gemini
+Enterprise, which calls your agent where it runs. An eject target reports it as `native` when the
+ejected project runs on the engine you named, and dropped otherwise.
+
+## What changes per engine
+
+| Capability     | `claude-agent-sdk` | `openai-agents` | `pi` | `mastra` |
+| -------------- | ------------------ | --------------- | ---- | -------- |
+| MCP connectors | yes                | yes             | no   | yes      |
+| Skills         | yes                | no              | yes  | yes      |
+| Subagents      | yes                | yes             | no   | yes      |
+| Fork a session | no                 | no              | yes  | no       |
+
+Each engine builds its own tools from the same four permissions, so the same agent reads files with
+a different tool name on each. The policy's `skills` and `limits` move with it.
+
+## What is refused
+
+A capability the new engine lacks is a typed refusal, never a run quietly without it:
+
+| Code                              | When                                                                                  |
+| --------------------------------- | ------------------------------------------------------------------------------------- |
+| `engine_capability_unsupported`   | The agent has a connector, a skill or a subagent the engine cannot honour (`422`)      |
+| `engine_switch_would_widen`       | The old policy denied something the new engine cannot express; nothing is stored (`422`) |
+| `unsupported_engine`              | The engine is not registered on this deployment (`400`)                               |
+| none, exit 2                      | A move to `claude-agent-sdk` from another engine: it needs that engine's own tool policy, so `aw` refuses before it sends anything; write the whole policy with `aw agents policy set <id> --file <json>` |
+
+`aw agents update --engine` checks `engine_switch_would_widen` itself before it sends anything, and
+refuses it the same way, as a usage error that exits 2.
+
+Switching never widens the agent: what the old policy withheld is carried into the new one.
+
+<Card title="Back to the chapter map" icon="arrow-left" href="/path/platforms">
+  Chapter 7: Run it on other platforms.
+</Card>

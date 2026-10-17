@@ -1,0 +1,13 @@
+{{- if .Values.podDisruptionBudget.enabled }}
+{{- range $name := list "web" "gateway" "runner-manager" }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: agent-workspace-{{ $name }}
+spec:
+  maxUnavailable: {{ $.Values.podDisruptionBudget.maxUnavailable }}
+  selector:
+    matchLabels: { app.kubernetes.io/name: "agent-workspace-{{ $name }}" }
+---
+{{- end }}
+{{- end }}

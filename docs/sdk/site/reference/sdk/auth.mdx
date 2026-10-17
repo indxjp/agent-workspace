@@ -1,0 +1,67 @@
+---
+title: "AuthClient"
+description: "Every method of AuthClient, its parameters, return type, and route."
+---
+
+<Note>This page is generated from `packages/sdk/src/resources/auth.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+`/api/auth/cli-*` — issue #242 (SDK-10, S-22): sign a person in from a terminal with an OAuth
+2.0 device authorization grant (RFC 8628), and sign them out again. ADR-0083.
+
+`startDevice` and `pollToken` need no credential: call them on a client built with
+`{ kind: 'session' }`, which sends none. A client of any other kind sends its bearer with every
+request, these two included, so an API key or token would travel to unauthenticated routes that
+have no use for it. The token `pollToken` returns is what a `{ kind: 'user-token', token }`
+client presents afterwards; `revoke` must be called on such a client. Every request, these
+included, states the contracts version it was built against (ADR-0078).
+
+## startDevice
+
+Start a sign-in: a device code to poll with, and a user code for the person to approve.
+
+```ts
+startDevice(options?: RequestOptions): Promise<DeviceAuthorizationResponse>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<DeviceAuthorizationResponse>`
+
+**Route:** `POST /api/auth/cli-device`
+
+## pollToken
+
+Poll once. Until the person answers, this throws an `ApiProblemError` whose `code` is
+`authorization_pending` or `slow_down` (poll again after the interval) or `access_denied`,
+`expired_token` or `invalid_grant` (stop).
+
+```ts
+pollToken(deviceCode: string, options?: RequestOptions): Promise<CliTokenResponse>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `deviceCode` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<CliTokenResponse>`
+
+**Route:** `POST /api/auth/cli-token`
+
+## revoke
+
+Sign out: revoke this client's own user token on the server.
+
+```ts
+async revoke(options?: RequestOptions): Promise<void>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<void>`
+
+**Route:** `DELETE /api/auth/cli-token`

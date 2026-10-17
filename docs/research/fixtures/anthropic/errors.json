@@ -1,0 +1,75 @@
+{
+  "description": "The complete HTTP status -> error.type mapping with the exact response envelope for each. Every envelope has a top-level type:\"error\", an error object with type+message, and a top-level request_id.",
+  "provenance": "documented",
+  "source": "https://platform.claude.com/docs/en/api/errors (retrieved 2026-09-03); the 429 spend-cap variant from https://platform.claude.com/docs/en/api/rate-limits#reaching-your-spend-cap (retrieved 2026-09-03)",
+  "cases": [
+    {
+      "status": 400,
+      "response_headers": {},
+      "body": { "type": "error", "error": { "type": "invalid_request_error", "message": "messages: at least one message is required" }, "request_id": "req_011CSHoEeqs5C35K2UUqR7F1" }
+    },
+    {
+      "status": 400,
+      "label": "prefill not supported (Claude 4.6 and later)",
+      "response_headers": {},
+      "body": { "type": "error", "error": { "type": "invalid_request_error", "message": "This model does not support assistant message prefill. The conversation must end with a user message." }, "request_id": "req_011CSHoEeqs5C35K2UUqR7F2" }
+    },
+    {
+      "status": 401,
+      "response_headers": {},
+      "body": { "type": "error", "error": { "type": "authentication_error", "message": "invalid x-api-key" }, "request_id": "req_011CSHoEeqs5C35K2UUqR7F3" }
+    },
+    {
+      "status": 402,
+      "response_headers": {},
+      "body": { "type": "error", "error": { "type": "billing_error", "message": "Your credit balance is too low to access the API." }, "request_id": "req_011CSHoEeqs5C35K2UUqR7F4" }
+    },
+    {
+      "status": 403,
+      "response_headers": {},
+      "body": { "type": "error", "error": { "type": "permission_error", "message": "Your API key does not have permission to use the specified resource." }, "request_id": "req_011CSHoEeqs5C35K2UUqR7F5" }
+    },
+    {
+      "status": 404,
+      "response_headers": {},
+      "body": { "type": "error", "error": { "type": "not_found_error", "message": "The requested resource could not be found." }, "request_id": "req_011CSHoEeqs5C35K2UUqR7Fy" }
+    },
+    {
+      "status": 409,
+      "response_headers": {},
+      "body": { "type": "error", "error": { "type": "conflict_error", "message": "The request conflicts with the current state of a resource." }, "request_id": "req_011CSHoEeqs5C35K2UUqR7F6" }
+    },
+    {
+      "status": 413,
+      "response_headers": {},
+      "body": { "type": "error", "error": { "type": "request_too_large", "message": "Request exceeds the maximum allowed number of bytes." }, "request_id": "req_011CSHoEeqs5C35K2UUqR7F7" }
+    },
+    {
+      "status": 429,
+      "label": "ordinary rate limit — carries retry-after",
+      "response_headers": { "retry-after": "12" },
+      "body": { "type": "error", "error": { "type": "rate_limit_error", "message": "Number of request tokens has exceeded your per-minute rate limit." }, "request_id": "req_011CSHoEeqs5C35K2UUqR7F8" }
+    },
+    {
+      "status": 429,
+      "label": "tier spend cap — NO retry-after; do not retry",
+      "response_headers": {},
+      "body": { "type": "error", "error": { "type": "rate_limit_error", "message": "You have reached your API usage limits: your organization has crossed its monthly API usage threshold, set based on your organization's API tier. You will regain access on 2026-10-01 at 00:00 UTC.", "details": { "error_code": "enforced_spend_limit_reached" } }, "request_id": "req_018EeWyXxfu5pfWkrYcMdjWG" }
+    },
+    {
+      "status": 500,
+      "response_headers": {},
+      "body": { "type": "error", "error": { "type": "api_error", "message": "Internal server error" }, "request_id": "req_011CSHoEeqs5C35K2UUqR7F9" }
+    },
+    {
+      "status": 504,
+      "response_headers": {},
+      "body": { "type": "error", "error": { "type": "timeout_error", "message": "Request timed out." }, "request_id": "req_011CSHoEeqs5C35K2UUqR7FA" }
+    },
+    {
+      "status": 529,
+      "response_headers": {},
+      "body": { "type": "error", "error": { "type": "overloaded_error", "message": "Overloaded" }, "request_id": "req_011CSHoEeqs5C35K2UUqR7FB" }
+    }
+  ]
+}

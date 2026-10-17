@@ -1,0 +1,69 @@
+{
+  "from": "2025-04",
+  "to": "2025-05",
+  "layouts": [
+    {
+      "branch": "東京",
+      "files": ["東京支店/東京_売上報告_2025年4月.xlsx", "東京支店/東京_売上報告_2025年5月.xlsx"],
+      "sheet": "売上明細",
+      "headerRows": [3, 4],
+      "columns": { "date": "A", "category": "B", "amount": "D" },
+      "unit": "千円",
+      "dateFormat": "wareki",
+      "skip": ["小計", "※"]
+    },
+    {
+      "branch": "大阪",
+      "files": ["大阪支店/大阪 月次売上 202504.xlsx", "大阪支店/大阪 月次売上 202505.xlsx"],
+      "sheet": "Sheet1",
+      "headerRows": [1],
+      "columns": { "date": "A", "category": "B", "amount": "C" },
+      "unit": "円",
+      "dateFormat": "ymd",
+      "skip": ["合計"]
+    },
+    {
+      "branch": "名古屋",
+      "files": ["名古屋営業所/名古屋_売上_R7.4.xlsx", "名古屋営業所/名古屋_売上_R7.5.xlsx"],
+      "sheet": "名古屋営業所",
+      "headerRows": [2],
+      "columns": { "date": "B", "category": "A", "amount": "C" },
+      "unit": "千円",
+      "dateFormat": "serial",
+      "skip": []
+    },
+    {
+      "branch": "福岡",
+      "files": ["福岡支店/福岡支店売上報告（令和7年4月）.xlsx"],
+      "sheet": "R7.4",
+      "headerRows": [3],
+      "columns": { "date": "A", "category": "B", "amount": "C" },
+      "unit": "円",
+      "dateFormat": "wareki",
+      "skip": ["※", "（参考）"]
+    },
+    {
+      "branch": "福岡",
+      "files": ["福岡支店/福岡支店売上報告（令和7年5月）.xlsx"],
+      "sheet": "R7.5",
+      "headerRows": [3],
+      "columns": { "date": "A", "category": "B", "amount": "C" },
+      "unit": "円",
+      "dateFormat": "wareki",
+      "skip": ["※", "（参考）"]
+    },
+    {
+      "branch": "札幌",
+      "files": ["札幌営業所/札幌_月次報告_2025-04.xlsx", "札幌営業所/札幌_月次報告_2025-05.xlsx"],
+      "sheet": "実績",
+      "headerRows": [4],
+      "columns": { "date": "A", "category": "B", "amount": "C" },
+      "unit": "千円",
+      "dateFormat": "wareki",
+      "skip": ["合計"]
+    }
+  ],
+  "excluded": [
+    { "file": "共通/売上報告テンプレート.xlsx", "reason": "記入前のテンプレートで、データ行がない" }
+  ]
+}

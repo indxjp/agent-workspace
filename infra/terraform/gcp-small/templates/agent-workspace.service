@@ -1,0 +1,21 @@
+[Unit]
+Description=Agent Workspace single-VM stack
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+RuntimeDirectory=agent-workspace
+RuntimeDirectoryMode=0700
+ExecStartPre=/usr/local/libexec/agent-workspace/fetch-secrets
+ExecStartPre=/usr/local/libexec/agent-workspace/validate
+ExecStart=/usr/bin/docker compose --env-file /etc/agent-workspace/images.env -f /etc/agent-workspace/compose.yaml up --detach --wait --remove-orphans
+ExecReload=/usr/local/libexec/agent-workspace/upgrade /etc/agent-workspace/images.env
+ExecStop=/usr/bin/docker compose --env-file /etc/agent-workspace/images.env -f /etc/agent-workspace/compose.yaml down --remove-orphans
+TimeoutStartSec=10min
+TimeoutStopSec=2min
+
+[Install]
+WantedBy=multi-user.target

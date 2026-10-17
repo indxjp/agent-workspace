@@ -1,0 +1,680 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Security &amp; governance — Agent Workspace</title>
+<meta name="description" content="A first-pass security review of Agent Workspace: where data lives, how credentials are kept out of sandboxes, runtime isolation and its verification status, least-privilege tools, roles, SSO, audit and known limits.">
+<link rel="canonical" href="https://lp.agentworkspace.indx.jp/security">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://lp.agentworkspace.indx.jp/security">
+<meta property="og:title" content="Security &amp; governance — Agent Workspace">
+<meta property="og:description" content="Self-hosted agents with gateway-held credentials, per-runtime isolation, four roles, OIDC SSO and an Owner-only audit trail — and an honest list of what is not yet verified.">
+<!-- chrome:head -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23171614'/%3E%3Cpath d='M9 24 13.9 8h4.2L23 24h-3.3l-1.1-3.6h-5.2L12.3 24zm5.3-6.4h3.4L16 11.9z' fill='%23fff' fill-rule='evenodd'/%3E%3C/svg%3E">
+<meta property="og:site_name" content="Agent Workspace">
+<meta property="og:image" content="https://lp.agentworkspace.indx.jp/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Agent Workspace — deploy Claude agents your company can actually run.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://lp.agentworkspace.indx.jp/og.png">
+<meta name="theme-color" content="#08080a">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="assets/site.css">
+<script>
+/* Applied before first paint: without it the page paints visible and the reveal rules
+   would hide it again. A deep link (#section) opts out of the reveal altogether. */
+document.documentElement.className += location.hash ? " js no-reveal" : " js";
+</script>
+<script src="assets/site.js" defer></script>
+<!-- /chrome:head -->
+</head>
+<body>
+<!-- chrome:header -->
+<a class="skip" href="#top">Skip to content</a>
+<header class="hdr" id="site-header">
+  <div class="shell hdr-in">
+    <a class="wordmark" href="index.html"><span class="mk" aria-hidden="true"><svg viewBox="0 0 32 32" width="16" height="16" aria-hidden="true"><path d="M9 24 13.9 8h4.2L23 24h-3.3l-1.1-3.6h-5.2L12.3 24zm5.3-6.4h3.4L16 11.9z" fill="currentColor" fill-rule="evenodd"/></svg></span><span class="wm-t">Agent Workspace</span></a>
+    <nav class="hdr-nav-wrap" aria-label="Primary"><ul class="hdr-nav">
+      <li class="has-menu">
+        <button class="nav-btn" type="button" aria-expanded="false" aria-controls="menu-product">Product</button>
+        <div class="menu" id="menu-product">
+          <a href="product.html"><b>Platform overview</b><span>Everything an Agent SDK deployment needs, and nothing else.</span></a>
+          <a href="product.html#how"><b>How it works</b><span>Five screens from an empty deployment to a running agent.</span></a>
+          <a href="product.html#runtimes"><b>Runtimes</b><span>Local, sandboxed process, Docker, Kubernetes and what is next.</span></a>
+          <a href="product.html#honesty"><b>Models &amp; compatibility</b><span>Claude, Azure OpenAI, OpenAI, and what does not carry over.</span></a>
+          <a href="security.html" aria-current="page"><b>Security &amp; governance</b><span>Isolation, secrets, roles, SSO and the audit log.</span></a>
+          <a href="examples.html"><b>For developers</b><span>Agents as code, the aw CLI, evals and embedding.</span></a>
+          <div class="menu-foot"><span>New here?</span><a href="index.html#start">Start on a laptop</a><a href="https://docs.agentworkspace.indx.jp">Read the docs</a></div>
+        </div>
+      </li>
+      <li><a href="use-cases.html">Use cases</a></li>
+      <li><a href="examples.html">Examples</a></li>
+      <li><a href="security.html" aria-current="page">Security</a></li>
+      <li><a href="compare.html">Compare</a></li>
+    </ul></nav>
+    <span class="sp"></span>
+    <div class="hdr-cta">
+      <a class="docs" href="https://docs.agentworkspace.indx.jp">Docs</a>
+      <a class="btn btn-action" href="https://indx.jp/en/contact">Book a demo</a>
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="mnav" aria-label="Open menu"><span></span></button>
+    </div>
+  </div>
+  <nav class="mnav" id="mnav" aria-label="Mobile">
+    <div class="shell">
+      <ul>
+        <li><a href="product.html">Product <span>platform overview</span></a></li>
+        <li><a href="use-cases.html">Use cases <span>by team</span></a></li>
+        <li><a href="examples.html">Examples <span>agents as code</span></a></li>
+        <li><a href="security.html" aria-current="page">Security <span>and governance</span></a></li>
+        <li><a href="compare.html">Compare <span>the alternatives</span></a></li>
+        <li><a href="https://docs.agentworkspace.indx.jp">Docs <span>docs.agentworkspace.indx.jp</span></a></li>
+      </ul>
+      <div class="btn-row"><a class="btn btn-action" href="https://indx.jp/en/contact">Book a demo</a><a class="btn btn-quiet" href="index.html#start">Start on a laptop</a></div>
+    </div>
+  </nav>
+</header>
+<!-- /chrome:header -->
+
+<main id="top" tabindex="-1">
+
+<section class="sec page-hero sec--paper" id="overview">
+  <div class="shell">
+    <ol class="crumbs"><li><a href="index.html">Home</a></li><li>Security</li></ol>
+    <div class="page-hero-grid">
+      <div>
+        <span class="eyebrow reveal">Security &amp; governance</span>
+        <h1 class="reveal" data-d="1">Built for the review your security team will do.</h1>
+        <p class="lead reveal" data-d="2">
+          This page is a first-pass review document. It states where data is stored, how model
+          credentials are kept out of the agent's sandbox, what each runtime isolates, who can do
+          what, and what is recorded. Anything not yet verified is marked as such.
+        </p>
+        <div class="btn-row reveal" data-d="3">
+          <a class="btn btn-action btn-lg" href="https://indx.jp/en/contact">Book a security walkthrough</a>
+          <a class="btn btn-quiet btn-lg" href="https://docs.agentworkspace.indx.jp/building/self-hosting">Read the self-hosting guide</a>
+        </div>
+      </div>
+      <div class="card reveal" data-d="2">
+        <h2 class="h3">At a glance</h2>
+        <dl class="kv" style="margin-top:14px">
+          <dt>Hosting</dt><dd>Self-hosted, 5 services</dd>
+          <dt>Public port</dt><dd><code>web</code> on 3000 only</dd>
+          <dt>Provider keys</dt><dd>Gateway only, never in a sandbox</dd>
+          <dt>Runtime drivers</dt><dd>11 ids, 6 implemented, 1 fixture-verified</dd>
+          <dt>Roles</dt><dd>4: owner, admin, builder, viewer</dd>
+          <dt>SSO</dt><dd>Any OIDC issuer</dd>
+          <dt>Audit actions</dt><dd>21, Owner-only read</dd>
+          <dt>Licence</dt><dd>Apache-2.0</dd>
+        </dl>
+      </div>
+    </div>
+    <ul class="toc reveal" aria-label="On this page">
+      <li><a href="#data">Where data lives</a></li><li><a href="#credentials">Credentials</a></li>
+      <li><a href="#isolation">Isolation</a></li><li><a href="#privilege">Least privilege</a></li>
+      <li><a href="#people">People and access</a></li><li><a href="#audit">Audit</a></li>
+      <li><a href="#public">Public surfaces</a></li><li><a href="#limits">Known limits</a></li>
+      <li><a href="#faq">FAQ</a></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============================ DATA ============================ -->
+<section class="sec sec--surface" id="data">
+  <div class="shell">
+    <div class="sec-head measure">
+      <span class="eyebrow reveal">Where your data lives</span>
+      <h2 class="h2 reveal" data-d="1">Five services in your infrastructure, one public port.</h2>
+      <p class="lead reveal" data-d="2">
+        A full deployment is five services. Only <code>web</code> is exposed, on port
+        <code>3000</code>, and you put your own TLS terminator in front of it. Sandboxes are
+        created on demand by the runtime driver; they are not a sixth service.
+      </p>
+    </div>
+
+    <div class="scroll-x reveal">
+      <table class="matrix">
+        <thead>
+          <tr><th scope="col">Service</th><th scope="col">Does</th><th scope="col">Exposed</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="k">web</td><td>The UI, <code>/api/**</code>, authentication, the setup wizard</td><td>Port <code>3000</code>, the only public one</td></tr>
+          <tr><td class="k">gateway</td><td>The model gateway. Substitutes a per-run token for the stored provider credential; Anthropic-compatible <code>/v1/messages</code></td><td>Private; reachable from sandboxes</td></tr>
+          <tr><td class="k">runner</td><td>Allocates a sandbox through the chosen runtime driver and relays the agent's events. The Docker socket is mounted here and nowhere else.</td><td>Private</td></tr>
+          <tr><td class="k">postgres</td><td>PostgreSQL 17. Every durable row: workspaces, principals, agents, runs, events</td><td>Private</td></tr>
+          <tr><td class="k">storage</td><td>SeaweedFS, S3 or GCS. Workspace files, skills, transcripts</td><td>Private</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="grid grid-2" style="gap:40px; margin-top:48px; align-items:start">
+      <div>
+        <h3 class="h3 reveal">The path a prompt takes</h3>
+        <div class="arch reveal" data-d="1" style="margin-top:16px">
+          <div class="arch-box"><b>Your users</b><span class="d">browser · aw CLI · your backend</span></div>
+          <div class="arch-arrow"><span class="ln">↓</span><span class="lb">your TLS → :3000</span></div>
+          <div class="arch-box core"><b>web</b><span class="d">auth · roles · /api/**</span></div>
+          <div class="arch-arrow"><span class="ln">↓</span></div>
+          <div class="arch-box"><b>runner</b><span class="d">runtime driver · Docker socket (runner only)</span></div>
+          <div class="arch-arrow"><span class="ln">↓</span><span class="lb">via the runtime driver</span></div>
+          <div class="arch-box"><b>Sandbox</b><span class="d">holds a short-lived run token, no provider key</span></div>
+          <div class="arch-arrow"><span class="ln">↓</span><span class="lb">/v1/messages</span></div>
+          <div class="arch-box"><b>gateway</b><span class="d">resolves the stored provider credential</span></div>
+          <div class="arch-arrow"><span class="ln">↓</span></div>
+          <div class="arch-box"><b>Your configured model provider</b><span class="d">the one outbound hop a prompt must make</span></div>
+        </div>
+      </div>
+      <div>
+        <h3 class="h3 reveal">Three stores, one each</h3>
+        <div class="grid reveal" data-d="1" style="gap:12px; margin-top:16px">
+          <div class="card">
+            <h4 class="h3" style="font-size:15.5px">PostgreSQL</h4>
+            <p>Every durable row the control plane has, including the session row.</p>
+          </div>
+          <div class="card">
+            <h4 class="h3" style="font-size:15.5px">Object store</h4>
+            <p>Files, skills and transcripts, in SeaweedFS, S3, GCS or Azure Blob.</p>
+          </div>
+          <div class="card">
+            <h4 class="h3" style="font-size:15.5px">Secrets, inside PostgreSQL</h4>
+            <p>Envelope-encrypted under one deployment key, not a fourth store.</p>
+          </div>
+        </div>
+        <p class="small reveal" data-d="2" style="margin-top:16px">
+          These stores hold Agent Workspace's own state. Your own databases and document systems
+          reach an agent only as an MCP connector or as uploaded files. Native object-store and
+          secret backends per cloud are implemented, with live proof pending; see
+          <a href="https://docs.agentworkspace.indx.jp/concepts/data-plane">the data plane</a>.
+        </p>
+      </div>
+    </div>
+    <a class="more" style="display:inline-block;margin-top:18px" href="https://docs.agentworkspace.indx.jp/features/self-host-securely">Learn more: self-host securely</a>
+  </div>
+</section>
+
+<!-- ============================ CREDENTIALS ============================ -->
+<section class="sec sec--paper" id="credentials">
+  <div class="shell">
+    <div class="sec-head measure">
+      <span class="eyebrow reveal">Credentials</span>
+      <h2 class="h2 reveal" data-d="1">Credentials never enter a sandbox.</h2>
+      <p class="lead reveal" data-d="2">
+        The agent runs in the sandbox, but the key that pays for its model calls stays with the
+        gateway. What the sandbox gets is a token that is only good for one run and one model.
+      </p>
+    </div>
+
+    <div class="cap cap-4 reveal">
+      <div>
+        <h3>Gateway-resolved provider keys</h3>
+        <p>Provider credentials are stored encrypted and resolved only by the gateway.</p>
+        <span class="k">gateway</span>
+      </div>
+      <div>
+        <h3>A run- and model-bound token</h3>
+        <p>Inside the sandbox, the provider key is replaced by a short-lived token bound to one run and one model.</p>
+        <span class="k">per-run token</span>
+      </div>
+      <div>
+        <h3>The run environment refuses provider keys</h3>
+        <p>The compiled run environment refuses <code>ANTHROPIC_API_KEY</code> outright; the run is not compiled.</p>
+        <span class="k">ANTHROPIC_API_KEY</span>
+      </div>
+      <div>
+        <h3>Write-only secrets</h3>
+        <p>Secrets, connector credentials and runtime credentials are write-only over HTTP. Only an Owner may delete a secret.</p>
+        <span class="k">write-only</span>
+      </div>
+    </div>
+
+    <div class="grid grid-2" style="gap:40px; margin-top:48px; align-items:start">
+      <div>
+        <h3 class="h3 reveal">Envelope encryption and key backends</h3>
+        <p class="reveal" data-d="1" style="margin-top:8px">
+          Secrets are envelope-encrypted inside PostgreSQL under one deployment key. The
+          deployment key can come from a cloud key service. Three backends exist; only one has
+          a live proof.
+        </p>
+      </div>
+      <div class="scroll-x reveal" data-d="1">
+        <table class="matrix" style="min-width:0">
+          <thead><tr><th scope="col">Key backend</th><th scope="col">Status</th></tr></thead>
+          <tbody>
+            <tr><td>Azure Key Vault</td><td><span class="badge badge-ok">verified</span></td></tr>
+            <tr><td>AWS KMS</td><td><span class="badge badge-caveat">awaiting live proof</span></td></tr>
+            <tr><td>GCP Secret Manager + CMEK</td><td><span class="badge badge-caveat">awaiting live proof</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <a class="more" style="display:inline-block;margin-top:18px" href="https://docs.agentworkspace.indx.jp/features/self-host-securely">Learn more: self-host securely</a>
+  </div>
+</section>
+
+<!-- ============================ ISOLATION ============================ -->
+<section class="sec sec--surface" id="isolation">
+  <div class="shell">
+    <div class="sec-head measure">
+      <span class="eyebrow reveal">Isolation, per runtime</span>
+      <h2 class="h2 reveal" data-d="1">Isolation depends on the runtime, and we say which is proven.</h2>
+      <p class="lead reveal" data-d="2">
+        A runtime profile names one of eleven driver ids. Six are implemented. Only
+        <code>docker</code> is fixture-verified, and no managed-cloud driver has a live isolation
+        proof yet.
+      </p>
+    </div>
+
+    <div class="scroll-x reveal">
+      <table class="matrix">
+        <thead>
+          <tr><th scope="col">Driver</th><th scope="col">Isolation</th><th scope="col">Status today</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="k">local</td><td>None. Development only.</td><td><span class="badge badge-caveat">no isolation</span> implemented, dev only</td></tr>
+          <tr><td class="k">sandbox-runtime</td><td>Host OS sandbox. On Linux it needs <code>bubblewrap</code>, <code>socat</code> and <code>ripgrep</code>.</td><td><span class="badge badge-caveat">implemented</span></td></tr>
+          <tr><td class="k">docker</td><td>One container per session. The single-VM default.</td><td><span class="badge badge-ok">fixture-verified</span></td></tr>
+          <tr><td class="k">kubernetes</td><td>One pod per session; a gVisor RuntimeClass is optional.</td><td><span class="badge badge-caveat">partially verified</span> no live-cluster proof</td></tr>
+          <tr><td class="k">aca-sessions</td><td>Hyper-V microVM, no persistent file system.</td><td><span class="badge badge-caveat">implemented</span> not exercised by the live driver suite</td></tr>
+          <tr><td class="k">cloud-run-service</td><td>Cloud Run service.</td><td><span class="badge badge-caveat">implemented</span> not exercised by the live driver suite</td></tr>
+          <tr><td class="k">gke-agent-sandbox</td><td>—</td><td><span class="badge badge-caveat">named only</span> not implemented</td></tr>
+          <tr><td class="k">aws-agentcore</td><td>—</td><td><span class="badge badge-caveat">named only</span> not implemented</td></tr>
+          <tr><td class="k">aws-ecs</td><td>—</td><td><span class="badge badge-caveat">named only</span> not implemented</td></tr>
+          <tr><td class="k">cloud-run-sandbox</td><td>—</td><td><span class="badge badge-caveat">named only</span> not implemented</td></tr>
+          <tr><td class="k">external</td><td>—</td><td><span class="badge badge-caveat">named only</span> not implemented</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="small reveal" style="margin-top:14px">
+      Source: <a href="https://docs.agentworkspace.indx.jp/building/self-hosting#which-runtime-drivers-are-real-today">Which runtime drivers are real today</a>.
+    </p>
+
+    <h3 class="h3 reveal" style="font-size:19px; margin:44px 0 14px">Network policy, enforced or refused</h3>
+    <div class="grid grid-3 reveal" data-d="1">
+      <div class="card">
+        <h4 class="h3" style="font-size:15.5px"><code>none</code></h4>
+        <p>The model gateway only. The profile grants the sandbox no other network destination.</p>
+      </div>
+      <div class="card">
+        <h4 class="h3" style="font-size:15.5px"><code>restricted</code></h4>
+        <p>The gateway plus the profile's <code>allowedDomains</code>, on a driver that can enforce them.</p>
+      </div>
+      <div class="card">
+        <h4 class="h3" style="font-size:15.5px"><code>open</code></h4>
+        <p>Everything. Choose it deliberately.</p>
+      </div>
+    </div>
+    <div class="grid grid-2" style="gap:14px; margin-top:20px">
+      <div class="notice reveal">
+        <span class="sym">✕</span>
+        <span><b>A policy the driver cannot enforce is refused.</b><br>
+          The server answers <code>422 network_policy_not_enforceable</code> rather than pretending.</span>
+      </div>
+      <div class="notice reveal" data-d="1">
+        <span class="sym">⚠</span>
+        <span><b><code>docker</code> refuses <code>restricted</code>; <code>kubernetes</code> refuses <code>allowedDomains</code>.</b><br>
+          Docker refuses <code>restricted</code> and any <code>allowedDomains</code>, so in practice it is <code>none</code> or <code>open</code>. There is no proxy setting to change that today.</span>
+      </div>
+    </div>
+    <a class="more" style="display:inline-block;margin-top:18px" href="https://docs.agentworkspace.indx.jp/features/self-host-securely">Learn more: self-host securely</a>
+  </div>
+</section>
+
+<!-- ============================ LEAST PRIVILEGE ============================ -->
+<section class="sec sec--paper" id="privilege">
+  <div class="shell">
+    <div class="sec-head measure">
+      <span class="eyebrow reveal">Least privilege for agents</span>
+      <h2 class="h2 reveal" data-d="1">A permission that is off removes its tools.</h2>
+      <p class="lead reveal" data-d="2">
+        Each agent has four permission switches. When a switch is off, the compiled Claude Agent
+        SDK options deny its tools through <code>disallowedTools</code>. Withholding an approval
+        is not enough, because <code>allowedTools</code> grants and does not restrict.
+      </p>
+    </div>
+
+    <div class="grid grid-2" style="gap:40px; align-items:start">
+      <div>
+        <div class="scroll-x reveal">
+          <table class="matrix" style="min-width:0">
+            <thead><tr><th scope="col">Switch off</th><th scope="col">Tools denied</th></tr></thead>
+            <tbody>
+              <tr><td class="k">readFiles</td><td><code>Read</code>, <code>Glob</code>, <code>Grep</code></td></tr>
+              <tr><td class="k">writeFiles</td><td><code>Write</code>, <code>Edit</code>, <code>NotebookEdit</code></td></tr>
+              <tr><td class="k">runCommands</td><td><code>Bash</code>, <code>BashOutput</code>, <code>KillShell</code></td></tr>
+              <tr><td class="k">unrestrictedNetwork</td><td><code>WebFetch</code>, <code>WebSearch</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <ul class="ticks reveal" data-d="1">
+          <li>Connectors assigned to the agent are auto-approved as <code>mcp__&lt;connector-name&gt;__*</code>, and only those: <code>strictMcpConfig: true</code>.</li>
+          <li>Host <code>.claude</code> settings are never inherited: <code>settingSources: ["project"]</code> loads only the session's own project, never <code>user</code> or <code>local</code>.</li>
+          <li>A read-only file grant denies <code>Write</code>, <code>Edit</code> and <code>NotebookEdit</code> on that path, and any read-only grant denies the shell tools, since a shell redirect could write anyway.</li>
+          <li>A project policy can set a ceiling, for example <code>writeFiles: false</code>, that agents in it cannot exceed.</li>
+        </ul>
+      </div>
+      <div>
+        <p class="codecap reveal"><span>Example: compiled options for an agent with only <code>readFiles</code> on, one connector and a read-only <code>manuals</code> folder (simplified)</span></p>
+        <pre data-claim="illustrative" class="code reveal" data-d="1"><span class="kw">const</span> options = {
+  settingSources: ["project"],     <span class="cm">// the session's own project only, never host user state</span>
+  strictMcpConfig: <span class="kw">true</span>,  <span class="cm">// only this agent's connectors</span>
+  allowedTools: [<span class="str">'mcp__&lt;connector-name&gt;__*'</span>], <span class="cm">// manual-index</span>
+  disallowedTools: [
+    <span class="str">'Write'</span>, <span class="str">'Edit'</span>, <span class="str">'NotebookEdit'</span>,      <span class="cm">// writeFiles off</span>
+    <span class="str">'Bash'</span>, <span class="str">'BashOutput'</span>, <span class="str">'KillShell'</span>,    <span class="cm">// runCommands off</span>
+    <span class="str">'WebFetch'</span>, <span class="str">'WebSearch'</span>,             <span class="cm">// unrestrictedNetwork off</span>
+    <span class="str">'Write(/workspace/manuals/**)'</span>,       <span class="cm">// read-only grant</span>
+    <span class="str">'Edit(/workspace/manuals/**)'</span>,
+    <span class="str">'NotebookEdit(/workspace/manuals/**)'</span>,
+  ],
+  env,                    <span class="cm">// run token, never a provider key</span>
+};</pre>
+        <p class="small reveal" data-d="2" style="margin-top:10px">
+          Real connector keys and workspace paths differ per run. The order and de-duplication
+          rules are in the adapter, not shown here.
+        </p>
+      </div>
+    </div>
+    <a class="more" style="display:inline-block;margin-top:18px" href="https://docs.agentworkspace.indx.jp/features/self-host-securely">Learn more: self-host securely</a>
+  </div>
+</section>
+
+<!-- ============================ PEOPLE ============================ -->
+<section class="sec sec--surface" id="people">
+  <div class="shell">
+    <div class="sec-head measure">
+      <span class="eyebrow reveal">People and access</span>
+      <h2 class="h2 reveal" data-d="1">Four roles, your identity provider, and keys that do one thing.</h2>
+      <p class="lead reveal" data-d="2">
+        Every member has exactly one of four roles. The roles are not a total order: an Admin has
+        no projects grant and cannot confer the Builder role.
+      </p>
+    </div>
+
+    <div class="scroll-x reveal">
+      <table class="matrix">
+        <thead><tr><th scope="col">Role</th><th scope="col">Can</th><th scope="col">Cannot</th></tr></thead>
+        <tbody>
+          <tr><td class="k">owner</td><td>Everything. The only role that reads the audit trail, manages secrets and runs setup. Owns the public-sharing policy.</td><td>—</td></tr>
+          <tr><td class="k">admin</td><td>Full control of agents, skills and files. Manages connectors, API keys, members, invitations, users, models, model connections, runtimes and shares.</td><td>Projects, secrets, audit</td></tr>
+          <tr><td class="k">builder</td><td>Reads any agent, skill, file or connector; writes and runs its own. Reads runtime profiles. Owns its own projects and sessions.</td><td>Edit other people's rows; API keys, members, models, runtimes</td></tr>
+          <tr><td class="k">viewer</td><td>Reads agents. Runs only agents it is explicitly granted. Reads its own sessions and runs.</td><td>Skills, files, connectors; any ungranted agent</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="small reveal" style="margin-top:14px">
+      Full table: <a href="https://docs.agentworkspace.indx.jp/concepts/ownership-and-sharing">Ownership and sharing</a>.
+    </p>
+
+    <div class="grid grid-3" style="margin-top:40px">
+      <article class="card reveal">
+        <h3 class="h3">Single sign-on</h3>
+        <p>Any OIDC issuer, set with <code>OIDC_ISSUER_URL</code>, <code>OIDC_CLIENT_ID</code>, <code>OIDC_CLIENT_SECRET</code> and <code>OIDC_REDIRECT_URI</code>. A password bootstrap admin covers first setup.</p>
+        <ul class="chip-list" style="margin-top:14px">
+          <li><span class="badge badge-ok">✓ Entra ID</span></li>
+          <li><span class="badge badge-ok">✓ Okta / Cognito</span></li>
+          <li><span class="badge badge-ok">✓ Google</span></li>
+        </ul>
+        <p class="small" style="margin-top:12px">Agent Workspace is not an identity provider.</p>
+      </article>
+      <article class="card reveal" data-d="1">
+        <h3 class="h3">API keys</h3>
+        <ul class="ticks plain" style="margin-top:8px">
+          <li>One fixed role per key; no finer scopes.</li>
+          <li>Optional <code>expiresAt</code>.</li>
+          <li>Plaintext shown once at mint; a read returns only a display prefix.</li>
+          <li>Refused on <code>/api/workspaces/**</code> and <code>/api/invitations/**</code>: <code>403 api_key_not_permitted</code>.</li>
+          <li>The <code>aw</code> CLI never accepts a key as a flag; use <code>--api-key-stdin</code>.</li>
+        </ul>
+      </article>
+      <article class="card reveal" data-d="2">
+        <h3 class="h3">Browser tokens</h3>
+        <ul class="ticks plain" style="margin-top:8px">
+          <li>Scope <code>run</code> or <code>session</code>.</li>
+          <li>TTL <code>60</code>–<code>3600</code> s, default <code>300</code>.</li>
+          <li>Stored as a hash, re-checked against the minting principal on every request.</li>
+          <li>Minted by your backend: <code>aw tokens mint --scope run --id &lt;id&gt;</code>.</li>
+        </ul>
+        <p class="small" style="margin-top:12px">API keys must never reach a browser.</p>
+      </article>
+    </div>
+    <a class="more" style="display:inline-block;margin-top:18px" href="https://docs.agentworkspace.indx.jp/features/self-host-securely">Learn more: self-host securely</a>
+  </div>
+</section>
+
+<!-- ============================ AUDIT ============================ -->
+<section class="sec sec--paper" id="audit">
+  <div class="shell">
+    <div class="sec-head measure">
+      <span class="eyebrow reveal">Audit and observability</span>
+      <h2 class="h2 reveal" data-d="1">Changes to access, credentials and agents are recorded.</h2>
+      <p class="lead reveal" data-d="2">
+        Each audit row records the actor, action, subject and time, with labels snapshotted when
+        the row is written. Only an Owner can read it.
+      </p>
+    </div>
+
+    <h3 class="h3 reveal" style="font-size:17px; margin-bottom:14px">The 21 audit actions</h3>
+    <ul class="chip-list reveal" data-d="1">
+      <li class="chip">user-created</li><li class="chip">user-deleted</li>
+      <li class="chip">agent-changed</li><li class="chip">provider-credential-changed</li>
+      <li class="chip">api-key-created</li><li class="chip">api-key-revoked</li>
+      <li class="chip">connector-changed</li><li class="chip">permission-changed</li>
+      <li class="chip">runtime-profile-changed</li>
+      <li class="chip">project-created</li><li class="chip">project-deleted</li>
+      <li class="chip">project-archived</li><li class="chip">project-restored</li>
+      <li class="chip">session-published</li><li class="chip">public-link-revoked</li>
+      <li class="chip">runnable-link-stopped</li><li class="chip">public-sharing-policy-changed</li>
+      <li class="chip">invitation-created</li><li class="chip">invitation-resent</li>
+      <li class="chip">invitation-revoked</li><li class="chip">invitation-accepted</li>
+    </ul>
+
+    <div class="grid grid-2" style="gap:40px; margin-top:44px; align-items:start">
+      <div>
+        <h3 class="h3 reveal">Read it as an Owner</h3>
+        <p class="reveal" data-d="1" style="margin-top:8px">Newest first, from the product or the CLI.</p>
+        <pre data-claim="illustrative" class="term reveal" data-d="2"><span class="p">$</span> aw audit list
+<span class="p">$</span> aw audit list --all</pre>
+      </div>
+      <div>
+        <h3 class="h3 reveal">OpenTelemetry traces</h3>
+        <p class="reveal" data-d="1" style="margin-top:8px">
+          When <code>OTEL_EXPORTER_OTLP_ENDPOINT</code> is set, <code>web</code> exports OTLP/HTTP
+          traces: one <code>agent.run</code> span per run, with these attributes.
+        </p>
+        <dl class="kv reveal" data-d="2" style="margin-top:14px">
+          <dt>run.id</dt><dd>the run</dd>
+          <dt>workspace.id</dt><dd>the workspace</dd>
+          <dt>agent.id</dt><dd>the agent</dd>
+          <dt>run.status</dt><dd>how it ended</dd>
+          <dt>run.duration_ms</dt><dd>wall time</dd>
+          <dt>run.cost_usd</dt><dd>estimated cost</dd>
+        </dl>
+        <p class="small reveal" data-d="2" style="margin-top:14px">
+          Tokens and tool calls are in the run record and its event stream, not in the span. OTel
+          export is in the code but not yet on the docs site.
+        </p>
+      </div>
+    </div>
+    <a class="more" style="display:inline-block;margin-top:18px" href="https://docs.agentworkspace.indx.jp/features/self-host-securely">Learn more: self-host securely</a>
+  </div>
+</section>
+
+<!-- ============================ PUBLIC ============================ -->
+<section class="sec sec--surface" id="public">
+  <div class="shell">
+    <div class="sec-head measure">
+      <span class="eyebrow reveal">Public surfaces</span>
+      <h2 class="h2 reveal" data-d="1">What the public can reach is explicit and narrow.</h2>
+      <p class="lead reveal" data-d="2">
+        A surface is the chat page or widget visitors use. The rest of the API sends no CORS
+        headers; a cross-origin frontend goes through your backend, or a same-origin proxy with a
+        browser token.
+      </p>
+    </div>
+
+    <div class="grid grid-2" style="gap:24px; align-items:start">
+      <article class="card reveal">
+        <h3 class="h3">Surfaces</h3>
+        <ul class="ticks plain" style="margin-top:8px">
+          <li><code>allowedOrigins</code>: up to <code>20</code> exact origins, no path, no wildcard. They set <code>frame-ancestors</code> and CORS on the session bootstrap and visitor run routes. No cookie is sent.</li>
+          <li>Any other origin gets <code>403 surface_origin_not_allowed</code>.</li>
+          <li>Visitors are rate-limited (<code>429 surface_rate_limited</code>) and capped at <code>50</code> turns per conversation by default (<code>429 surface_turn_limit_reached</code>).</li>
+          <li>The origins in force are the <b>promoted</b> version's. A new origin needs <code>aw promote</code>.</li>
+          <li>Without <code>allowedOrigins</code>, the <code>aw dev</code> draft admits <code>localhost</code> and <code>127.0.0.1</code> on any port.</li>
+        </ul>
+      </article>
+      <article class="card reveal" data-d="1">
+        <h3 class="h3">Shares</h3>
+        <ul class="ticks plain" style="margin-top:8px">
+          <li>A session or project can be shared as private, workspace or public (<code>/p/&lt;token&gt;</code>). Sharing an agent or a skill is not supported today.</li>
+          <li>Public sharing is blocked when the workspace sharing policy is off; the policy belongs to the Owner.</li>
+          <li>A share is a <b>snapshot</b>, not a live view.</li>
+          <li>Expiry: <code>24 h</code>, <code>7 days</code>, <code>30 days</code> or never. Optional passphrase, stored hashed.</li>
+          <li>Revoking takes effect at once.</li>
+        </ul>
+        <div class="notice" style="margin-top:16px">
+          <span class="sym">✕</span>
+          <span><b>Public runnable agents are switched off today.</b><br>
+            The <code>runnable</code> share mode is compiled off and refused with <code>400 invalid_share</code>.</span>
+        </div>
+      </article>
+    </div>
+    <a class="more" style="display:inline-block;margin-top:18px" href="https://docs.agentworkspace.indx.jp/features/embed-in-your-product">Learn more: embed in your product</a>
+  </div>
+</section>
+
+<!-- ============================ LIMITS ============================ -->
+<section class="sec sec--paper" id="limits">
+  <div class="shell">
+    <div class="sec-head measure">
+      <span class="eyebrow reveal">Known limits</span>
+      <h2 class="h2 reveal" data-d="1">What is not verified yet.</h2>
+      <p class="lead reveal" data-d="2">
+        Read these before you plan a production rollout. Each one is stated in the product's own
+        documentation or status records.
+      </p>
+    </div>
+
+    <div class="grid grid-2" style="gap:14px">
+      <div class="notice reveal"><span class="sym">⚠</span><span><b>No managed-cloud driver has a live isolation proof.</b><br><code>aca-sessions</code> and <code>cloud-run-service</code> are implemented but not exercised by the live driver suite.</span></div>
+      <div class="notice reveal" data-d="1"><span class="sym">⚠</span><span><b><code>kubernetes</code> is partially verified.</b><br>Lifecycle and isolation are partially verified; no live-cluster proof has been published.</span></div>
+      <div class="notice reveal"><span class="sym">⚠</span><span><b>stdio MCP connectors cannot run.</b><br>They are stored but cannot run today. Use <code>http</code> or <code>sse</code>.</span></div>
+      <div class="notice reveal" data-d="1"><span class="sym">⚠</span><span><b><code>docker</code> cannot do <code>restricted</code>.</b><br>Docker sandboxes are <code>none</code> or <code>open</code>; it refuses <code>allowedDomains</code>, and so does <code>kubernetes</code>.</span></div>
+      <div class="notice reveal"><span class="sym">⚠</span><span><b>Deny-by-default networking is the design intent, not the shipped default.</b><br>The specification calls for deny by default with explicit allowlists. Set each runtime profile's policy deliberately.</span></div>
+      <div class="notice reveal" data-d="1"><span class="sym">⚠</span><span><b>Not yet a declared release.</b><br>The project's release-readiness check is still red. Key backends other than Azure Key Vault, and native per-cloud stores, await live proof.</span></div>
+    </div>
+
+    <dl class="kv reveal" style="margin-top:32px">
+      <dt>Licence</dt><dd>Apache-2.0</dd>
+      <dt>Affiliation</dt><dd style="font-family:inherit">Claude and Claude Agent SDK are products of Anthropic. Agent Workspace is not affiliated with or endorsed by Anthropic.</dd>
+    </dl>
+    <a class="more" style="display:inline-block;margin-top:18px" href="https://docs.agentworkspace.indx.jp/features/self-host-securely">Learn more: self-host securely</a>
+  </div>
+</section>
+
+<!-- ============================ FAQ ============================ -->
+<section class="sec sec--surface" id="faq">
+  <div class="shell faq-grid">
+    <div class="sec-head" style="margin:0">
+      <span class="eyebrow reveal">FAQ</span>
+      <h2 class="h2 reveal" data-d="1">Questions a security review asks first.</h2>
+      <p class="small reveal" data-d="2" style="margin-top:14px">Something else? <a href="https://indx.jp/en/contact">Ask us</a>.</p>
+    </div>
+    <div class="faq reveal">
+      <details open><summary>Can an agent read our model provider's API key?</summary><div class="a"><p>No. Provider credentials are resolved only by the gateway. The sandbox gets a short-lived token bound to one run and one model, and the compiled run environment refuses <code>ANTHROPIC_API_KEY</code>.</p></div></details>
+      <details><summary>What leaves our infrastructure?</summary><div class="a"><p>All five services and the three stores run where you deploy them. Prompts go to the model provider you configure, through the gateway. Your own databases and document systems reach an agent only as an MCP connector or as uploaded files.</p></div></details>
+      <details><summary>Which runtime should we use in production?</summary><div class="a"><p><code>docker</code> is the single-VM default and the only fixture-verified driver. <code>kubernetes</code> is implemented and partially verified. No managed-cloud driver has a live isolation proof yet. Avoid <code>local</code> outside development: it has no isolation.</p></div></details>
+      <details><summary>Can we stop an agent from reaching the internet?</summary><div class="a"><p>Yes. Set the runtime profile's network policy to <code>none</code>, and turn off <code>unrestrictedNetwork</code> so <code>WebFetch</code> and <code>WebSearch</code> are denied. A policy the driver cannot enforce is refused with <code>422 network_policy_not_enforceable</code>.</p></div></details>
+      <details><summary>How are API keys scoped and stored?</summary><div class="a"><p>Each key carries one fixed role and an optional expiry; there are no finer scopes. The plaintext is shown once, and a read returns only a display prefix. Keys are refused on workspace and invitation routes. For browsers, mint a <code>run</code> or <code>session</code> token with a 60–3600 s lifetime instead.</p></div></details>
+      <details><summary>Who can see the audit trail, and can we export it?</summary><div class="a"><p>Only an Owner can read it, in the product or with <code>aw audit list</code>. The OpenTelemetry export covers runs (one <code>agent.run</code> span each), not audit rows.</p></div></details>
+    </div>
+  </div>
+</section>
+
+<section class="sec sec--paper" style="padding:56px 0">
+  <div class="shell">
+    <div class="band reveal">
+      <div><h2>Check the runtime against your own threat model.</h2><p>The self-hosting guide lists every driver's standing and the four security-boundary rules.</p></div>
+      <div class="btn-row"><a class="btn btn-action" href="https://docs.agentworkspace.indx.jp/building/self-hosting#the-security-boundary">Read the security boundary</a><a class="btn btn-quiet" href="product.html#runtimes">Runtimes overview</a></div>
+    </div>
+  </div>
+</section>
+
+<section class="sec final" id="demo">
+  <div class="shell">
+    <div class="measure">
+      <h2 class="h2 reveal">Walk through it with the people who built it.</h2>
+      <p class="lead reveal" data-d="1">A 30-minute session on the security boundary, the runtime you would use, roles and SSO, and the open items above.</p>
+      <div class="btn-row reveal" data-d="2">
+        <a class="btn btn-convert btn-xl" href="https://indx.jp/en/contact">Book a security walkthrough</a>
+        <a class="btn btn-quiet btn-xl" href="https://docs.agentworkspace.indx.jp/building/self-hosting">Read the self-hosting guide</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- chrome:footer -->
+<footer class="ftr" id="site-footer">
+  <div class="shell">
+    <div class="ftr-grid ftr-grid-5">
+      <div>
+        <a class="wordmark" href="index.html"><span class="mk" aria-hidden="true"><svg viewBox="0 0 32 32" width="16" height="16" aria-hidden="true"><path d="M9 24 13.9 8h4.2L23 24h-3.3l-1.1-3.6h-5.2L12.3 24zm5.3-6.4h3.4L16 11.9z" fill="currentColor" fill-rule="evenodd"/></svg></span>Agent Workspace</a>
+        <p class="small" style="margin-top:14px; max-width:30em">The smallest practical enterprise deployment layer for the Claude Agent SDK.</p>
+        <p class="small" style="margin-top:10px"><a href="https://indx.jp/en/contact">Contact INDX</a></p>
+      </div>
+      <div>
+        <h4>Product</h4>
+        <ul>
+          <li><a href="product.html">Platform overview</a></li>
+          <li><a href="product.html#how">How it works</a></li>
+          <li><a href="product.html#runtimes">Runtimes</a></li>
+          <li><a href="product.html#honesty">Compatibility</a></li>
+          <li><a href="security.html">Security</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Solutions</h4>
+        <ul>
+          <li><a href="use-cases.html">Use cases</a></li>
+          <li><a href="examples.html">Examples</a></li>
+          <li><a href="compare.html">Compare</a></li>
+          <li><a href="index.html#faq">FAQ</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Deploy</h4>
+        <ul>
+          <li><a href="https://docs.agentworkspace.indx.jp/getting-started/quickstart">Quickstart</a></li>
+          <li><a href="https://docs.agentworkspace.indx.jp/building/self-hosting">Self-host</a></li>
+          <li><a href="https://docs.agentworkspace.indx.jp/guides/deploy">Deploy guide</a></li>
+          <li><a href="https://docs.agentworkspace.indx.jp/building/embedding">Embedding</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Reference</h4>
+        <ul>
+          <li><a href="https://docs.agentworkspace.indx.jp">Documentation</a></li>
+          <li><a href="https://docs.agentworkspace.indx.jp/reference/cli/commands">CLI reference</a></li>
+          <li><a href="https://docs.agentworkspace.indx.jp/tutorials/index">Tutorials</a></li>
+          <li><a href="https://platform.claude.com/docs/en/agent-sdk/overview">Claude Agent SDK</a></li>
+        </ul>
+      </div>
+    </div>
+    <p class="ftr-note">
+      Screens are illustrative of the product UI. Capabilities, runtime driver standing and the
+      compatibility matrix are described as they stand in the <a href="https://docs.agentworkspace.indx.jp/building/models-and-runtimes">docs</a>.
+      Third-party products are described from their public documentation as of the date shown on each page.
+      <br>
+      Claude and Claude Agent SDK are products of Anthropic. This site is unofficial material for the
+      Agent Workspace project and is not affiliated with or endorsed by Anthropic.
+    </p>
+  </div>
+</footer>
+<!-- /chrome:footer -->
+</body>
+</html>

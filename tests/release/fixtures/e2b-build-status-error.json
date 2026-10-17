@@ -1,0 +1,30 @@
+{
+  "templateID": "tpl_1",
+  "buildID": "0f1e2d3c-4b5a-4968-8776-655443322110",
+  "status": "error",
+  "logs": [],
+  "logEntries": [
+    {
+      "timestamp": "2026-10-10T13:00:01.000Z",
+      "level": "info",
+      "message": "Pulling image node:24.21.0-bookworm-slim"
+    },
+    {
+      "timestamp": "2026-10-10T13:00:02.000Z",
+      "level": "error",
+      "step": "2",
+      "message": "\u001b[31mfetch https://storage.example/ctx?X-Amz-Signature=abc123 with key e2b_test_key_value failed\u001b[0m"
+    }
+  ],
+  "reason": {
+    "message": "Build failed: step 2 exited with code 1 (see https://storage.example/ctx?X-Amz-Signature=abc123) e2b_test_key_value\n::set-output name=x::y",
+    "step": "2",
+    "logEntries": [
+      {
+        "timestamp": "2026-10-10T13:00:03.000Z",
+        "level": "error",
+        "message": "LONG"
+      }
+    ]
+  }
+}

@@ -1,0 +1,212 @@
+---
+title: "endpoint-clients"
+description: "The @indx-workspace/contracts/endpoint-clients exports, sorted alphabetically."
+---
+
+<Note>This page is generated from `packages/contracts/src/endpoint-clients.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## CreateEndpointClientRequest
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `kind` | `"mcp-project" \| "a2a-agent"` | Yes |  |
+| `agentIds` | `readonly string[]` | Yes |  |
+| `toolNames` | `undefined \| null \| readonly string[]` | No |  |
+
+## CreateEndpointClientRequestSchema
+
+The body of `POST /api/endpoint-clients`. An `a2a-agent` client lists exactly one agent and no
+`toolNames`; an `mcp-project` client lists 1 to `ENDPOINT_CLIENT_AGENTS_MAX` agents and may
+narrow the tools with `toolNames` (`null` or absent means every code tool of those agents).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `kind` | `"mcp-project" \| "a2a-agent"` | Yes |  |
+| `agentIds` | `readonly string[]` | Yes |  |
+| `toolNames` | `undefined \| null \| readonly string[]` | No |  |
+
+## ENDPOINT_CLIENT_AGENTS_MAX
+
+The most agents one `mcp-project` client lists; equal to `TOOL_SANDBOX_TOOLS_MAX`.
+
+Value: `64`
+
+## ENDPOINT_CLIENT_KINDS
+
+What an endpoint client names (ADR-0134): an MCP project tool endpoint or one agent's A2A
+endpoint. A credential is bound to exactly one client, so revoking the client revokes everything
+that could reach the resource.
+
+- `'mcp-project'`
+- `'a2a-agent'`
+
+## ENDPOINT_CLIENT_PROBLEM_CODES
+
+Domain problem codes of the endpoint-client routes, with the status each travels under.
+
+| Key | Value |
+| --- | --- |
+| `endpoint_client_not_found` | `404` |
+| `endpoint_client_name_taken` | `409` |
+| `endpoint_client_revoked` | `409` |
+| `endpoint_client_agent_not_runnable` | `403` |
+| `endpoint_client_invalid` | `400` |
+
+## ENDPOINT_CLIENT_REDIRECT_URI_MAX_LENGTH
+
+The longest redirect URI accepted.
+
+Value: `2048`
+
+## ENDPOINT_CLIENT_REDIRECT_URIS_MAX
+
+The most OAuth redirect URIs one client registers (ADR-0134 part 3).
+
+Value: `10`
+
+## ENDPOINT_CLIENT_TOOLS_MAX
+
+The most tool names one `mcp-project` client allows.
+
+Value: `64`
+
+## EndpointClientKind
+
+- `"mcp-project"`
+- `"a2a-agent"`
+
+## EndpointClientListResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `endpointClients` | `readonly EndpointClientResource[]` | Yes |  |
+
+## EndpointClientListResponseSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `endpointClients` | `readonly EndpointClientResource[]` | Yes |  |
+
+## EndpointClientProblemCode
+
+- `"endpoint_client_not_found"`
+- `"endpoint_client_name_taken"`
+- `"endpoint_client_revoked"`
+- `"endpoint_client_agent_not_runnable"`
+- `"endpoint_client_invalid"`
+
+## EndpointClientResource
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `name` | `string` | Yes |  |
+| `kind` | `"mcp-project" \| "a2a-agent"` | Yes |  |
+| `agentIds` | `readonly string[]` | Yes |  |
+| `toolNames` | `null \| readonly string[]` | Yes |  |
+| `redirectUris` | `readonly string[]` | Yes |  |
+| `hasClientSecret` | `false \| true` | Yes |  |
+| `actsForPrincipalId` | `string` | Yes |  |
+| `apiKeyIds` | `readonly string[]` | Yes |  |
+| `revokedAt` | `null \| string` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+| `updatedAt` | `string` | Yes |  |
+
+## EndpointClientResourceSchema
+
+One endpoint client as every item of `GET /api/endpoint-clients` and the body of the single
+routes render it. `apiKeyIds` names the bound keys and never carries one; the key itself is
+shown once, by the mint answer.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `name` | `string` | Yes |  |
+| `kind` | `"mcp-project" \| "a2a-agent"` | Yes |  |
+| `agentIds` | `readonly string[]` | Yes |  |
+| `toolNames` | `null \| readonly string[]` | Yes |  |
+| `redirectUris` | `readonly string[]` | Yes |  |
+| `hasClientSecret` | `false \| true` | Yes |  |
+| `actsForPrincipalId` | `string` | Yes |  |
+| `apiKeyIds` | `readonly string[]` | Yes |  |
+| `revokedAt` | `null \| string` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+| `updatedAt` | `string` | Yes |  |
+
+## EndpointClientResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `endpointClient` | `EndpointClientResource` | Yes |  |
+
+## EndpointClientResponseSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `endpointClient` | `EndpointClientResource` | Yes |  |
+
+## MintEndpointKeyRequest
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `expiresAt` | `undefined \| null \| string` | No |  |
+
+## MintEndpointKeyRequestSchema
+
+The body of `POST /api/endpoint-clients/:id/keys`. The answer is `MintedApiKeyResponseSchema`
+unchanged: the key is the only response in the platform that carries the plaintext.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `expiresAt` | `undefined \| null \| string` | No |  |
+
+## RedirectUriSchema
+
+A registered OAuth redirect URI: absolute, `https` (or `http` on a loopback host), with no
+fragment and no credentials. It is compared as an exact string, never normalised.
+
+`string`
+
+## RotateEndpointClientSecretResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `clientId` | `string` | Yes |  |
+| `clientSecret` | `string` | Yes |  |
+| `warning` | `string` | Yes |  |
+
+## RotateEndpointClientSecretResponseSchema
+
+The answer of `POST /api/endpoint-clients/:id/secret` (ADR-0134 part 3): the OAuth `client_id`
+(the client's id) and its secret, shown once. The old secret stops working at once.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `clientId` | `string` | Yes |  |
+| `clientSecret` | `string` | Yes |  |
+| `warning` | `string` | Yes |  |
+
+## UpdateEndpointClientRequest
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `agentIds` | `undefined \| readonly string[]` | No |  |
+| `toolNames` | `undefined \| null \| readonly string[]` | No |  |
+| `redirectUris` | `undefined \| readonly string[]` | No |  |
+
+## UpdateEndpointClientRequestSchema
+
+The body of `PATCH /api/endpoint-clients/:id`: the agents, the tool allow-list and/or the OAuth
+redirect URIs. Whether
+the new list fits the client's kind (one agent for `a2a-agent`, no `toolNames`) depends on the
+stored client, so the server checks that and answers `400 endpoint_client_invalid`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `agentIds` | `undefined \| readonly string[]` | No |  |
+| `toolNames` | `undefined \| null \| readonly string[]` | No |  |
+| `redirectUris` | `undefined \| readonly string[]` | No |  |

@@ -1,0 +1,7 @@
+<Warning>
+  Every `/api/workspaces` route and every `/api/invitations` route refuses an API-key principal
+  with `403 api_key_not_permitted`: a key acts for one workspace with a fixed
+  role, so it has no human membership to list, create, or administer against. Call
+  `aw.workspaces.*` and `aw.team.invitations.*` with `auth: { kind: 'session' }` — an API key
+  cannot reach them, no matter its role.
+</Warning>

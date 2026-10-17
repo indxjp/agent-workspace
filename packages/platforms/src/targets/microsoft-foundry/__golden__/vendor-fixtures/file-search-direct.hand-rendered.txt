@@ -1,0 +1,13 @@
+{
+  "definition": {
+    "kind": "prompt",
+    "model": "gpt-5-mini",
+    "instructions": "Answer from the attached files.",
+    "tools": [
+      {
+        "type": "file_search",
+        "vector_store_ids": ["vs_example"]
+      }
+    ]
+  }
+}

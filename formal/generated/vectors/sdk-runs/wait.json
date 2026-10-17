@@ -1,0 +1,33 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Normative.SdkRuns.wait_requires_settled_record",
+    "AgentWorkspace.Theorems.Refinement.SdkRuns.indeterminate_done_diverges_from_settled_wait"],
+   "input": {"status": "queued", "done": true},
+   "id": "wait/queued",
+   "expected": {"violation": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.SdkRuns.wait_requires_settled_record",
+    "AgentWorkspace.Theorems.Refinement.SdkRuns.indeterminate_done_diverges_from_settled_wait"],
+   "input": {"status": "running", "done": true},
+   "id": "wait/running",
+   "expected": {"violation": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.SdkRuns.wait_requires_settled_record",
+    "AgentWorkspace.Theorems.Refinement.SdkRuns.indeterminate_done_diverges_from_settled_wait"],
+   "input": {"status": "completed", "done": true},
+   "id": "wait/completed",
+   "expected": {"violation": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.SdkRuns.wait_requires_settled_record",
+    "AgentWorkspace.Theorems.Refinement.SdkRuns.indeterminate_done_diverges_from_settled_wait"],
+   "input": {"status": "failed", "done": true},
+   "id": "wait/failed",
+   "expected": {"violation": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.SdkRuns.wait_requires_settled_record",
+    "AgentWorkspace.Theorems.Refinement.SdkRuns.indeterminate_done_diverges_from_settled_wait"],
+   "input": {"status": "cancelled", "done": true},
+   "id": "wait/cancelled",
+   "expected": {"violation": false}}],
+ "family": "sdk-runs",
+ "description": "Settled-record decision"}

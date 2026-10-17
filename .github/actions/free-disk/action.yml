@@ -1,0 +1,48 @@
+name: Free runner disk
+description: >-
+  GitHub's ubuntu-latest image leaves about 14 GB free on its one 72 GB disk (/mnt is on the same
+  file system) and too little room for the jobs that build Docker images: `pnpm install` inside an
+  image build failed with ENOSPC on it (PR #1147). The SDKs the image ships and this repository
+  never uses (.NET, Android, Haskell, CodeQL, Swift, Boost; about 30 GB, 2-3 minutes of disk I/O)
+  are deleted in the background: call this action once with no input right after checkout, and
+  once more with `wait: 'true'` just before the step that needs the room. The steps in between
+  overlap the deletion.
+
+inputs:
+  wait:
+    description: "'true' waits for the deletion started by an earlier call; fails if it failed."
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    - name: Delete the preinstalled SDKs this repository does not use
+      if: inputs.wait != 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        df -h / | tail -1
+        # Orphaned background processes run until the job ends.
+        nohup bash -c '
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup \
+            /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/local/share/boost &&
+            docker image prune --all --force > /dev/null
+          echo $? > "$RUNNER_TEMP/free-disk.status"
+        ' > "$RUNNER_TEMP/free-disk.log" 2>&1 &
+
+    - name: Wait for the disk to be freed
+      if: inputs.wait == 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        for _ in $(seq 600); do
+          if [ -f "$RUNNER_TEMP/free-disk.status" ]; then
+            df -h / | tail -1
+            status="$(cat "$RUNNER_TEMP/free-disk.status")"
+            [ "$status" = 0 ] || { cat "$RUNNER_TEMP/free-disk.log"; exit "$status"; }
+            exit 0
+          fi
+          sleep 1
+        done
+        echo "::error::free-disk: the deletion did not finish in 10 minutes (or was never started)"
+        exit 1

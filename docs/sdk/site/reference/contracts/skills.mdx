@@ -1,0 +1,288 @@
+---
+title: "skills"
+description: "The @indx-workspace/contracts/skills exports, sorted alphabetically."
+---
+
+<Note>This page is generated from `packages/contracts/src/skills.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## ImportSkillInput
+
+The body of `POST /api/skills`, which both creates a skill (one `SKILL.md`) and imports a
+whole directory. `files` must be non-empty, contain a `SKILL.md` entry, and hold no two paths
+that are equal once letter case is folded (`409 colliding_paths`); the name must be free in
+the workspace (`409 skill_already_exists`).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `files` | `readonly SkillFile[]` | Yes |  |
+
+## MAX_SKILL_REQUEST_BODY_BYTES
+
+The most bytes one `POST` or `PATCH /api/skills` request body may carry, base64 included; a
+larger body is a `413 request_body_too_large`, refused while it streams. There is no per-file
+or file-count bound: the body ceiling is the only size limit.
+
+Value: `16 * 1024 * 1024`
+
+## SKILL_FILE_BASE64_PATTERN
+
+Standard, padded base64 — the empty string included — as `contentBase64` must be encoded. The
+server validates a request's bytes against this before decoding (a lenient decoder would turn
+a malformed value into *some* bytes rather than refusing it: `400 malformed_content`), and an
+export renders every file the same way.
+
+Value: `/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/`
+
+## SKILL_FILE_PATH_MAX_BYTES
+
+The longest relative path one skill file may have, in UTF-8 bytes. The server admits a path by
+grammar (every `/`-separated segment `[A-Za-z0-9][A-Za-z0-9._-]*`, none ending in `.` or a
+space, none `.` or `..`) and refuses anything else as `400 inadmissible_path`; the grammar is
+the server's to state, so only its byte ceiling is published here.
+
+Value: `4096`
+
+## SKILL_MD_FILENAME
+
+The one file every skill directory must contain; `removeFiles` may never name it.
+
+Value: `'SKILL.md'`
+
+## SKILL_NAME_MAX_LENGTH
+
+Value: `64`
+
+## SKILL_NAME_PATTERN
+
+The shape of a skill's name: a lower-case slug of letters, digits and single hyphens, 1–64
+characters, exactly the directory name the Claude Agent SDK loads (`.claude/skills/<name>/`).
+Transcribed from the `skills_name_shape` database CHECK that `apps/web/server/skills/keys.ts`
+restates; `POST /api/skills` refuses a name outside it as `400 invalid_name`, and a `:name`
+path segment outside it is a `404 skill_not_found` (no such skill could ever have been made).
+
+Value: `/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/`
+
+## SkillDetail
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `source` | `null \| string` | Yes |  |
+| `instructions` | `null \| string` | Yes |  |
+| `allowedTools` | `null \| readonly string[]` | Yes |  |
+| `files` | `readonly SkillFileStat[]` | Yes |  |
+| `id` | `string` | Yes | The resource-catalog row's id, opaque. Required (K-4, issue #234): a route with no catalog configured answers `503 skills_runtime_not_configured` rather than a body with no id, and `POST`/`PATCH` refuse a `SKILL.md` whose bytes are not valid UTF-8 (`400 malformed_content`), so no new skill can enter a state a catalog row cannot be written for. A skill is always addressed by `name`, never by this. |
+| `name` | `string` | Yes |  |
+| `enabled` | `false \| true` | Yes |  |
+| `description` | `null \| string` | Yes | From `SKILL.md`'s frontmatter `description`, or `null` when it has none. |
+| `fileCount` | `number` | Yes | Every file under the skill's directory, `SKILL.md` included. |
+| `createdAt` | `string` | Yes |  |
+| `updatedAt` | `string` | Yes |  |
+
+## SkillDetailSchema
+
+One skill as `GET /api/skills/:name`, the `201` of `POST /api/skills`, the `200` of
+`PATCH /api/skills/:name` and every item of `GET /api/skills` render it, wrapped as `{ skill }`
+everywhere but the list.
+
+`source` is `SKILL.md`'s complete text, so an editor can preserve frontmatter fields the
+platform does not parse; `instructions` is its Markdown body and `allowedTools` its
+`allowed-tools` list. All three are `null` when `SKILL.md` is missing or not valid UTF-8
+(`allowedTools` also when the field is absent); the bytes are still stored and exported.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `source` | `null \| string` | Yes |  |
+| `instructions` | `null \| string` | Yes |  |
+| `allowedTools` | `null \| readonly string[]` | Yes |  |
+| `files` | `readonly SkillFileStat[]` | Yes |  |
+| `id` | `string` | Yes | The resource-catalog row's id, opaque. Required (K-4, issue #234): a route with no catalog configured answers `503 skills_runtime_not_configured` rather than a body with no id, and `POST`/`PATCH` refuse a `SKILL.md` whose bytes are not valid UTF-8 (`400 malformed_content`), so no new skill can enter a state a catalog row cannot be written for. A skill is always addressed by `name`, never by this. |
+| `name` | `string` | Yes |  |
+| `enabled` | `false \| true` | Yes |  |
+| `description` | `null \| string` | Yes | From `SKILL.md`'s frontmatter `description`, or `null` when it has none. |
+| `fileCount` | `number` | Yes | Every file under the skill's directory, `SKILL.md` included. |
+| `createdAt` | `string` | Yes |  |
+| `updatedAt` | `string` | Yes |  |
+
+## SkillExport
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `files` | `readonly SkillFile[]` | Yes |  |
+
+## SkillExportResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `skill` | `SkillExport` | Yes |  |
+
+## SkillExportResponseSchema
+
+The body of `GET /api/skills/:name?export=true`: the export wrapped as `{ skill }`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `skill` | `SkillExport` | Yes |  |
+
+## SkillExportSchema
+
+A skill's directory, byte for byte: every stored file re-served exactly as it was imported,
+`SKILL.md` included, in a stable order by path. Importing it under another name reproduces
+the skill.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `files` | `readonly SkillFile[]` | Yes |  |
+
+## SkillFile
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | `string` | Yes |  |
+| `contentBase64` | `string` | Yes |  |
+
+## SkillFileSchema
+
+One file with its bytes, as an import or patch sends it and an export returns it. `path` is
+relative to the skill directory with forward slashes; `contentBase64` is the file's bytes in
+standard padded base64 (see `SKILL_FILE_BASE64_PATTERN`) — an empty file is `""`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | `string` | Yes |  |
+| `contentBase64` | `string` | Yes |  |
+
+## SkillFileStat
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | `string` | Yes |  |
+| `sizeBytes` | `number` | Yes |  |
+
+## SkillFileStatSchema
+
+One file of a skill as the detail lists it: its relative path and stored size, no bytes.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | `string` | Yes |  |
+| `sizeBytes` | `number` | Yes |  |
+
+## SkillListResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `skills` | `readonly SkillDetail[]` | Yes |  |
+
+## SkillListResponseSchema
+
+The body of `GET /api/skills`: every skill of the workspace, by name, each in full detail.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `skills` | `readonly SkillDetail[]` | Yes |  |
+
+## SkillResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `skill` | `SkillDetail` | Yes |  |
+
+## SkillResponseSchema
+
+The body of `GET /api/skills/:name`, `PATCH /api/skills/:name` and the `201` of `POST`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `skill` | `SkillDetail` | Yes |  |
+
+## SKILLS_PROBLEM_CODES
+
+Problem codes the skills routes own, with the status each one travels under. The common
+vocabulary (`malformed_body`, `request_body_too_large`, `unsupported_media_type`, …) is
+`COMMON_PROBLEM_CODES` at the package root.
+
+| Key | Value |
+| --- | --- |
+| `missing_name` | `400` |
+| `invalid_name` | `400` |
+| `missing_files` | `400` |
+| `malformed_file_entry` | `400` |
+| `inadmissible_path` | `400` |
+| `duplicate_path` | `400` |
+| `missing_skill_md` | `400` |
+| `malformed_content` | `400` |
+| `invalid_path` | `400` |
+| `empty_patch` | `400` |
+| `cannot_remove_skill_md` | `400` |
+| `skill_not_found` | `404` |
+| `skill_already_exists` | `409` |
+| `colliding_paths` | `409` |
+| `skill_md_removal_rejected` | `409` |
+| `skill_in_use` | `409` |
+| `store_inconsistent` | `500` |
+| `skills_runtime_not_configured` | `503` |
+
+## SkillsProblemCode
+
+- `"invalid_path"`
+- `"store_inconsistent"`
+- `"missing_name"`
+- `"invalid_name"`
+- `"missing_files"`
+- `"malformed_file_entry"`
+- `"inadmissible_path"`
+- `"duplicate_path"`
+- `"missing_skill_md"`
+- `"malformed_content"`
+- `"empty_patch"`
+- `"cannot_remove_skill_md"`
+- `"skill_not_found"`
+- `"skill_already_exists"`
+- `"colliding_paths"`
+- `"skill_md_removal_rejected"`
+- `"skill_in_use"`
+- `"skills_runtime_not_configured"`
+
+## SkillSummary
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes | The resource-catalog row's id, opaque. Required (K-4, issue #234): a route with no catalog configured answers `503 skills_runtime_not_configured` rather than a body with no id, and `POST`/`PATCH` refuse a `SKILL.md` whose bytes are not valid UTF-8 (`400 malformed_content`), so no new skill can enter a state a catalog row cannot be written for. A skill is always addressed by `name`, never by this. |
+| `name` | `string` | Yes |  |
+| `enabled` | `false \| true` | Yes |  |
+| `description` | `null \| string` | Yes | From `SKILL.md`'s frontmatter `description`, or `null` when it has none. |
+| `fileCount` | `number` | Yes | Every file under the skill's directory, `SKILL.md` included. |
+| `createdAt` | `string` | Yes |  |
+| `updatedAt` | `string` | Yes |  |
+
+## SkillSummarySchema
+
+The fields every skill body carries. No route renders exactly this today — each item of
+`GET /api/skills` is a full `SkillDetailSchema` — so this is the narrow projection a
+consumer that lists skills may keep, not a wire shape of its own.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes | The resource-catalog row's id, opaque. Required (K-4, issue #234): a route with no catalog configured answers `503 skills_runtime_not_configured` rather than a body with no id, and `POST`/`PATCH` refuse a `SKILL.md` whose bytes are not valid UTF-8 (`400 malformed_content`), so no new skill can enter a state a catalog row cannot be written for. A skill is always addressed by `name`, never by this. |
+| `name` | `string` | Yes |  |
+| `enabled` | `false \| true` | Yes |  |
+| `description` | `null \| string` | Yes | From `SKILL.md`'s frontmatter `description`, or `null` when it has none. |
+| `fileCount` | `number` | Yes | Every file under the skill's directory, `SKILL.md` included. |
+| `createdAt` | `string` | Yes |  |
+| `updatedAt` | `string` | Yes |  |
+
+## UpdateSkillPatch
+
+The body of `PATCH /api/skills/:name`. At least one field must be present (`400 empty_patch`).
+`files` writes or overwrites by exact path; `removeFiles` deletes by path and may never name
+`SKILL.md`. Writes run before deletes, so a case-only rename in one request is refused as a
+collision — do it as two requests.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `enabled` | `undefined \| false \| true` | No |  |
+| `files` | `undefined \| readonly SkillFile[]` | No |  |
+| `removeFiles` | `undefined \| readonly string[]` | No |  |

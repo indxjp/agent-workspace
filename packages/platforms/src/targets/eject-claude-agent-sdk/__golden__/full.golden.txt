@@ -1,0 +1,442 @@
+=== .claude/skills/refund-policy/SKILL.md ===
+---
+name: refund-policy
+description: When and how to issue refunds
+---
+Refunds within 30 days are approved automatically.
+=== .env.example ===
+ANTHROPIC_API_KEY=
+ZENDESK_TOKEN=
+=== .gitignore ===
+node_modules
+.env
+=== README.md ===
+# support-triage
+Triages customer support tickets and drafts replies.
+
+## Run
+
+```sh
+npm install
+cp .env.example .env   # then fill in the values
+node --env-file=.env src/main.ts "your prompt"
+```
+
+## Code tools
+
+Copy your project's `tools/` directory next to `src/` and add any package your run files import.
+`src/code-tools.ts` loads the declarations from it.
+
+## Claude Agent SDK
+
+The agent runs through `query()` of the Claude Agent SDK. `src/agent.ts` exports `agentOptions()`, which holds the permissions, MCP servers, skills and subagents; `.claude/skills/` holds the skills.
+Set `ANTHROPIC_API_KEY` in `.env`.
+
+## What was not carried over
+
+The platform report that came with this project gives every field a verdict and says why a field could not be carried. An ejected project is not importable back into Agent Workspace.
+=== package.json ===
+{
+  "name": "support-triage",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Triages customer support tickets and drafts replies.",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node src/main.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.296",
+    "@indx-workspace/sdk": "0.6.9",
+    "zod": "4.6.6"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "typescript": "6.0.2"
+  }
+}
+=== src/agent.ts ===
+import { createSdkMcpServer, tool, type Options } from "@anthropic-ai/claude-agent-sdk";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+import { loadCodeTools, type LoadedCodeTool } from "./code-tools.ts";
+
+const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (value === undefined || value === "") {
+    throw new Error("Set " + name + " (see .env.example)");
+  }
+  return value;
+}
+
+function codeToolsServer(codeTools: readonly LoadedCodeTool[]) {
+  return createSdkMcpServer({
+    name: "code-tools",
+    version: "1.0.0",
+    tools: codeTools.map((codeTool) =>
+      tool(codeTool.name, codeTool.description, codeTool.input.shape, async (args) => ({
+        content: [
+          { type: "text", text: JSON.stringify(await codeTool.call(args)) ?? "null" },
+        ],
+      })),
+    ),
+  });
+}
+
+export async function agentOptions(): Promise<Options> {
+  const codeTools = await loadCodeTools(projectRoot, ["get_order"], "support-triage");
+  const options: Options = {
+    cwd: projectRoot,
+    model: "claude-sonnet-4-6",
+    systemPrompt: {
+      type: "preset",
+      preset: "claude_code",
+      append: "You triage support tickets.\n\n- Look up the order before answering.\n- Hand billing questions to billing-specialist.",
+    },
+    tools: {
+      type: "preset",
+      preset: "claude_code",
+    },
+    disallowedTools: [
+      "Write",
+      "Edit",
+      "NotebookEdit",
+      "Bash",
+      "BashOutput",
+      "KillShell",
+      "WebFetch",
+      "WebSearch",
+    ],
+    allowedTools: ["mcp__code-tools__*", "mcp__local-git__*", "mcp__zendesk__*"],
+    permissionMode: "default",
+    settingSources: ["project"],
+    strictMcpConfig: true,
+    mcpServers: {
+      zendesk: {
+        type: "http",
+        url: "https://mcp.example.com/zendesk",
+        headers: {
+          Authorization: "Bearer " + requireEnv("ZENDESK_TOKEN"),
+        },
+      },
+      "local-git": {
+        type: "stdio",
+        command: "git-mcp",
+      },
+      "code-tools": codeToolsServer(codeTools),
+    },
+    skills: ["refund-policy"],
+    agents: {
+      "billing-specialist": {
+        description: "Answers billing and refund questions.",
+        prompt: "You answer billing questions using the refund-policy skill.",
+        disallowedTools: [
+          "Write",
+          "Edit",
+          "NotebookEdit",
+          "Bash",
+          "BashOutput",
+          "KillShell",
+          "WebFetch",
+          "WebSearch",
+        ],
+        model: "claude-sonnet-4-6",
+        skills: ["refund-policy"],
+      },
+    },
+    maxTurns: 20,
+    maxBudgetUsd: 2,
+  };
+  return options;
+}
+=== src/code-tools.ts ===
+import { randomUUID } from 'node:crypto';
+import { readdir, realpath } from 'node:fs/promises';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+import { isCodeTool } from '@indx-workspace/sdk/define';
+import { z } from 'zod';
+
+export interface LoadedCodeTool {
+  readonly name: string;
+  readonly description: string;
+  readonly input: z.ZodObject;
+  call(input: unknown): Promise<unknown>;
+}
+
+interface RunContext {
+  readonly signal: AbortSignal;
+  readonly runId: string;
+  readonly agent: string;
+}
+
+type RunFunction = (input: unknown, context: RunContext) => unknown;
+
+const runId = randomUUID();
+
+async function filesBelow(directory: string): Promise<string[]> {
+  const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
+  const nested = await Promise.all(
+    entries.map(async (entry) => {
+      const file = path.join(directory, entry.name);
+      if (entry.isDirectory()) return filesBelow(file);
+      return /(?<!\.d)\.[jt]s$/u.test(entry.name) ? [file] : [];
+    }),
+  );
+  return nested.flat();
+}
+
+async function defaultExport(file: string): Promise<unknown> {
+  return ((await import(pathToFileURL(file).href)) as { default?: unknown }).default;
+}
+
+async function runFile(root: string, run: string): Promise<string> {
+  const real = await realpath(path.join(root, ...run.split('/')));
+  const relative = path.relative(await realpath(root), real);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error(run + ' is outside the project');
+  }
+  return real;
+}
+
+export async function loadCodeTools(
+  root: string,
+  names: readonly string[],
+  agent: string,
+): Promise<readonly LoadedCodeTool[]> {
+  const wanted = new Set(names);
+  const loaded = new Map<string, LoadedCodeTool>();
+  for (const file of (await filesBelow(path.join(root, 'tools'))).sort()) {
+    const declaration = await defaultExport(file);
+    if (!isCodeTool(declaration) || !wanted.has(declaration.name)) continue;
+    if (loaded.has(declaration.name)) continue;
+    const run = await defaultExport(await runFile(root, declaration.run));
+    if (typeof run !== 'function') {
+      throw new Error(declaration.run + ' must export a function as its default');
+    }
+    const input = z.fromJSONSchema(declaration.inputSchema);
+    if (!(input instanceof z.ZodObject)) {
+      throw new Error(declaration.name + ': its input schema must describe an object');
+    }
+    const timeoutMs = declaration.limits.timeoutMs;
+    loaded.set(declaration.name, {
+      name: declaration.name,
+      description: declaration.description,
+      input,
+      call: async (args) =>
+        (run as RunFunction)(input.parse(args), {
+          signal: AbortSignal.timeout(timeoutMs),
+          runId,
+          agent,
+        }),
+    });
+  }
+  return names.map((name) => {
+    const found = loaded.get(name);
+    if (found === undefined) throw new Error('code tool ' + name + ' not found under tools/');
+    return found;
+  });
+}
+=== src/main.ts ===
+import { query } from "@anthropic-ai/claude-agent-sdk";
+
+import { agentOptions } from "./agent.ts";
+
+const prompt = process.argv.slice(2).join(" ").trim();
+if (prompt === "") {
+  console.error("Usage: node --env-file=.env src/main.ts \"your prompt\"");
+  process.exit(1);
+}
+
+try {
+  const options = await agentOptions();
+  for await (const message of query({ prompt, options })) {
+    if (message.type !== "result") continue;
+    if (message.subtype === "success") {
+      console.log(message.result);
+    } else {
+      throw new Error(message.errors.join("; ") || message.subtype);
+    }
+  }
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+}
+=== tsconfig.json ===
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": [
+      "ES2023"
+    ],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "types": [
+      "node"
+    ],
+    "skipLibCheck": true
+  },
+  "include": [
+    "src",
+    "tools"
+  ]
+}
+=== report.json ===
+[
+  {
+    "path": "toolEndpoint",
+    "verdict": "mapped",
+    "note": "not needed: an ejected project runs its code tools in-process"
+  },
+  {
+    "path": "support-triage.description",
+    "verdict": "mapped",
+    "note": "the description of package.json"
+  },
+  {
+    "path": "support-triage.instructions",
+    "verdict": "native",
+    "note": "appended to the claude_code system prompt"
+  },
+  {
+    "path": "support-triage.model",
+    "verdict": "native",
+    "note": "model"
+  },
+  {
+    "path": "support-triage.permissions.readFiles",
+    "verdict": "native",
+    "note": "the tools it governs are allowed"
+  },
+  {
+    "path": "support-triage.permissions.writeFiles",
+    "verdict": "native",
+    "note": "the tools it governs are listed in disallowedTools"
+  },
+  {
+    "path": "support-triage.permissions.runCommands",
+    "verdict": "native",
+    "note": "the tools it governs are listed in disallowedTools"
+  },
+  {
+    "path": "support-triage.permissions.unrestrictedNetwork",
+    "verdict": "mapped",
+    "note": "WebFetch and WebSearch are removed; the process network is not isolated"
+  },
+  {
+    "path": "support-triage.tools.0",
+    "verdict": "native",
+    "note": "remote MCP server zendesk; the token is read from the environment variable ZENDESK_TOKEN"
+  },
+  {
+    "path": "support-triage.tools.1",
+    "verdict": "native",
+    "note": "a local process registered as MCP server local-git; it must exist where the project runs"
+  },
+  {
+    "path": "support-triage.tools.2",
+    "verdict": "native",
+    "note": "wrapped in-process from src/code-tools.ts; copy the project’s tools/ directory (aw platforms export does this)"
+  },
+  {
+    "path": "support-triage.tools.3",
+    "verdict": "dropped",
+    "code": "code_tool_needs_public_mcp",
+    "note": "an openapi tool runs in the Agent Workspace gateway; an ejected project has none"
+  },
+  {
+    "path": "support-triage.tools.4",
+    "verdict": "dropped",
+    "code": "permissions_unsupported",
+    "note": "WebSearch is in disallowedTools because permissions.unrestrictedNetwork is false"
+  },
+  {
+    "path": "support-triage.tools.5",
+    "verdict": "mapped",
+    "note": "Claude Code’s Bash, governed by permissions.runCommands"
+  },
+  {
+    "path": "support-triage.skills.0",
+    "verdict": "native",
+    "note": "copied to .claude/skills/refund-policy/ and enabled by skills"
+  },
+  {
+    "path": "support-triage.knowledge.0",
+    "verdict": "dropped",
+    "code": "knowledge_unsupported",
+    "note": "no SDK of an ejected project has a retrieval slot for a files source; project.knowledgeFiles are not copied"
+  },
+  {
+    "path": "support-triage.knowledge.1",
+    "verdict": "dropped",
+    "code": "knowledge_unsupported",
+    "note": "no SDK of an ejected project has a retrieval slot for a url source; project.knowledgeFiles are not copied"
+  },
+  {
+    "path": "support-triage.subagents.0",
+    "verdict": "mapped",
+    "note": "emitted as agents.billing-specialist; it inherits the root’s tools, minus those its own permissions deny, and its own MCP servers are listed in its mcpServers"
+  },
+  {
+    "path": "support-triage.limits.maxTurns",
+    "verdict": "native",
+    "note": "maxTurns"
+  },
+  {
+    "path": "support-triage.limits.maxBudgetUsd",
+    "verdict": "native",
+    "note": "maxBudgetUsd"
+  },
+  {
+    "path": "billing-specialist.description",
+    "verdict": "native",
+    "note": "the subagent’s description"
+  },
+  {
+    "path": "billing-specialist.instructions",
+    "verdict": "native",
+    "note": "the subagent’s prompt"
+  },
+  {
+    "path": "billing-specialist.model",
+    "verdict": "native",
+    "note": "model"
+  },
+  {
+    "path": "billing-specialist.permissions.readFiles",
+    "verdict": "native",
+    "note": "the tools it governs are allowed"
+  },
+  {
+    "path": "billing-specialist.permissions.writeFiles",
+    "verdict": "native",
+    "note": "the tools it governs are listed in disallowedTools"
+  },
+  {
+    "path": "billing-specialist.permissions.runCommands",
+    "verdict": "native",
+    "note": "the tools it governs are listed in disallowedTools"
+  },
+  {
+    "path": "billing-specialist.permissions.unrestrictedNetwork",
+    "verdict": "mapped",
+    "note": "WebFetch and WebSearch are removed; the process network is not isolated"
+  },
+  {
+    "path": "billing-specialist.skills.0",
+    "verdict": "native",
+    "note": "copied to .claude/skills/refund-policy/ and enabled by skills"
+  }
+]

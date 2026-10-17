@@ -1,0 +1,121 @@
+# One image per component, named as infra/release/build-and-push.sh publishes it. The
+# runner-manager is the root Dockerfile's `runner` target, which is why its placeholder repository
+# is `runner` rather than the value key. Every digest is an all-zero placeholder so that an
+# install which has not been given the release set cannot start.
+images:
+  web: registry.example/agent-workspace/web@sha256:0000000000000000000000000000000000000000000000000000000000000000
+  gateway: registry.example/agent-workspace/gateway@sha256:0000000000000000000000000000000000000000000000000000000000000000
+  runnerManager: registry.example/agent-workspace/runner@sha256:0000000000000000000000000000000000000000000000000000000000000000
+  # ENG-07 (docs/adr/0073-one-runtime-image-per-engine.md): one runtime image per engine, keyed by
+  # engine id. The engines this deployment offers are exactly the keys set here.
+  runtime:
+    claude-agent-sdk: registry.example/agent-workspace/runtime-claude-agent-sdk@sha256:0000000000000000000000000000000000000000000000000000000000000000
+replicas:
+  web: 2
+  gateway: 2
+  # One: the runner manager keeps its sandbox allocations in the process, so a second replica would
+  # not know the sandboxes the first one made. It is never autoscaled.
+  runnerManager: 1
+rollout:
+  revision: ''
+  minReadySeconds: 10
+  progressDeadlineSeconds: 600
+  maxUnavailable: 0
+  maxSurge: 1
+# ADR-0122: a pre-install/pre-upgrade Job applies migrations before the new pods start. Set
+# `enabled: false` only if you migrate out of band; the web entry point still migrates under the
+# same advisory lock.
+migrations:
+  enabled: true
+  backoffLimit: 2
+  activeDeadlineSeconds: 600
+probes:
+  startup:
+    failureThreshold: 30
+    periodSeconds: 5
+  readiness:
+    failureThreshold: 3
+    periodSeconds: 10
+  liveness:
+    failureThreshold: 3
+    periodSeconds: 20
+    timeoutSeconds: 5
+podDisruptionBudget:
+  enabled: true
+  maxUnavailable: 1
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+service:
+  type: ClusterIP
+  annotations: {}
+serviceAccount:
+  name: agent-workspace
+  annotations: {}
+storageClassName: ''
+external:
+  databaseUrlSecret: agent-workspace-database
+  objectStoreSecret: agent-workspace-object-store
+secrets:
+  applicationSecret: agent-workspace-secrets
+runtimeClassName: ''
+# The images run as the `node` user; a named user cannot satisfy runAsNonRoot, so the pods pin its
+# numeric uid. OpenShift assigns its own uid: set it to null there.
+runAsUser: 1000
+# Where agent sessions run. `kubernetes` makes the runner manager create one Pod per session in this
+# namespace, with its own ServiceAccount token (the Role in templates/serviceaccount.yaml).
+# `egressProxyImage` (a digest-pinned image) puts the egress proxy in front of each sandbox.
+runtime:
+  driver: kubernetes
+  egressProxyImage: ''
+# NetworkPolicy (default deny, plus the allowances in templates/networkpolicy.yaml). The database
+# rule opens only `port` to web, the gateway, the migrate Job and the runner manager; set `cidr` (the
+# address range of an external PostgreSQL) or `podSelector` (the labels of an in-cluster one) to
+# narrow where it may go. `namespace` is the in-cluster one's namespace when it is not the release's.
+database:
+  port: 5432
+  cidr: ''
+  podSelector: {}
+  namespace: ''
+# The object store web reads and writes files in: the same shape as `database`, opened to web only.
+objectStore:
+  port: 443
+  cidr: ''
+  podSelector: {}
+  namespace: ''
+# The model providers web and the gateway call: the public internet on `port`, minus the private
+# ranges. Narrow `cidr` (and drop `except`) to a provider or a proxy when you know where it is.
+providers:
+  port: 443
+  cidr: 0.0.0.0/0
+  except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16]
+  podSelector: {}
+  namespace: ''
+# The Kubernetes API server, which the runner manager dials to create sandbox Pods. Empty `cidr`
+# opens only `ports`, so the runner manager may reach any host on 443/6443; set it in production to
+# the API server address (`kubectl get endpoints kubernetes`).
+kubernetesApi:
+  cidr: ''
+  ports: [443, 6443]
+# Where the cluster DNS runs; every pod of the release may reach it on port 53.
+dns:
+  namespace: kube-system
+  podSelector:
+    k8s-app: kube-dns
+# One Ingress for web. `tls.clusterIssuer` names a cert-manager ClusterIssuer; the certificate is
+# stored in the `agent-workspace-tls` Secret. `controllerNamespace` is where the ingress controller
+# runs, which web accepts connections from.
+ingress:
+  enabled: false
+  className: ''
+  host: ''
+  controllerNamespace: ingress-nginx
+  tls:
+    clusterIssuer: ''
+# The canonical deployment-policy JSON (AW_DEPLOYMENT_POLICY) web enforces; empty sets none.
+deploymentPolicy: ''
+# The https origin (no path) of this deployment (AW_PUBLIC_URL, ADR-0135): web's A2A agent cards use
+# it; empty leaves it unset.
+publicUrl: ''

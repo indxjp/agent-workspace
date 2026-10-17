@@ -1,0 +1,15 @@
+{
+  // The emit view. The only config in this app that writes to dist/, and
+  // therefore the only one that needs to exclude tests.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "rootDir": "src",
+    "outDir": "dist",
+    "sourceMap": true
+  },
+  // `types` holds the adapter module declarations this build type-checks the registry's imports
+  // against, because an image copies only one adapter (see `types/engine-modules.d.ts`).
+  "include": ["src", "types"],
+  "exclude": ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"]
+}

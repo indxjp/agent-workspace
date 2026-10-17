@@ -1,0 +1,136 @@
+---
+title: "WorkspacesClient"
+description: "Every method of WorkspacesClient, its parameters, return type, and route."
+---
+
+<Note>This page is generated from `packages/sdk/src/resources/workspaces.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+`/api/workspaces/**` — spec §25's tenant boundary as a resource.
+
+**A person only.** Every route behind `list`, `get`, `create` and `update` refuses an
+API-key principal with `403 api_key_not_permitted`: an API key acts for one workspace with a
+fixed role and has no human membership to list, create or administer workspace records against.
+Build the client with
+`auth: { kind: 'session' }` in a browser, or `{ kind: 'user-token' }` with the token `aw login`
+holds (issue #242), to use any of them. `sharingPolicy` is the exception: its routes belong to
+the caller's current workspace and serve every principal.
+
+## list
+
+Every workspace the caller belongs to, with the role held in each.
+
+```ts
+async list(options?: RequestOptions): Promise<readonly WorkspaceMembershipView[]>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<readonly WorkspaceMembershipView[]>`
+
+**Route:** `GET /api/workspaces`
+
+## get
+
+```ts
+async get(workspaceId: string, options?: RequestOptions): Promise<WorkspaceMembershipView>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `workspaceId` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<WorkspaceMembershipView>`
+
+**Route:** `GET /api/workspaces/:workspaceId`
+
+## create
+
+Create a workspace; the caller becomes its first Owner in the same transaction.
+
+```ts
+async create(input: CreateWorkspaceInput, options?: RequestOptions): Promise<WorkspaceMembershipView>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `input` | `CreateWorkspaceInput` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<WorkspaceMembershipView>`
+
+**Route:** `POST /api/workspaces`
+
+## update
+
+Rename, archive, and/or restore.
+
+```ts
+async update(workspaceId: string, patch: UpdateWorkspacePatch, options?: RequestOptions): Promise<WorkspaceResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `workspaceId` | `string` | Yes |
+| `patch` | `UpdateWorkspacePatch` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<WorkspaceResource>`
+
+**Route:** `PATCH /api/workspaces/:workspaceId`
+
+## select
+
+Switch the session's current workspace (issue #236, SDK-04, S-2) — `idOrSlug` is either half
+of `WorkspaceMembershipView`'s pair. `POST /api/auth/workspace` with `Content-Type:
+application/json`, which answers `200 { workspace }` and a new session `Set-Cookie` rather
+than the browser-form path's `303` redirect. A `user-token` client (issue #242) calls
+`POST /api/auth/cli-workspace` instead, which moves the token itself to the workspace. An
+API-key or a browser-token client answers `401 session_expired`, because neither carries a
+session to switch.
+
+```ts
+async select(idOrSlug: string, options?: RequestOptions): Promise<WorkspaceMembershipView>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `idOrSlug` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<WorkspaceMembershipView>`
+
+## sharingPolicy.get
+
+Whether the workspace lets a member publish a public share. Every role may read it.
+
+```ts
+get(options?: RequestOptions): Promise<SharingPolicy>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<SharingPolicy>`
+
+**Route:** `GET /api/sharing-policies`
+
+## sharingPolicy.set
+
+Turn public sharing on or off. Owner only: any other role is `403 forbidden`.
+
+```ts
+set(input: UpdateSharingPolicyInput, options?: RequestOptions): Promise<SharingPolicy>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `input` | `UpdateSharingPolicyInput` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<SharingPolicy>`
+
+**Route:** `PATCH /api/sharing-policies`

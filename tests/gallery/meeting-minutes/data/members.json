@@ -1,0 +1,69 @@
+{
+  "organization": "東和精機株式会社",
+  "members": [
+    {
+      "name": "佐藤 健一",
+      "kana": "さとう けんいち",
+      "department": "製造部",
+      "title": "部長",
+      "assignable": true
+    },
+    {
+      "name": "鈴木 一郎",
+      "kana": "すずき いちろう",
+      "department": "製造部 第2製造課",
+      "title": "課長",
+      "assignable": true
+    },
+    {
+      "name": "山本 真理子",
+      "kana": "やまもと まりこ",
+      "department": "品質保証部",
+      "title": "主任",
+      "assignable": true
+    },
+    {
+      "name": "高橋 翔太",
+      "kana": "たかはし しょうた",
+      "department": "生産技術課",
+      "title": "係長",
+      "assignable": true
+    },
+    {
+      "name": "伊藤 美咲",
+      "kana": "いとう みさき",
+      "department": "総務部",
+      "title": "",
+      "assignable": true
+    },
+    {
+      "name": "中村 由美",
+      "kana": "なかむら ゆみ",
+      "department": "開発部",
+      "title": "課長",
+      "assignable": true
+    },
+    {
+      "name": "小林 大輔",
+      "kana": "こばやし だいすけ",
+      "department": "開発部",
+      "title": "",
+      "assignable": true
+    },
+    {
+      "name": "加藤 拓也",
+      "kana": "かとう たくや",
+      "department": "営業部",
+      "title": "主任",
+      "assignable": true
+    },
+    {
+      "name": "渡辺 隆",
+      "kana": "わたなべ たかし",
+      "department": "購買部",
+      "title": "係長",
+      "assignable": true
+    }
+  ],
+  "guests": [{ "name": "木村 浩二", "company": "株式会社ミナト金型", "title": "営業部長" }]
+}

@@ -1,0 +1,11 @@
+{
+  "framework": "nextjs",
+  "installCommand": "pnpm install --frozen-lockfile --filter \"{.}...\"",
+  "buildCommand": "pnpm --filter \"{.}^...\" run build && pnpm run build",
+  "crons": [
+    {
+      "path": "/api/cron/retention",
+      "schedule": "0 3 * * *"
+    }
+  ]
+}

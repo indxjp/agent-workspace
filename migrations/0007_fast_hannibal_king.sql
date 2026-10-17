@@ -1,0 +1,1 @@
+ALTER TABLE "workspaces" ADD COLUMN "public_sharing_enabled" boolean DEFAULT true NOT NULL;

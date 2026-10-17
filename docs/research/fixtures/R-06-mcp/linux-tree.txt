@@ -1,0 +1,7 @@
+hung-child {"threw":"McpError: MCP error -32001: Request timed out","ms":2007,"directChildPid":41,"directChildAlive":false,"grandchildPid":null,"grandchildAlive":null}
+deaf-child-ignores-sigterm {"threw":"McpError: MCP error -32001: Request timed out","ms":2003,"directChildPid":48,"directChildAlive":false,"grandchildPid":null,"grandchildAlive":null}
+launcher-with-grandchild {"threw":"McpError: MCP error -32001: Request timed out","ms":2004,"directChildPid":55,"directChildAlive":false,"grandchildPid":62,"grandchildAlive":true}
+
+-- process-group kill, the ADR-W1-INF-03b shape --
+before: child=73 alive=true grandchild=80 alive=true
+after process.kill(-73, SIGKILL): {"childAlive":false,"grandchildAlive":false}

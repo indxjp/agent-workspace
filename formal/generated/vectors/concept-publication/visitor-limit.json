@@ -1,0 +1,7 @@
+{"vectors":
+ [{"witnesses": ["AgentWorkspace.Theorems.Normative.ConceptPublication.five_messages_per_visitor_per_hour"],
+   "input": {"now": 1000000},
+   "id": "visitor-limit/runnable-message",
+   "expected": {"windowMs": 3600000, "limit": 5}}],
+ "family": "concept-publication",
+ "description": "RunnableShareService.message: the per-visitor limit and window it reserves with"}

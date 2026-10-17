@@ -1,0 +1,111 @@
+name: Nx self-hosted remote cache
+description: >-
+  Connects this job's `nx` to this repository's own Nx remote cache (infra/nx-cache)
+  — or deliberately leaves it on local cache only. The ONE place every CI job
+  gets NX_SELF_HOSTED_REMOTE_CACHE_SERVER / NX_SELF_HOSTED_REMOTE_CACHE_ACCESS_TOKEN;
+  workflows never set those two variables themselves
+  (scripts/ci/check-nx-cache-config.mjs enforces that).
+
+  Credentials: the job's GitHub OIDC token is exchanged at the cache server's
+  POST /v1/token for a short-lived cache token. The SERVER chooses read vs
+  write from GitHub-signed claims (repository, ref, event_name) — a
+  pull_request run gets `ref=refs/pull/<n>/merge` and can only ever receive a
+  read token, whatever its workflow YAML says. No long-lived write credential
+  exists in GitHub at all. See docs/operations/ci.md "Nx remote cache" and
+  docs/adr/0110.
+
+  Never fails the job for availability reasons: a disabled/unreachable cache,
+  or a job without an OIDC token (fork PRs), degrades to local cache with a
+  warning. It DOES fail the job when the server hands out a MORE privileged
+  role than the workflow expected — that is a server misconfiguration that
+  must be noticed, not silently used.
+
+inputs:
+  kind:
+    description: >-
+      What the workflow's plan (ci.yml `env.NX_REMOTE_CACHE_KIND`) decided this
+      run may do: "write" (push to main), "read" (everything else) or "off" (kill switch
+      INDX_NX_REMOTE_CACHE_ENABLED != true, or no server configured).
+    required: true
+  server:
+    description: Cache server base URL (vars.NX_SELF_HOSTED_REMOTE_CACHE_SERVER).
+    required: false
+    default: ""
+  audience:
+    description: >-
+      OIDC audience the cache server expects (deploy-gcp.sh AUDIENCE, which
+      defaults to the service name). Distinct per instance, so a token minted
+      for a sibling repository's cache is never presented to this one.
+    required: false
+    default: aw-nx-cache
+
+runs:
+  using: composite
+  steps:
+    - name: Connect Nx to the self-hosted remote cache
+      shell: bash
+      env:
+        KIND: ${{ inputs.kind }}
+        SERVER: ${{ inputs.server }}
+        AUDIENCE: ${{ inputs.audience }}
+        EVENT_NAME: ${{ github.event_name }}
+      run: |
+        set -euo pipefail
+        local_only() {
+          echo "::warning title=Nx remote cache::$1 — this job uses the local Nx cache only (correctness is unaffected; only speed)."
+          exit 0
+        }
+        case "$KIND" in
+          write|read) ;;
+          off) echo "::notice title=Nx remote cache::off (INDX_NX_REMOTE_CACHE_ENABLED != true or no server configured) — local cache only"; exit 0 ;;
+          *) echo "::error::nx-remote-cache: unknown kind '$KIND' (expected write|read|off)"; exit 1 ;;
+        esac
+        # Defense in depth: the plan step already asserts this, and the
+        # server would refuse anyway — but a pull_request run must never even
+        # ASK for write.
+        if [ "$EVENT_NAME" = "pull_request" ] && [ "$KIND" = "write" ]; then
+          echo "::error::pull_request run resolved to remote-cache kind 'write' — refusing. See NX_REMOTE_CACHE_KIND in the workflow's env."
+          exit 1
+        fi
+        [ -n "$SERVER" ] || local_only "no server URL"
+        SERVER="${SERVER%/}"
+
+        if ! curl -fsS --max-time 10 --retry 2 --retry-delay 2 "$SERVER/v1/health" > /dev/null; then
+          local_only "cache server $SERVER is unreachable"
+        fi
+
+        if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ] || [ -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]; then
+          local_only "no GitHub OIDC token for this job (fork PR, or the job lacks 'permissions: id-token: write')"
+        fi
+        jwt="$(curl -fsS --max-time 15 --retry 2 \
+          -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+          "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$AUDIENCE" | jq -r '.value // empty')" || true
+        [ -n "$jwt" ] || local_only "could not obtain a GitHub OIDC token"
+        echo "::add-mask::$jwt"
+
+        resp="$(curl -sS --max-time 15 --retry 2 -X POST --data "" -H "Authorization: Bearer $jwt" -w '\n%{http_code}' "$SERVER/v1/token")" || local_only "token exchange request failed"
+        code="${resp##*$'\n'}"
+        body="${resp%$'\n'*}"
+        [ "$code" = "200" ] || local_only "token exchange returned HTTP $code"
+        token="$(jq -r '.token // empty' <<<"$body")"
+        role="$(jq -r '.role // empty' <<<"$body")"
+        expires="$(jq -r '.expires_at // empty' <<<"$body")"
+        [ -n "$token" ] || local_only "token exchange returned no token"
+        echo "::add-mask::$token"
+
+        # The server's answer may be LESS privileged than expected (e.g. its
+        # write policy does not cover this event) — use it and say so. It
+        # must never be MORE privileged: fail loudly.
+        if [ "$role" = "write" ] && [ "$KIND" != "write" ]; then
+          echo "::error::cache server issued a WRITE token to a run the workflow classified as '$KIND' (event=$EVENT_NAME, ref=$GITHUB_REF). Fix NX_CACHE_OIDC_WRITE_REFS / NX_CACHE_OIDC_WRITE_EVENTS on the server."
+          exit 1
+        fi
+        if [ "$role" != "$KIND" ]; then
+          echo "::warning title=Nx remote cache::expected '$KIND', server granted '$role' — continuing with '$role'"
+        fi
+
+        {
+          echo "NX_SELF_HOSTED_REMOTE_CACHE_SERVER=$SERVER"
+          echo "NX_SELF_HOSTED_REMOTE_CACHE_ACCESS_TOKEN=$token"
+        } >> "$GITHUB_ENV"
+        echo "::notice title=Nx remote cache::connected as '$role' (event=$EVENT_NAME, ref=$GITHUB_REF, token expires $expires)"

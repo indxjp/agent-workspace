@@ -1,0 +1,29 @@
+{"vectors":
+ [{"witnesses": ["AgentWorkspace.Theorems.Adversarial.Mastra.observability_is_off_for_every_compiled_agent"],
+   "input": {"env": {}},
+   "id": "empty",
+   "expected": {"installed": {"MASTRA_TELEMETRY_DISABLED": "1", "MASTRA_OFFLINE": "1"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Adversarial.Mastra.observability_is_off_for_every_compiled_agent"],
+   "input": {"env": {"MASTRA_TELEMETRY_DISABLED": "0", "HOME": "/root"}},
+   "id": "telemetry-turned-on",
+   "expected": {"installed": {"MASTRA_TELEMETRY_DISABLED": "1", "MASTRA_OFFLINE": "1", "HOME": "/root"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Adversarial.Mastra.observability_is_off_for_every_compiled_agent"],
+   "input": {"env": {"MASTRA_OFFLINE": "false"}},
+   "id": "offline-off",
+   "expected": {"installed": {"MASTRA_TELEMETRY_DISABLED": "1", "MASTRA_OFFLINE": "1"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Adversarial.Mastra.observability_is_off_for_every_compiled_agent"],
+   "input": {"env": {"PATH": "/usr/bin", "OPENAI_BASE_URL": "", "ANTHROPIC_BASE_URL": ""}},
+   "id": "empty-base-urls-removed",
+   "expected": {"installed": {"PATH": "/usr/bin", "MASTRA_TELEMETRY_DISABLED": "1", "MASTRA_OFFLINE": "1"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Adversarial.Mastra.observability_is_off_for_every_compiled_agent"],
+   "input": {"env": {"OPENAI_BASE_URL": "http://gw/v1", "ANTHROPIC_BASE_URL": "http://gw"}},
+   "id": "set-base-urls-kept",
+   "expected":
+   {"installed":
+    {"OPENAI_BASE_URL": "http://gw/v1",
+     "MASTRA_TELEMETRY_DISABLED": "1",
+     "MASTRA_OFFLINE": "1",
+     "ANTHROPIC_BASE_URL": "http://gw"}}}],
+ "family": "engine-mastra",
+ "description":
+ "mastraInstalledEnvironment: the process environment Mastra loads under, telemetry and the catalogue refresh off"}

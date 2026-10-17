@@ -1,0 +1,4 @@
+project_id            = "replace-with-project-id"
+region                = "asia-northeast1"
+state_bucket_name     = "replace-with-project-id-agent-workspace-tfstate"
+terraform_admin_members = ["group:terraform-admins@example.com"]

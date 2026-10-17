@@ -1,0 +1,8 @@
+--- A. testConnection() straight at a launcher-shaped stdio server ---
+result: timeout — No answer within 2 seconds. The server may be starting slowly, or unreachable behind a firewall that drops rather than refuses.
+grandchild 105 still alive after testConnection returned: true
+
+--- B. the same probe run inside a process-group leader, group-killed after ---
+probe child exited; it reported: {"kind":"timeout","message":"No answer within 2 seconds. The server may be starting slowly, or unreachable behind a firewall that drops rather than refuses."}
+grandchild 130 alive before the group kill: true
+grandchild 130 alive after process.kill(-116, SIGKILL): false

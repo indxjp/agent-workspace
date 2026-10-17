@@ -1,0 +1,476 @@
+=== .env.example ===
+ANTHROPIC_API_KEY=
+ZENDESK_TOKEN=
+=== .gitignore ===
+node_modules
+.env
+=== .mastra/skills/refund-policy/SKILL.md ===
+---
+name: refund-policy
+description: When and how to issue refunds
+---
+Refunds within 30 days are approved automatically.
+=== README.md ===
+# support-triage
+Triages customer support tickets and drafts replies.
+
+## Run
+
+```sh
+npm install
+cp .env.example .env   # then fill in the values
+node --env-file=.env src/main.ts "your prompt"
+```
+
+## Code tools
+
+Copy your project's `tools/` directory next to `src/` and add any package your run files import.
+`src/code-tools.ts` loads the declarations from it.
+
+## Mastra
+
+The agent is a Mastra `Agent`. `src/agent.ts` exports `createAgent()`, which holds the workspace tools each permission enables, the MCP servers, the skills and the subagents; `.mastra/skills/` holds the skills.
+The model is routed by Mastra from `<provider>/<id>`; an agent that names none runs on `anthropic/claude-sonnet-4-5`. Set the key of each provider in `.env`.
+A remote MCP server is reached over streamable HTTP, with a fall back to SSE.
+
+## What was not carried over
+
+The platform report that came with this project gives every field a verdict and says why a field could not be carried. An ejected project is not importable back into Agent Workspace.
+=== package.json ===
+{
+  "name": "support-triage",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Triages customer support tickets and drafts replies.",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node src/main.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@indx-workspace/sdk": "0.6.9",
+    "@mastra/core": "1.76.0",
+    "@mastra/mcp": "2.3.0",
+    "zod": "4.6.6"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "typescript": "6.0.2"
+  }
+}
+=== src/agent.ts ===
+import { Agent } from "@mastra/core/agent";
+import { createTool } from "@mastra/core/tools";
+import { LocalFilesystem, LocalSandbox, Workspace, type WorkspaceToolsConfig } from "@mastra/core/workspace";
+import { MCPClient } from "@mastra/mcp";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+import { loadCodeTools } from "./code-tools.ts";
+
+const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (value === undefined || value === "") {
+    throw new Error("Set " + name + " (see .env.example)");
+  }
+  return value;
+}
+
+const workspaces: Workspace[] = [];
+
+function workspaceFor(
+  id: string,
+  tools: WorkspaceToolsConfig,
+  skills: readonly string[],
+  commands: boolean,
+): Workspace {
+  const workspace = new Workspace({
+    id,
+    filesystem: new LocalFilesystem({ basePath: projectRoot }),
+    ...(commands ? { sandbox: new LocalSandbox({ workingDirectory: projectRoot }) } : {}),
+    ...(skills.length === 0 ? {} : { skills: [...skills] }),
+    tools,
+  });
+  workspaces.push(workspace);
+  return workspace;
+}
+
+export async function createAgent(): Promise<{ agent: Agent; close(): Promise<void> }> {
+  const codeTools = await loadCodeTools(projectRoot, ["get_order"], "support-triage");
+  const codeToolsFor = (names: readonly string[]) =>
+    Object.fromEntries(
+      codeTools
+        .filter((codeTool) => names.includes(codeTool.name))
+        .map((codeTool) => [
+          codeTool.name,
+          createTool({
+            id: codeTool.name,
+            description: codeTool.description,
+            inputSchema: codeTool.input,
+            execute: async (input) => codeTool.call(input),
+          }),
+        ]),
+    );
+  const mcp = new MCPClient({ id: "support-triage", servers: {
+    zendesk: {
+      url: new URL("https://mcp.example.com/zendesk"),
+      requestInit: {
+        headers: {
+          Authorization: "Bearer " + requireEnv("ZENDESK_TOKEN"),
+        },
+      },
+    },
+    "local-git": {
+      command: "git-mcp",
+    },
+  } });
+  const toolsets = await mcp.listToolsets().catch(async (error: unknown) => {
+    await mcp.disconnect();
+    throw error;
+  });
+  const mcpTools = (names: readonly string[]) =>
+    Object.fromEntries(
+      names.flatMap((server) =>
+        Object.entries(toolsets[server] ?? {}).map(([name, tool]) => [server + "_" + name, tool]),
+      ),
+    );
+  const subagent0 = new Agent({
+    id: "billing-specialist",
+    name: "billing-specialist",
+    description: "Answers billing and refund questions.",
+    instructions: "You answer billing questions using the refund-policy skill.",
+    model: "anthropic/claude-sonnet-4-6",
+    workspace: workspaceFor("billing-specialist", {
+      enabled: false,
+      mastra_workspace_read_file: {
+        enabled: true,
+      },
+      mastra_workspace_list_files: {
+        enabled: true,
+      },
+      mastra_workspace_grep: {
+        enabled: true,
+      },
+      mastra_workspace_file_stat: {
+        enabled: true,
+      },
+    }, [".mastra/skills/refund-policy"], false),
+  });
+  const agent = new Agent({
+    id: "support-triage",
+    name: "support-triage",
+    description: "Triages customer support tickets and drafts replies.",
+    instructions: "You triage support tickets.\n\n- Look up the order before answering.\n- Hand billing questions to billing-specialist.",
+    model: "anthropic/claude-sonnet-4-6",
+    tools: { ...mcpTools(["zendesk", "local-git"]), ...codeToolsFor(["get_order"]) },
+    workspace: workspaceFor("support-triage", {
+      enabled: false,
+      mastra_workspace_read_file: {
+        enabled: true,
+      },
+      mastra_workspace_list_files: {
+        enabled: true,
+      },
+      mastra_workspace_grep: {
+        enabled: true,
+      },
+      mastra_workspace_file_stat: {
+        enabled: true,
+      },
+    }, [".mastra/skills/refund-policy"], false),
+    agents: {
+      "billing-specialist": subagent0,
+    },
+    defaultOptions: {
+      maxSteps: 20,
+    },
+  });
+  return { agent, close: async () => { await Promise.all([...workspaces.map((workspace) => workspace.destroy()), mcp.disconnect()]); } };
+}
+=== src/code-tools.ts ===
+import { randomUUID } from 'node:crypto';
+import { readdir, realpath } from 'node:fs/promises';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+import { isCodeTool } from '@indx-workspace/sdk/define';
+import { z } from 'zod';
+
+export interface LoadedCodeTool {
+  readonly name: string;
+  readonly description: string;
+  readonly input: z.ZodObject;
+  call(input: unknown): Promise<unknown>;
+}
+
+interface RunContext {
+  readonly signal: AbortSignal;
+  readonly runId: string;
+  readonly agent: string;
+}
+
+type RunFunction = (input: unknown, context: RunContext) => unknown;
+
+const runId = randomUUID();
+
+async function filesBelow(directory: string): Promise<string[]> {
+  const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
+  const nested = await Promise.all(
+    entries.map(async (entry) => {
+      const file = path.join(directory, entry.name);
+      if (entry.isDirectory()) return filesBelow(file);
+      return /(?<!\.d)\.[jt]s$/u.test(entry.name) ? [file] : [];
+    }),
+  );
+  return nested.flat();
+}
+
+async function defaultExport(file: string): Promise<unknown> {
+  return ((await import(pathToFileURL(file).href)) as { default?: unknown }).default;
+}
+
+async function runFile(root: string, run: string): Promise<string> {
+  const real = await realpath(path.join(root, ...run.split('/')));
+  const relative = path.relative(await realpath(root), real);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error(run + ' is outside the project');
+  }
+  return real;
+}
+
+export async function loadCodeTools(
+  root: string,
+  names: readonly string[],
+  agent: string,
+): Promise<readonly LoadedCodeTool[]> {
+  const wanted = new Set(names);
+  const loaded = new Map<string, LoadedCodeTool>();
+  for (const file of (await filesBelow(path.join(root, 'tools'))).sort()) {
+    const declaration = await defaultExport(file);
+    if (!isCodeTool(declaration) || !wanted.has(declaration.name)) continue;
+    if (loaded.has(declaration.name)) continue;
+    const run = await defaultExport(await runFile(root, declaration.run));
+    if (typeof run !== 'function') {
+      throw new Error(declaration.run + ' must export a function as its default');
+    }
+    const input = z.fromJSONSchema(declaration.inputSchema);
+    if (!(input instanceof z.ZodObject)) {
+      throw new Error(declaration.name + ': its input schema must describe an object');
+    }
+    const timeoutMs = declaration.limits.timeoutMs;
+    loaded.set(declaration.name, {
+      name: declaration.name,
+      description: declaration.description,
+      input,
+      call: async (args) =>
+        (run as RunFunction)(input.parse(args), {
+          signal: AbortSignal.timeout(timeoutMs),
+          runId,
+          agent,
+        }),
+    });
+  }
+  return names.map((name) => {
+    const found = loaded.get(name);
+    if (found === undefined) throw new Error('code tool ' + name + ' not found under tools/');
+    return found;
+  });
+}
+=== src/main.ts ===
+import { createAgent } from "./agent.ts";
+
+const prompt = process.argv.slice(2).join(" ").trim();
+if (prompt === "") {
+  console.error("Usage: node --env-file=.env src/main.ts \"your prompt\"");
+  process.exit(1);
+}
+
+let close: (() => Promise<void>) | undefined;
+try {
+  const created = await createAgent();
+  close = created.close;
+  const { agent } = created;
+  const result = await agent.generate(prompt, { maxSteps: 20 });
+  console.log(result.text);
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exitCode = 1;
+} finally {
+  await close?.();
+}
+=== tsconfig.json ===
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": [
+      "ES2023"
+    ],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "types": [
+      "node"
+    ],
+    "skipLibCheck": true
+  },
+  "include": [
+    "src",
+    "tools"
+  ]
+}
+=== report.json ===
+[
+  {
+    "path": "toolEndpoint",
+    "verdict": "mapped",
+    "note": "not needed: an ejected project runs its code tools in-process"
+  },
+  {
+    "path": "support-triage.description",
+    "verdict": "native",
+    "note": "the agent’s description and the description of package.json"
+  },
+  {
+    "path": "support-triage.instructions",
+    "verdict": "native",
+    "note": "the agent’s instructions"
+  },
+  {
+    "path": "support-triage.model",
+    "verdict": "native",
+    "note": "routed by Mastra as anthropic/claude-sonnet-4-6"
+  },
+  {
+    "path": "support-triage.permissions.readFiles",
+    "verdict": "native",
+    "note": "the workspace tools read_file, list_files, grep, file_stat are enabled"
+  },
+  {
+    "path": "support-triage.permissions.writeFiles",
+    "verdict": "native",
+    "note": "the workspace tools write_file, edit_file, mkdir, delete stay disabled"
+  },
+  {
+    "path": "support-triage.permissions.runCommands",
+    "verdict": "native",
+    "note": "the workspace tools execute_command, get_process_output, kill_process stay disabled"
+  },
+  {
+    "path": "support-triage.permissions.unrestrictedNetwork",
+    "verdict": "mapped",
+    "note": "LocalSandbox does not isolate the network; no web tool is offered"
+  },
+  {
+    "path": "support-triage.tools.0",
+    "verdict": "native",
+    "note": "remote MCP server zendesk; the token is read from the environment variable ZENDESK_TOKEN"
+  },
+  {
+    "path": "support-triage.tools.1",
+    "verdict": "native",
+    "note": "a local process registered as MCP server local-git; it must exist where the project runs"
+  },
+  {
+    "path": "support-triage.tools.2",
+    "verdict": "native",
+    "note": "wrapped in-process from src/code-tools.ts; copy the project’s tools/ directory (aw platforms export does this)"
+  },
+  {
+    "path": "support-triage.tools.3",
+    "verdict": "dropped",
+    "code": "code_tool_needs_public_mcp",
+    "note": "an openapi tool runs in the Agent Workspace gateway; an ejected project has none"
+  },
+  {
+    "path": "support-triage.tools.4",
+    "verdict": "dropped",
+    "code": "builtin_unsupported",
+    "note": "Mastra has no built-in web_search tool"
+  },
+  {
+    "path": "support-triage.tools.5",
+    "verdict": "mapped",
+    "note": "the workspace’s execute_command, governed by permissions.runCommands"
+  },
+  {
+    "path": "support-triage.skills.0",
+    "verdict": "native",
+    "note": "copied to .mastra/skills/refund-policy/ and given to the agent’s workspace"
+  },
+  {
+    "path": "support-triage.knowledge.0",
+    "verdict": "dropped",
+    "code": "knowledge_unsupported",
+    "note": "no SDK of an ejected project has a retrieval slot for a files source; project.knowledgeFiles are not copied"
+  },
+  {
+    "path": "support-triage.knowledge.1",
+    "verdict": "dropped",
+    "code": "knowledge_unsupported",
+    "note": "no SDK of an ejected project has a retrieval slot for a url source; project.knowledgeFiles are not copied"
+  },
+  {
+    "path": "support-triage.subagents.0",
+    "verdict": "native",
+    "note": "emitted as an Agent in agents.billing-specialist; it has its own workspace, tools and MCP servers"
+  },
+  {
+    "path": "support-triage.limits.maxTurns",
+    "verdict": "native",
+    "note": "defaultOptions.maxSteps"
+  },
+  {
+    "path": "support-triage.limits.maxBudgetUsd",
+    "verdict": "dropped",
+    "code": "limits_unsupported",
+    "note": "Mastra has no spend cap"
+  },
+  {
+    "path": "billing-specialist.description",
+    "verdict": "native",
+    "note": "the agent’s description, which the root sees on the tool that delegates to it"
+  },
+  {
+    "path": "billing-specialist.instructions",
+    "verdict": "native",
+    "note": "the agent’s instructions"
+  },
+  {
+    "path": "billing-specialist.model",
+    "verdict": "native",
+    "note": "routed by Mastra as anthropic/claude-sonnet-4-6"
+  },
+  {
+    "path": "billing-specialist.permissions.readFiles",
+    "verdict": "native",
+    "note": "the workspace tools read_file, list_files, grep, file_stat are enabled"
+  },
+  {
+    "path": "billing-specialist.permissions.writeFiles",
+    "verdict": "native",
+    "note": "the workspace tools write_file, edit_file, mkdir, delete stay disabled"
+  },
+  {
+    "path": "billing-specialist.permissions.runCommands",
+    "verdict": "native",
+    "note": "the workspace tools execute_command, get_process_output, kill_process stay disabled"
+  },
+  {
+    "path": "billing-specialist.permissions.unrestrictedNetwork",
+    "verdict": "mapped",
+    "note": "LocalSandbox does not isolate the network; no web tool is offered"
+  },
+  {
+    "path": "billing-specialist.skills.0",
+    "verdict": "native",
+    "note": "copied to .mastra/skills/refund-policy/ and given to the agent’s workspace"
+  }
+]

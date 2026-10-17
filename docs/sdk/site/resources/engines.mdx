@@ -1,0 +1,175 @@
+---
+title: "Engines"
+description: "Discover which harnesses a deployment can run an agent on, and what each one can honour."
+---
+
+<Info>
+
+- **Read this when:** you choose which harness runs an agent, or a policy change is refused with `unsupported_engine` or `engine_capability_unsupported`.
+- **You will learn:** the difference between an engine and a model provider, what each engine can honour (MCP, skills, resume, fork, budget caps), and how to switch an agent's engine.
+- **Used in:** [Chapter 2 · Build your agent](/path/build) (step-by-step: [Models and runtimes](/building/models-and-runtimes)).
+
+</Info>
+
+What you can do with engines:
+
+- [List](#list-the-engines) the engines this deployment knows, and see which are installed.
+- Read each engine's [capabilities](#what-a-descriptor-says) before assigning skills or connectors.
+- [Choose an engine for an agent](#choosing-an-engine-for-an-agent) through its policy or `aw agents update --engine`.
+
+`aw.engines` reads the **engine catalogue** of one deployment. It wraps `GET /api/engines`
+(API specification §5.15). Source: `packages/sdk/src/resources/engines.ts`, contract:
+`packages/contracts/src/engines.ts`.
+
+An **engine** is the harness that turns an agent definition and a prompt into model calls, tool
+calls and a stream of events. It is not the **model provider** — who serves the model is a
+property of a [model connection](/resources/models) and travels as `Run.provider`. The two words
+were the same word before the engine got its own name so `Run.provider` could keep its meaning.
+
+## What a descriptor says
+
+```ts title="illustrative" claim="illustrative"
+interface EngineDescriptor {
+  id: EngineId; // 'claude-agent-sdk' | 'openai-agents' | 'pi' | 'mastra' — the catalogue the contracts publish
+  displayName: string;
+  version: string; // the adapter's own version, opaque to the platform
+  capabilities: EngineCapabilities;
+  installed: boolean;
+}
+
+interface EngineCapabilities {
+  mcp: boolean; // MCP connectors can be handed to the engine
+  skills: boolean; // SKILL.md skills can be materialised for it
+  resume: boolean; // a session can be continued from a reported engine session id
+  fork: boolean; // a session can be branched, not only continued
+  interrupt: boolean; // a turn in flight can be cancelled without losing the session
+  streamingText: boolean; // assistant text arrives as deltas
+  reasoning: boolean; // reasoning is reported apart from the answer
+  maxTurns: 'native' | 'adapter'; // who enforces the turn cap
+  maxBudget: 'native' | 'adapter' | 'none'; // who enforces the per-run budget cap
+  wireProtocols: readonly WireProtocol[]; // non-empty
+}
+```
+
+`installed` is not decoration. The contracts describe a catalogue of engines the platform knows
+how to _talk about_; a runtime image carries only the adapters it was built with, so a descriptor
+can legitimately say "this deployment knows this engine and cannot run it".
+
+`wireProtocols` is the HTTP dialect the engine speaks to reach the gateway — one or more of
+`anthropic-messages`, `openai-responses`, `openai-chat-completions`. It is never empty: an engine
+that can reach no ingress can run nothing, and `[]` would read as "any" to a careless consumer.
+
+## List the engines
+
+```ts title="illustrative" claim="illustrative"
+const engines = await workspace.engines.list();
+// [{ id: 'claude-agent-sdk', displayName: 'Claude Agent SDK', version: '0.3.278',
+//    capabilities: { …, wireProtocols: ['anthropic-messages'] }, installed: true }]
+```
+
+| Code                       | Status | Meaning                                                                                                                               |
+| -------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `unauthenticated`          | 401    | No usable session cookie or API key.                                                                                                  |
+| `engine_catalogue_invalid` | 500    | This deployment registered an engine the published contract cannot describe. The catalogue is refused whole rather than served short. |
+
+Every role reads this route, and so does an API key: it is the list a caller's next decision is
+taken against. There is no `get(id)` and no write method — the catalogue is short enough to travel
+whole, and an engine is installed by deploying an adapter, not by an API call.
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw engines list
+aw engines list --json
+```
+
+</CodeGroup>
+
+## Choosing an engine for an agent
+
+The engine is the discriminant of an [agent's policy](/resources/agents#replacepolicy):
+
+```ts title="illustrative" claim="illustrative"
+await workspace.agents.replacePolicy(agentId, { ...policy, engine: 'claude-agent-sdk' });
+
+// The OpenAI Agents SDK arm has no tool grammar: the portable half plus two optional settings.
+await workspace.agents.replacePolicy(agentId, {
+  engine: 'openai-agents',
+  skills: policy.skills,
+  limits: policy.limits,
+  reasoningEffort: 'medium',
+});
+
+// The pi arm has no tool grammar either: the portable half plus two optional settings.
+await workspace.agents.replacePolicy(agentId, {
+  engine: 'pi',
+  skills: policy.skills,
+  limits: policy.limits,
+  thinkingLevel: 'medium',
+});
+
+// The mastra arm: the portable half plus one optional setting.
+await workspace.agents.replacePolicy(agentId, {
+  engine: 'mastra',
+  skills: policy.skills,
+  limits: policy.limits,
+  toolCallConcurrency: 4,
+});
+```
+
+Each arm's engine-native fields are its own, so moving a policy between engines keeps `skills` and
+`limits` and replaces the rest. `openai-agents` declares `skills: false` and `fork: false`: an agent
+assigned a skill is refused `422 engine_capability_unsupported` on that engine rather than run
+without it. Its `maxBudget` is `'adapter'`, a provisional cap that stops a run with
+`stopReason: 'max_budget'` and refuses a cap on a model it cannot price. `pi` declares `mcp: false`:
+an agent assigned a connector is refused `422 engine_capability_unsupported` with
+`capability: 'mcp'`. It supports skills, resume and fork, enforces both `maxTurns` and the same
+provisional `maxBudget` in its adapter, and speaks only `anthropic-messages`, the gateway's native
+ingress, which reaches every provider: the gateway translates it for an OpenAI-family connection.
+`mastra` supports connectors, skills and resume, declares `fork: false`
+(a fork is refused), enforces `maxTurns` natively and the same provisional `maxBudget` in its
+adapter, and speaks all three dialects, each connection in its own.
+
+A policy naming an engine this deployment does not register is refused with
+`400 unsupported_engine`, and the list above is exactly what that refusal is taken against. The
+CLI asks first, so an unregistered engine is refused before anything is created or changed. It is
+also stricter than the route: it refuses a descriptor whose `installed` is `false`, the same
+engines the agent editor hides, rather than pin a policy to an engine this deployment cannot run:
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw agents create --file agent.json --engine claude-agent-sdk
+aw agents update <id> --engine claude-agent-sdk
+aw agents update <id> --engine openai-agents
+aw agents update <id> --engine pi
+aw agents update <id> --engine mastra
+```
+
+</CodeGroup>
+
+`--engine` stores the agent's policy under that engine, which leaves a _stored_ policy behind on
+an agent that had none. A stored policy is a snapshot of the compiled one, skill allowlist
+included — the same consequence `aw agents policy set` has.
+
+<Note>
+  Four engines are registered in this release, `claude-agent-sdk`, `openai-agents`, `pi` and
+  `mastra`. The control plane's own agent editor still shows the engine read-only — it lists each
+  installed engine and marks one without skills or without connectors — and the arm is set with `aw
+  agents update --engine` or `replacePolicy`. `--engine openai-agents`, `--engine pi` and `--engine
+  mastra` keep the policy's skills and limits, carry what the Claude tool grammar withheld into
+  `withheldPermissions`, and print that translation; moving an `openai-agents`, `pi` or `mastra`
+  policy back to `claude-agent-sdk` needs a tool policy, so the CLI asks for `aw agents policy set`
+  instead of inventing one.
+</Note>
+
+## See also
+
+- [EnginesClient](/reference/sdk/engines) — full method signatures.
+- [engines](/reference/contracts/engines) — every schema and constant, including `ENGINE_IDS`,
+  `WIRE_PROTOCOLS` and `EngineDescriptorSchema`.
+- [Agents](/resources/agents) — the policy whose discriminant this is.
+- [Sessions](/resources/sessions) — `engine` and `engineSessionId`, the engine a session is
+  pinned to and the id that engine reported for it.
+- [Runs](/resources/runs) — `engine` (which engine executed the run) beside `provider` (which
+  model provider served the model).

@@ -1,0 +1,109 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Petstore",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://{host}/v1",
+      "variables": {
+        "host": {
+          "default": "93.184.216.34"
+        }
+      }
+    }
+  ],
+  "paths": {
+    "/pets": {
+      "get": {
+        "operationId": "listPets",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A list of pets"
+          }
+        }
+      },
+      "post": {
+        "operationId": "addPet",
+        "responses": {
+          "201": {
+            "description": "Created"
+          }
+        }
+      }
+    },
+    "/pets/{petId}": {
+      "get": {
+        "operationId": "showPetById",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PetId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One pet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Pet"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pets/{petId}/photos": {
+      "get": {
+        "operationId": "listPhotos",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PetId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The pet's photos"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "PetId": {
+        "name": "petId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    "schemas": {
+      "Pet": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "tag": {
+            "type": ["string", "null"]
+          }
+        }
+      }
+    }
+  }
+}

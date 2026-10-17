@@ -1,0 +1,25 @@
+apiVersion: agentworkspace.dev/v2
+kind: Project
+name: manual-search
+engine: claude-agent-sdk
+# The search index is your own MCP server (mcp/manual-index.mjs). A project file names only remote
+# connectors, so run it over Streamable HTTP for `aw dev`:
+#   MCP_TRANSPORT=http PORT=8787 node mcp/manual-index.mjs
+connectors:
+  manual-index:
+    url: http://127.0.0.1:8787/mcp
+    transport: http
+policy:
+  permissions:
+    writeFiles: false
+    runCommands: false
+    unrestrictedNetwork: false
+  limits:
+    maxBudgetUsd: 1
+  promotion:
+    minEvalScore: 0.9
+environments:
+  local:
+    cloud: local
+    identity:
+      bootstrapAdmin: admin@localhost.test

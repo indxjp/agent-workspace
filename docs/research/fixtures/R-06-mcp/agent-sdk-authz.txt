@@ -1,0 +1,64 @@
+== @modelcontextprotocol/sdk ==
+[mcp-sdk] 401-invalid-token: {"ctor":"StreamableHTTPError","message":"Streamable HTTP error: Error POSTing to endpoint: {\"error\":\"invalid_token\",\"error_description\":\"The access token is invalid\"}","code":401,"causeCode":null}
+[mcp-sdk] 401-no-header-at-all: {"ctor":"StreamableHTTPError","message":"Streamable HTTP error: Error POSTing to endpoint: {\"error\":\"invalid_token\",\"error_description\":\"The access token is invalid\"}","code":401,"causeCode":null}
+[mcp-sdk] 403-insufficient-scope: {"ctor":"StreamableHTTPError","message":"Streamable HTTP error: Error POSTing to endpoint: {\"error\":\"insufficient_scope\",\"error_description\":\"token lacks scope mcp:tools\"}","code":403,"causeCode":null}
+[mcp-sdk] 500-html-error-page: {"ctor":"StreamableHTTPError","message":"Streamable HTTP error: Error POSTing to endpoint: <html><body>Internal Server Error</body></html>","code":500,"causeCode":null}
+
+== @anthropic-ai/claude-agent-sdk ==
+[
+  {
+    "name": "oauth_no_header",
+    "status": "failed",
+    "error": "Dynamic Client Registration rejected (HTTP 404): {\"error\":\"not found\"}"
+  },
+  {
+    "name": "invalid_token",
+    "status": "failed",
+    "error": "Server rejected the configured Authorization header (HTTP 401). Check that the token is valid for this MCP endpoint — OAuth fallback is disabled when headers.Authorization is set."
+  },
+  {
+    "name": "forbidden_403",
+    "status": "failed",
+    "error": "Server rejected the configured Authorization header (HTTP 403). Check that the token is valid for this MCP endpoint — OAuth fallback is disabled when headers.Authorization is set."
+  },
+  {
+    "name": "html_500",
+    "status": "failed",
+    "error": "Error POSTing to endpoint: <html><body>Internal Server Error</body></html>"
+  },
+  {
+    "name": "good",
+    "status": "connected"
+  }
+]
+
+== requests the Agent SDK made ==
+POST /mcp auth=Bearer WRONG body={"method":"initialize","params":{"protocolVersion":"2025-11-25","capab
+POST /mcp auth=(none) body={"method":"initialize","params":{"protocolVersion":"2025-11-25","capab
+POST /forbidden auth=Bearer s3cret body={"method":"initialize","params":{"protocolVersion":"2025-11-25","capab
+POST /500 auth=Bearer s3cret body={"method":"initialize","params":{"protocolVersion":"2025-11-25","capab
+POST /mcp auth=Bearer WRONG body={"jsonrpc":"2.0","id":"server-discover-probe-1","method":"server/disco
+POST /forbidden auth=Bearer s3cret body={"jsonrpc":"2.0","id":"server-discover-probe-1","method":"server/disco
+POST /mcp auth=Bearer s3cret body={"jsonrpc":"2.0","id":"server-discover-probe-1","method":"server/disco
+POST /500 auth=Bearer s3cret body={"jsonrpc":"2.0","id":"server-discover-probe-1","method":"server/disco
+POST /mcp auth=(none) body={"jsonrpc":"2.0","id":"server-discover-probe-1","method":"server/disco
+POST /mcp auth=Bearer WRONG body={"method":"initialize","params":{"protocolVersion":"2025-11-25","capab
+POST /forbidden auth=Bearer s3cret body={"method":"initialize","params":{"protocolVersion":"2025-11-25","capab
+POST /mcp auth=Bearer s3cret body={"method":"initialize","params":{"protocolVersion":"2025-11-25","capab
+POST /500 auth=Bearer s3cret body={"method":"initialize","params":{"protocolVersion":"2025-11-25","capab
+GET /.well-known/oauth-authorization-server auth=(none) body=
+POST /mcp auth=Bearer s3cret body={"jsonrpc":"2.0","method":"notifications/initialized"}
+GET /.well-known/openid-configuration auth=(none) body=
+GET /mcp auth=Bearer s3cret body=
+POST /mcp auth=Bearer s3cret body={"method":"tools/list","jsonrpc":"2.0","id":1}
+GET /.well-known/oauth-protected-resource auth=(none) body=
+POST /register auth=(none) body={"client_name":"Claude Code (oauth_no_header)","redirect_uris":["http:
+POST /mcp auth=(none) body={"method":"initialize","params":{"protocolVersion":"2025-11-25","capab
+GET /.well-known/oauth-authorization-server auth=(none) body=
+GET /.well-known/openid-configuration auth=(none) body=
+GET /.well-known/oauth-protected-resource auth=(none) body=
+POST /register auth=(none) body={"client_name":"Claude Code (oauth_no_header)","redirect_uris":["http:
+POST /500 auth=Bearer s3cret body={"jsonrpc":"2.0","id":"server-discover-probe-1","method":"server/disco
+POST /500 auth=Bearer s3cret body={"method":"initialize","params":{"protocolVersion":"2025-11-25","capab
+POST /500 auth=Bearer s3cret body={"jsonrpc":"2.0","id":"server-discover-probe-1","method":"server/disco
+POST /500 auth=Bearer s3cret body={"method":"initialize","params":{"protocolVersion":"2025-11-25","capab

@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shared links — Agent Workspace</title>
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<script>window.PAGE = { nav: "shares", crumbs: [["Administration"], ["Shared links"]] };</script>
+
+<div class="app">
+  <div class="main">
+    <div class="page">
+
+      <div class="page-head">
+        <div>
+          <h1>Shared links</h1>
+          <div class="sub">Every share that exists in this workspace: agents, chats, projects and skills.</div>
+        </div>
+        <div class="actions">
+          <select style="width:160px"><option>All types</option><option>Agents</option><option>Chats</option><option>Projects</option><option>Skills</option></select>
+          <select style="width:180px"><option>All visibilities</option><option>Public link</option><option>Workspace</option></select>
+        </div>
+      </div>
+
+      <div class="card mb16">
+        <div class="card-body" style="display:flex;align-items:center;gap:14px">
+          <div class="grow">
+            <div style="font-weight:600;font-size:13.5px">Public sharing</div>
+            <div class="muted small">When off, public links are suspended (not deleted) and the server refuses
+              every request to <span class="mono">/p/…</span>. Existing links stay listed so nothing is silently re-exposed later.</div>
+          </div>
+          <span class="toggle on" title="Public sharing enabled"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="table-wrap">
+        <table class="tbl">
+          <thead><tr><th>Shared object</th><th>Type</th><th>Visibility</th><th>Created by</th><th>Created</th><th>Usage</th><th></th></tr></thead>
+          <tbody>
+            <tr>
+              <td><div class="cell-main">Q3 contract summary</div><div class="cell-sub mono">/p/pub_7Yk2mQ · expires in 30 days</div></td>
+              <td>Chat</td>
+              <td><span class="badge info">Public link</span></td>
+              <td>Aya Ito</td>
+              <td class="nowrap">4 min ago</td>
+              <td>14 views</td>
+              <td><a class="btn sm" href="public-run.html">View</a> <button class="btn sm danger" data-toast="Link revoked">Revoke</button></td>
+            </tr>
+            <tr>
+              <td><div class="cell-main">Invoice Triage</div><div class="cell-sub mono">/p/agt_3Xf9Lp · runnable</div></td>
+              <td>Agent</td>
+              <td><span class="badge warn">Runnable link</span></td>
+              <td>Kenji Sato</td>
+              <td class="nowrap">2 days ago</td>
+              <td>$12.40 of $20.00 · 61 messages</td>
+              <td><a class="btn sm" href="public-agent.html">View</a> <button class="btn sm danger" data-toast="Link stopped — no longer accepting messages">Stop</button></td>
+            </tr>
+            <tr>
+              <td><div class="cell-main">Customer Support Agent</div><div class="cell-sub">Definition only</div></td>
+              <td>Agent</td>
+              <td><span class="badge muted">Workspace</span></td>
+              <td>Aya Ito</td>
+              <td class="nowrap">1 week ago</td>
+              <td>—</td>
+              <td><button class="btn sm danger" data-toast="Share removed">Revoke</button></td>
+            </tr>
+            <tr>
+              <td><div class="cell-main">Q3 Supplier Contracts</div><div class="cell-sub">Instructions and shared chats</div></td>
+              <td>Project</td>
+              <td><span class="badge muted">Workspace</span></td>
+              <td>Aya Ito</td>
+              <td class="nowrap">1 week ago</td>
+              <td>—</td>
+              <td><button class="btn sm danger" data-toast="Share removed">Revoke</button></td>
+            </tr>
+            <tr>
+              <td><div class="cell-main">Invoice Review</div><div class="cell-sub mono">/p/skl_9Rt2Wc</div></td>
+              <td>Skill</td>
+              <td><span class="badge info">Public link</span></td>
+              <td>Marie Dupont</td>
+              <td class="nowrap">3 weeks ago</td>
+              <td>38 views</td>
+              <td><button class="btn sm danger" data-toast="Link revoked">Revoke</button></td>
+            </tr>
+            <tr>
+              <td><div class="cell-main">Onboarding walkthrough</div><div class="cell-sub mono">/p/pub_1Fa5Kd · expired</div></td>
+              <td>Chat</td>
+              <td><span class="badge outline">Expired</span></td>
+              <td>Tomás Rivera</td>
+              <td class="nowrap">2 months ago</td>
+              <td>106 views</td>
+              <td><button class="btn sm" data-toast="Republished with a new link">Republish</button></td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+      </div>
+
+      <div class="callout mt16">
+        <span class="ico">🔒</span>
+        <div class="grow">
+          Revoking is immediate and permanent for that link. Re-publishing mints a new one, so a leaked URL
+          can never be reactivated. Every publish and revoke is recorded in the
+          <a href="settings.html#audit">audit log</a>.
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

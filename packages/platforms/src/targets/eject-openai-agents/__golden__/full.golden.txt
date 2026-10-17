@@ -1,0 +1,424 @@
+=== .env.example ===
+ANTHROPIC_API_KEY=
+ZENDESK_TOKEN=
+=== .gitignore ===
+node_modules
+.env
+=== README.md ===
+# support-triage
+Triages customer support tickets and drafts replies.
+
+## Run
+
+```sh
+npm install
+cp .env.example .env   # then fill in the values
+node --env-file=.env src/main.ts "your prompt"
+```
+
+## Code tools
+
+Copy your project's `tools/` directory next to `src/` and add any package your run files import.
+`src/code-tools.ts` loads the declarations from it.
+
+## OpenAI Agents SDK
+
+The agent runs through `run()` of the OpenAI Agents SDK. `src/agent.ts` exports `createAgent()`, which holds the models, MCP servers, code tools and handoffs.
+The SDK has no file or shell tool and no skills, so the agent has neither; add a file or shell tool with `tool()` where the report asks for one.
+A subagent is a handoff: the conversation moves to it and does not return to the root agent.
+
+## What was not carried over
+
+The platform report that came with this project gives every field a verdict and says why a field could not be carried. An ejected project is not importable back into Agent Workspace.
+=== package.json ===
+{
+  "name": "support-triage",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Triages customer support tickets and drafts replies.",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node src/main.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "4.0.78",
+    "@indx-workspace/sdk": "0.6.9",
+    "@openai/agents": "0.20.0",
+    "@openai/agents-extensions": "0.20.0",
+    "zod": "4.6.6"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "typescript": "6.0.2"
+  }
+}
+=== src/agent.ts ===
+import { Agent, MCPServerStdio, MCPServerStreamableHttp, tool } from "@openai/agents";
+import { aisdk } from "@openai/agents-extensions/ai-sdk";
+import { anthropic } from "@ai-sdk/anthropic";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+import { loadCodeTools } from "./code-tools.ts";
+
+const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (value === undefined || value === "") {
+    throw new Error("Set " + name + " (see .env.example)");
+  }
+  return value;
+}
+
+export async function createAgent(): Promise<{ agent: Agent; close(): Promise<void> }> {
+  const codeTools = await loadCodeTools(projectRoot, ["get_order"], "support-triage");
+  const codeToolsFor = (names: readonly string[]) =>
+    codeTools
+      .filter((codeTool) => names.includes(codeTool.name))
+      .map((codeTool) =>
+        tool({
+          name: codeTool.name,
+          description: codeTool.description,
+          parameters: codeTool.input,
+          execute: async (input) => JSON.stringify(await codeTool.call(input)) ?? "null",
+        }),
+      );
+  const servers = {
+    zendesk: new MCPServerStreamableHttp({
+      name: "zendesk",
+      url: "https://mcp.example.com/zendesk",
+      requestInit: {
+        headers: {
+          Authorization: "Bearer " + requireEnv("ZENDESK_TOKEN"),
+        },
+      },
+    }),
+    "local-git": new MCPServerStdio({
+      name: "local-git",
+      command: "git-mcp",
+    }),
+  };
+  const connected = Object.values(servers);
+  try {
+    await Promise.all(connected.map((server) => server.connect()));
+  } catch (error) {
+    await Promise.allSettled(connected.map((server) => server.close()));
+    throw error;
+  }
+  const subagent0 = new Agent({
+    name: "billing-specialist",
+    instructions: "You answer billing questions using the refund-policy skill.",
+    handoffDescription: "Answers billing and refund questions.",
+    model: aisdk(anthropic("claude-sonnet-4-6")),
+  });
+  const agent = new Agent({
+    name: "support-triage",
+    instructions: "You triage support tickets.\n\n- Look up the order before answering.\n- Hand billing questions to billing-specialist.",
+    model: aisdk(anthropic("claude-sonnet-4-6")),
+    tools: [
+      ...codeToolsFor(["get_order"]),
+    ],
+    mcpServers: [
+      servers["zendesk"],
+      servers["local-git"],
+    ],
+    handoffs: [
+      subagent0,
+    ],
+  });
+  return { agent, close: async () => { await Promise.all(connected.map((server) => server.close())); } };
+}
+=== src/code-tools.ts ===
+import { randomUUID } from 'node:crypto';
+import { readdir, realpath } from 'node:fs/promises';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+import { isCodeTool } from '@indx-workspace/sdk/define';
+import { z } from 'zod';
+
+export interface LoadedCodeTool {
+  readonly name: string;
+  readonly description: string;
+  readonly input: z.ZodObject;
+  call(input: unknown): Promise<unknown>;
+}
+
+interface RunContext {
+  readonly signal: AbortSignal;
+  readonly runId: string;
+  readonly agent: string;
+}
+
+type RunFunction = (input: unknown, context: RunContext) => unknown;
+
+const runId = randomUUID();
+
+async function filesBelow(directory: string): Promise<string[]> {
+  const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
+  const nested = await Promise.all(
+    entries.map(async (entry) => {
+      const file = path.join(directory, entry.name);
+      if (entry.isDirectory()) return filesBelow(file);
+      return /(?<!\.d)\.[jt]s$/u.test(entry.name) ? [file] : [];
+    }),
+  );
+  return nested.flat();
+}
+
+async function defaultExport(file: string): Promise<unknown> {
+  return ((await import(pathToFileURL(file).href)) as { default?: unknown }).default;
+}
+
+async function runFile(root: string, run: string): Promise<string> {
+  const real = await realpath(path.join(root, ...run.split('/')));
+  const relative = path.relative(await realpath(root), real);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error(run + ' is outside the project');
+  }
+  return real;
+}
+
+export async function loadCodeTools(
+  root: string,
+  names: readonly string[],
+  agent: string,
+): Promise<readonly LoadedCodeTool[]> {
+  const wanted = new Set(names);
+  const loaded = new Map<string, LoadedCodeTool>();
+  for (const file of (await filesBelow(path.join(root, 'tools'))).sort()) {
+    const declaration = await defaultExport(file);
+    if (!isCodeTool(declaration) || !wanted.has(declaration.name)) continue;
+    if (loaded.has(declaration.name)) continue;
+    const run = await defaultExport(await runFile(root, declaration.run));
+    if (typeof run !== 'function') {
+      throw new Error(declaration.run + ' must export a function as its default');
+    }
+    const input = z.fromJSONSchema(declaration.inputSchema);
+    if (!(input instanceof z.ZodObject)) {
+      throw new Error(declaration.name + ': its input schema must describe an object');
+    }
+    const timeoutMs = declaration.limits.timeoutMs;
+    loaded.set(declaration.name, {
+      name: declaration.name,
+      description: declaration.description,
+      input,
+      call: async (args) =>
+        (run as RunFunction)(input.parse(args), {
+          signal: AbortSignal.timeout(timeoutMs),
+          runId,
+          agent,
+        }),
+    });
+  }
+  return names.map((name) => {
+    const found = loaded.get(name);
+    if (found === undefined) throw new Error('code tool ' + name + ' not found under tools/');
+    return found;
+  });
+}
+=== src/main.ts ===
+import { run } from "@openai/agents";
+
+import { createAgent } from "./agent.ts";
+
+const prompt = process.argv.slice(2).join(" ").trim();
+if (prompt === "") {
+  console.error("Usage: node --env-file=.env src/main.ts \"your prompt\"");
+  process.exit(1);
+}
+
+let close: (() => Promise<void>) | undefined;
+try {
+  const created = await createAgent();
+  close = created.close;
+  const { agent } = created;
+  const result = await run(agent, prompt, { maxTurns: 20 });
+  console.log(result.finalOutput);
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exitCode = 1;
+} finally {
+  await close?.();
+}
+=== tsconfig.json ===
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": [
+      "ES2023"
+    ],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "types": [
+      "node"
+    ],
+    "skipLibCheck": true
+  },
+  "include": [
+    "src",
+    "tools"
+  ]
+}
+=== report.json ===
+[
+  {
+    "path": "toolEndpoint",
+    "verdict": "mapped",
+    "note": "not needed: an ejected project runs its code tools in-process"
+  },
+  {
+    "path": "support-triage.description",
+    "verdict": "mapped",
+    "note": "the description of package.json"
+  },
+  {
+    "path": "support-triage.instructions",
+    "verdict": "native",
+    "note": "the agent’s instructions"
+  },
+  {
+    "path": "support-triage.model",
+    "verdict": "mapped",
+    "note": "run through the AI SDK adapter (@openai/agents-extensions) on @ai-sdk/anthropic"
+  },
+  {
+    "path": "support-triage.permissions.readFiles",
+    "verdict": "dropped",
+    "code": "permissions_unsupported",
+    "note": "the OpenAI Agents SDK has no file or shell tool; add one with tool() in src/agent.ts"
+  },
+  {
+    "path": "support-triage.permissions.writeFiles",
+    "verdict": "native",
+    "note": "no tool that needs it is offered"
+  },
+  {
+    "path": "support-triage.permissions.runCommands",
+    "verdict": "native",
+    "note": "no tool that needs it is offered"
+  },
+  {
+    "path": "support-triage.permissions.unrestrictedNetwork",
+    "verdict": "mapped",
+    "note": "the process network is not isolated; no hosted web tool is offered"
+  },
+  {
+    "path": "support-triage.tools.0",
+    "verdict": "native",
+    "note": "remote MCP server zendesk; the token is read from the environment variable ZENDESK_TOKEN"
+  },
+  {
+    "path": "support-triage.tools.1",
+    "verdict": "native",
+    "note": "a local process registered as MCP server local-git; it must exist where the project runs"
+  },
+  {
+    "path": "support-triage.tools.2",
+    "verdict": "native",
+    "note": "wrapped in-process from src/code-tools.ts; copy the project’s tools/ directory (aw platforms export does this)"
+  },
+  {
+    "path": "support-triage.tools.3",
+    "verdict": "dropped",
+    "code": "code_tool_needs_public_mcp",
+    "note": "an openapi tool runs in the Agent Workspace gateway; an ejected project has none"
+  },
+  {
+    "path": "support-triage.tools.4",
+    "verdict": "dropped",
+    "code": "builtin_unsupported",
+    "note": "a hosted tool runs on OpenAI’s side, so this agent’s model cannot use it"
+  },
+  {
+    "path": "support-triage.tools.5",
+    "verdict": "dropped",
+    "code": "builtin_unsupported",
+    "note": "a hosted tool runs on OpenAI’s side, so this agent’s model cannot use it"
+  },
+  {
+    "path": "support-triage.skills.0",
+    "verdict": "dropped",
+    "code": "skills_unsupported",
+    "note": "the OpenAI Agents SDK has no skills"
+  },
+  {
+    "path": "support-triage.knowledge.0",
+    "verdict": "dropped",
+    "code": "knowledge_unsupported",
+    "note": "no SDK of an ejected project has a retrieval slot for a files source; project.knowledgeFiles are not copied"
+  },
+  {
+    "path": "support-triage.knowledge.1",
+    "verdict": "dropped",
+    "code": "knowledge_unsupported",
+    "note": "no SDK of an ejected project has a retrieval slot for a url source; project.knowledgeFiles are not copied"
+  },
+  {
+    "path": "support-triage.subagents.0",
+    "verdict": "mapped",
+    "note": "emitted as a handoff to billing-specialist; the conversation moves to it and does not return to the root"
+  },
+  {
+    "path": "support-triage.limits.maxTurns",
+    "verdict": "native",
+    "note": "maxTurns of run()"
+  },
+  {
+    "path": "support-triage.limits.maxBudgetUsd",
+    "verdict": "dropped",
+    "code": "limits_unsupported",
+    "note": "the OpenAI Agents SDK has no spend cap"
+  },
+  {
+    "path": "billing-specialist.description",
+    "verdict": "native",
+    "note": "the handoff description, which the root sees"
+  },
+  {
+    "path": "billing-specialist.instructions",
+    "verdict": "native",
+    "note": "the agent’s instructions"
+  },
+  {
+    "path": "billing-specialist.model",
+    "verdict": "mapped",
+    "note": "run through the AI SDK adapter (@openai/agents-extensions) on @ai-sdk/anthropic"
+  },
+  {
+    "path": "billing-specialist.permissions.readFiles",
+    "verdict": "dropped",
+    "code": "permissions_unsupported",
+    "note": "the OpenAI Agents SDK has no file or shell tool; add one with tool() in src/agent.ts"
+  },
+  {
+    "path": "billing-specialist.permissions.writeFiles",
+    "verdict": "native",
+    "note": "no tool that needs it is offered"
+  },
+  {
+    "path": "billing-specialist.permissions.runCommands",
+    "verdict": "native",
+    "note": "no tool that needs it is offered"
+  },
+  {
+    "path": "billing-specialist.permissions.unrestrictedNetwork",
+    "verdict": "mapped",
+    "note": "the process network is not isolated; no hosted web tool is offered"
+  },
+  {
+    "path": "billing-specialist.skills.0",
+    "verdict": "dropped",
+    "code": "skills_unsupported",
+    "note": "the OpenAI Agents SDK has no skills"
+  }
+]

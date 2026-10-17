@@ -1,0 +1,29 @@
+apiVersion: agentworkspace.dev/v2
+kind: Project
+name: quotation
+engine: claude-agent-sdk
+# No MCP connector: the ERP is an openapiTool() in tools/erp.ts. `aw dev` reads
+# apis/erp.openapi.json and registers it, taking ERP_TOKEN from its environment:
+#   ERP_TOKEN=... aw dev
+# The document's `servers` is the company's ERP (erp.example.co.jp), which is not reachable from
+# here. To try the project, run the bundled stand-in with the same token and set
+# servers[0].url in apis/erp.openapi.json to http://127.0.0.1:8790/api/v1:
+#   ERP_TOKEN=... PORT=8790 node erp/fake-erp.mjs
+policy:
+  permissions:
+    readFiles: true
+    writeFiles: false
+    # The cost-model skill runs scripts/estimate.mjs.
+    runCommands: true
+    unrestrictedNetwork: false
+  # The only connector any agent in this project may use.
+  tools: [erp]
+  limits:
+    maxBudgetUsd: 1
+  promotion:
+    minEvalScore: 0.9
+environments:
+  local:
+    cloud: local
+    identity:
+      bootstrapAdmin: admin@localhost.test

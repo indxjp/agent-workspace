@@ -1,0 +1,29 @@
+{
+  "main": "control-plane-worker.mjs",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "containers": [
+    {
+      "class_name": "Web",
+      "image": "registry.example/web@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "max_instances": 1,
+      "instance_type": "standard-1"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "WEB",
+        "class_name": "Web"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "Web"
+      ]
+    }
+  ]
+}

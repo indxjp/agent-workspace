@@ -1,0 +1,27 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.SessionState.a_blob_over_the_cap_is_refused",
+    "AgentWorkspace.Theorems.Invariants.SessionState.an_over_cap_blob_answers_413"],
+   "input": {"sizeBytes": 0, "cap": 33554432},
+   "id": "empty",
+   "expected": {"outcome": "stored"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.SessionState.a_blob_over_the_cap_is_refused",
+    "AgentWorkspace.Theorems.Invariants.SessionState.an_over_cap_blob_answers_413"],
+   "input": {"sizeBytes": 1024, "cap": 33554432},
+   "id": "small",
+   "expected": {"outcome": "stored"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.SessionState.a_blob_over_the_cap_is_refused",
+    "AgentWorkspace.Theorems.Invariants.SessionState.an_over_cap_blob_answers_413"],
+   "input": {"sizeBytes": 33554432, "cap": 33554432},
+   "id": "exactly-the-cap",
+   "expected": {"outcome": "stored"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.SessionState.a_blob_over_the_cap_is_refused",
+    "AgentWorkspace.Theorems.Invariants.SessionState.an_over_cap_blob_answers_413"],
+   "input": {"sizeBytes": 33554433, "cap": 33554432},
+   "id": "one-byte-over",
+   "expected": {"status": 413, "outcome": "refused", "code": "session_state_too_large"}}],
+ "family": "session-state",
+ "description": "The blob size cap"}

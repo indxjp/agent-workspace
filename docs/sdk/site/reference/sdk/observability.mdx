@@ -1,0 +1,54 @@
+---
+title: "ObservabilityClient"
+description: "Every method of ObservabilityClient, its parameters, return type, and route."
+---
+
+<Note>This page is generated from `packages/sdk/src/resources/observability.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+Metrics and the audit trail — spec §5.14 `aw.observability`.
+
+## metrics.recentRuns
+
+```ts
+async recentRuns(options?: RequestOptions): Promise<readonly RunTelemetry[]>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<readonly RunTelemetry[]>`
+
+**Route:** `GET /api/metrics`
+
+## audit.list
+
+One page of the audit trail, and the cursor of the next (`null` on the last).
+
+```ts
+list(query?: AuditListQuery, options?: RequestOptions): Promise<AuditEventListResponse>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `query` | `AuditListQuery` | No |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<AuditEventListResponse>`
+
+**Route:** `GET /api/audit-events`
+
+## audit.listAll
+
+Every audit event, newest first, one page request at a time.
+
+```ts
+listAll(query?: AuditListQuery, options?: RequestOptions): AsyncGenerator<AuditEvent, void, undefined>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `query` | `AuditListQuery` | No |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `AsyncGenerator<AuditEvent, void, undefined>`

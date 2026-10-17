@@ -1,0 +1,40 @@
+node: v24.19.0
+file: azure-v1-v1-generated.json  bytes: 1470255
+sha256: 9fade08c5d30751828e67fecca63b3800567c802d1d6c4c91bba3d193843f7a8
+
+### 1. parallel_tool_calls on the Responses surface  (frozen item B1)
+  POST /responses requestBody schema         : {"$ref":"#/components/schemas/OpenAI.CreateResponse"}
+  OpenAI.CreateResponse.parallel_tool_calls  : {"anyOf":[{"type":"boolean"},{"type":"null"}],"default":true}
+  OpenAI.Response.parallel_tool_calls        : {"type":"boolean","description":"Whether to allow the model to run tool calls in parallel.","default":true}
+  OpenAI.Response.required includes it       : true
+  raw occurrences of "parallel_tool_calls"   : 18
+
+### 2. content_filters member: source_type has no enum  (frozen items B2 / N1)
+  AzureContentFilterForResponsesAPI.required            : ["blocked","source_type","content_filter_results","content_filter_offsets"]
+  AzureContentFilterForResponsesAPI.properties.source_type: {"type":"string","description":"The name of the source type of the message."}
+  raw occurrences of "source_type"                      : 2
+
+### 3. the inner content_filter_results object  (frozen item N5)
+  AzureContentFilterResultsForResponsesAPI.required  : ["jailbreak","task_adherence"]
+  AzureContentFilterResultsForResponsesAPI.properties (all, in declaration order):
+    sexual
+    hate
+    violence
+    self_harm
+    profanity
+    custom_blocklists
+    custom_topics
+    error
+    jailbreak
+    task_adherence
+    protected_material_text
+    protected_material_code
+    ungrounded_material
+    personally_identifiable_information
+    indirect_attack
+
+### 4. the terminal streaming event carries the same object  (frozen item N4)
+  OpenAI.ResponseCompletedEvent.required      : ["type","response","sequence_number"]
+  ...properties.type                          : ["response.completed"]
+  ...properties.response                      : [{"$ref":"#/components/schemas/OpenAI.Response"}]
+  OpenAI.Response.properties.content_filters  : {"type":"array","items":{"$ref":"#/components/schemas/AzureContentFilterForResponsesAPI"},"description":"The content filter results from RAI."}

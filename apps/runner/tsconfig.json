@@ -1,0 +1,11 @@
+{
+  // The type-checking view: the whole of `src`, tests included, emitting
+  // nothing. This is the project the editor and type-aware ESLint resolve to.
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  // `formal` holds the Lean vector replay suite (decision D-012: a suite that imports application
+  // code lives with the application), so it is type-checked with `src` rather than only executed.
+  "include": ["src", "formal"]
+}

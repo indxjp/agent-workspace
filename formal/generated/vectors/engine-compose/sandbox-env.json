@@ -1,0 +1,52 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.EngineSandboxEnv.accepted_environment_has_no_master_key",
+    "AgentWorkspace.Theorems.Adversarial.EngineSandboxEnv.accepted_credential_variables_hold_the_run_token"],
+   "input":
+   {"runToken": "run-token",
+    "env":
+    {"PATH": "/usr/bin",
+     "NODE_USE_ENV_PROXY": "1",
+     "AW_SESSION_MIRROR_TOKEN": "run-token",
+     "ANTHROPIC_BASE_URL": "https://gateway.internal",
+     "ANTHROPIC_AUTH_TOKEN": "run-token"}},
+   "id": "todays-composed-run",
+   "expected": {"variable": null, "checked": 1, "accepted": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.EngineSandboxEnv.accepted_environment_has_no_master_key",
+    "AgentWorkspace.Theorems.Adversarial.EngineSandboxEnv.accepted_credential_variables_hold_the_run_token"],
+   "input": {"runToken": "run-token", "env": {"ANTHROPIC_API_KEY": "provider-master-key"}},
+   "id": "master-key",
+   "expected": {"variable": "ANTHROPIC_API_KEY", "checked": null, "accepted": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.EngineSandboxEnv.accepted_environment_has_no_master_key",
+    "AgentWorkspace.Theorems.Adversarial.EngineSandboxEnv.accepted_credential_variables_hold_the_run_token"],
+   "input": {"runToken": "run-token", "env": {"Anthropic_Api_Key": "provider-master-key"}},
+   "id": "master-key-mixed-case",
+   "expected": {"variable": "Anthropic_Api_Key", "checked": null, "accepted": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.EngineSandboxEnv.accepted_environment_has_no_master_key",
+    "AgentWorkspace.Theorems.Adversarial.EngineSandboxEnv.accepted_credential_variables_hold_the_run_token"],
+   "input": {"runToken": "run-token", "env": {"SOME_FUTURE_API_KEY": "sk-live-real", "PATH": "/usr/bin"}},
+   "id": "unheard-of-provider-key",
+   "expected": {"variable": "SOME_FUTURE_API_KEY", "checked": null, "accepted": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.EngineSandboxEnv.accepted_environment_has_no_master_key",
+    "AgentWorkspace.Theorems.Adversarial.EngineSandboxEnv.accepted_credential_variables_hold_the_run_token"],
+   "input": {"runToken": "run-token", "env": {"X_AUTH_TOKEN": "run-token-other"}},
+   "id": "resembling-token",
+   "expected": {"variable": "X_AUTH_TOKEN", "checked": null, "accepted": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.EngineSandboxEnv.accepted_environment_has_no_master_key",
+    "AgentWorkspace.Theorems.Adversarial.EngineSandboxEnv.accepted_credential_variables_hold_the_run_token"],
+   "input": {"runToken": "run-token", "env": {"DATABASE_URL": "postgres://u:p@h/db"}},
+   "id": "not-credential-shaped",
+   "expected": {"variable": null, "checked": 0, "accepted": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.EngineSandboxEnv.accepted_environment_has_no_master_key",
+    "AgentWorkspace.Theorems.Adversarial.EngineSandboxEnv.accepted_credential_variables_hold_the_run_token"],
+   "input": {"runToken": "run-token", "env": {}},
+   "id": "empty",
+   "expected": {"variable": null, "checked": 0, "accepted": true}}],
+ "family": "engine-compose",
+ "description": "Spec A.11 as a property of the compiled environment"}

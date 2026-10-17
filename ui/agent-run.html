@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Run — Customer Support Agent</title>
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<script>window.PAGE = { nav: "agents", crumbs: [["Agents", "agents.html"], ["Customer Support Agent", "agent.html"], ["Session"]] };</script>
+
+<div class="app">
+  <div class="main">
+    <div class="page wide">
+
+      <div class="page-head">
+        <div>
+          <h1>Customer Support Agent</h1>
+          <div class="sub">Session <span class="mono">sess_8f21c4</span> · started 3 minutes ago · Claude Sonnet 5 · Standard Sandbox</div>
+        </div>
+        <div class="actions">
+          <span class="badge ok" id="runstate"><span class="dot"></span>Running</span>
+          <button class="btn" id="interrupt" data-toast="Interrupt sent to the sandbox">Interrupt</button>
+          <button class="btn" data-modal-open="m-sessions">Sessions</button>
+        </div>
+      </div>
+
+      <div class="split-wide">
+        <!-- ---------------- conversation ---------------- -->
+        <div>
+          <div class="chat" id="chat">
+
+            <div class="msg user">
+              <div class="who">AI</div>
+              <div class="body">
+                <div class="name">Aya Ito</div>
+                <p class="mb0">Prepare a summary of the three supplier contracts in <span class="mono">contracts/2026-q3/</span>,
+                and tell me which ones deviate from our standard payment terms.</p>
+              </div>
+            </div>
+
+            <div class="msg agent">
+              <div class="who">CS</div>
+              <div class="body">
+                <div class="name">Customer Support Agent</div>
+                <p>Reviewing the uploaded files…</p>
+
+                <div class="activity">
+                  <div class="act"><span class="tick">✓</span> Read <span class="tool">contracts/2026-q3/agreement-01.pdf</span><span class="dur">0.6 s</span></div>
+                  <div class="act"><span class="tick">✓</span> Read <span class="tool">contracts/2026-q3/agreement-02.pdf</span><span class="dur">0.5 s</span></div>
+                  <div class="act"><span class="tick">✓</span> Read <span class="tool">contracts/2026-q3/agreement-03.pdf</span><span class="dur">0.7 s</span></div>
+                </div>
+
+                <p>Searching the internal contract database for our standard clause set…</p>
+
+                <div class="activity">
+                  <div class="act"><span class="tick">✓</span> Internal Search <span class="tool">mcp__internalSearch.query</span><span class="dur">1.2 s</span></div>
+                  <div class="act" id="pending"><span class="spin"></span> Preparing summary…<span class="dur">—</span></div>
+                </div>
+
+                <div id="answer" hidden>
+                  <p><b>Summary of the three Q3 supplier contracts</b></p>
+                  <p><b>1. Kobayashi Precision Parts — agreement-01.</b> Two-year supply agreement, ¥48M annual cap,
+                    net 30 payment terms, standard limitation of liability. Matches the standard clause set.</p>
+                  <p><b>2. Nordwind Logistics — agreement-02.</b> One-year framework, indexed fuel surcharge,
+                    <b>net 60 payment terms</b>. This deviates from our standard net 30 and shifts about ¥6M of
+                    working capital per quarter.</p>
+                  <p><b>3. Tanaka Tooling — agreement-03.</b> Renewal, ¥12M cap, net 30, but the
+                    <b>termination-for-convenience clause is missing</b> — only termination for cause is included.</p>
+                  <p class="mb0"><b>Deviations to review:</b> agreement-02 (payment terms) and agreement-03
+                    (termination). I have written the full comparison to
+                    <span class="mono">output/contract-review-2026-q3.md</span>.</p>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <details class="adv" id="tech">
+            <summary>Show technical details <span class="hint">SDK events, tool calls, MCP calls, usage</span></summary>
+            <div class="adv-body">
+              <div class="tabs" data-tabs>
+                <button data-tab="events" class="active">SDK events</button>
+                <button data-tab="usage">Usage</button>
+                <button data-tab="runtime-ev">Runtime</button>
+              </div>
+
+              <section class="tabpanel active" data-panel="events">
+                <div class="card"><div class="card-body event-log">
+                  <div class="line"><span class="ts">14:32:04.118</span><span class="ev">system.init</span><span class="dt">session_id=sess_8f21c4 model=claude-sonnet-5 cwd=/workspace tools=7 mcp_servers=2</span></div>
+                  <div class="line"><span class="ts">14:32:04.402</span><span class="ev">assistant.text</span><span class="dt">"Reviewing the uploaded files…"</span></div>
+                  <div class="line"><span class="ts">14:32:04.655</span><span class="ev">tool_use.Read</span><span class="dt">{"file_path":"/workspace/contracts/2026-q3/agreement-01.pdf"}</span></div>
+                  <div class="line"><span class="ts">14:32:05.201</span><span class="ev">tool_result.Read</span><span class="dt">ok · 18 pages · 42.1k characters</span></div>
+                  <div class="line"><span class="ts">14:32:05.244</span><span class="ev">tool_use.Read</span><span class="dt">{"file_path":"/workspace/contracts/2026-q3/agreement-02.pdf"}</span></div>
+                  <div class="line"><span class="ts">14:32:05.760</span><span class="ev">tool_result.Read</span><span class="dt">ok · 11 pages · 26.8k characters</span></div>
+                  <div class="line"><span class="ts">14:32:05.801</span><span class="ev">tool_use.Read</span><span class="dt">{"file_path":"/workspace/contracts/2026-q3/agreement-03.pdf"}</span></div>
+                  <div class="line"><span class="ts">14:32:06.480</span><span class="ev">tool_result.Read</span><span class="dt">ok · 9 pages · 19.3k characters</span></div>
+                  <div class="line"><span class="ts">14:32:06.512</span><span class="ev">mcp.request</span><span class="dt">internalSearch.query {"q":"standard payment terms clause set","limit":5}</span></div>
+                  <div class="line"><span class="ts">14:32:07.744</span><span class="ev">mcp.response</span><span class="dt">5 results · 1.2 s · https://mcp.meridian.internal/search</span></div>
+                  <div class="line"><span class="ts">14:32:07.902</span><span class="ev">assistant.thinking</span><span class="dt">redacted by workspace policy (thinking is not stored)</span></div>
+                  <div class="line"><span class="ts">14:32:11.360</span><span class="ev">tool_use.Write</span><span class="dt">{"file_path":"/workspace/output/contract-review-2026-q3.md"}</span></div>
+                  <div class="line"><span class="ts">14:32:11.402</span><span class="ev">tool_result.Write</span><span class="dt">ok · 6.1 KB written</span></div>
+                  <div class="line"><span class="ts">14:32:26.918</span><span class="ev">result</span><span class="dt">status=completed turns=6 duration_ms=22800 cost_usd=0.0812</span></div>
+                </div></div>
+                <p class="small muted mt8">Raw Claude Agent SDK event stream, delivered to this page over SSE. Hidden by default.</p>
+              </section>
+
+              <section class="tabpanel" data-panel="usage">
+                <div class="stat-row">
+                  <div class="stat"><div class="k">Input tokens</div><div class="v">11 940</div></div>
+                  <div class="stat"><div class="k">Output tokens</div><div class="v">2 264</div></div>
+                  <div class="stat"><div class="k">Cache read</div><div class="v">8 512</div></div>
+                  <div class="stat"><div class="k">Turns</div><div class="v">6</div></div>
+                  <div class="stat"><div class="k">Cost</div><div class="v">$0.08</div></div>
+                </div>
+                <div class="card mt16"><div class="card-body">
+                  <dl class="kv">
+                    <dt>Provider</dt><dd>Anthropic <span class="muted small">· via gateway <span class="mono">http://gateway:4000</span></span></dd>
+                    <dt>Model</dt><dd class="mono">claude-sonnet-5</dd>
+                    <dt>Prompt caching</dt><dd><span class="badge ok">Used</span> <span class="muted small">8 512 tokens read from cache</span></dd>
+                    <dt>Budget</dt><dd>$0.08 of $1.50</dd>
+                  </dl>
+                </div></div>
+              </section>
+
+              <section class="tabpanel" data-panel="runtime-ev">
+                <div class="card"><div class="card-body event-log">
+                  <div class="line"><span class="ts">14:32:02.004</span><span class="ev">runtime.create</span><span class="dt">driver=docker profile=Standard Sandbox image=agent-workspace/runtime@sha256:9f2c…4b1e</span></div>
+                  <div class="line"><span class="ts">14:32:02.918</span><span class="ev">runtime.ready</span><span class="dt">container=aw-sess-8f21c4 cpu=1 mem=1024Mi net=agent-egress (allowlist: gateway, mcp.meridian.internal, meridian.atlassian.net)</span></div>
+                  <div class="line"><span class="ts">14:32:03.101</span><span class="ev">files.hydrate</span><span class="dt">12 objects · 4.5 MB → /workspace</span></div>
+                  <div class="line"><span class="ts">14:32:03.640</span><span class="ev">skills.materialize</span><span class="dt">.claude/skills/customer-support, document-writer, invoice-review</span></div>
+                  <div class="line"><span class="ts">14:32:27.010</span><span class="ev">files.collect</span><span class="dt">/workspace/output · 1 object · 6.1 KB → object storage</span></div>
+                  <div class="line"><span class="ts">14:32:27.455</span><span class="ev">runtime.destroy</span><span class="dt">container removed · volume retained 24 h</span></div>
+                </div></div>
+              </section>
+            </div>
+          </details>
+
+          <div class="composer mt24">
+            <textarea placeholder="Ask a follow-up. The session is resumed, so the agent still has the context above."></textarea>
+            <div class="tools">
+              <button class="btn sm ghost" data-toast="File picker opened">Attach file</button>
+              <button class="btn sm ghost" data-modal-open="m-sessions">Resume another session</button>
+              <span class="spacer"></span>
+              <span class="small muted">Claude Sonnet 5 · $0.08 spent of $1.50</span>
+              <button class="btn primary sm" data-toast="Message sent">Send</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ---------------- right rail ---------------- -->
+        <aside>
+          <div class="card">
+            <div class="card-head"><h3>This run</h3></div>
+            <div class="card-body">
+              <dl class="kv" style="grid-template-columns:105px 1fr">
+                <dt>Status</dt><dd id="rt-status"><span class="badge ok"><span class="dot"></span>Running</span></dd>
+                <dt>Model</dt><dd>Claude Sonnet 5</dd>
+                <dt>Runtime</dt><dd>Standard Sandbox<div class="muted small">Docker · container <span class="mono">aw-sess-8f21c4</span></div></dd>
+                <dt>Started by</dt><dd>Aya Ito</dd>
+                <dt>Turns</dt><dd>6 of 24</dd>
+                <dt>Cost</dt><dd>$0.08 of $1.50</dd>
+              </dl>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h3>In use</h3></div>
+            <div class="card-body">
+              <div class="small muted mb8">Files</div>
+              <div class="mono small">contracts/2026-q3/ · handbook/ · output/</div>
+              <div class="small muted mb8 mt16">Skills</div>
+              <div class="mono small">customer-support · document-writer · invoice-review</div>
+              <div class="small muted mb8 mt16">Connectors</div>
+              <div class="mono small">internalSearch · jira</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h3>Output files</h3></div>
+            <div class="card-body">
+              <div class="rows" style="box-shadow:none">
+                <div class="row" style="padding:10px 12px">
+                  <div class="grow"><div class="title">contract-review-2026-q3.md</div>
+                    <div class="meta">6.1 KB · written 12 s ago</div></div>
+                  <div class="right"><button class="btn sm" data-toast="Downloading…">Download</button></div>
+                </div>
+              </div>
+              <p class="small muted mt8 mb0">Only paths marked persistent are kept when the sandbox is destroyed.</p>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ---------- modal: sessions (§20) ---------- -->
+<div class="scrim" id="m-sessions" hidden>
+  <div class="modal wide">
+    <div class="m-head"><h3>Sessions</h3><div class="sub">Claude Agent SDK sessions for this agent. Resuming continues the same conversation on a fresh sandbox.</div></div>
+    <div class="m-body" style="padding:0">
+      <table class="tbl">
+        <thead><tr><th>Session</th><th>Started by</th><th class="num">Messages</th><th>Updated</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          <tr><td class="mono">sess_8f21c4</td><td>Aya Ito</td><td class="num">4</td><td>Now</td><td><span class="badge ok">Active</span></td><td><span class="muted small">Current</span></td></tr>
+          <tr><td class="mono">sess_71c0ab</td><td>Aya Ito</td><td class="num">18</td><td>Yesterday</td><td><span class="badge muted">Idle</span></td><td><button class="btn sm" data-modal-close data-toast="Session resumed on a fresh sandbox">Resume</button></td></tr>
+          <tr><td class="mono">sess_5ad901</td><td>Marie Dupont</td><td class="num">7</td><td>3 days ago</td><td><span class="badge muted">Idle</span></td><td><button class="btn sm" data-modal-close data-toast="Session resumed on a fresh sandbox">Resume</button></td></tr>
+          <tr><td class="mono">sess_2b7e40</td><td>Kenji Sato</td><td class="num">31</td><td>2 weeks ago</td><td><span class="badge outline">Archived</span></td><td><button class="btn sm" data-toast="Unarchived">Unarchive</button></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="m-foot">
+      <button class="btn" data-modal-close>Close</button>
+      <button class="btn primary" data-modal-close data-toast="New session started">New session</button>
+    </div>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+<script>
+/* Small simulation so the streaming view reads as live rather than static. */
+setTimeout(function () {
+  var pending = document.getElementById("pending");
+  if (pending) pending.innerHTML = '<span class="tick">✓</span> Wrote <span class="tool">output/contract-review-2026-q3.md</span><span class="dur">3.4 s</span>';
+  var ans = document.getElementById("answer");
+  if (ans) ans.hidden = false;
+  var badge = document.getElementById("runstate");
+  if (badge) { badge.className = "badge ok"; badge.innerHTML = "Completed · 23 s · $0.08"; }
+  var st = document.getElementById("rt-status");
+  if (st) st.innerHTML = '<span class="badge ok">Completed</span>';
+  var ib = document.getElementById("interrupt");
+  if (ib) { ib.textContent = "Run again"; ib.setAttribute("data-toast", "Starting a new turn"); }
+}, 2600);
+</script>
+</body>
+</html>

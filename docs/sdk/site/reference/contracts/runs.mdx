@@ -1,0 +1,460 @@
+---
+title: "runs"
+description: "The @indx-workspace/contracts/runs exports, sorted alphabetically."
+---
+
+<Note>This page is generated from `packages/contracts/src/runs.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## ACCOUNTING_STATES
+
+How far usage accounting for a run has progressed. `complete` is the only settled answer.
+
+- `'pending'`
+- `'complete'`
+- `'partial'`
+- `'failed'`
+- `'unavailable'`
+
+## AccountingState
+
+- `"failed"`
+- `"partial"`
+- `"unavailable"`
+- `"pending"`
+- `"complete"`
+
+## InterruptRunResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `run` | `RunResource` | Yes |  |
+
+## InterruptRunResponseSchema
+
+The body of `POST /api/runs/:id/interrupt` (issue #235, S-14): the run, re-read after its
+terminal status is written, so a caller learns the status it actually reached rather than the
+one it asked for.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `run` | `RunResource` | Yes |  |
+
+## isRunStartProblemCode
+
+```ts
+isRunStartProblemCode(value: string): value is RunStartProblemCode
+```
+
+## isTerminalRunStatus
+
+```ts
+isTerminalRunStatus(status: RunStatus): boolean
+```
+
+## MAX_PROMPT_CHARS
+
+The largest prompt one run may carry, in string code units (`docs/adr/W1-CP-04-start-run-request-shape.md`).
+
+Value: `100_000`
+
+## MODEL_PROVIDERS
+
+The **model** provider families a model connection can name — who serves the model. Matches
+`model_connections.provider`.
+
+Not the engine. The harness that runs the agent loop is `RunResourceSchema`'s `engine`
+(`EngineId`, `./engines.ts`); this list is who answered the model call it made. One run has both,
+and they are independent: a `claude-agent-sdk` run can be served by `openai`.
+
+- `'anthropic'`
+- `'anthropic-compatible'`
+- `'openai'`
+- `'azure-openai'`
+- `'openai-compatible'`
+
+## ModelProvider
+
+- `"anthropic"`
+- `"anthropic-compatible"`
+- `"openai"`
+- `"azure-openai"`
+- `"openai-compatible"`
+
+## parseRunFailure
+
+```ts
+parseRunFailure(error: string | null): RunFailure | null
+```
+
+## RevokeRunTokensResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `revoked` | `number` | Yes |  |
+| `outcome` | `"revoked" \| "already-revoked" \| "not-found"` | Yes |  |
+
+## RevokeRunTokensResponseSchema
+
+The body of `POST /api/runs/:id/revoke-tokens` (issue #235, S-15) and, until the next major release (ADR-0078 D7), the
+deprecated `POST /api/runs/:id`: `revoked` is how many gateway tokens the call actually revoked,
+and `outcome` is the repository's own vocabulary — a single-token request answers `revoked`,
+`already-revoked` or `not-found`; an all-tokens request answers `revoked` or
+`already-revoked`, or `not-found` if the caller's workspace scope cannot be resolved.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `revoked` | `number` | Yes |  |
+| `outcome` | `"revoked" \| "already-revoked" \| "not-found"` | Yes |  |
+
+## RUN_LIST_DEFAULT_LIMIT
+
+The default and largest page `GET /api/runs` serves.
+
+Value: `20`
+
+## RUN_LIST_MAX_LIMIT
+
+Value: `200`
+
+## RUN_PREPARATION_FAILED
+
+The run-failure code of a run whose request could not be prepared (issue #827): something threw
+while the control plane resolved the runtime, allocated it or composed the run request. The
+stored `error` is `run_preparation_failed: The run request could not be prepared at the <step>
+step (<ErrorName>[: <safe cause>[: <manager message>]]).` — the step is one of a closed set.
+Nothing from the failure's own message is repeated, except that a runner manager's
+`tool_sandbox_unavailable` answer appends its message, redacted of the run's secret values, URLs
+and long tokens, capped at 400 characters, and withheld when the run's secrets are unknown. Not
+retryable as is.
+
+Value: `'run_preparation_failed'`
+
+## RUN_START_PROBLEM_CODES
+
+Why `POST /api/agents/:id/runs` refused to queue a run (issue #393), with the status each one
+travels under. Every one is decided **before** a run row exists, so a refused start leaves no
+queued run behind, and each names the one missing piece an operator fixes:
+
+- `agent_runtime_profile_missing` — the agent has no runtime profile, or the one it names no
+  longer exists. Attach a runtime profile to the agent.
+- `model_connection_unresolved` — no layer of the model-resolution ladder (run override, agent,
+  project, workspace default, then the deployment default model) names a usable connection: none
+  is configured, the named one was deleted, it is not ready, or its credential cannot be read.
+  The deployment default applies when the agent names a connection without a model; it is
+  refused with this code too when the deployment sets no model for that connection's provider.
+- `model_connection_failed` — the connection's provider could not be connected to at all: the
+  connection was refused or its name did not resolve (issue #661). The key is not the problem;
+  check the connection's base URL and this host's network (proxy, DNS).
+- `model_unavailable` — the connection is usable and its model list was read, and the selected
+  model is not on it. A run queued while the list could not be read, whose model the provider
+  then refuses as unknown, fails with this code too.
+- `model_credential_rejected` — the provider answered the model list with `401`/`403`: the
+  connection's API key was rejected. Replace the key. A run whose provider rejects the key only
+  once it is running fails at once with this code too, instead of retrying (issue #661).
+
+A model list that cannot be read for a reason that may pass (a `429`, a `5xx`, a timeout or a
+reset) is not a refusal: every selection is an explicit model on a ready connection, so the
+server logs a warning and lets the run proceed. There is therefore no "discovery failed" code.
+
+- `policy_cannot_widen` — the run asks for more than the deployment's policy ceiling allows: an
+  engine or a model outside its allowlist, judged at the start for an explicit `modelOverride`
+  and in preflight for the resolved model (ADR-0102 SD6, C14, issue #524).
+- `network_policy_unenforceable` — the agent lacks `unrestrictedNetwork`, so its `open` profile
+  was lowered to `restricted` for its remote connectors' hosts, and the profile's driver cannot
+  enforce `restricted` (ADR-0117 decisions 7 and 9, issue #785). Grant `unrestrictedNetwork`,
+  remove the remote connectors, or pick a driver that enforces `restricted`. It is judged when
+  the run launches, so the run fails with this code rather than the start answering it.
+- `run_deadline_exceeds_host` — the runtime profile's `timeoutSeconds` is longer than the longest
+  run the control plane's host allows (on Vercel Functions, the function's maximum duration;
+  ADR-0120 LC7, issue #830). Shorten the profile's deadline. It is judged when the run launches,
+  so the run fails with this code before the runtime is contacted.
+- `runtime_connection_missing` — the runtime profile's driver is a provider sandbox (`external`,
+  `vercel-sandbox`, `cloudflare-sandbox`) and its runtime connection is absent: the profile names
+  none, or the named one was deleted or belongs to another workspace or driver (ADR-0120 LC6).
+  Attach a runtime connection of that driver to the profile. It is judged when the run launches,
+  so the run fails with this code before the runtime is contacted.
+- `runtime_connection_credential_unavailable` — the runtime connection exists but holds no
+  usable provider credential. Replace the credential on the connection. Judged at launch too.
+- `runtime_not_verified` — the profile's driver has no current Test Runtime pass: it never
+  passed, or its pass lapsed (it lasts 24 hours, and a new runtime image needs a new one) and
+  re-verifying it automatically failed. Run Test Runtime, then retry. Judged at launch too.
+
+The ten configuration codes are `422`: the request is well formed and the agent exists — it is
+the workspace's configuration that cannot run it yet. The ceiling refusal is `403`: it refuses
+what is asked rather than naming a missing piece (C14).
+
+| Key | Value |
+| --- | --- |
+| `agent_runtime_profile_missing` | `422` |
+| `model_connection_unresolved` | `422` |
+| `model_connection_failed` | `422` |
+| `model_unavailable` | `422` |
+| `model_credential_rejected` | `422` |
+| `network_policy_unenforceable` | `422` |
+| `run_deadline_exceeds_host` | `422` |
+| `runtime_connection_missing` | `422` |
+| `runtime_connection_credential_unavailable` | `422` |
+| `runtime_not_verified` | `422` |
+| `policy_cannot_widen` | `403` |
+
+## RUN_STATUSES
+
+The run lifecycle as the API reports it. `queued` and `running` are live; the other three are
+terminal, and a terminal run's event stream replays and ends rather than follows.
+
+- `'queued'`
+- `'running'`
+- `'completed'`
+- `'failed'`
+- `'cancelled'`
+
+## RunCost
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `amount` | `string` | Yes | A decimal string, never a float — `"0.000000"` until accounting settles. |
+| `currency` | `string` | Yes |  |
+| `priceTableVersion` | `null \| string` | Yes |  |
+
+## RunCostSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `amount` | `string` | Yes | A decimal string, never a float — `"0.000000"` until accounting settles. |
+| `currency` | `string` | Yes |  |
+| `priceTableVersion` | `null \| string` | Yes |  |
+
+## RunFailure
+
+A run's stored `error`, split into its safe code and its message.
+
+A run that is refused only once it is being composed — a race with an edit made after the start
+was accepted, or a deployment whose run API performs no pre-queue check — records an `error` of
+the form `<code>: <message>`, the same shape `engine_model_protocol_unsupported` already uses.
+A run whose runtime stayed at its concurrent-run capacity for the launcher's whole wait budget
+records `RUNTIME_CAPACITY_EXHAUSTED` the same way (issue #557); that one is retryable.
+This reads the code back so a client can branch on it rather than on prose. `code` is `null`
+for an error that carries no recognised code (a runtime failure, an older run).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `code` | `null \| "policy_cannot_widen" \| "engine_model_protocol_unsupported" \| "agent_runtime_profile_missing" \| "model_connection_unresolved" \| "model_connection_failed" \| "model_unavailable" \| "model_credential_rejected" \| "network_policy_unenforceable" \| "run_deadline_exceeds_host" \| "runtime_connection_missing" \| "runtime_connection_credential_unavailable" \| "runtime_not_verified" \| "run_preparation_failed" \| "runtime_capacity_exhausted"` | Yes |  |
+| `message` | `string` | Yes |  |
+
+## RunListQuery
+
+The filters `GET /api/runs` accepts. Every field is optional; `user` is honoured only for a
+caller whose grant covers the whole workspace (Owner or Admin) and is otherwise a `403`
+`user_filter_forbidden`. `from`/`to` are ISO-8601 instants; `cursor` is exactly the
+`nextCursor` of a previous page.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `status` | `undefined \| "completed" \| "failed" \| "running" \| "queued" \| "cancelled"` | No |  |
+| `agent` | `undefined \| string` | No |  |
+| `project` | `undefined \| string` | No |  |
+| `provider` | `undefined \| "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible"` | No |  |
+| `model` | `undefined \| string` | No |  |
+| `from` | `undefined \| string` | No |  |
+| `to` | `undefined \| string` | No |  |
+| `user` | `undefined \| string` | No |  |
+| `limit` | `undefined \| number` | No |  |
+| `cursor` | `undefined \| string` | No |  |
+
+## RunListResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `runs` | `readonly RunResource[]` | Yes |  |
+| `nextCursor` | `null \| string` | Yes |  |
+
+## RunListResponseSchema
+
+The body of `GET /api/runs`: one page, newest first, and an opaque cursor for the next one.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `runs` | `readonly RunResource[]` | Yes |  |
+| `nextCursor` | `null \| string` | Yes |  |
+
+## runListSearchParams
+
+Render a `RunListQuery` as the query string the route parses, omitting absent fields.
+
+```ts
+runListSearchParams(query: RunListQuery): URLSearchParams
+```
+
+## RunResource
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `workspaceId` | `string` | Yes |  |
+| `agentId` | `string` | Yes |  |
+| `projectId` | `null \| string` | Yes |  |
+| `initiatingUserId` | `null \| string` | Yes | Legacy human attribution; `null` for a run started with an API key. |
+| `sessionId` | `string` | Yes |  |
+| `status` | `"completed" \| "failed" \| "running" \| "queued" \| "cancelled"` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+| `startedAt` | `null \| string` | Yes |  |
+| `endedAt` | `null \| string` | Yes |  |
+| `durationMs` | `null \| number` | Yes |  |
+| `model` | `null \| string` | Yes |  |
+| `provider` | `null \| "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible"` | Yes | The **model** provider that served the call, never the engine. See `MODEL_PROVIDERS`. |
+| `modelConnectionId` | `null \| string` | Yes |  |
+| `engine` | `null \| "claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes | The engine that executed the run. `'claude-agent-sdk'` on every run this release starts, and `null` only for a run recorded before ADR-0065 named the field — the honest answer for a row nobody ever wrote an engine onto, rather than a backfilled guess. |
+| `engineVersion` | `null \| string` | Yes | The adapter's and third-party SDK's version, as the runner reported it. Opaque to the platform: recorded for support, never compared. `null` for a historic run. |
+| `usage` | `RunUsage` | Yes |  |
+| `cost` | `RunCost` | Yes |  |
+| `error` | `null \| string` | Yes | The safe public failure text, or `null` while the run is live or ended well. |
+| `accountingState` | `"failed" \| "partial" \| "unavailable" \| "pending" \| "complete"` | Yes |  |
+| `accountingError` | `null \| string` | Yes |  |
+
+## RunResourceSchema
+
+One run as `GET /api/runs/:id`, every item of `GET /api/runs`, and the `202` of
+`POST /api/agents/:id/runs` render it. Dates are ISO-8601 strings; `durationMs` is `null` until
+both `startedAt` and `endedAt` exist.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `workspaceId` | `string` | Yes |  |
+| `agentId` | `string` | Yes |  |
+| `projectId` | `null \| string` | Yes |  |
+| `initiatingUserId` | `null \| string` | Yes | Legacy human attribution; `null` for a run started with an API key. |
+| `sessionId` | `string` | Yes |  |
+| `status` | `"completed" \| "failed" \| "running" \| "queued" \| "cancelled"` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+| `startedAt` | `null \| string` | Yes |  |
+| `endedAt` | `null \| string` | Yes |  |
+| `durationMs` | `null \| number` | Yes |  |
+| `model` | `null \| string` | Yes |  |
+| `provider` | `null \| "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible"` | Yes | The **model** provider that served the call, never the engine. See `MODEL_PROVIDERS`. |
+| `modelConnectionId` | `null \| string` | Yes |  |
+| `engine` | `null \| "claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes | The engine that executed the run. `'claude-agent-sdk'` on every run this release starts, and `null` only for a run recorded before ADR-0065 named the field — the honest answer for a row nobody ever wrote an engine onto, rather than a backfilled guess. |
+| `engineVersion` | `null \| string` | Yes | The adapter's and third-party SDK's version, as the runner reported it. Opaque to the platform: recorded for support, never compared. `null` for a historic run. |
+| `usage` | `RunUsage` | Yes |  |
+| `cost` | `RunCost` | Yes |  |
+| `error` | `null \| string` | Yes | The safe public failure text, or `null` while the run is live or ended well. |
+| `accountingState` | `"failed" \| "partial" \| "unavailable" \| "pending" \| "complete"` | Yes |  |
+| `accountingError` | `null \| string` | Yes |  |
+
+## RunResponseSchema
+
+The body of `GET /api/runs/:id`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `run` | `RunResource` | Yes |  |
+
+## RunStartProblemCode
+
+- `"policy_cannot_widen"`
+- `"agent_runtime_profile_missing"`
+- `"model_connection_unresolved"`
+- `"model_connection_failed"`
+- `"model_unavailable"`
+- `"model_credential_rejected"`
+- `"network_policy_unenforceable"`
+- `"run_deadline_exceeds_host"`
+- `"runtime_connection_missing"`
+- `"runtime_connection_credential_unavailable"`
+- `"runtime_not_verified"`
+
+## RunStatus
+
+- `"completed"`
+- `"failed"`
+- `"running"`
+- `"queued"`
+- `"cancelled"`
+
+## RUNTIME_CAPACITY_EXHAUSTED
+
+The run-failure code of a run whose runtime refused it for capacity (issue #557).
+
+Not a start refusal, and so not in `RUN_START_PROBLEM_CODES`: `POST /api/agents/:id/runs`
+has already answered `202` when the runtime says it is serving its maximum number of concurrent
+runs. The server waits for a free slot for a bounded time; only a runtime that stays full for
+that whole wait fails the run, with a stored `error` of the form
+`runtime_capacity_exhausted: <message>`. Nothing ran, so the failure is retryable: a client may
+offer to send the message again.
+
+Value: `'runtime_capacity_exhausted'`
+
+## RunUsage
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `inputTokens` | `number` | Yes |  |
+| `outputTokens` | `number` | Yes |  |
+| `cacheReadInputTokens` | `number` | Yes |  |
+| `cacheCreationInputTokens` | `number` | Yes |  |
+| `totalTokens` | `number` | Yes | Derived by the server: the sum of the four counters above. |
+| `toolCalls` | `number` | Yes |  |
+
+## RunUsageSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `inputTokens` | `number` | Yes |  |
+| `outputTokens` | `number` | Yes |  |
+| `cacheReadInputTokens` | `number` | Yes |  |
+| `cacheCreationInputTokens` | `number` | Yes |  |
+| `totalTokens` | `number` | Yes | Derived by the server: the sum of the four counters above. |
+| `toolCalls` | `number` | Yes |  |
+
+## StartRunRequest
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `prompt` | `string` | Yes |  |
+| `sessionId` | `undefined \| null \| string` | No |  |
+| `modelConnectionId` | `undefined \| null \| string` | No |  |
+| `model` | `undefined \| null \| string` | No |  |
+| `version` | `undefined \| number` | No |  |
+
+## StartRunRequestSchema
+
+The body of `POST /api/agents/:id/runs`.
+
+`modelConnectionId` and `model` override the agent's default for this run only, and travel
+together or not at all: no layer of the model-resolution ladder may mix a connection from one
+level with a model from another. `sessionId` continues an existing session; omit it (or send
+`null`) to start one.
+
+`version` runs a new session on that numbered version of the agent instead of the one the `local`
+pointer names (issue #697). A session keeps the version it started on, so `version` with a
+`sessionId` is refused. An unknown number is `404 agent_version_not_found`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `prompt` | `string` | Yes |  |
+| `sessionId` | `undefined \| null \| string` | No |  |
+| `modelConnectionId` | `undefined \| null \| string` | No |  |
+| `model` | `undefined \| null \| string` | No |  |
+| `version` | `undefined \| number` | No |  |
+
+## StartRunResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `run` | `RunResource` | Yes |  |
+| `events` | `string` | Yes | Relative to the API origin: `/api/runs/:id/events`. Also sent as the `Location` header. |
+
+## StartRunResponseSchema
+
+The `202` body of `POST /api/agents/:id/runs`: the queued run and where to stream it from.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `run` | `RunResource` | Yes |  |
+| `events` | `string` | Yes | Relative to the API origin: `/api/runs/:id/events`. Also sent as the `Location` header. |
+
+## TERMINAL_RUN_STATUSES
+
+- `'completed'`
+- `'failed'`
+- `'cancelled'`

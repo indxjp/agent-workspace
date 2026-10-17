@@ -1,0 +1,54 @@
+name: Terraform
+
+# fmt -check, validate and terraform test for every root module under infra/terraform. Offline
+# only: no backend, no cloud credential, no plan or apply. A new root is one more matrix entry.
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/terraform.yml'
+      - 'infra/terraform/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/terraform.yml'
+      - 'infra/terraform/**'
+  workflow_dispatch:
+
+concurrency:
+  group: terraform-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: validate · ${{ matrix.root }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        root:
+          - infra/terraform/azure-container-apps
+          - infra/terraform/azure-container-apps/bootstrap
+          - infra/terraform/gcp-cloudrun
+          - infra/terraform/gcp-small
+          - infra/terraform/gcp-small/bootstrap
+    env:
+      TF_IN_AUTOMATION: 'true'
+      TF_INPUT: 'false'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.15.8
+      - name: Format
+        run: terraform -chdir=${{ matrix.root }} fmt -check -recursive
+      - name: Init
+        run: terraform -chdir=${{ matrix.root }} init -backend=false -lockfile=readonly
+      - name: Validate
+        run: terraform -chdir=${{ matrix.root }} validate
+      - name: Test
+        run: terraform -chdir=${{ matrix.root }} test

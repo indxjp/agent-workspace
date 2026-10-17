@@ -1,0 +1,205 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"table": "projects"},
+   "id": "checks/projects",
+   "expected": {"otherChecks": ["projects_name_not_blank", "projects_default_model_pair"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"table": "sessions"},
+   "id": "checks/sessions",
+   "expected": {"otherChecks": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"table": "session_transcripts"},
+   "id": "checks/session_transcripts",
+   "expected": {"otherChecks": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"table": "session_messages"},
+   "id": "checks/session_messages",
+   "expected": {"otherChecks": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"table": "session_state_streams"},
+   "id": "checks/session_state_streams",
+   "expected": {"otherChecks": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"table": "session_state_entries"},
+   "id": "checks/session_state_entries",
+   "expected": {"otherChecks": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"table": "session_state_blobs"},
+   "id": "checks/session_state_blobs",
+   "expected": {"otherChecks": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"table": "runs"},
+   "id": "checks/runs",
+   "expected":
+   {"otherChecks":
+    ["runs_ended_at_iff_terminal",
+     "runs_ended_after_started",
+     "runs_counters_non_negative",
+     "runs_cost_currency_usd",
+     "runs_price_version_matches_accounting_state",
+     "runs_unpriced_cost_zero"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"table": "run_events"},
+   "id": "checks/run_events",
+   "expected": {"otherChecks": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"table": "run_feedback"},
+   "id": "checks/run_feedback",
+   "expected": {"otherChecks": ["run_feedback_comment_length"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"table": "run_tokens"},
+   "id": "checks/run_tokens",
+   "expected": {"otherChecks": ["run_tokens_expiry_after_created", "run_tokens_revoked_after_created"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"table": "run_usage_records"},
+   "id": "checks/run_usage_records",
+   "expected": {"otherChecks": ["run_usage_records_counters_non_negative", "run_usage_records_currency_usd"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"table": "audit_events"},
+   "id": "checks/audit_events",
+   "expected":
+   {"otherChecks":
+    ["audit_events_actor_label_not_blank", "audit_events_subject_label_not_blank", "audit_events_subject_id_shape"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"table": "surface_session_keys"},
+   "id": "checks/surface_session_keys",
+   "expected": {"otherChecks": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"name": "projects_name_not_blank"},
+   "id": "check/projects_name_not_blank",
+   "expected": {"sql": "length(btrim(\"projects\".\"name\")) > 0"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"name": "projects_default_model_pair"},
+   "id": "check/projects_default_model_pair",
+   "expected":
+   {"sql": "(\"projects\".\"default_model_connection_id\" is null) = (\"projects\".\"default_model\" is null)"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"name": "runs_ended_at_iff_terminal"},
+   "id": "check/runs_ended_at_iff_terminal",
+   "expected":
+   {"sql": "(\"runs\".\"status\" in ('completed', 'failed', 'cancelled')) = (\"runs\".\"ended_at\" is not null)"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"name": "runs_ended_after_started"},
+   "id": "check/runs_ended_after_started",
+   "expected":
+   {"sql":
+    "\"runs\".\"ended_at\" is null or \"runs\".\"started_at\" is null or \"runs\".\"ended_at\" >= \"runs\".\"started_at\""}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"name": "runs_counters_non_negative"},
+   "id": "check/runs_counters_non_negative",
+   "expected":
+   {"sql":
+    "\"runs\".\"input_tokens\" >= 0 and \"runs\".\"output_tokens\" >= 0 and \"runs\".\"cache_read_input_tokens\" >= 0 and \"runs\".\"cache_creation_input_tokens\" >= 0 and \"runs\".\"tool_calls\" >= 0 and \"runs\".\"cost_usd\" >= 0"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"name": "runs_cost_currency_usd"},
+   "id": "check/runs_cost_currency_usd",
+   "expected": {"sql": "\"runs\".\"cost_currency\" = 'USD'"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"name": "runs_price_version_matches_accounting_state"},
+   "id": "check/runs_price_version_matches_accounting_state",
+   "expected":
+   {"sql":
+    "(\"runs\".\"accounting_state\" in ('complete', 'partial')) = (\"runs\".\"price_table_version\" is not null)"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"name": "runs_unpriced_cost_zero"},
+   "id": "check/runs_unpriced_cost_zero",
+   "expected": {"sql": "\"runs\".\"accounting_state\" in ('complete', 'partial') or \"runs\".\"cost_usd\" = 0"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"name": "run_feedback_comment_length"},
+   "id": "check/run_feedback_comment_length",
+   "expected": {"sql": "\"run_feedback\".\"comment\" is null or char_length(\"run_feedback\".\"comment\") <= 1000"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"name": "run_tokens_expiry_after_created"},
+   "id": "check/run_tokens_expiry_after_created",
+   "expected": {"sql": "\"run_tokens\".\"expires_at\" > \"run_tokens\".\"created_at\""}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"name": "run_tokens_revoked_after_created"},
+   "id": "check/run_tokens_revoked_after_created",
+   "expected":
+   {"sql": "\"run_tokens\".\"revoked_at\" is null or \"run_tokens\".\"revoked_at\" >= \"run_tokens\".\"created_at\""}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"name": "run_usage_records_counters_non_negative"},
+   "id": "check/run_usage_records_counters_non_negative",
+   "expected":
+   {"sql":
+    "\"run_usage_records\".\"input_tokens\" >= 0 and \"run_usage_records\".\"output_tokens\" >= 0 and \"run_usage_records\".\"cache_read_input_tokens\" >= 0 and \"run_usage_records\".\"cache_creation_input_tokens\" >= 0 and \"run_usage_records\".\"tool_calls\" >= 0 and \"run_usage_records\".\"cost_usd\" >= 0"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"name": "run_usage_records_currency_usd"},
+   "id": "check/run_usage_records_currency_usd",
+   "expected": {"sql": "\"run_usage_records\".\"cost_currency\" = 'USD'"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"name": "audit_events_actor_label_not_blank"},
+   "id": "check/audit_events_actor_label_not_blank",
+   "expected": {"sql": "length(btrim(\"audit_events\".\"actor_label\")) > 0"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"name": "audit_events_subject_label_not_blank"},
+   "id": "check/audit_events_subject_label_not_blank",
+   "expected": {"sql": "length(btrim(\"audit_events\".\"subject_label\")) > 0"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"name": "audit_events_subject_id_shape"},
+   "id": "check/audit_events_subject_id_shape",
+   "expected":
+   {"sql":
+    "\"audit_events\".\"subject_id\" is null or \"audit_events\".\"subject_id\" ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'"}}],
+ "family": "concept-work",
+ "description": "The refined checks of the work tables and their exact SQL"}

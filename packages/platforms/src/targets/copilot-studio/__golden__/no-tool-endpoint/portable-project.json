@@ -1,0 +1,139 @@
+{
+  "root": "support-triage",
+  "agents": [
+    {
+      "apiVersion": "agentworkspace.dev/v1",
+      "kind": "Agent",
+      "name": "support-triage",
+      "description": "Triages customer support tickets and drafts replies.",
+      "instructions": "You triage support tickets.\n\n- Look up the order before answering.\n- Hand billing questions to billing-specialist.",
+      "model": {
+        "provider": "anthropic",
+        "id": "claude-sonnet-4-6"
+      },
+      "permissions": {
+        "readFiles": true,
+        "writeFiles": false,
+        "runCommands": false,
+        "unrestrictedNetwork": false
+      },
+      "tools": [
+        {
+          "kind": "mcp",
+          "name": "zendesk",
+          "transport": "streamable-http",
+          "url": "https://mcp.example.com/zendesk",
+          "auth": {
+            "scheme": "bearer",
+            "secretRef": "ZENDESK_TOKEN"
+          }
+        },
+        {
+          "kind": "mcp",
+          "name": "local-git",
+          "transport": "stdio",
+          "command": "git-mcp"
+        },
+        {
+          "kind": "code",
+          "name": "get_order",
+          "description": "Look up an order by its id",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": ["id"]
+          }
+        },
+        {
+          "kind": "openapi",
+          "name": "orders-api",
+          "specRef": "openapi/orders.json",
+          "allow": ["GET /orders/*"]
+        },
+        {
+          "kind": "builtin",
+          "id": "web_search"
+        },
+        {
+          "kind": "builtin",
+          "id": "code_execution"
+        }
+      ],
+      "skills": [
+        {
+          "name": "refund-policy",
+          "path": "skills/refund-policy"
+        }
+      ],
+      "knowledge": [
+        {
+          "kind": "files",
+          "paths": ["knowledge/faq.md"]
+        },
+        {
+          "kind": "url",
+          "url": "https://help.example.com"
+        }
+      ],
+      "subagents": [
+        {
+          "name": "billing-specialist"
+        }
+      ],
+      "limits": {
+        "maxTurns": 20,
+        "maxBudgetUsd": 2
+      }
+    },
+    {
+      "apiVersion": "agentworkspace.dev/v1",
+      "kind": "Agent",
+      "name": "billing-specialist",
+      "description": "Answers billing and refund questions.",
+      "instructions": "You answer billing questions using the refund-policy skill.",
+      "model": {
+        "provider": "anthropic",
+        "id": "claude-sonnet-4-6"
+      },
+      "permissions": {
+        "readFiles": true,
+        "writeFiles": false,
+        "runCommands": false,
+        "unrestrictedNetwork": false
+      },
+      "skills": [
+        {
+          "name": "refund-policy",
+          "path": "skills/refund-policy"
+        }
+      ]
+    }
+  ],
+  "skills": [
+    {
+      "name": "refund-policy",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "content": "---\nname: refund-policy\ndescription: When and how to issue refunds\n---\nRefunds within 30 days are approved automatically.\n"
+        }
+      ]
+    }
+  ],
+  "knowledgeFiles": [
+    {
+      "path": "knowledge/faq.md",
+      "content": "# FAQ\n\nOrders ship in 2 days.\n"
+    }
+  ],
+  "openapiSpecs": [
+    {
+      "ref": "openapi/orders.json",
+      "content": "{\"openapi\":\"3.1.0\",\"info\":{\"title\":\"Orders\",\"version\":\"1\"},\"paths\":{}}"
+    }
+  ]
+}

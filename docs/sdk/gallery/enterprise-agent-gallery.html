@@ -1,0 +1,985 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Enterprise Agent Gallery</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+JP:wght@400;500;700&display=swap">
+<style>
+/* Layout: a technical-document page. Hero → benchmark matrix → SDK pieces → ten use-case dossiers → cross-cutting gaps.
+   Tokens follow sites/lp/assets/site.css (the landing-page system): paper neutrals, one action blue, ok / caveat semantics. */
+:root {
+  --action: #2f5fd0; --action-soft: #eaf0ff; --action-ink: #1f46a8;
+  --ok: #1a7f4b; --ok-soft: #e6f4ec;
+  --caveat: #8f5208; --caveat-soft: #fdf1e0;
+  --gap: #a3361d; --gap-soft: #fbe9e4;
+  --ink: #171614; --ink-2: #45433d; --ink-3: #6b6860;
+  --rule: #e3e0da; --rule-strong: #cfcbc2;
+  --paper: #faf9f7; --paper-2: #f4f3f0; --paper-3: #eceae5; --surface: #ffffff;
+  --code-bg: #f4f3f0; --code-comment: #6b6860; --code-key: #2f5fd0; --code-str: #1a7f4b;
+  --e1: 0 1px 2px rgba(24,23,20,.05), 0 4px 12px rgba(24,23,20,.05);
+  --sans: "Inter", "Noto Sans JP", system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Yu Gothic UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Consolas, Menlo, monospace;
+  --shell: 1200px; --measure: 720px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --action: #7ea2f5; --action-soft: #1d2740; --action-ink: #a9c1fa;
+  --ok: #5cc98d; --ok-soft: #14291e; --caveat: #e7a54d; --caveat-soft: #2e2212; --gap: #f08a70; --gap-soft: #321a14;
+  --ink: #f2f0ec; --ink-2: #cfccc4; --ink-3: #a29e95; --rule: #2e2d29; --rule-strong: #45433d;
+  --paper: #141412; --paper-2: #1b1a18; --paper-3: #23221f; --surface: #1d1c1a;
+  --code-bg: #10100f; --code-comment: #8d897f; --code-key: #9bb7f7; --code-str: #7fd3a3;
+  --e1: 0 1px 2px rgba(0,0,0,.4); color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --action: #7ea2f5; --action-soft: #1d2740; --action-ink: #a9c1fa;
+  --ok: #5cc98d; --ok-soft: #14291e; --caveat: #e7a54d; --caveat-soft: #2e2212; --gap: #f08a70; --gap-soft: #321a14;
+  --ink: #f2f0ec; --ink-2: #cfccc4; --ink-3: #a29e95; --rule: #2e2d29; --rule-strong: #45433d;
+  --paper: #141412; --paper-2: #1b1a18; --paper-3: #23221f; --surface: #1d1c1a;
+  --code-bg: #10100f; --code-comment: #8d897f; --code-key: #9bb7f7; --code-str: #7fd3a3;
+  --e1: 0 1px 2px rgba(0,0,0,.4); color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--paper); color: var(--ink-2); font: 400 15px/1.7 var(--sans); margin: 0; }
+a { color: var(--action); text-underline-offset: 2px; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--action); outline-offset: 2px; border-radius: 4px; }
+h1, h2, h3, h4 { color: var(--ink); text-wrap: balance; margin: 0; }
+code, .mono { font-family: var(--mono); font-size: .9em; }
+.shell { max-width: var(--shell); margin: 0 auto; padding-inline: 24px; }
+@media (max-width: 600px) { .shell { padding-inline: 16px; } }
+
+/* top bar */
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10; background: color-mix(in srgb, var(--paper) 92%, transparent); backdrop-filter: blur(6px); border-bottom: 1px solid var(--rule); }
+.bar .shell { display: flex; align-items: center; gap: 16px; min-height: 52px; flex-wrap: wrap; padding-block: 6px; }
+.brand { font: 600 13px/1 var(--mono); letter-spacing: .04em; color: var(--ink); }
+.bar nav { display: flex; gap: 14px; flex-wrap: wrap; margin-left: auto; font-size: 13px; }
+.bar nav a { color: var(--ink-3); text-decoration: none; }
+.bar nav a:hover { color: var(--ink); }
+.lang { display: inline-flex; border: 1px solid var(--rule-strong); border-radius: 999px; overflow: hidden; }
+.lang button { font: 500 12px/1 var(--mono); padding: 7px 11px; background: transparent; color: var(--ink-3); border: 0; cursor: pointer; }
+.lang button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+
+/* hero */
+.hero { padding-block: 64px 40px; }
+.eyebrow { font: 600 12px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--action); margin-bottom: 16px; }
+.hero h1 { font-size: clamp(30px, 4.2vw, 50px); line-height: 1.12; letter-spacing: -.028em; font-weight: 650; max-width: 22ch; }
+:lang(ja) .hero h1 { letter-spacing: -.01em; max-width: 24ch; }
+.lead { font-size: 17px; max-width: var(--measure); margin: 20px 0 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 10px 22px; margin-top: 28px; font-size: 13px; }
+.legend > span { display: inline-flex; align-items: center; gap: 8px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0; margin-top: 36px; border-top: 1px solid var(--rule); }
+.stat { padding: 18px 20px 18px 0; border-bottom: 1px solid var(--rule); }
+.stat b { display: block; font: 600 26px/1.1 var(--mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+.stat span { font-size: 13px; color: var(--ink-3); }
+.stat a { font-size: 12px; }
+
+/* status marks */
+.mk { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; font: 600 12px/1 var(--mono); flex: none; }
+.mk.ok { background: var(--ok-soft); color: var(--ok); }
+.mk.work { background: var(--caveat-soft); color: var(--caveat); }
+.mk.gap { background: var(--gap-soft); color: var(--gap); }
+.mk.na { color: var(--rule-strong); }
+
+section.block { padding-block: 56px; border-top: 1px solid var(--rule); }
+section.alt { background: var(--paper-2); }
+.sec-head { display: grid; gap: 10px; margin-bottom: 28px; max-width: var(--measure); }
+.sec-head h2 { font-size: clamp(24px, 3vw, 34px); letter-spacing: -.02em; line-height: 1.2; font-weight: 650; }
+.sec-head p { margin: 0; }
+
+/* matrix */
+.scroll { overflow-x: auto; border: 1px solid var(--rule); background: var(--surface); }
+table.matrix { border-collapse: collapse; width: 100%; min-width: 980px; font-size: 13px; }
+.matrix th, .matrix td { border-bottom: 1px solid var(--rule); padding: 8px 6px; text-align: center; }
+.matrix thead th { font: 500 11px/1.3 var(--sans); color: var(--ink-3); vertical-align: bottom; height: 92px; }
+.matrix thead th .ref { display: block; font-family: var(--mono); color: var(--ink-3); margin-top: 4px; font-size: 10px; }
+.matrix th.uc, .matrix td.uc { text-align: left; padding-left: 14px; white-space: nowrap; }
+.matrix td.uc a { color: var(--ink); text-decoration: none; font-weight: 600; }
+.matrix td.uc a:hover { color: var(--action); }
+.matrix td.uc small { display: block; color: var(--ink-3); font-weight: 400; font-size: 11px; }
+.matrix tbody tr:hover { background: var(--paper-2); }
+.matrix td.score { font: 600 12px var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--ink); }
+.matrix tfoot td { font: 600 11px var(--mono); color: var(--ink-3); border-bottom: 0; }
+.verdict { display: inline-block; font: 600 11px/1 var(--mono); padding: 5px 8px; border-radius: 6px; white-space: nowrap; }
+.verdict.ok { background: var(--ok-soft); color: var(--ok); }
+.verdict.work { background: var(--caveat-soft); color: var(--caveat); }
+.verdict.gap { background: var(--gap-soft); color: var(--gap); }
+
+/* building blocks */
+.pieces { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.piece { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.piece header { display: flex; align-items: center; gap: 8px; }
+.piece h4 { font: 600 13px/1.3 var(--mono); }
+.piece p { margin: 0; font-size: 13px; line-height: 1.6; }
+.piece .api { font: 400 11.5px/1.5 var(--mono); color: var(--ink-3); overflow-wrap: anywhere; }
+
+/* use-case dossiers */
+.index { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; margin-bottom: 8px; }
+.index a { display: flex; gap: 10px; align-items: baseline; padding: 10px 12px; border: 1px solid var(--rule); border-radius: 10px; background: var(--surface); text-decoration: none; color: var(--ink); font-size: 13px; }
+.index a:hover { border-color: var(--rule-strong); }
+.index a .n { font: 600 12px var(--mono); color: var(--ink-3); }
+.uc-sec { padding-block: 48px; border-top: 1px solid var(--rule); scroll-margin-top: 64px; }
+.uc-head { display: grid; grid-template-columns: auto 1fr auto; gap: 6px 18px; align-items: start; }
+.uc-num { font: 600 13px/1 var(--mono); color: var(--action); padding-top: 9px; }
+.uc-head h3 { font-size: clamp(22px, 2.6vw, 28px); letter-spacing: -.015em; line-height: 1.25; font-weight: 650; }
+.uc-head .sub { color: var(--ink-3); font-size: 14px; margin-top: 4px; }
+.uc-head .verdict { margin-top: 8px; }
+@media (max-width: 640px) { .uc-head { grid-template-columns: 1fr; } .uc-num { padding-top: 0; } }
+.uc-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 28px 40px; margin-top: 26px; }
+@media (max-width: 980px) { .uc-grid { grid-template-columns: minmax(0, 1fr); } }
+.label { font: 600 11px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 12px; }
+.pain { margin: 0; }
+.evidence { margin: 12px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; font-size: 13px; }
+.evidence li { padding-left: 14px; position: relative; }
+.evidence li::before { content: ""; position: absolute; left: 0; top: .72em; width: 6px; height: 1px; background: var(--ink-3); }
+ol.flow { margin: 0; padding: 0; list-style: none; counter-reset: s; display: grid; gap: 0; }
+ol.flow li { counter-increment: s; display: grid; grid-template-columns: 28px 1fr; gap: 10px; padding: 8px 0; border-bottom: 1px dashed var(--rule); font-size: 14px; }
+ol.flow li::before { content: counter(s); font: 600 12px/22px var(--mono); color: var(--action); text-align: center; border: 1px solid var(--rule-strong); border-radius: 999px; width: 22px; height: 22px; }
+
+/* architecture diagram */
+.arch { border: 1px solid var(--rule-strong); background: var(--surface); padding: 14px; display: grid; gap: 10px; font-size: 12.5px; }
+.arch .row { display: grid; grid-template-columns: 74px 1fr; gap: 10px; align-items: start; }
+.arch .rl { font: 600 10.5px/1.3 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); padding-top: 7px; }
+.arch .chips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.chip { display: inline-grid; gap: 1px; padding: 6px 9px; border-radius: 6px; border: 1px solid; max-width: 100%; }
+.chip b { font: 600 11.5px/1.3 var(--mono); overflow-wrap: anywhere; }
+.chip i { font-style: normal; font-size: 11.5px; line-height: 1.4; }
+.chip.ok { border-color: color-mix(in srgb, var(--ok) 35%, transparent); background: var(--ok-soft); color: var(--ink); }
+.chip.ok b { color: var(--ok); }
+.chip.work { border-color: color-mix(in srgb, var(--caveat) 35%, transparent); background: var(--caveat-soft); color: var(--ink); }
+.chip.work b { color: var(--caveat); }
+.chip.gap { border-color: color-mix(in srgb, var(--gap) 35%, transparent); background: var(--gap-soft); color: var(--ink); border-style: dashed; }
+.chip.gap b { color: var(--gap); }
+.arch .agent { border: 1.5px solid var(--ink); border-radius: 6px; padding: 8px 10px; background: var(--paper-2); }
+.arch .agent b { font: 600 12.5px var(--mono); color: var(--ink); }
+.arch .agent i { display: block; font-style: normal; color: var(--ink-3); font: 400 11.5px/1.5 var(--mono); overflow-wrap: anywhere; }
+.arch .down { text-align: center; color: var(--ink-3); font: 12px var(--mono); line-height: 1; margin: -4px 0 -4px 84px; }
+
+pre.code { margin: 0; background: var(--code-bg); border: 1px solid var(--rule); padding: 14px 16px; overflow-x: auto; font: 400 12.5px/1.6 var(--mono); color: var(--ink); tab-size: 2; }
+pre.code .c { color: var(--code-comment); }
+pre.code .k { color: var(--code-key); }
+pre.code .s { color: var(--code-str); }
+.file { font: 500 11px var(--mono); color: var(--ink-3); background: var(--paper-3); border: 1px solid var(--rule); border-bottom: 0; padding: 5px 10px; display: inline-block; }
+
+table.gaps { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.gaps td { padding: 10px 8px 10px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+.gaps td:first-child { width: 30px; }
+.gaps td b { color: var(--ink); font-weight: 600; display: block; margin-bottom: 2px; }
+.gaps .ref { font: 500 11px var(--mono); color: var(--ink-3); white-space: nowrap; }
+.span2 { grid-column: 1 / -1; }
+
+/* cross-cutting */
+.xgaps { display: grid; gap: 0; border-top: 1px solid var(--rule); }
+.xgap { display: grid; grid-template-columns: 34px minmax(0, 1fr) 210px; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--rule); align-items: start; }
+.xgap h4 { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+.xgap p { margin: 0; font-size: 13.5px; }
+.xgap .meter { display: grid; gap: 6px; font: 500 11px var(--mono); color: var(--ink-3); }
+.xgap .dots { display: flex; gap: 3px; }
+.xgap .dots i { width: 14px; height: 14px; border-radius: 3px; background: var(--paper-3); }
+.xgap .dots i.on { background: var(--gap); }
+.xgap .dots i.on.w { background: var(--caveat); }
+@media (max-width: 720px) { .xgap { grid-template-columns: 34px minmax(0, 1fr); } .xgap .meter { grid-column: 2; } }
+.note { font-size: 12.5px; color: var(--ink-3); max-width: var(--measure); }
+footer { padding-block: 40px 64px; border-top: 1px solid var(--rule); font-size: 12.5px; color: var(--ink-3); }
+footer ul { padding-left: 18px; margin: 8px 0 0; display: grid; gap: 4px; }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="shell">
+    <span class="brand">AGENT WORKSPACE · GALLERY</span>
+    <nav aria-label="Sections">
+      <a href="#matrix" data-i18n="navMatrix">Benchmark</a>
+      <a href="#pieces" data-i18n="navPieces">SDK pieces</a>
+      <a href="#cases" data-i18n="navCases">Use cases</a>
+      <a href="#findings" data-i18n="navFind">Findings</a>
+      <a href="#gaps" data-i18n="navGaps">Gaps</a>
+    </nav>
+    <div class="lang" role="group" aria-label="Language">
+      <button type="button" id="lang-ja" aria-pressed="true">日本語</button>
+      <button type="button" id="lang-en" aria-pressed="false">EN</button>
+    </div>
+  </div>
+</header>
+
+<main id="app"></main>
+
+<script>
+(function () {
+const S = { ok: '✓', work: '~', gap: '−', na: '·' };
+
+const T = {
+  navMatrix: { ja: 'ベンチマーク', en: 'Benchmark' },
+  navPieces: { ja: 'SDKの部品', en: 'SDK pieces' },
+  navCases: { ja: 'ユースケース', en: 'Use cases' },
+  navGaps: { ja: '横断ギャップ', en: 'Gaps' },
+  navFind: { ja: '発見', en: 'Findings' },
+  eyebrow: { ja: 'Agent Workspace SDK · 業務エージェント・ギャラリー', en: 'Agent Workspace SDK · Enterprise agent gallery' },
+  h1: { ja: 'このSDKがあれば、日本企業の業務エージェント10種をすぐに組み立てられる。', en: 'With this SDK, ten enterprise agents Japanese companies ask for are a short build away.' },
+  lead: {
+    ja: '日本企業が実際に求めている10のエージェントを、Agent Workspace SDK（@indx-workspace/sdk・aw CLI）の部品で組み立てたときの設計図です。各ユースケースは同時にベンチマークでもあります。SDKが今日きれいにこなす部分、自分でコードを書けば実現できる部分、まだ提供されていない部分を、コードを読んだうえで正直に区別しています。',
+    en: 'Blueprints for the ten agents Japanese enterprises actually ask for, built from the pieces of the Agent Workspace SDK (@indx-workspace/sdk and the aw CLI). Each use case is also a benchmark. Having read the code, we mark honestly what the SDK does cleanly today, what you can reach by writing your own code, and what is not there yet.'
+  },
+  lgOk: { ja: '今日のSDKでそのまま実現できる', en: 'The SDK does it today' },
+  lgWork: { ja: '自前のコード（MCPサーバー・スクリプト）で実現できる', en: 'Reachable with your own code (MCP server, script)' },
+  lgGap: { ja: 'まだ提供されていない', en: 'Not provided yet' },
+  lgNa: { ja: 'このユースケースでは不要', en: 'Not needed for this use case' },
+  stat1: { ja: '生成AIを積極活用・領域限定で活用する方針の企業（2025年度、前年49.7%）', en: 'Japanese firms whose policy is to use generative AI actively or in limited areas (FY2025; 49.7% the year before)' },
+  stat2: { ja: '生成AIが部門の業務プロセスに組み込まれている日本企業の割合（米独は4割弱）', en: 'Japanese firms where generative AI is embedded in departmental processes (US and Germany: just under 40%)' },
+  stat3: { ja: '利用企業の最大の懸念は「情報の正確性」', en: 'Users whose top concern is the accuracy of output' },
+  stat4: { ja: '2040年に見込まれる労働供給の不足', en: 'Projected labour-supply shortfall by 2040' },
+  matrixH: { ja: 'ベンチマーク：10ユースケース × 11の能力', en: 'Benchmark: ten use cases × eleven capabilities' },
+  matrixP: {
+    ja: '各行は1つのユースケース、各列はそれが必要とする能力です。この表は検証済みです。10件すべてを tests/gallery/ に実装し、各セルの判定をテスト・ギャップ探針（能力が現れた日に失敗するテスト）・ソースの引用のいずれかで裏づけました（130 テスト、APIキー不要）。スコアは ✓ = 1、~ = 0.5、− = 0 の平均で、括弧内は Phase 1 でコードを読んで推定した値です。',
+    en: 'Each row is a use case; each column is a capability it needs. This table is verified: all ten are implemented under tests/gallery/, and every cell is backed by a test, a gap probe (a test that fails the day the capability arrives) or a cited source. That is 130 tests, with no API key. The score averages ✓ = 1, ~ = 0.5 and − = 0; the figure in brackets is the Phase 1 estimate made from reading the code.'
+  },
+  ucCol: { ja: 'ユースケース', en: 'Use case' },
+  scoreCol: { ja: 'スコア', en: 'Score' },
+  verdictCol: { ja: '判定', en: 'Verdict' },
+  colTotals: { ja: '✓の数', en: '✓ count' },
+  piecesH: { ja: 'このギャラリーで使うSDKの部品', en: 'The SDK pieces this gallery uses' },
+  piecesP: {
+    ja: 'すべて現行コードに存在する公開APIです。エージェントは「データ」として定義され、サーバーで版管理・評価・昇格されます。独自ロジックはMCPサーバーかスキルのスクリプトとして足します。',
+    en: 'All of these are public APIs in the current code. An agent is defined as data and versioned, evaluated and promoted on the server. Custom logic is added as an MCP server or as a skill’s scripts.'
+  },
+  casesH: { ja: '10のユースケース', en: 'The ten use cases' },
+  casesP: {
+    ja: '6つはご指定のもの、4つは公開事例と調査で需要が裏付けられたものを選びました（契約書レビュー、議事録、技能伝承、品質不具合）。各ユースケースに、利用者から見た流れ、構成、コード例、ギャップ分析を載せています。',
+    en: 'Six are the ones you named. The other four (contract review, meeting minutes, skill transfer and quality defects) were chosen because public cases and surveys show strong demand. Each one has the user’s view, the architecture, a code sketch and a gap analysis.'
+  },
+  lPain: { ja: 'なぜ日本企業で求められるか', en: 'Why Japanese enterprises want it' },
+  lFlow: { ja: '利用者から見た流れ', en: 'What the user sees' },
+  lArch: { ja: '構成', en: 'Architecture' },
+  lCode: { ja: 'SDKでの書き方', en: 'How you build it' },
+  lGaps: { ja: 'ギャップ分析', en: 'Gap analysis' },
+  rEntry: { ja: '入口', en: 'Entry' },
+  rAgent: { ja: 'エージェント', en: 'Agent' },
+  rSkills: { ja: 'スキル', en: 'Skills' },
+  rTools: { ja: 'ツール', en: 'Tools' },
+  rFiles: { ja: 'ファイル', en: 'Files' },
+  rQuality: { ja: '品質・統制', en: 'Quality' },
+  gapsH: { ja: '横断ギャップ：何を作れば一番多くのユースケースが前に進むか', en: 'Cross-cutting gaps: what unblocks the most use cases' },
+  gapsP: {
+    ja: '個々のギャップを、影響するユースケースの数で並べました。右の10マスは各ユースケース（1〜10）で、赤は未提供、黄は自前コードで回避できることを示します。参照IDはリポジトリのロードマップ（docs/sdk/site/concepts/roadmap.mdx）のものです。「新規」はロードマップにまだ載っていない提案です。',
+    en: 'The gaps below are ranked by how many use cases they touch. The ten squares on the right are use cases 1 to 10: red means not provided, amber means your own code works around it. Reference IDs come from the repository roadmap (docs/sdk/site/concepts/roadmap.mdx). "new" marks a proposal the roadmap does not list yet.'
+  },
+  uses: { ja: '件のユースケースに影響', en: 'use cases affected' },
+  gapsSrc: { ja: '下は Phase 1 の分析です。検証済みの判定（上の表）は次のファイルにあります:', en: 'Below is the Phase 1 analysis; the verified verdicts (the table above) are in' },
+  findH: { ja: '実装して分かったこと', en: 'What building them found' },
+  findP: { ja: 'コードを読むだけでは見えなかった事実です。いずれもテストかギャップ探針で固定しました。', en: 'Facts that reading the code did not show. Each one is now pinned by a test or a gap probe.' },
+  footNote: {
+    ja: '判定の根拠：@indx-workspace/sdk 0.3.0 系のソース（main b03df3c、2026-10-04時点）と、ブランチ claude/dreamy-darwin-y65qsm の tests/gallery（130 テスト）。市場データは各出典の公表値で、検証できなかった数値は載せていません。ここに顧客名・導入実績は含みません。事例はすべて公開記事のものです。',
+    en: 'Basis: the source of @indx-workspace/sdk 0.3.x at main b03df3c (2026-10-04) and tests/gallery on branch claude/dreamy-darwin-y65qsm (130 tests). Market figures are as published by each source; figures we could not verify are left out. Nothing here claims a customer of this product; every case cited is a public article about another vendor or an in-house build.'
+  },
+  srcH: { ja: '出典（横断統計）', en: 'Sources (headline statistics)' },
+  next: { ja: '次の段階：各ユースケースを実際にコードで実装し、テストで判定を確定させます（Phase 3）。', en: 'Next: implement each use case in code and settle every verdict with a test (Phase 3).' }
+};
+
+const CAPS = [
+  { id: 'agent', ja: 'エージェント定義・版管理', en: 'Agent as code, versions', ref: 'defineAgent' },
+  { id: 'search', ja: '根拠検索（索引）', en: 'Grounded search (index)', ref: 'mcp()' },
+  { id: 'parse', ja: '文書解析 PDF/xlsx/DXF', en: 'Document parsing', ref: 'skill + runCommands' },
+  { id: 'struct', ja: '構造化出力', en: 'Structured output', ref: 'new' },
+  { id: 'hitl', ja: '実行中の人の承認', en: 'Human approval mid-run', ref: 'policy.approval' },
+  { id: 'write', ja: '業務システムへの書込', en: 'Write to business systems', ref: 'openapiTool GET' },
+  { id: 'trigger', ja: 'イベント起動・定期実行', en: 'Event trigger, schedule', ref: 'N-3' },
+  { id: 'scope', ja: '利用者ごとのデータ範囲', en: 'Per-user data scope', ref: 'RF-102' },
+  { id: 'ui', ja: '埋め込みUI', en: 'Embedded UI', ref: 'defineSurface' },
+  { id: 'eval', ja: '評価・昇格ゲート', en: 'Evals, promotion gate', ref: 'aw eval' },
+  { id: 'audit', ja: '監査・コスト', en: 'Audit, cost', ref: 'observability' }
+];
+
+const PIECES = [
+  { st: 'ok', name: 'defineAgent()', ja: '指示・モデル・エンジン・権限・ツール・スキル・ファイル・上限をTypeScriptで宣言し、aw push で版として保存。ただし writeFiles / runCommands を与えても Write・Bash の自動承認は宣言できず、無人の実行では拒否される（aw.agents.replacePolicy が必要）。', en: 'Declare instructions, model, engine, permissions, tools, skills, files and limits in TypeScript; aw push saves it as a version. But granting writeFiles or runCommands cannot pre-approve Write and Bash, so an unattended run refuses them until aw.agents.replacePolicy stores a policy.', api: '@indx-workspace/sdk/define' },
+  { st: 'ok', name: 'skill()', ja: 'SKILL.md と付属ファイル（テンプレート・スクリプト）。業務手順や書式を版管理された知識として渡す。', en: 'A SKILL.md plus supporting files (templates, scripts). Hands the agent a procedure or a format as managed knowledge.', api: 'aw.skills.import({ name, files })' },
+  { st: 'ok', name: 'mcp()', ja: '自前のMCPサーバー（stdio / http / sse）をコネクタとして登録し、資格情報はサーバー側で保持。独自ロジックの正式な入口。', en: 'Registers your own MCP server (stdio, http or sse) as a connector; the credential stays on the server. The supported way in for custom logic.', api: 'aw.connectors.create({ transport, url })' },
+  { st: 'ok', name: 'openapiTool()', ja: 'OpenAPI文書から読み取り専用ツールを生成。ゲートウェイが呼ぶのでMCPサーバー不要。GET / HEAD のみ。', en: 'Turns an OpenAPI document into a read-only tool. The gateway calls it, so you run no MCP server. GET and HEAD only.', api: "allow: ['GET /orders/*']" },
+  { st: 'work', name: 'postgresTool()', ja: '読み取り専用のテーブル参照。定義はできるが、実行時のゲートが閉じている（#598）。', en: 'Read-only table access. It can be defined, but the run-time gate is closed (#598).', api: "postgresTool({ tables, readOnly: true })" },
+  { st: 'work', name: 'files()', ja: 'ワークスペースのファイルを read / read-write でエージェントに割り当て。1ファイル64MiBまで。解析はしない。実行中に書いたファイルはファイルストアに戻らない（検証済み）。', en: 'Grants workspace files as read or read-write, up to 64 MiB a file, unparsed. A file the agent writes in a run does not come back to the file store (verified).', api: "files('manuals', 'read')" },
+  { st: 'ok', name: 'defineSurface()', ja: '/p/s/<name> で公開されるチャット窓口。レイアウト、提案質問、評価ボタン、埋め込み元の制限。toolResults はMCPツールを指定できず、ログイン中の利用者も渡せない。', en: 'The chat widget served at /p/s/<name>: layout, suggested prompts, rating buttons, allowed embedding origins. toolResults cannot name an MCP tool, and the widget cannot carry who is signed in.', api: "layout: 'side', parts: { feedback: true }" },
+  { st: 'ok', name: 'runs.start / follow', ja: 'バックエンドから実行し、SSEを再接続付きで追従。toAgentEvent で中立イベントに変換し、回答本文を取り出す。', en: 'Start a run from your backend and follow its SSE stream with reconnects. toAgentEvent turns frames into neutral events you read the answer from.', api: 'aw.runs.follow(run.id)' },
+  { st: 'ok', name: 'aw eval / promote', ja: '1回20ケースまでの評価（含む・含まない・呼んだツール・LLM判定）。合格率で production への昇格を止める。', en: 'Evaluations of up to 20 cases (contains, notContains, tool called, LLM judge). A pass-rate bar blocks promotion to production.', api: 'policy.promotion.minEvalScore' },
+  { st: 'ok', name: 'policy ceiling', ja: 'プロジェクト単位の上限（権限・予算・エンジン・モデル・ツール）。エージェントはそれ以上に広げられない。', en: 'A project-wide ceiling on permissions, budget, engines, models and tools. No agent can widen past it.', api: '403 policy_cannot_widen' },
+  { st: 'ok', name: 'observability', ja: '監査ログ（Owner）、実行ごとのトークン・コスト、評価・フィードバック。', en: 'The audit log (Owner only), per-run tokens and cost, evaluations and feedback.', api: 'aw.observability.audit.listAll()' },
+  { st: 'ok', name: '@indx-workspace/sdk/testing', ja: '記録型 fetch ダブルと契約準拠のフィクスチャ。APIキーなしでクライアントコードを検証。', en: 'A recording fetch double and contract-valid fixtures, to test client code with no API key.', api: 'fetchDouble(), fixtures.run()' }
+];
+
+/* m: capability verdicts in CAPS order. ok | work | gap | na */
+const UC = [
+{
+  id: 'manual-search', no: 1, ja: 'マニュアル検索エージェント', en: 'Manual search agent',
+  dept: { ja: '保守・運用、コールセンター後方、社内ヘルプデスク', en: 'Maintenance, operations, contact-centre back office, internal help desk' },
+  verdict: 'ok', vnote: { ja: '今日つくれる（索引は自前）', en: 'Buildable today (bring your own index)' },
+  m: ['ok', 'work', 'work', 'gap', 'na', 'na', 'na', 'work', 'ok', 'ok', 'ok'],
+  est: ['ok','work','work','gap','na','na','na','work','ok','ok','ok'],
+  tests: 6,
+  pain: { ja: '数千ページの規程・保守マニュアルから該当条文を探す作業が、熟練者の勘に頼っています。引退とともに「どこを見ればよいか」が失われつつあります。一方で導入の最大の障壁は誤答で、利用企業の50.4%が「情報の正確性」を懸念しています。条文番号とページで根拠を示すことが必須です。', en: 'Finding the right clause in thousands of pages of rules and maintenance manuals relies on veterans’ instinct, and the knowledge of where to look is leaving as they retire. The biggest barrier is wrong answers: 50.4% of user companies name accuracy as their top concern. Clause- and page-level citations are mandatory.' },
+  ev: [
+    { t: { ja: '日立：エレベーター据付の問い合わせ（月約100件・各30分）をAIエージェント化', en: 'Hitachi: an AI agent for elevator-installation inquiries (about 100 a month, 30 minutes each)' }, u: 'https://www.hitachi.com/ja-jp/press/articles/2025/03/0326/' },
+    { t: { ja: 'JR東日本：法令・社内基準・マニュアルを学習した「鉄道版生成AI」を構築中', en: 'JR East: building a railway generative AI over laws, internal standards and manuals' }, u: 'https://trafficnews.jp/post/135434' }
+  ],
+  flow: { ja: ['現場担当者が社内ポータルの検索パネルに質問する', 'エージェントが検索語を自分で組み立て、索引を何度も引き直す', '該当する節を読み、〔文書名 p.ページ §節〕付きで回答する', '根拠が見つからなければ「該当なし」と答え、担当窓口を案内する'],
+          en: ['A field engineer asks a question in the portal’s search panel', 'The agent writes its own queries and searches the index several times', 'It reads the matching sections and answers with 〔document p.page §section〕 citations', 'With no grounding it says so and points to the responsible desk'] },
+  arch: {
+    entry: [['ok', 'surface manual-desk', { ja: 'layout side · ツール経過は折りたたみ', en: 'layout side · tool trace collapsed' }]],
+    agent: ['manual-search', 'claude-agent-sdk · readFiles · maxTurns 12'],
+    skills: [['ok', 'cite-answer', { ja: '出典表記と「該当なし」の基準', en: 'citation format and the no-answer rule' }]],
+    tools: [['work', "mcp('manual-index')", { ja: 'search_manual / read_section（自前MCP）', en: 'search_manual / read_section (your MCP)' }]],
+    files: [['ok', "files('manuals')", { ja: 'read · 原本PDF', en: 'read · the source PDFs' }]],
+    quality: [['ok', 'evals/manual-search.yaml', { ja: '出典・ツール呼び出しを固定', en: 'pins citations and the tool call' }], ['work', 'citations', { ja: '本文から〔〕を抽出', en: 'parsed out of the text' }]]
+  },
+  file: 'agents/manual-search.ts',
+  code: `import { defineAgent, files, mcp, skill } from '@indx-workspace/sdk/define';
+
+export default defineAgent({
+  name: 'manual-search',
+  instructions: { file: './manual-search.md' },
+  model: 'default',
+  engine: 'claude-agent-sdk',
+  permissions: { readFiles: true },          // 書き込み・コマンドは不要
+  tools: [mcp('manual-index')],              // search_manual, read_section
+  skills: [skill('cite-answer')],            // 〔保全規程 p.42 §3.2〕形式
+  files: [files('manuals', 'read')],
+  limits: { maxTurns: 12, maxBudgetUsd: 0.5 },
+});
+
+// evals/manual-search.yaml
+// cases:
+//   - name: 点検周期を出典付きで答える
+//     input: 油圧ユニットの定期点検の周期は？
+//     expect: { tool: search_manual, contains: ['〔'] }`,
+  gaps: [
+    ['work', { ja: '検索索引は自前', en: 'Bring your own index' }, { ja: 'プラットフォームはRAG・埋め込み・索引を設計上持ちません（files.ts の方針）。search_manual / read_section を提供するMCPサーバーを自分でホストします。', en: 'The platform deliberately has no RAG, embeddings or index (the policy in files.ts). Host an MCP server that offers search_manual and read_section.' }, 'by design'],
+    ['work', { ja: 'PDFのテキスト化', en: 'PDF text extraction' }, { ja: 'アップロードしたPDFはバイト列のまま保存されます。ページ番号付きのテキスト化は取り込み側（インデクサ）で行います。', en: 'Uploaded PDFs are stored as bytes. Page-numbered text extraction happens in your indexer.' }, '—'],
+    ['gap', { ja: '出典の構造化', en: 'Structured citations' }, { ja: '回答は自由文だけで、出典を型付きで返す出力スキーマがありません。本文中の〔〕表記をパースします。RunResource も最終回答を持たず、イベントから組み立てます。', en: 'Answers are free text, with no output schema for typed citations: parse the 〔〕 marks. RunResource has no final answer either; you rebuild it from the events.' }, 'new'],
+    ['work', { ja: '部門ごとの閲覧範囲', en: 'Per-department visibility' }, { ja: '権限はエージェント単位です。部門ごとにエージェントを分けるか、MCPサーバー側で利用者を判定します。', en: 'Permissions are per agent. Split agents per department, or decide the caller inside the MCP server.' }, 'RF-102'],
+    ['ok', { ja: '回答品質の固定', en: 'Pinning answer quality' }, { ja: '「出典を含む」「search_manual を呼ぶ」を eval に書き、昇格ゲートにかけられます。', en: 'Write "contains a citation" and "calls search_manual" as eval cases and gate promotion on them.' }, 'aw eval']
+  ]
+},
+{
+  id: 'cad-drafting', no: 2, ja: 'CAD図面エージェント', en: 'CAD drawing agent',
+  dept: { ja: '機械・電気設計、生産技術', en: 'Mechanical and electrical design, production engineering' },
+  verdict: 'gap', vnote: { ja: '類似図面検索と下書きまで', en: 'Similar-drawing search and drafts only' },
+  m: ['ok', 'work', 'work', 'gap', 'gap', 'gap', 'na', 'work', 'work', 'work', 'ok'],
+  est: ['ok','work','work','gap','gap','gap','na','na','ok','work','ok'],
+  tests: 8,
+  pain: { ja: '数十万枚の過去図面がPDFに埋もれ、既にある部品を描き直しています。設計者は不足し、設計の勘所は暗黙知のままです。公開事例で実績があるのは「類似図面の検索」と「図面の読解」までで、新規図面の生成はまだPoC段階です。このユースケースは「探して、再利用して、検図用の下書きを出す」と位置づけます。', en: 'Hundreds of thousands of past drawings are buried in PDFs, so existing parts get redrawn. Designers are scarce and design judgement stays tacit. Public cases prove similar-drawing search and drawing reading; generating new drawings is still at PoC stage. We scope this as find, reuse and draft for the designer’s check.' },
+  ev: [
+    { t: { ja: 'スズキ：CADDi Drawer で類似図面検索を導入', en: 'Suzuki: adopted CADDi Drawer for similar-drawing search' }, u: 'https://monoist.itmedia.co.jp/mn/articles/2310/31/news023.html' },
+    { t: { ja: 'トヨタ「O-Beya」：設計データ上の9エージェント、パワートレイン技術者約800人が利用', en: 'Toyota "O-Beya": nine agents over design data, used by about 800 powertrain engineers' }, u: 'https://news.microsoft.com/source/asia/features/toyota-is-deploying-ai-agents-to-harness-the-collective-wisdom-of-engineers-and-innovate-faster/' }
+  ],
+  flow: { ja: ['設計者が要求仕様（外形・材質・取付条件）を入力する', 'エージェントが類似の過去図面を検索し、候補3件を差分つきで示す', '選んだ図面を基にDXFの下書きを作る', '設計者が検図し、CADで正式図面に仕上げる'],
+          en: ['The designer enters requirements: envelope, material, mounting', 'The agent searches past drawings and shows three candidates with differences', 'It drafts a DXF from the chosen drawing', 'The designer checks it and finishes the official drawing in CAD'] },
+  arch: {
+    entry: [['ok', 'surface design-desk', { ja: 'layout page', en: 'layout page' }]],
+    agent: ['cad-drafting', 'readFiles · writeFiles · runCommands'],
+    skills: [['work', 'dxf-draft', { ja: 'ezdxf スクリプト同梱', en: 'ships ezdxf scripts' }]],
+    tools: [['work', "mcp('drawing-index')", { ja: '類似図面検索（自前）', en: 'similar-drawing search (yours)' }], ['gap', 'DWG / raster', { ja: '変換は未提供', en: 'no conversion' }]],
+    files: [['ok', "files('drawings')", { ja: 'read', en: 'read' }], ['gap', "files('drafts','read-write')", { ja: '生成物の返却は未確認', en: 'write-back unverified' }]],
+    quality: [['gap', 'approval', { ja: '検図で止める仕組みなし', en: 'no pause for the check' }], ['work', 'geometry eval', { ja: '幾何検証は自前', en: 'geometry checks are yours' }]]
+  },
+  file: 'skills/dxf-draft/SKILL.md',
+  code: `---
+name: dxf-draft
+description: 過去図面を基にDXFの下書きを作る。寸法は必ずスクリプトで計算する。
+---
+1. search_drawings で類似図面を3件まで探す（品番・外形・材質）。
+2. 選ばれた図面を scripts/read_dxf.py で読み、外形と穴位置をJSONにする。
+3. 要求との差分だけを scripts/draft_dxf.py に渡し、drafts/ に書き出す。
+4. 差分表と「未検図」の注記を必ず添える。寸法を推測しない。
+
+// agents/cad-drafting.ts
+defineAgent({
+  name: 'cad-drafting',
+  permissions: { readFiles: true, writeFiles: true, runCommands: true },
+  tools: [mcp('drawing-index')],
+  skills: [skill('dxf-draft')],
+  files: [files('drawings'), files('drafts', 'read-write')],
+  /* ... */
+});`,
+  gaps: [
+    ['work', { ja: 'DXFの読み書き', en: 'Reading and writing DXF' }, { ja: 'プラットフォームは図面を解析しません。スキル同梱のスクリプトを runCommands で実行します。ランタイムのイメージにPythonとezdxfが必要です。', en: 'The platform does not parse drawings. Run scripts shipped in the skill with runCommands; the runtime image needs Python and ezdxf.' }, '—'],
+    ['gap', { ja: 'DWG・スキャン図面', en: 'DWG and scanned drawings' }, { ja: 'DWG変換やラスタ図面の読取りはありません。外部の変換サービスをMCP経由で呼ぶ必要があります。', en: 'No DWG conversion or raster reading. Call an external conversion service through MCP.' }, 'new'],
+    ['gap', { ja: '生成ファイルの返却', en: 'Getting generated files back' }, { ja: '実行中に書いたファイルがワークスペースのファイルストアへ戻る経路を、コードでは確認できませんでした。Phase 3で検証します。', en: 'We could not find, in the code, the path by which a file written during a run returns to the workspace file store. Phase 3 tests it.' }, 'verify'],
+    ['gap', { ja: '検図（実行中の承認）', en: 'The designer’s check mid-run' }, { ja: '実行を止めて承認を待つ仕組みがありません（policy.approval は「未実装」で拒否）。同じセッションの次のターンで確認を取る形で代替します。', en: 'A run cannot pause for approval (policy.approval is refused as not built). Ask for confirmation in the next turn of the same session instead.' }, 'policy.approval'],
+    ['work', { ja: '寸法の正しさの評価', en: 'Evaluating dimensions' }, { ja: 'eval は文字列一致とLLM判定だけです。幾何の検証は自前のテストで行います。', en: 'Evals check substrings and an LLM judge only. Geometry needs your own tests.' }, 'aw eval']
+  ]
+},
+{
+  id: 'quotation', no: 3, ja: '見積エージェント', en: 'Quotation agent',
+  dept: { ja: '営業・見積（板金・切削の加工業）、調達・原価企画', en: 'Sales estimating at job shops, procurement and cost engineering' },
+  verdict: 'work', vnote: { ja: '見積案まで（確定・登録は人とコード）', en: 'Draft quotes (approval and booking stay outside)' },
+  m: ['ok', 'ok', 'work', 'gap', 'gap', 'gap', 'na', 'work', 'work', 'ok', 'ok'],
+  est: ['ok','work','work','gap','gap','gap','na','na','ok','ok','ok'],
+  tests: 10,
+  pain: { ja: '見積は一部のベテランに属人化しており、回答が遅く、担当者によって価格がぶれます。中小の加工業には見積依頼が殺到しています。材料費・加工費・段取り費の内訳を説明でき、似た過去品の実績単価を根拠に示せることが求められます。', en: 'Quoting depends on a few veterans, turnaround is slow, and prices vary by who quotes. Small job shops are flooded with RFQs. The estimate must explain material, machining and setup costs and cite the actual price of a similar past part.' },
+  ev: [
+    { t: { ja: 'CADDi Quote：図面に紐づくAI見積クラウド（2024年4月）', en: 'CADDi Quote: an AI quotation cloud tied to drawings (April 2024)' }, u: 'https://monoist.itmedia.co.jp/mn/articles/2407/17/news040.html' },
+    { t: { ja: 'コマツグループ：図面活用で1人あたり月最大200分の削減試算', en: 'Komatsu group: up to 200 minutes saved per person per month, estimated' }, u: 'https://monoist.itmedia.co.jp/mn/spv/2412/20/news051.html' }
+  ],
+  flow: { ja: ['営業が顧客図面（PDF/DXF）をアップロードする', 'エージェントが材質・外形・加工工程を読み取る', '類似品の過去受注単価をERPで照会する', '内訳つき見積案と信頼度を示し、担当者が承認する'],
+          en: ['Sales uploads the customer drawing (PDF or DXF)', 'The agent reads material, envelope and machining steps', 'It looks up actual prices of similar past orders in the ERP', 'It shows a draft quote with a cost breakdown and confidence; a person approves it'] },
+  arch: {
+    entry: [['ok', 'backend runs.start', { ja: '見積システムから起動', en: 'started by the quoting system' }]],
+    agent: ['quotation', 'readFiles · runCommands · maxBudgetUsd 1'],
+    skills: [['work', 'cost-model', { ja: '計算はスクリプトで決定的に', en: 'deterministic maths in a script' }]],
+    tools: [['ok', "openapiTool('erp-history')", { ja: 'GETのみ・MCP不要', en: 'GET only, no MCP needed' }], ['gap', 'ERP write', { ja: 'POSTは拒否', en: 'POST refused' }]],
+    files: [['ok', "files('rfq')", { ja: '図面・単価表', en: 'drawings, rate tables' }]],
+    quality: [['gap', 'quote JSON', { ja: '出力スキーマなし', en: 'no output schema' }], ['gap', 'approval', { ja: '確定前の承認なし', en: 'no sign-off step' }]]
+  },
+  file: 'tools/erp-history.ts',
+  code: `import { openapiTool, secret } from '@indx-workspace/sdk/define';
+
+export default openapiTool({
+  name: 'erp-history',
+  spec: 'apis/erp.openapi.json',
+  auth: secret('ERP_TOKEN'),
+  allow: ['GET /orders/*', 'GET /parts/*/price-history'],
+});
+
+// backend/quote.ts — 見積システムから呼ぶ
+const { run } = await aw.runs.start(agentId, {
+  prompt: \`図面 rfq/\${rfqId}.pdf の見積案を作成。内訳はJSONで最後に出力。\`,
+});
+const done = await aw.runs.waitForOutcome(run.id);
+// RunResource に回答本文はない → events を toAgentEvent で読み、JSONを抽出`,
+  gaps: [
+    ['ok', { ja: '過去実績の照会', en: 'Looking up past orders' }, { ja: 'ERPの照会APIは openapiTool（GET/HEAD）でそのままツールにでき、MCPサーバーは不要です。資格情報はゲートウェイが保持します。', en: 'The ERP’s query API becomes a tool through openapiTool (GET and HEAD) with no MCP server; the gateway holds the credential.' }, 'ADR-0113'],
+    ['gap', { ja: '見積書の構造化出力', en: 'Structured quote output' }, { ja: '金額内訳をJSONスキーマで受け取れません。RunResource は回答を持たず、イベントから本文を組み立てて自分でパースします。', en: 'There is no JSON-schema output for the breakdown. RunResource carries no answer, so you rebuild the text from events and parse it.' }, 'new'],
+    ['work', { ja: '決定的な計算', en: 'Deterministic arithmetic' }, { ja: 'LLMに計算させず、スキル同梱のスクリプトで計算します（runCommands が必要）。', en: 'Keep arithmetic out of the model: a script in the skill computes it (needs runCommands).' }, '—'],
+    ['gap', { ja: 'ERPへの登録', en: 'Booking into the ERP' }, { ja: 'openapiTool は書き込み（POST等）を拒否します。登録はバックエンドが行うか、自前のMCPサーバーで行います。', en: 'openapiTool refuses writes (POST and the rest). Book it from your backend or your own MCP server.' }, 'ADR-0113'],
+    ['work', { ja: '原価DBの直接参照', en: 'Querying the cost database' }, { ja: 'postgresTool は定義できますが、実行時のゲートが閉じています（#598）。今はAPIかMCP経由です。', en: 'postgresTool can be defined, but its run-time gate is closed (#598). Use an API or MCP for now.' }, '#598']
+  ]
+},
+{
+  id: 'ringi-review', no: 4, ja: '稟議書レビューエージェント', en: 'Ringi review agent',
+  dept: { ja: '起案部門、経営企画・経理・法務の決裁者、銀行の融資審査', en: 'Requesting departments; approvers in planning, finance and legal; bank credit review' },
+  verdict: 'work', vnote: { ja: 'レビュー票まで今日つくれる', en: 'The review sheet is buildable today' },
+  m: ['ok', 'work', 'gap', 'gap', 'na', 'work', 'gap', 'gap', 'ok', 'ok', 'ok'],
+  est: ['ok','work','work','gap','work','work','gap','work','ok','ok','ok'],
+  tests: 10,
+  pain: { ja: '多段の稟議と、記載漏れによる差し戻しが繰り返されます。決裁者は職務権限規程・社内規程・過去の決裁例と手作業で突き合わせています。エージェントは指摘し、承認はしない、という線引きが日本の稟議文化に合います。', en: 'Ringi pass through many approvers and come back for missing items again and again. Approvers check them by hand against the authority matrix, internal rules and past decisions. An agent that flags issues but never approves fits ringi culture.' },
+  ev: [
+    { t: { ja: '横浜銀行×IBM：融資稟議の作成支援で年最大19,500時間削減', en: 'Bank of Yokohama × IBM: up to 19,500 hours a year saved drafting loan ringi' }, u: 'https://it.impress.co.jp/articles/-/27069' },
+    { t: { ja: '京都銀行×NTTデータ：審査者の合格水準に達する稟議が約30%→約95%', en: 'Kyoto Bank × NTT Data: drafts reaching the reviewer’s pass line rose from about 30% to about 95%' }, u: 'https://www.nttdata.com/global/ja/news/topics/2026/022500' }
+  ],
+  flow: { ja: ['申請者が既存のワークフローで稟議を起票する', 'エージェントが職務権限規程と過去の類似稟議を検索する', '記載漏れ・規程違反の疑い・決裁区分をレビュー票にまとめる', '決裁者がレビュー票を見て判断する（エージェントは承認しない）'],
+          en: ['The requester files a ringi in the existing workflow system', 'The agent searches the authority rules and similar past ringi', 'It writes a review sheet: missing items, possible rule breaches, approval level', 'The approver decides; the agent never approves'] },
+  arch: {
+    entry: [['work', 'backend hook', { ja: 'ワークフロー→runs.start', en: 'workflow → runs.start' }]],
+    agent: ['ringi-review', 'readFiles only · maxTurns 20'],
+    skills: [['ok', 'ringi-checklist', { ja: '確認項目と指摘の書式', en: 'checklist and finding format' }]],
+    tools: [['work', "mcp('ringi-archive')", { ja: '過去稟議の検索（自前）', en: 'past-ringi search (yours)' }]],
+    files: [['ok', "files('rules')", { ja: '職務権限規程・社内規程', en: 'authority matrix, rules' }]],
+    quality: [['ok', 'audit log', { ja: '誰が・どの版で', en: 'who, which version' }], ['gap', 'trigger', { ja: '受信Webhookなし', en: 'no inbound webhook' }]]
+  },
+  file: 'backend/on-ringi-submitted.ts',
+  code: `import { createClient } from '@indx-workspace/sdk';
+
+const aw = createClient({
+  baseUrl: process.env.AW_BASE_URL!,
+  auth: { kind: 'api-key', apiKey: process.env.AW_API_KEY! },
+});
+
+// ワークフロー製品の「起票」通知を自前のHTTPで受け、エージェントを起動する
+export async function onRingiSubmitted(ringi: { id: string; body: string }) {
+  const { run } = await aw.runs.start(REVIEW_AGENT_ID, {
+    prompt: \`稟議 \${ringi.id} をレビューしてください。\\n\\n\${ringi.body}\`,
+  });
+  const outcome = await aw.runs.waitForOutcome(run.id);
+  if (outcome.status !== 'completed') throw runFailure(outcome);
+  // レビュー票を events から取り出し、ワークフローのコメントへ転記
+}`,
+  gaps: [
+    ['gap', { ja: '起票をきっかけに起動', en: 'Starting on submission' }, { ja: '受信Webhookもスケジューラもありません。ワークフロー側の通知を自前のバックエンドで受けて runs.start を呼びます。runs.start は冪等でないため、再送で二重レビューになり得ます。', en: 'There is no inbound webhook or scheduler. Receive the workflow’s notification in your backend and call runs.start. runs.start is not idempotent, so a retry can review twice.' }, 'N-3 · S-6'],
+    ['gap', { ja: 'レビュー票の構造化', en: 'A typed review sheet' }, { ja: '指摘事項を型付きで返せません。書式をスキルで固定し、本文をパースします。', en: 'Findings cannot come back typed. Fix the format in the skill and parse the text.' }, 'new'],
+    ['ok', { ja: '「承認しない」を構造で保証', en: 'Never approving, by construction' }, { ja: '権限を readFiles のみにし、書き込みツールを渡さなければ、エージェントは何も変更できません。ポリシー上限でも固定できます。', en: 'With readFiles only and no write tool, the agent cannot change anything. The policy ceiling can lock that in.' }, 'policy'],
+    ['ok', { ja: '監査', en: 'Audit' }, { ja: '誰が、どの版のエージェントで、何を参照したかを、実行イベントと監査ログで追えます。', en: 'Run events and the audit log show who ran which agent version over what.' }, 'observability'],
+    ['work', { ja: '結果の返送', en: 'Posting the result back' }, { ja: 'ワークフローへのコメント書き込みは、バックエンドが転記するか自前のMCPで行います。', en: 'Your backend posts the comment to the workflow system, or your own MCP server does.' }, '—']
+  ]
+},
+{
+  id: 'customer-inquiry', no: 5, ja: '顧客問い合わせエージェント', en: 'Customer inquiry agent',
+  dept: { ja: 'コンタクトセンター、BtoB技術サポート、営業支援', en: 'Contact centres, B2B technical support, sales support' },
+  verdict: 'work', vnote: { ja: '窓口は今日公開できる', en: 'The widget ships today' },
+  m: ['ok', 'work', 'na', 'gap', 'gap', 'na', 'gap', 'work', 'ok', 'ok', 'ok'],
+  est: ['ok','work','na','na','gap','work','gap','gap','ok','ok','ok'],
+  tests: 11,
+  pain: { ja: 'コールセンターの人手不足と離職、24時間対応への期待。過去の対応履歴はCRM・メール・チケットに散らばっています。エージェントが自分で検索語を立てて履歴を引き、敬語で答え、本人確認や複雑な案件は有人に引き継ぐ必要があります。', en: 'Contact centres face staff shortages, attrition and 24/7 expectations, while past interactions are scattered across CRM, email and tickets. The agent must form its own queries over that history, answer in polite Japanese, and hand identity checks and hard cases to a person.' },
+  ev: [
+    { t: { ja: 'LINEヤフー：月30万件超の問い合わせにAgentforce、正答率80%超', en: 'LINE Yahoo: Agentforce on 300,000+ inquiries a month, over 80% correct' }, u: 'https://atmarkit.itmedia.co.jp/ait/articles/2509/04/news127.html' },
+    { t: { ja: 'SMBC：24時間応答のAIオペレーター、有人とのハイブリッド', en: 'SMBC: a 24/7 AI operator with human handoff' }, u: 'https://www.jri.co.jp/company/release/2026/0218/' }
+  ],
+  flow: { ja: ['顧客がWebサイトのチャットで質問する', 'エージェントが顧客IDで過去の対応を、検索語を変えながら検索する', '根拠となる過去対応を踏まえ、敬語で回答する', '本人確認や複雑な案件は有人窓口に引き継ぐ'],
+          en: ['A customer asks in the website chat', 'The agent searches past interactions for that customer, rephrasing as it goes', 'It answers politely, grounded in the past interactions', 'Identity checks and complex cases go to a human agent'] },
+  arch: {
+    entry: [['ok', 'surface support', { ja: 'allowedOrigins · history · feedback', en: 'allowedOrigins · history · feedback' }]],
+    agent: ['customer-inquiry', 'no file writes · maxTurns 10'],
+    skills: [['ok', 'keigo-reply', { ja: '敬語・禁止表現', en: 'register and banned phrases' }]],
+    tools: [['work', "mcp('crm-history')", { ja: '履歴検索（自前）', en: 'history search (yours)' }], ['gap', 'handoff', { ja: '有人引き継ぎなし', en: 'no human handoff' }]],
+    files: [['ok', "files('faq')", { ja: 'FAQ・製品マニュアル', en: 'FAQ, product manuals' }]],
+    quality: [['ok', 'feedback → eval', { ja: '低評価をケース化', en: 'thumbs-down becomes a case' }], ['gap', 'per-customer scope', { ja: '顧客単位の絞込は自前', en: 'per-customer scoping is yours' }]]
+  },
+  file: 'surfaces/support.ts',
+  code: `import { defineSurface } from '@indx-workspace/sdk/define';
+
+export default defineSurface({
+  name: 'support',
+  agent: 'customer-inquiry',
+  title: 'お問い合わせ窓口',
+  layout: 'dock',
+  allowedOrigins: ['https://www.example.co.jp'],
+  parts: {
+    greeting: 'ご用件をお聞かせください。',
+    suggestedPrompts: ['注文の配送状況を知りたい', '請求書を再発行したい'],
+    disclaimer: 'AIが回答します。個人情報は入力しないでください。',
+    toolTrace: 'hidden',
+    history: true,
+    feedback: true,               // 👎 → aw eval add-case <run-id>
+  },
+});`,
+  gaps: [
+    ['ok', { ja: '埋め込みウィジェット', en: 'Embedded widget' }, { ja: 'defineSurface だけで、埋め込み元の制限・会話履歴・評価ボタン付きの窓口を公開できます。React なら @indx-workspace/react の <Chat/> も使えます。', en: 'defineSurface alone publishes a widget with origin restrictions, history and rating buttons. React apps can use <Chat/> from @indx-workspace/react.' }, 'defineSurface'],
+    ['gap', { ja: '顧客ごとのデータ範囲', en: 'Per-customer data scope' }, { ja: 'コネクタの資格情報はエージェント単位です。ログイン中の顧客IDで検索範囲を絞るには、MCPサーバー側で呼び出し元を判定する仕組みを自前で用意します。', en: 'Connector credentials are per agent. To scope a search to the signed-in customer, the MCP server must identify the caller itself.' }, 'RF-102'],
+    ['gap', { ja: '有人への引き継ぎ', en: 'Handoff to a person' }, { ja: '引き継ぎイベントやキューがありません。回答の定型文を検知してバックエンドで振り分けます。', en: 'There is no handoff event or queue. Detect a fixed phrase in the answer and route it in your backend.' }, 'new'],
+    ['gap', { ja: '個人情報のマスキング', en: 'PII masking' }, { ja: '個人情報保護法を意識したPII除去の仕組みはありません。MCPサーバーの応答側でマスクします。', en: 'There is no PII redaction for APPI compliance. Mask in the MCP server’s responses.' }, 'new'],
+    ['ok', { ja: '改善ループ', en: 'Improvement loop' }, { ja: '低評価 → aw eval add-case → 昇格ゲート、が今日そのまま回ります。', en: 'Thumbs-down → aw eval add-case → promotion gate works today.' }, 'aw eval']
+  ]
+},
+{
+  id: 'excel-consolidation', no: 6, ja: 'Excel集約・分析エージェント', en: 'Excel consolidation & analysis agent',
+  dept: { ja: '経営企画、経理、営業管理、工場管理', en: 'Corporate planning, accounting, sales management, plant management' },
+  verdict: 'work', vnote: { ja: 'スクリプトで実現、定期実行は外部', en: 'Works through scripts; scheduling is external' },
+  m: ['ok', 'work', 'work', 'gap', 'work', 'gap', 'gap', 'work', 'work', 'ok', 'ok'],
+  est: ['ok','work','work','gap','work','work','gap','na','ok','ok','ok'],
+  tests: 9,
+  pain: { ja: '結合セル・多段見出し・拠点ごとに違う様式の「神Excel」を、月次で手作業集計しています。DX責任者の43.6%が「ファイルが散在して一貫性がない」ことを課題に挙げています。数値はLLMに計算させず、元ファイル・元セルまでたどれることが条件です。', en: 'Monthly roll-ups of "god Excel" files (merged cells, multi-row headers, a different layout per site) are done by hand. 43.6% of DX leaders cite scattered, inconsistent files as a top pain. The model must not do the arithmetic, and every number must trace back to its source file and cell.' },
+  ev: [
+    { t: { ja: 'DX責任者372名調査：「データ入力に時間」44.6%、「ファイル散在」43.6%', en: 'Survey of 372 DX leaders: data entry takes too long (44.6%), scattered files (43.6%)' }, u: 'https://prtimes.jp/main/html/rd/p/000000031.000085668.html' }
+  ],
+  flow: { ja: ['経営企画が「今月の拠点別売上を集計して」と依頼する', 'エージェントが各拠点のExcelを探し、シートごとの様式を推定する', '列の対応表を示し、利用者が確認する', 'スクリプトで1つの表に統合し、各値に元セルへの参照を残す', '増減の要因を日本語で説明する'],
+          en: ['Planning asks: "consolidate this month’s sales by site"', 'The agent finds each site’s workbook and infers each sheet’s layout', 'It shows a column mapping; the user confirms it', 'A script merges everything into one table, keeping a source-cell reference per value', 'It explains the changes in plain Japanese'] },
+  arch: {
+    entry: [['ok', 'surface planning', { ja: "toolResults: table", en: "toolResults: table" }]],
+    agent: ['excel-consolidation', 'readFiles · writeFiles · runCommands'],
+    skills: [['work', 'excel-normalize', { ja: '結合セル・和暦・千円単位', en: 'merged cells, era dates, ¥1,000 units' }]],
+    tools: [['work', "mcp('file-finder')", { ja: 'SharePoint/Box探索（自前）', en: 'SharePoint/Box search (yours)' }]],
+    files: [['ok', "files('reports')", { ja: 'read', en: 'read' }], ['gap', "files('consolidated','read-write')", { ja: '返却は未確認', en: 'write-back unverified' }]],
+    quality: [['gap', 'schedule', { ja: '月次の自動実行なし', en: 'no monthly schedule' }], ['ok', 'session', { ja: '確認→統合を多ターンで', en: 'confirm, then merge, across turns' }]]
+  },
+  file: 'skills/excel-normalize/scripts/normalize.py',
+  code: `# エージェントは「対応表」だけを決め、数値はこのスクリプトが扱う
+import json, sys, openpyxl
+
+def read_sheet(path, sheet, header_rows, mapping):
+    ws = openpyxl.load_workbook(path, data_only=True)[sheet]
+    for r in ws.iter_rows(min_row=header_rows + 1):
+        row = {}
+        for col, field in mapping.items():          # 例 {"C": "売上高_千円"}
+            cell = r[openpyxl.utils.column_index_from_string(col) - 1]
+            row[field] = cell.value
+            row[field + "@src"] = f"{path}!{sheet}!{cell.coordinate}"
+        yield row
+
+plan = json.load(sys.stdin)        # エージェントが作り、利用者が承認した計画
+rows = [r for f in plan["files"] for r in read_sheet(**f)]
+json.dump(rows, open("consolidated/sales.json", "w"), ensure_ascii=False)`,
+  gaps: [
+    ['work', { ja: '散在するファイルの探索', en: 'Finding scattered files' }, { ja: '標準の対象はワークスペースのファイルストアだけです。SharePoint・Box・ファイルサーバーは自前のMCPサーバーで探索します。', en: 'Only the workspace file store is built in. Search SharePoint, Box or file servers through your own MCP server.' }, '—'],
+    ['work', { ja: 'xlsxの解析', en: 'Parsing xlsx' }, { ja: 'プラットフォームは解析しません。スキルのスクリプト（openpyxl等）で結合セル・和暦・単位を正規化します。', en: 'The platform does not parse it. Normalise merged cells, era dates and units with the skill’s scripts (openpyxl or similar).' }, '—'],
+    ['ok', { ja: '対応表の確認', en: 'Confirming the mapping' }, { ja: '同じ sessionId で実行を続ければ、確認 → 統合を複数ターンで進められます。', en: 'Continue with the same sessionId and confirm-then-merge runs across turns.' }, 'sessions'],
+    ['gap', { ja: '月次の定期実行', en: 'Monthly schedule' }, { ja: 'スケジューラがありません。外部のcronからバックエンドが runs.start を呼びます。', en: 'There is no scheduler. Your backend calls runs.start from an external cron.' }, 'N-3'],
+    ['gap', { ja: '統合結果の返却', en: 'Getting the merged table back' }, { ja: '作業ディレクトリで作った表がファイルストアへ戻る経路が未確認です。1ファイル64MiBの上限もあります。', en: 'The path from the run’s working directory back to the file store is unverified. Files are also capped at 64 MiB.' }, 'verify · N-4']
+  ]
+},
+{
+  id: 'contract-review', no: 7, ja: '契約書レビューエージェント', en: 'Contract review agent',
+  dept: { ja: '法務、調達、営業', en: 'Legal, procurement, sales' },
+  verdict: 'work', vnote: { ja: '指摘一覧まで。赤字Word出力は未確認', en: 'Findings list; redlined Word output unverified' },
+  m: ['ok', 'work', 'work', 'gap', 'work', 'gap', 'na', 'work', 'work', 'ok', 'work'],
+  est: ['ok','work','work','gap','na','gap','na','na','ok','ok','ok'],
+  tests: 8,
+  pain: { ja: '少人数の法務部門に契約件数が増え続けています。法務担当者の55%が生成AIの出力の正確性に不安を持ち、42%が「信頼できる回答」を求めています。自社のプレイブック（審査基準）と雛形に沿って条項ごとに指摘できることが要件です。', en: 'Small legal teams face a growing contract volume. 55% of legal staff worry about the accuracy of generative AI and 42% want trustworthy answers above all. The agent must flag issues clause by clause against the company playbook and templates.' },
+  ev: [
+    { t: { ja: 'LegalOn調査（2025年7月、500名）：法務の40%が生成AIを利用、55%が正確性に不安', en: 'LegalOn survey (July 2025, n=500): 40% of legal staff use generative AI, 55% worry about accuracy' }, u: 'https://www.legalontech.com/jp/news/192' }
+  ],
+  flow: { ja: ['担当者が相手方ドラフト（Word）をアップロードする', 'エージェントが自社プレイブック・雛形と条項ごとに比較する', 'リスク条項と修正文案を一覧にする', '法務担当者が採否を決める'],
+          en: ['Staff upload the counterparty draft (Word)', 'The agent compares it clause by clause with the playbook and templates', 'It lists risky clauses with proposed wording', 'Legal decides what to accept'] },
+  arch: {
+    entry: [['ok', 'surface legal-desk', { ja: 'layout page', en: 'layout page' }]],
+    agent: ['contract-review', 'readFiles · runCommands'],
+    skills: [['ok', 'playbook', { ja: '審査基準・標準条項', en: 'review rules, standard clauses' }], ['work', 'docx-text', { ja: '本文抽出スクリプト', en: 'text-extraction script' }]],
+    tools: [],
+    files: [['ok', "files('contracts/inbox')", { ja: 'read', en: 'read' }], ['gap', 'redline .docx', { ja: '変更履歴付き出力', en: 'tracked-changes output' }]],
+    quality: [['ok', 'judge eval', { ja: '「責任上限なし」を必ず指摘', en: '"must flag uncapped liability"' }]]
+  },
+  file: 'evals/contract-review.yaml',
+  code: `cases:
+  - name: 責任上限のない損害賠償条項を指摘する
+    input: contracts/inbox/nda-acme.docx をレビューしてください。
+    expect:
+      contains: ['損害賠償']
+      judge: >
+        第8条の損害賠償に上限がないことをリスクとして指摘し、
+        プレイブックの標準条項（直近12か月の支払額を上限）を
+        修正案として示していること。
+  - name: 準拠法が日本法でない場合に指摘する
+    input: contracts/inbox/msa-us.docx をレビューしてください。
+    expect:
+      contains: ['準拠法']
+      notContains: ['問題ありません']`,
+  gaps: [
+    ['ok', { ja: 'プレイブックのスキル化', en: 'The playbook as a skill' }, { ja: '審査基準を SKILL.md と条項リストにし、エージェントに渡せます。ただしスキル自体の改訂履歴はまだありません。', en: 'Put the review rules in a SKILL.md and clause list and hand them to the agent. Skills have no revision history yet, though.' }, 'N-1'],
+    ['work', { ja: 'Wordの読取り', en: 'Reading Word files' }, { ja: 'スキル同梱スクリプトで本文を抽出します（runCommands が必要）。', en: 'A script in the skill extracts the text (needs runCommands).' }, '—'],
+    ['gap', { ja: '変更履歴付きWordの返却', en: 'Returning a redlined Word file' }, { ja: '変更履歴付きdocxの生成はスクリプトで可能でも、それをファイルストアへ返す経路が未確認です。', en: 'A script can produce a tracked-changes docx, but the path back to the file store is unverified.' }, 'verify'],
+    ['gap', { ja: '条項ごとの構造化出力', en: 'Clause-level structured output' }, { ja: '条項番号・リスク度・修正案を型付きで返せません。', en: 'Clause number, risk level and proposed wording cannot come back typed.' }, 'new'],
+    ['ok', { ja: '判定の固定', en: 'Pinning judgements' }, { ja: 'judge で「必ず指摘すべきこと」を書き、昇格ゲートにできます。', en: 'Write what must always be flagged as a judge rubric and gate promotion on it.' }, 'aw eval']
+  ]
+},
+{
+  id: 'meeting-minutes', no: 8, ja: '議事録・アクション管理エージェント', en: 'Meeting minutes & action-item agent',
+  dept: { ja: '全部門、自治体、取締役会事務局', en: 'Every department, municipalities, board secretariats' },
+  verdict: 'work', vnote: { ja: '議事録作成まで。登録前の確認は2回実行で', en: 'Minutes today; confirm-before-send takes two runs' },
+  m: ['work', 'na', 'gap', 'gap', 'work', 'work', 'gap', 'work', 'work', 'ok', 'ok'],
+  est: ['ok','na','gap','gap','gap','work','gap','na','ok','ok','ok'],
+  tests: 10,
+  pain: { ja: '日本企業には正式な議事録の文化があり、作成・配布・フォローに工数がかかります。議事録・メール作成補助は生成AIの業務利用で最も使われ、効果も実感されている分野です。決定事項とアクション項目を担当・期限付きで抜き出し、確認してからタスク管理に登録したいという需要があります。', en: 'Japanese companies keep formal minutes, and writing, circulating and following them up takes real effort. Minutes and email drafting are the most-used generative-AI tasks at work, with the strongest felt effect. People want decisions and action items extracted with owners and due dates, confirmed, then sent to the task tracker.' },
+  ev: [
+    { t: { ja: 'パナソニック コネクト ConnectAI：2025年度に78.8万時間削減（議事録生成を含む）', en: 'Panasonic Connect ConnectAI: 788,000 hours saved in FY2025, minutes generation included' }, u: 'https://news.panasonic.com/jp/press/jn260729-1' }
+  ],
+  flow: { ja: ['会議後、Teams/Zoomの文字起こしテキストを渡す', '社内様式（日時・出席者・決定事項・課題）の議事録に整える', 'アクション項目を担当・期限付きで抽出する', '利用者が確認し、タスク管理ツールへ登録する'],
+          en: ['After the meeting, hand over the Teams or Zoom transcript', 'The agent formats minutes in the house style: date, attendees, decisions, issues', 'It extracts action items with owners and due dates', 'The user confirms; the items go to the task tracker'] },
+  arch: {
+    entry: [['ok', 'surface minutes', { ja: 'layout page', en: 'layout page' }]],
+    agent: ['meeting-minutes', 'no files · maxTurns 6'],
+    skills: [['ok', 'gijiroku-format', { ja: '社内様式', en: 'house format' }]],
+    tools: [['work', "mcp('tasks')", { ja: 'Backlog/Planner登録（自前）', en: 'Backlog/Planner write (yours)' }], ['gap', 'audio', { ja: '音声入力なし', en: 'no audio input' }]],
+    files: [],
+    quality: [['gap', 'confirm before send', { ja: '一時停止なし→2回実行', en: 'no pause → two runs' }]]
+  },
+  file: 'backend/minutes.ts',
+  code: `// 承認待ちで止められないため、「作成」と「登録」を別の実行に分ける
+const session = await aw.projects.startSession(PROJECT_ID);
+
+const draft = await runAndRead(MINUTES_AGENT, {
+  sessionId: session.id,
+  prompt: \`次の文字起こしから議事録とアクション項目を作成。\\n\${transcript}\`,
+});
+await showToUser(draft);                 // 利用者がUIで確認・修正
+
+if (await userApproved()) {
+  await runAndRead(MINUTES_AGENT, {
+    sessionId: session.id,               // 同じセッションで続ける
+    prompt: '確認済みのアクション項目を tasks に登録してください。',
+  });
+}`,
+  gaps: [
+    ['gap', { ja: '音声の文字起こし', en: 'Audio transcription' }, { ja: '音声入力はありません。会議ツールの文字起こしテキストを入力にします。', en: 'There is no audio input. Use the meeting tool’s transcript as input.' }, 'new'],
+    ['ok', { ja: '社内様式の固定', en: 'House format' }, { ja: '議事録の様式・敬称・決定事項の書き方をスキルで固定できます。', en: 'A skill fixes the minutes format, honorifics and how decisions are written.' }, 'skill'],
+    ['gap', { ja: '登録前の確認', en: 'Confirming before sending' }, { ja: '書き込みの直前で止めて承認を待つ仕組みがありません。作成と登録を別の実行に分け、間で人が確認します。', en: 'A run cannot stop right before a write and wait. Split drafting and sending into two runs with a person in between.' }, 'policy.approval'],
+    ['work', { ja: 'タスク管理への登録', en: 'Writing to the task tracker' }, { ja: 'openapiTool は GET のみなので、Backlog・Planner等への登録は自前のMCPサーバーで行います。', en: 'openapiTool is GET only, so writing to Backlog, Planner and the like needs your own MCP server.' }, 'ADR-0113'],
+    ['gap', { ja: '会議終了での自動起動', en: 'Starting when the meeting ends' }, { ja: 'トリガーがありません。会議ツールの通知を自前で受けて起動します。', en: 'There are no triggers. Receive the meeting tool’s notification yourself and start the run.' }, 'N-3']
+  ]
+},
+{
+  id: 'maintenance-troubleshooting', no: 9, ja: '技能伝承・保全トラブル対応エージェント', en: 'Skill-transfer & maintenance troubleshooting agent',
+  dept: { ja: '設備保全、フィールドサービス、FAエンジニア、インフラ運用', en: 'Plant maintenance, field service, FA engineers, infrastructure operations' },
+  verdict: 'work', vnote: { ja: '今日つくれる（写真添付を除く）', en: 'Buildable today (except photo upload)' },
+  m: ['ok', 'work', 'gap', 'gap', 'work', 'work', 'na', 'work', 'gap', 'ok', 'ok'],
+  est: ['ok','work','work','na','na','work','na','na','work','ok','ok'],
+  tests: 8,
+  pain: { ja: '熟練保全員の引退が進み、製造業の3社に2社が技能継承に苦労していますが、デジタル技術を活用しているのは21.7%にとどまります。症状から過去のトラブル記録と設備マニュアルをたどり、出典つきで一手ずつ確認手順を示し、熟練者のレビューで知識を増やしていく必要があります。', en: 'Veteran maintenance staff are retiring. Two in three manufacturers struggle to pass on skills, yet only 21.7% use digital tools for it. From a symptom the agent must trace past trouble logs and equipment manuals, give one cited step at a time, and grow its knowledge through expert review.' },
+  ev: [
+    { t: { ja: 'ものづくり白書2026：技能継承に苦労する企業が約3分の2、デジタル活用は21.7%', en: 'Monodzukuri White Paper 2026: about two in three struggle with skill transfer; 21.7% use digital tools' }, u: 'https://monoist.itmedia.co.jp/mn/articles/2607/03/news055_3.html' },
+    { t: { ja: '日立：現場作業者向けAIエージェント、保守センター業務を約30%効率化', en: 'Hitachi: AI agents for frontline workers; maintenance centre about 30% more efficient' }, u: 'https://www.hitachi.com/ja-jp/press/articles/2025/03/0326/' }
+  ],
+  flow: { ja: ['現場作業者がタブレットで設備番号と症状を入力する', 'エージェントが過去トラブル記録・設備マニュアル・熟練者メモを検索する', '確認手順を1ステップずつ、出典つきで示す', '解決内容を記録し、熟練者がレビューして改善ケースに加える'],
+          en: ['A technician enters the machine number and symptom on a tablet', 'The agent searches trouble logs, manuals and expert notes', 'It gives one check at a time, each with a source', 'The fix is logged; an expert reviews it and adds it as an improvement case'] },
+  arch: {
+    entry: [['ok', 'surface floor', { ja: 'layout page · タブレット', en: 'layout page · tablet' }], ['gap', 'photo upload', { ja: '添付は拒否', en: 'attachments refused' }]],
+    agent: ['maintenance', 'readFiles · maxTurns 30'],
+    skills: [['ok', 'one-step-diagnosis', { ja: '1手ずつ・安全確認', en: 'one step at a time, safety first' }]],
+    tools: [['work', "mcp('trouble-log')", { ja: '過去トラ・設備台帳（自前）', en: 'trouble log, asset register (yours)' }]],
+    files: [['ok', "files('equipment-manuals')", { ja: 'read', en: 'read' }]],
+    quality: [['ok', 'feedback → eval', { ja: '熟練者のレビューを評価に', en: 'expert review becomes evals' }]]
+  },
+  file: 'agents/maintenance.md',
+  code: `あなたは設備保全の先輩です。若手が現場で困っています。
+
+- 最初に必ず安全確認（停止・ロックアウト）を促す。
+- trouble_log.search で設備番号と症状から過去事例を探す。
+  見つからなければ症状の言い換えで最大3回検索し直す。
+- 確認手順は1回に1ステップだけ示し、結果を聞いてから次へ進む。
+- 各ステップに出典〔設備マニュアル p.xx〕または〔過去トラ T-xxxx〕を付ける。
+- 出典のない手順を推測で示さない。分からなければ
+  「熟練者への確認が必要です」と答え、連絡先を案内する。`,
+  gaps: [
+    ['ok', { ja: '多ターンの診断', en: 'Multi-turn diagnosis' }, { ja: 'セッションが続くので、1手ずつ結果を聞きながら進められます（maxTurns と予算で上限）。', en: 'The session continues, so the agent can step through checks while asking for results (bounded by maxTurns and budget).' }, 'sessions'],
+    ['gap', { ja: '写真の添付', en: 'Photo upload' }, { ja: 'ウィジェットは添付を受け付けません。写真は別途ファイルとしてアップロードし、パスを伝える運用になります。', en: 'The widget refuses attachments. Upload photos as files separately and pass the path.' }, 'surfaces'],
+    ['work', { ja: 'トラブル記録の検索', en: 'Searching trouble logs' }, { ja: 'Excelや紙由来の記録を索引化したMCPサーバーを自前で用意します。', en: 'Run your own MCP server over the indexed logs, many of which start as Excel or paper.' }, '—'],
+    ['ok', { ja: '熟練者のレビュー', en: 'Expert review' }, { ja: '評価ボタン → aw eval add-case で、熟練者の指摘が次の版の合格条件になります。', en: 'Rating → aw eval add-case turns an expert’s correction into a pass condition for the next version.' }, 'aw eval'],
+    ['work', { ja: '電波の弱い現場', en: 'Poor connectivity' }, { ja: '常時接続が前提です。オフライン動作はありません。', en: 'It assumes a connection; there is no offline mode.' }, '—']
+  ]
+},
+{
+  id: 'quality-defect', no: 10, ja: '品質不具合・過去トラ分析エージェント', en: 'Quality defect & past-trouble agent',
+  dept: { ja: '品質保証、設計審査（DR）、クレーム対応', en: 'Quality assurance, design review, claims handling' },
+  verdict: 'work', vnote: { ja: '類似事例と分析の下書きまで', en: 'Similar cases and analysis drafts' },
+  m: ['ok', 'work', 'work', 'gap', 'work', 'na', 'na', 'work', 'work', 'ok', 'ok'],
+  est: ['ok','work','work','gap','na','work','na','na','ok','ok','ok'],
+  tests: 12,
+  pain: { ja: '過去トラ（過去のトラブル事例）を活かすことは日本の品質文化の中核ですが、類似事例の検索に時間がかかり、なぜなぜ分析・8Dレポートの作成負荷も大きいままです。類似事例を出典つきで示し、根本原因の仮説を構造化して下書きすることが求められます。', en: 'Learning from past trouble is core to Japanese quality culture, but finding similar cases is slow and writing 5-whys and 8D reports is heavy. The agent must show similar cases with sources and draft a structured root-cause analysis.' },
+  ev: [
+    { t: { ja: '日立 品質保証PoC：不具合事例の検索が10分超→約1分', en: 'Hitachi QA PoC: trouble-case search went from 10+ minutes to about 1' }, u: 'https://monoist.itmedia.co.jp/mn/spv/2507/07/news022.html' }
+  ],
+  flow: { ja: ['品証担当が新しい不具合の現象・ロット・工程を入力する', 'エージェントが類似の過去トラを検索し、共通要因をまとめる', 'なぜなぜ分析の下書きと8Dの雛形を作る', '設計審査で有識者がレビューする'],
+          en: ['QA enters the new defect: symptom, lot, process', 'The agent finds similar past cases and summarises common causes', 'It drafts a 5-whys analysis and an 8D skeleton', 'Experts review it in design review'] },
+  arch: {
+    entry: [['ok', 'surface qa', { ja: "toolResults: table", en: "toolResults: table" }]],
+    agent: ['quality-defect', 'readFiles · runCommands · networkPolicy none'],
+    skills: [['ok', 'eight-d', { ja: '8D・なぜなぜの様式', en: '8D and 5-whys format' }]],
+    tools: [['work', "mcp('defect-db')", { ja: '類似事例検索（自前）', en: 'similar-case search (yours)' }], ['work', 'postgresTool', { ja: 'ゲート閉（#598）', en: 'gate closed (#598)' }]],
+    files: [['ok', "files('fmea')", { ja: 'FMEA・検査基準', en: 'FMEA, inspection standards' }]],
+    quality: [['gap', '8D JSON', { ja: '構造化出力なし', en: 'no structured output' }], ['ok', 'ceiling', { ja: '外部通信禁止を上限で固定', en: 'no-egress locked by the ceiling' }]]
+  },
+  file: 'agent-workspace.yaml',
+  code: `apiVersion: agentworkspace.dev/v2
+kind: Project
+name: quality-agents
+policy:                       # プロジェクトの上限：どのエージェントも越えられない
+  permissions:
+    unrestrictedNetwork: false
+  limits:
+    maxBudgetUsd: 2
+  promotion:
+    minEvalScore: 0.9         # 評価90%未満は production に出さない
+connectors:
+  defect-db:
+    transport: http
+    url: https://defect-db.internal.example.co.jp/mcp`,
+  gaps: [
+    ['work', { ja: '類似事例検索', en: 'Similar-case search' }, { ja: '不具合報告書（Excel・Word）を索引化したMCPサーバーを自前で用意します。', en: 'Run your own MCP server over indexed defect reports (Excel and Word).' }, 'by design'],
+    ['work', { ja: '品質DBの直接参照', en: 'Querying the quality DB' }, { ja: 'postgresTool は定義できますが実行ゲートが閉じています（#598）。', en: 'postgresTool can be defined but its run-time gate is closed (#598).' }, '#598'],
+    ['gap', { ja: '8Dの構造化出力', en: 'Structured 8D output' }, { ja: 'D1〜D8を型付きで受け取れません。スキルで書式を固定し本文をパースします。', en: 'D1 to D8 cannot come back typed. Fix the format in a skill and parse the text.' }, 'new'],
+    ['ok', { ja: '機密の保護', en: 'Confidentiality' }, { ja: 'プロジェクトのポリシー上限で外部通信・予算・昇格条件を固定でき、監査ログが残ります。', en: 'The project policy ceiling locks egress, budget and the promotion bar, and the audit log records every run.' }, 'policy'],
+    ['ok', { ja: '様式のスキル化', en: 'Format as a skill' }, { ja: '8D・なぜなぜ分析の社内様式をスキルとして配布できます。', en: 'Ship the house 8D and 5-whys format as a skill.' }, 'skill']
+  ]
+}
+];
+
+const XGAPS = [
+  { ref: 'run-output-schema', ja: '構造化出力と最終回答の取得', en: 'Structured output and the final answer', pja: '10件すべてが、回答本文に埋め込んだ表・JSON・〔〕を自分でパースし、検証しています。RunResource は最終回答を持たず、イベントから組み立てる必要があります。出力スキーマを指定でき、型付きの結果を受け取れることが、最も多くのコードを消します。', pen: 'All ten parse and validate a table, a JSON block or 〔〕 citations out of the answer text themselves, and RunResource has no answer, so each rebuilds it from events. An output schema with a typed result would delete the most code.', u: [1,2,3,4,5,6,7,8,9,10], w: [] },
+  { ref: 'by design', ja: '検索索引の参照実装', en: 'A reference search server', pja: '8件が同じ「日本語の索引＋出典つき検索」のMCPサーバーを自作しました（ギャラリーの jp-search と mcp-server キットで各100〜200行）。索引を持たない方針は妥当なので、公式の雛形があれば最大の時短になります。', pen: 'Eight use cases built the same Japanese index with cited search as an MCP server (100 to 200 lines each on the gallery’s jp-search and server kit). Not owning an index is a sound policy, so an official template would save the most time.', u: [], w: [1,2,4,5,6,7,9,10] },
+  { ref: 'RF-102', ja: '利用者ごとのデータ範囲', en: 'Per-user data scope', pja: '資格情報と権限はエージェント単位で、実行は利用者の身元を道具に渡しません。顧客問い合わせでは、バックエンドが発行するHMACトークンをMCPサーバーが検証する方式を自作しました。', pen: 'Credentials and grants are per agent, and a run passes no end-user identity to its tools. Customer inquiry built its own HMAC token, minted by the backend and checked by the MCP server.', u: [4], w: [1,2,3,5,6,7,8,9,10] },
+  { ref: 'policy.approval', ja: '実行中の人の承認', en: 'Human approval mid-run', pja: '実行を止めて承認を待てないため、6件が「同じセッションで2回実行」に分けました。議事録では、承認トークンがない書き込みをタスク管理側で拒否させています。', pen: 'A run cannot stop and wait, so six use cases split the work into two runs in one session. Meeting minutes has the tracker refuse any write without an approval token.', u: [2,3,5], w: [6,7,8,9,10] },
+  { ref: 'define-tool-approval', ja: 'コードで定義したエージェントのツール承認', en: 'Tool approval for agents as code', pja: 'defineAgent で writeFiles / runCommands を与えても Write・Bash は自動承認されず、無人の実行では拒否されます。スキルのスクリプトを使う6件は aw.agents.replacePolicy で方針を上書きする必要があり、次の aw push で戻る恐れがあります。', pen: 'Granting writeFiles or runCommands in defineAgent does not auto-approve Write or Bash, so an unattended run refuses them. The six use cases that run skill scripts must store a policy with aw.agents.replacePolicy, which a later aw push may undo.', u: [], w: [2,3,6,7,8,10] },
+  { ref: 'N-3 · S-6', ja: 'イベント起動・定期実行', en: 'Event triggers and schedules', pja: '起票・メール受信・会議終了・月次の起動はすべて自前のバックエンドです。runs.start に冪等キーがないため、稟議ではリトライで二重レビューにならないよう自分で重複排除しました。', pen: 'Ringi filed, email received, meeting ended and the monthly run are all your own backend. runs.start has no idempotency key, so ringi review dedupes retried webhooks itself.', u: [4,5,6,8], w: [] },
+  { ref: 'launcher.ts', ja: '成果物ファイルの返却', en: 'Getting output files back', pja: '実行中に書いたファイルはファイルストアに戻りません（ライブ実行で確認）。persistPaths は実行の作業ディレクトリではなく /workspace を収集しています。図面・統合表・赤字docx は回答経由で返し、バックエンドで再生成しています。', pen: 'A file written during a run never reaches the file store (confirmed with a live run): persistPaths collects /workspace, not the run’s working directory. Drawings, merged tables and redlined docx come back through the answer and the backend rebuilds them.', u: [2,6,7], w: [] },
+  { ref: 'ADR-0113', ja: '業務システムへの書き込み', en: 'Writes to business systems', pja: 'openapiTool は GET/HEAD のみです。タスク登録・保全記録は自前MCP、ERP登録・稟議コメントはバックエンドで行いました。', pen: 'openapiTool allows GET and HEAD only. Task creation and maintenance logs use your own MCP server; ERP booking and ringi comments go through the backend.', u: [3], w: [4,8,9] },
+  { ref: 'attachments', ja: '添付（写真・図面・音声）', en: 'Attachments (photos, drawings, audio)', pja: 'ウィジェットも runs.start も添付を受け付けません。写真の不具合部品、見積の図面、稟議の見積書、会議の音声はすべて別経路です。', pen: 'Neither the widget nor runs.start takes attachments: the photo of a faulty part, the drawing for a quote, the quotes on a ringi and meeting audio all travel another way.', u: [4,8,9], w: [2,3,7] },
+  { ref: 'surfaces', ja: 'ウィジェットの表示と利用者', en: 'What the widget can show and who it serves', pja: 'toolResults はMCPツールを指定できず（実行名に接続ごとのIDが入る）、検索結果をカードや表で出せません。また埋め込みウィジェットはログイン中の顧客を受け取れないため、顧客ごとの履歴は自前のチャットUIが必要です。', pen: 'toolResults cannot name an MCP tool (its run name carries a per-workspace connector id), so search hits cannot render as cards or tables. The embedded widget also cannot carry the signed-in customer, so per-customer history needs your own chat UI.', u: [5], w: [1,2,3,4,6,8,10] }
+];
+
+const SOURCES = [
+  ['総務省 情報通信白書 令和8年版', 'https://www.soumu.go.jp/johotsusintokei/whitepaper/ja/r08/html/nd121110.html'],
+  ['IPA DX動向2025', 'https://www.ipa.go.jp/digital/chousa/dx-trend/dx-trend-2025.html'],
+  ['帝国データバンク 生成AI活用調査（2026年3月）', 'https://www.itmedia.co.jp/news/article/2605/15/1260515115/'],
+  ['リクルートワークス研究所 未来予測2040（要約記事）', 'https://president.jp/articles/-/78626']
+];
+
+
+const FINDINGS = [
+  { ja: ['eval の tool: でMCPツールを固定できない', '実行ではMCPツールが mcp__<コネクタ名>__… と命名され、eval の tool: は完全一致です。コミットした期待値はコネクタ名が異なるワークスペースでは外れるため、全ユースケースで contains / judge を使いました。'], en: ['An eval cannot pin an MCP tool call', 'A run names an MCP tool mcp__<connector-name>__…, and an eval’s tool: matches exactly, so a committed expectation is wrong in any workspace that names the connector differently. Every use case pins behaviour with contains and judge instead.'] },
+  { ja: ['書き込んだファイルは戻らない（不具合）', 'persistPaths は実行の作業ディレクトリではなく /workspace を収集し、未変更の複製を昇格させます。ライブ実行で確認し、修正タスクを起票しました。'], en: ['Files an agent writes never come back (a bug)', 'persistPaths collects /workspace instead of the run’s working directory and promotes the untouched hydrated copy. Confirmed with a live run; a fix task is filed.'] },
+  { ja: ['コードで定義したエージェントは Write・Bash を自動承認できない', 'defineAgent は permissionMode default・autoApprove 空にコンパイルされ、設定項目もありません。無人の実行では書き込みとシェルが拒否されます。'], en: ['Agents as code cannot pre-approve Write and Bash', 'defineAgent compiles to permissionMode default with an empty autoApprove and offers no setting for either, so an unattended run refuses writes and shell commands.'] },
+  { ja: ['writeFiles: false でもシェルのリダイレクトは止まらない', '拒否されるのは Write・Edit ツールだけです。runCommands を与えると、ファイル書き込みはポリシー上は防げません。'], en: ['writeFiles: false does not stop shell redirection', 'Only the Write and Edit tools are denied. With runCommands granted, writing files is not prevented by the policy.'] },
+  { ja: ['埋め込みウィジェットはログイン中の利用者を渡せない', 'ウィジェットのセッション要求は resume・agent・environment のみ受け付けます。個人の履歴を扱う窓口は自前UIと backend が必要です。'], en: ['The embedded widget cannot carry who is signed in', 'A widget session request accepts only resume, agent and environment. A desk that shows personal history needs your own UI and backend.'] },
+  { ja: ['ランタイムに Python はない', 'runtime.Dockerfile は node:24 slim です。スキルのスクリプトはすべて依存なしの Node で書き、xlsx・docx・DXF も Node だけで読み書きしました。'], en: ['The runtime has no Python', 'runtime.Dockerfile is node:24 slim. Every skill script is dependency-free Node, including the xlsx, docx and DXF readers and writers.'] },
+  { ja: ['実ワークスペースで端から端まで動いた', 'マニュアル検索を、実際のコントロールプレーン・Claude Agent SDK エンジン・実行が起動したMCPサーバーで動かしました（モデルのみスクリプト）。出典つき回答が grounded と判定され、aw eval は 3/3。'], en: ['It ran end to end on a real workspace', 'Manual search ran on the real control plane and Claude Agent SDK engine, with the run spawning the use case’s own MCP server; only the model was scripted. The cited answer came back grounded and aw eval scored 3/3.'] }
+];
+
+let lang = 'ja';
+try { const saved = localStorage.getItem('gallery-lang'); if (saved === 'en' || saved === 'ja') lang = saved; } catch (e) { /* storage unavailable */ }
+
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const t = (o) => (o && typeof o === 'object' && 'ja' in o ? o[lang] : o);
+const mk = (st) => `<span class="mk ${st}" aria-label="${st}">${S[st]}</span>`;
+const vlabel = { ok: { ja: '今日つくれる', en: 'Buildable today' }, work: { ja: '自前コードで可能', en: 'With your own code' }, gap: { ja: 'ギャップ大', en: 'Major gaps' } };
+
+function score(m) {
+  const need = m.filter((x) => x !== 'na');
+  const v = need.reduce((a, x) => a + (x === 'ok' ? 1 : x === 'work' ? 0.5 : 0), 0);
+  return Math.round((v / need.length) * 100);
+}
+
+function codeBlock(code) {
+  // light highlighting: comments, quoted strings, a few keywords
+  const lines = code.split('\n').map((raw) => {
+    let comment = '';
+    let body = raw;
+    const idx = (() => {
+      let inS = null;
+      for (let i = 0; i < raw.length; i++) {
+        const c = raw[i];
+        if (inS) { if (c === inS && raw[i - 1] !== '\\') inS = null; continue; }
+        if (c === "'" || c === '"' || c === '`') { inS = c; continue; }
+        if (c === '/' && raw[i + 1] === '/' && raw[i - 1] !== ':') return i;
+        if (c === '#' && (i === 0 || raw[i - 1] === ' ')) return i;
+      }
+      return -1;
+    })();
+    if (idx >= 0) { body = raw.slice(0, idx); comment = raw.slice(idx); }
+    let h = esc(body)
+      .replace(/(&#39;|')((?:[^'\\]|\\.)*?)'/g, "<span class=\"s\">'$2'</span>")
+      .replace(/\b(import|from|export|default|const|await|async|function|if|return|throw|for|def|yield|in)\b/g, '<span class="k">$1</span>');
+    return h + (comment ? `<span class="c">${esc(comment)}</span>` : '');
+  });
+  return lines.join('\n');
+}
+
+function chips(list) {
+  return list.map(([st, name, note]) => `<span class="chip ${st}"><b>${esc(name)}</b><i>${esc(t(note))}</i></span>`).join('');
+}
+
+function arch(a) {
+  const row = (label, inner) => inner ? `<div class="row"><div class="rl">${esc(t(T[label]))}</div><div class="chips">${inner}</div></div>` : '';
+  return `<div class="arch" role="img" aria-label="${esc(t(T.lArch))}">
+    ${row('rEntry', chips(a.entry))}
+    <div class="down" aria-hidden="true">↓</div>
+    <div class="row"><div class="rl">${esc(t(T.rAgent))}</div><div class="agent"><b>${esc(a.agent[0])}</b><i>${esc(a.agent[1])}</i></div></div>
+    ${row('rSkills', chips(a.skills))}
+    ${row('rTools', chips(a.tools))}
+    ${row('rFiles', chips(a.files))}
+    ${row('rQuality', chips(a.quality))}
+  </div>`;
+}
+
+function render() {
+  document.documentElement.lang = lang;
+  document.querySelectorAll('[data-i18n]').forEach((el) => { el.textContent = t(T[el.dataset.i18n]); });
+  document.getElementById('lang-ja').setAttribute('aria-pressed', String(lang === 'ja'));
+  document.getElementById('lang-en').setAttribute('aria-pressed', String(lang === 'en'));
+
+  const colTotals = CAPS.map((_, i) => UC.filter((u) => u.m[i] === 'ok').length + '/' + UC.filter((u) => u.m[i] !== 'na').length);
+
+  const html = `
+  <div class="shell hero">
+    <div class="eyebrow">${esc(t(T.eyebrow))}</div>
+    <h1>${esc(t(T.h1))}</h1>
+    <p class="lead">${esc(t(T.lead))}</p>
+    <div class="legend">
+      <span>${mk('ok')}${esc(t(T.lgOk))}</span>
+      <span>${mk('work')}${esc(t(T.lgWork))}</span>
+      <span>${mk('gap')}${esc(t(T.lgGap))}</span>
+      <span>${mk('na')}${esc(t(T.lgNa))}</span>
+    </div>
+    <div class="stats">
+      <div class="stat"><b>68.9%</b><span>${esc(t(T.stat1))}</span> <a href="${SOURCES[0][1]}" target="_blank" rel="noopener">総務省 2026</a></div>
+      <div class="stat"><b>≈10%</b><span>${esc(t(T.stat2))}</span> <a href="${SOURCES[1][1]}" target="_blank" rel="noopener">IPA 2025</a></div>
+      <div class="stat"><b>50.4%</b><span>${esc(t(T.stat3))}</span> <a href="${SOURCES[2][1]}" target="_blank" rel="noopener">TDB 2026</a></div>
+      <div class="stat"><b>${lang === 'ja' ? '約1,100万人' : '≈11M'}</b><span>${esc(t(T.stat4))}</span> <a href="${SOURCES[3][1]}" target="_blank" rel="noopener">Recruit Works</a></div>
+    </div>
+  </div>
+
+  <section class="block alt" id="matrix">
+    <div class="shell">
+      <div class="sec-head"><div class="eyebrow">Benchmark</div><h2>${esc(t(T.matrixH))}</h2><p>${esc(t(T.matrixP))}</p></div>
+      <div class="scroll">
+        <table class="matrix">
+          <thead><tr><th class="uc">${esc(t(T.ucCol))}</th>${CAPS.map((c) => `<th scope="col">${esc(c[lang])}<span class="ref">${esc(c.ref)}</span></th>`).join('')}<th>${esc(t(T.scoreCol))}</th><th>${esc(t(T.verdictCol))}</th></tr></thead>
+          <tbody>${UC.map((u) => `<tr><td class="uc"><a href="#${u.id}">${u.no}. ${esc(u[lang])}</a><small>${esc(t(u.vnote))}</small></td>${u.m.map((x) => `<td>${mk(x)}</td>`).join('')}<td class="score">${score(u.m)} <span style="color:var(--ink-3);font-weight:400">(${score(u.est)})</span></td><td><span class="verdict ${u.verdict}">${esc(t(vlabel[u.verdict]))}</span></td></tr>`).join('')}</tbody>
+          <tfoot><tr><td class="uc">${esc(t(T.colTotals))}</td>${colTotals.map((x) => `<td>${x}</td>`).join('')}<td></td><td></td></tr></tfoot>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="pieces">
+    <div class="shell">
+      <div class="sec-head"><div class="eyebrow">Building blocks</div><h2>${esc(t(T.piecesH))}</h2><p>${esc(t(T.piecesP))}</p></div>
+      <div class="pieces">${PIECES.map((p) => `<div class="piece"><header>${mk(p.st)}<h4>${esc(p.name)}</h4></header><p>${esc(p[lang])}</p><div class="api">${esc(p.api)}</div></div>`).join('')}</div>
+    </div>
+  </section>
+
+  <section class="block alt" id="cases">
+    <div class="shell">
+      <div class="sec-head"><div class="eyebrow">Use cases</div><h2>${esc(t(T.casesH))}</h2><p>${esc(t(T.casesP))}</p></div>
+      <nav class="index" aria-label="${esc(t(T.casesH))}">${UC.map((u) => `<a href="#${u.id}"><span class="n">${String(u.no).padStart(2, '0')}</span><span>${esc(u[lang])}</span></a>`).join('')}</nav>
+    </div>
+  </section>
+
+  ${UC.map((u, i) => `
+  <section class="uc-sec ${i % 2 ? 'alt' : ''}" id="${u.id}" style="${i % 2 ? 'background:var(--paper-2)' : ''}">
+    <div class="shell">
+      <div class="uc-head">
+        <div class="uc-num">${String(u.no).padStart(2, '0')}</div>
+        <div><h3>${esc(u[lang])}</h3><div class="sub">${esc(lang === 'ja' ? u.en : u.ja)} · ${esc(t(u.dept))}</div></div>
+        <div style="display:grid;gap:6px;justify-items:start"><span class="verdict ${u.verdict}">${esc(t(vlabel[u.verdict]))} · ${score(u.m)}</span><span class="verdict" style="background:var(--paper-3);color:var(--ink-2)">${lang === 'ja' ? '検証済み' : 'verified'} · ${u.tests} tests</span></div>
+      </div>
+      <div class="uc-grid">
+        <div>
+          <p class="label">${esc(t(T.lPain))}</p>
+          <p class="pain">${esc(t(u.pain))}</p>
+          <ul class="evidence">${u.ev.map((e) => `<li><a href="${e.u}" target="_blank" rel="noopener">${esc(t(e.t))}</a></li>`).join('')}</ul>
+          <p class="label" style="margin-top:28px">${esc(t(T.lFlow))}</p>
+          <ol class="flow">${t(u.flow).map((s) => `<li><span>${esc(s)}</span></li>`).join('')}</ol>
+        </div>
+        <div>
+          <p class="label">${esc(t(T.lArch))}</p>
+          ${arch(u.arch)}
+        </div>
+        <div style="min-width:0">
+          <p class="label">${esc(t(T.lCode))}</p>
+          <span class="file">${esc(u.file)}</span>
+          <pre class="code"><code>${codeBlock(u.code)}</code></pre>
+        </div>
+        <div style="min-width:0">
+          <p class="label">${esc(t(T.lGaps))}</p>
+          <p class="note" style="margin:0 0 8px">${esc(t(T.gapsSrc))} <code>tests/gallery/${u.id}/benchmark.ts</code></p>
+          <table class="gaps"><tbody>${u.gaps.map(([st, h, d, ref]) => `<tr><td>${mk(st)}</td><td><b>${esc(t(h))}</b>${esc(t(d))}</td><td class="ref">${esc(ref)}</td></tr>`).join('')}</tbody></table>
+        </div>
+      </div>
+    </div>
+  </section>`).join('')}
+
+  <section class="block alt" id="findings">
+    <div class="shell">
+      <div class="sec-head"><div class="eyebrow">Findings</div><h2>${esc(t(T.findH))}</h2><p>${esc(t(T.findP))}</p></div>
+      <div class="xgaps">${FINDINGS.map((f, i) => `<div class="xgap" style="grid-template-columns:34px minmax(0,1fr)"><div class="uc-num" style="padding-top:2px">${String(i + 1).padStart(2, '0')}</div><div><h4>${esc(f[lang][0])}</h4><p>${esc(f[lang][1])}</p></div></div>`).join('')}</div>
+    </div>
+  </section>
+
+  <section class="block" id="gaps">
+    <div class="shell">
+      <div class="sec-head"><div class="eyebrow">Cross-cutting</div><h2>${esc(t(T.gapsH))}</h2><p>${esc(t(T.gapsP))}</p></div>
+      <div class="xgaps">${XGAPS.slice().sort((a, b) => (b.u.length + b.w.length * 0.5) - (a.u.length + a.w.length * 0.5)).map((g, i) => `
+        <div class="xgap">
+          <div class="uc-num" style="padding-top:2px">${String(i + 1).padStart(2, '0')}</div>
+          <div><h4>${esc(g[lang])}</h4><p>${esc(lang === 'ja' ? g.pja : g.pen)}</p></div>
+          <div class="meter"><span>${esc(g.ref)} · ${g.u.length + g.w.length} ${esc(t(T.uses))}</span>
+            <div class="dots" aria-hidden="true">${UC.map((u) => `<i class="${g.u.includes(u.no) ? 'on' : g.w.includes(u.no) ? 'on w' : ''}" title="${u.no}"></i>`).join('')}</div></div>
+        </div>`).join('')}
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="shell">
+      <p class="note">${esc(t(T.footNote))}</p>
+      <p class="label" style="margin-top:16px">${esc(t(T.srcH))}</p>
+      <ul>${SOURCES.map(([n, u]) => `<li><a href="${u}" target="_blank" rel="noopener">${esc(n)}</a></li>`).join('')}</ul>
+    </div>
+  </footer>`;
+  document.getElementById('app').innerHTML = html;
+}
+
+function setLang(l) { lang = l; try { localStorage.setItem('gallery-lang', l); } catch (e) { /* storage unavailable */ } render(); }
+document.getElementById('lang-ja').addEventListener('click', () => setLang('ja'));
+document.getElementById('lang-en').addEventListener('click', () => setLang('en'));
+render();
+})();
+</script>
+
+</body>
+</html>

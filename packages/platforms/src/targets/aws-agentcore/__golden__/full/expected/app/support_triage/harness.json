@@ -1,0 +1,47 @@
+{
+  "name": "support_triage",
+  "model": {
+    "provider": "bedrock",
+    "modelId": "global.anthropic.claude-sonnet-4-6"
+  },
+  "tools": [
+    {
+      "type": "remote_mcp",
+      "name": "zendesk",
+      "config": {
+        "remoteMcp": {
+          "url": "https://mcp.example.com/zendesk",
+          "headers": {
+            "Authorization": "Bearer ${arn:aws:bedrock-agentcore:us-east-1:123456789012:token-vault/default/apikeycredentialprovider/ZENDESK_TOKEN}"
+          }
+        }
+      }
+    },
+    {
+      "type": "remote_mcp",
+      "name": "aw-tools",
+      "config": {
+        "remoteMcp": {
+          "url": "https://aw.example.com/mcp/projects/acme-support",
+          "headers": {
+            "Authorization": "Bearer ${arn:aws:bedrock-agentcore:us-east-1:123456789012:token-vault/default/apikeycredentialprovider/ACME_TOOL_ENDPOINT_TOKEN}"
+          }
+        }
+      }
+    },
+    {
+      "type": "agentcore_code_interpreter",
+      "name": "code_interpreter"
+    }
+  ],
+  "skills": [
+    {
+      "s3Uri": "s3://acme-agent-skills/support-triage/refund-policy/"
+    }
+  ],
+  "allowedTools": ["@zendesk", "@aw-tools/get_order", "code_interpreter"],
+  "memory": {
+    "mode": "disabled"
+  },
+  "maxIterations": 20
+}

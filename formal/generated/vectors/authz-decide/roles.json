@@ -1,0 +1,131 @@
+{"vectors":
+ [{"witnesses": ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_role_is_refused"],
+   "input": {"role": "owner"},
+   "id": "role/\"owner\"",
+   "expected":
+   {"parsed": "owner",
+    "outcomes":
+    {"facts": {"resource": "users", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_role_is_refused"],
+   "input": {"role": "admin"},
+   "id": "role/\"admin\"",
+   "expected":
+   {"parsed": "admin",
+    "outcomes":
+    {"facts": {"resource": "users", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_role_is_refused"],
+   "input": {"role": "builder"},
+   "id": "role/\"builder\"",
+   "expected":
+   {"parsed": "builder",
+    "outcomes":
+    {"facts": {"resource": "users", "operation": "read", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_role_is_refused"],
+   "input": {"role": "viewer"},
+   "id": "role/\"viewer\"",
+   "expected":
+   {"parsed": "viewer",
+    "outcomes":
+    {"facts": {"resource": "users", "operation": "read", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_role_is_refused"],
+   "input": {"role": "Owner"},
+   "id": "role/\"Owner\"",
+   "expected":
+   {"parsed": null,
+    "outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "four roles"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_role_is_refused"],
+   "input": {"role": "ADMIN"},
+   "id": "role/\"ADMIN\"",
+   "expected":
+   {"parsed": null,
+    "outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "four roles"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_role_is_refused"],
+   "input": {"role": ""},
+   "id": "role/\"\"",
+   "expected":
+   {"parsed": null,
+    "outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "four roles"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_role_is_refused"],
+   "input": {"role": " owner"},
+   "id": "role/\" owner\"",
+   "expected":
+   {"parsed": null,
+    "outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "four roles"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_role_is_refused"],
+   "input": {"role": "owner "},
+   "id": "role/\"owner \"",
+   "expected":
+   {"parsed": null,
+    "outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "four roles"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_role_is_refused"],
+   "input": {"role": "superuser"},
+   "id": "role/\"superuser\"",
+   "expected":
+   {"parsed": null,
+    "outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "four roles"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_role_is_refused"],
+   "input": {"role": "member"},
+   "id": "role/\"member\"",
+   "expected":
+   {"parsed": null,
+    "outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "four roles"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_role_is_refused"],
+   "input": {"role": "viewer\u0000"},
+   "id": "role/\"viewer\\u0000\"",
+   "expected":
+   {"parsed": null,
+    "outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "four roles"}}}],
+ "family": "authz-decide",
+ "description": "Role spellings: parseRole and decide()"}

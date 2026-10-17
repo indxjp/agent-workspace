@@ -1,0 +1,516 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.workspaces_slug_format_renders_as_snapshot",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.workspaces_slug_format_separates_its_samples",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.refined_checks_cover_the_cluster"],
+   "input": {"table": "workspaces", "check": "workspaces_slug_format"},
+   "id": "check/workspaces_slug_format",
+   "expected":
+   {"sql": "\"workspaces\".\"slug\" ~ '^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$'",
+    "refused":
+    [{"slug": ""},
+     {"slug": "-a"},
+     {"slug": "a-"},
+     {"slug": "A"},
+     {"slug": "a_b"},
+     {"slug": "a b"},
+     {"slug": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}],
+    "pattern": "slug",
+    "column": "slug",
+    "accepted":
+    [{"slug": "a"},
+     {"slug": "default"},
+     {"slug": "0-a"},
+     {"slug": "a--b"},
+     {"slug": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+     {}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.workspaces_name_not_blank_renders_as_snapshot",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.workspaces_name_not_blank_separates_its_samples",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.refined_checks_cover_the_cluster"],
+   "input": {"table": "workspaces", "check": "workspaces_name_not_blank"},
+   "id": "check/workspaces_name_not_blank",
+   "expected":
+   {"sql": "length(btrim(\"workspaces\".\"name\")) > 0",
+    "refused": [{"name": ""}, {"name": "   "}],
+    "pattern": null,
+    "column": null,
+    "accepted": [{"name": "One"}, {"name": " x "}, {"name": "\u0009"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.workspaces_default_model_pair_renders_as_snapshot",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.workspaces_default_model_pair_separates_its_samples",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.refined_checks_cover_the_cluster"],
+   "input": {"table": "workspaces", "check": "workspaces_default_model_pair"},
+   "id": "check/workspaces_default_model_pair",
+   "expected":
+   {"sql": "(\"workspaces\".\"default_model_connection_id\" is null) = (\"workspaces\".\"default_model\" is null)",
+    "refused": [{"default_model_connection_id": "c1"}, {"default_model": "m"}],
+    "pattern": null,
+    "column": null,
+    "accepted": [{}, {"default_model_connection_id": "c1", "default_model": "m"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.users_email_lowercase_renders_as_snapshot",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.users_email_lowercase_separates_its_samples",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.refined_checks_cover_the_cluster"],
+   "input": {"table": "users", "check": "users_email_lowercase"},
+   "id": "check/users_email_lowercase",
+   "expected":
+   {"sql": "\"users\".\"email\" = lower(\"users\".\"email\")",
+    "refused": [{"email": "A@example.com"}, {"email": "a@Example.com"}],
+    "pattern": null,
+    "column": null,
+    "accepted": [{"email": "a@example.com"}, {"email": "a.b+c@d.e"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.users_email_shape_renders_as_snapshot",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.users_email_shape_separates_its_samples",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.refined_checks_cover_the_cluster"],
+   "input": {"table": "users", "check": "users_email_shape"},
+   "id": "check/users_email_shape",
+   "expected":
+   {"sql": "\"users\".\"email\" ~ '^[^[:space:]@]+@[^[:space:]@]+[.][^[:space:]@]+$'",
+    "refused":
+    [{"email": "a@example"},
+     {"email": "a@.com"},
+     {"email": "a@com."},
+     {"email": "@example.com"},
+     {"email": "a b@example.com"},
+     {"email": "a@@example.com"},
+     {"email": "a@b@c.com"},
+     {"email": ""},
+     {"email": "a@exa\u0009mple.com"}],
+    "pattern": "email",
+    "column": "email",
+    "accepted": [{"email": "a@example.com"}, {"email": "a.b@c.d"}, {"email": "a@b.c.d"}, {"email": "a@b..c"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.users_name_not_blank_renders_as_snapshot",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.users_name_not_blank_separates_its_samples",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.refined_checks_cover_the_cluster"],
+   "input": {"table": "users", "check": "users_name_not_blank"},
+   "id": "check/users_name_not_blank",
+   "expected":
+   {"sql": "length(btrim(\"users\".\"name\")) > 0",
+    "refused": [{"name": ""}, {"name": " "}],
+    "pattern": null,
+    "column": null,
+    "accepted": [{"name": "Ada"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.user_identities_issuer_not_blank_renders_as_snapshot",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.user_identities_issuer_not_blank_separates_its_samples",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.refined_checks_cover_the_cluster"],
+   "input": {"table": "user_identities", "check": "user_identities_issuer_not_blank"},
+   "id": "check/user_identities_issuer_not_blank",
+   "expected":
+   {"sql": "length(btrim(\"user_identities\".\"issuer\")) > 0",
+    "refused": [{"issuer": ""}, {"issuer": "  "}],
+    "pattern": null,
+    "column": null,
+    "accepted": [{"issuer": "https://id.example.com"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.user_identities_subject_not_blank_renders_as_snapshot",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.user_identities_subject_not_blank_separates_its_samples",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.refined_checks_cover_the_cluster"],
+   "input": {"table": "user_identities", "check": "user_identities_subject_not_blank"},
+   "id": "check/user_identities_subject_not_blank",
+   "expected":
+   {"sql": "length(btrim(\"user_identities\".\"subject\")) > 0",
+    "refused": [{"subject": ""}, {"subject": " "}],
+    "pattern": null,
+    "column": null,
+    "accepted": [{"subject": "248289761001"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.workspace_principals_source_xor_renders_as_snapshot",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.workspace_principals_source_xor_separates_its_samples",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.refined_checks_cover_the_cluster"],
+   "input": {"table": "workspace_principals", "check": "workspace_principals_source_xor"},
+   "id": "check/workspace_principals_source_xor",
+   "expected":
+   {"sql":
+    "(\"workspace_principals\".\"kind\" = 'membership' and \"workspace_principals\".\"membership_id\" is not null and \"workspace_principals\".\"api_key_id\" is null)\n        or (\"workspace_principals\".\"kind\" = 'api_key' and \"workspace_principals\".\"api_key_id\" is not null and \"workspace_principals\".\"membership_id\" is null)",
+    "refused":
+    [{"kind": "membership"},
+     {"kind": "api_key"},
+     {"membership_id": "m1", "kind": "membership", "api_key_id": "k1"},
+     {"kind": "membership", "api_key_id": "k1"},
+     {"membership_id": "m1", "kind": "api_key"},
+     {"kind": "api-key", "api_key_id": "k1"},
+     {}],
+    "pattern": null,
+    "column": null,
+    "accepted":
+    [{"membership_id": "m1", "kind": "membership"}, {"kind": "api_key", "api_key_id": "k1"}, {"membership_id": "m1"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.workspace_principals_revoked_after_activation_renders_as_snapshot",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.workspace_principals_revoked_after_activation_separates_its_samples",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.refined_checks_cover_the_cluster"],
+   "input": {"table": "workspace_principals", "check": "workspace_principals_revoked_after_activation"},
+   "id": "check/workspace_principals_revoked_after_activation",
+   "expected":
+   {"sql":
+    "\"workspace_principals\".\"revoked_at\" is null or \"workspace_principals\".\"revoked_at\" >= \"workspace_principals\".\"activated_at\"",
+    "refused": [{"revoked_at": "9", "activated_at": "10"}],
+    "pattern": null,
+    "column": null,
+    "accepted":
+    [{"activated_at": "10"}, {"revoked_at": "10", "activated_at": "10"}, {"revoked_at": "11", "activated_at": "10"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.workspace_principals_acts_for_api_key_only_renders_as_snapshot",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.workspace_principals_acts_for_api_key_only_separates_its_samples",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.refined_checks_cover_the_cluster"],
+   "input": {"table": "workspace_principals", "check": "workspace_principals_acts_for_api_key_only"},
+   "id": "check/workspace_principals_acts_for_api_key_only",
+   "expected":
+   {"sql":
+    "\"workspace_principals\".\"acts_for_principal_id\" is null or \"workspace_principals\".\"kind\" = 'api_key'",
+    "refused":
+    [{"kind": "membership", "acts_for_principal_id": "p1"}, {"kind": "api-key", "acts_for_principal_id": "p1"}],
+    "pattern": null,
+    "column": null,
+    "accepted":
+    [{"kind": "membership"},
+     {"kind": "api_key"},
+     {"kind": "api_key", "acts_for_principal_id": "p1"},
+     {"acts_for_principal_id": "p1"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.workspace_principals_acts_for_not_self_renders_as_snapshot",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.workspace_principals_acts_for_not_self_separates_its_samples",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.refined_checks_cover_the_cluster"],
+   "input": {"table": "workspace_principals", "check": "workspace_principals_acts_for_not_self"},
+   "id": "check/workspace_principals_acts_for_not_self",
+   "expected":
+   {"sql":
+    "\"workspace_principals\".\"acts_for_principal_id\" is null or \"workspace_principals\".\"acts_for_principal_id\" <> \"workspace_principals\".\"id\"",
+    "refused": [{"id": "p2", "acts_for_principal_id": "p2"}],
+    "pattern": null,
+    "column": null,
+    "accepted": [{"id": "p2"}, {"id": "p2", "acts_for_principal_id": "p1"}, {"acts_for_principal_id": "p1"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.api_keys_name_not_blank_renders_as_snapshot",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.api_keys_name_not_blank_separates_its_samples",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.refined_checks_cover_the_cluster"],
+   "input": {"table": "api_keys", "check": "api_keys_name_not_blank"},
+   "id": "check/api_keys_name_not_blank",
+   "expected":
+   {"sql": "length(btrim(\"api_keys\".\"name\")) > 0",
+    "refused": [{"name": ""}, {"name": "  "}],
+    "pattern": null,
+    "column": null,
+    "accepted": [{"name": "CI"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.api_keys_key_prefix_not_blank_renders_as_snapshot",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.api_keys_key_prefix_not_blank_separates_its_samples",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.refined_checks_cover_the_cluster"],
+   "input": {"table": "api_keys", "check": "api_keys_key_prefix_not_blank"},
+   "id": "check/api_keys_key_prefix_not_blank",
+   "expected":
+   {"sql": "length(btrim(\"api_keys\".\"key_prefix\")) > 0",
+    "refused": [{"key_prefix": ""}],
+    "pattern": null,
+    "column": null,
+    "accepted": [{"key_prefix": "ak_live_AAAAAAAAAAAAAAAAAAAAAA"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.api_keys_key_hash_not_blank_renders_as_snapshot",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.api_keys_key_hash_not_blank_separates_its_samples",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.refined_checks_cover_the_cluster"],
+   "input": {"table": "api_keys", "check": "api_keys_key_hash_not_blank"},
+   "id": "check/api_keys_key_hash_not_blank",
+   "expected":
+   {"sql": "length(btrim(\"api_keys\".\"key_hash\")) > 0",
+    "refused": [{"key_hash": " "}],
+    "pattern": null,
+    "column": null,
+    "accepted": [{"key_hash": "ab12"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.api_keys_expires_after_created_renders_as_snapshot",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.api_keys_expires_after_created_separates_its_samples",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.refined_checks_cover_the_cluster"],
+   "input": {"table": "api_keys", "check": "api_keys_expires_after_created"},
+   "id": "check/api_keys_expires_after_created",
+   "expected":
+   {"sql": "\"api_keys\".\"expires_at\" is null or \"api_keys\".\"expires_at\" > \"api_keys\".\"created_at\"",
+    "refused": [{"expires_at": "10", "created_at": "10"}, {"expires_at": "9", "created_at": "10"}],
+    "pattern": null,
+    "column": null,
+    "accepted": [{"created_at": "10"}, {"expires_at": "11", "created_at": "10"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.api_keys_revoked_after_created_renders_as_snapshot",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.api_keys_revoked_after_created_separates_its_samples",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.refined_checks_cover_the_cluster"],
+   "input": {"table": "api_keys", "check": "api_keys_revoked_after_created"},
+   "id": "check/api_keys_revoked_after_created",
+   "expected":
+   {"sql": "\"api_keys\".\"revoked_at\" is null or \"api_keys\".\"revoked_at\" >= \"api_keys\".\"created_at\"",
+    "refused": [{"revoked_at": "9", "created_at": "10"}],
+    "pattern": null,
+    "column": null,
+    "accepted": [{"created_at": "10"}, {"revoked_at": "10", "created_at": "10"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.invitations_email_lowercase_renders_as_snapshot",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.invitations_email_lowercase_separates_its_samples",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.refined_checks_cover_the_cluster"],
+   "input": {"table": "invitations", "check": "invitations_email_lowercase"},
+   "id": "check/invitations_email_lowercase",
+   "expected":
+   {"sql": "\"invitations\".\"email\" = lower(\"invitations\".\"email\")",
+    "refused": [{"email": "Ada@example.com"}],
+    "pattern": null,
+    "column": null,
+    "accepted": [{"email": "a@example.com"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.invitations_email_shape_renders_as_snapshot",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.invitations_email_shape_separates_its_samples",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.refined_checks_cover_the_cluster"],
+   "input": {"table": "invitations", "check": "invitations_email_shape"},
+   "id": "check/invitations_email_shape",
+   "expected":
+   {"sql": "\"invitations\".\"email\" ~ '^[^[:space:]@]+@[^[:space:]@]+[.][^[:space:]@]+$'",
+    "refused": [{"email": "a@example"}, {"email": "a@b@c.d"}],
+    "pattern": "email",
+    "column": "email",
+    "accepted": [{"email": "a@example.com"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.invitations_token_hash_not_blank_renders_as_snapshot",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.invitations_token_hash_not_blank_separates_its_samples",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.refined_checks_cover_the_cluster"],
+   "input": {"table": "invitations", "check": "invitations_token_hash_not_blank"},
+   "id": "check/invitations_token_hash_not_blank",
+   "expected":
+   {"sql": "length(btrim(\"invitations\".\"token_hash\")) > 0",
+    "refused": [{"token_hash": ""}],
+    "pattern": null,
+    "column": null,
+    "accepted": [{"token_hash": "ab12"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.invitations_expires_after_created_renders_as_snapshot",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.invitations_expires_after_created_separates_its_samples",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.refined_checks_cover_the_cluster"],
+   "input": {"table": "invitations", "check": "invitations_expires_after_created"},
+   "id": "check/invitations_expires_after_created",
+   "expected":
+   {"sql": "\"invitations\".\"expires_at\" > \"invitations\".\"created_at\"",
+    "refused": [{"expires_at": "10", "created_at": "10"}],
+    "pattern": null,
+    "column": null,
+    "accepted": [{"expires_at": "11", "created_at": "10"}, {"created_at": "10"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.invitations_accepted_after_created_renders_as_snapshot",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.invitations_accepted_after_created_separates_its_samples",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.refined_checks_cover_the_cluster"],
+   "input": {"table": "invitations", "check": "invitations_accepted_after_created"},
+   "id": "check/invitations_accepted_after_created",
+   "expected":
+   {"sql":
+    "\"invitations\".\"accepted_at\" is null or \"invitations\".\"accepted_at\" >= \"invitations\".\"created_at\"",
+    "refused": [{"created_at": "10", "accepted_at": "9"}],
+    "pattern": null,
+    "column": null,
+    "accepted": [{"created_at": "10"}, {"created_at": "10", "accepted_at": "10"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.invitations_revoked_after_created_renders_as_snapshot",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.invitations_revoked_after_created_separates_its_samples",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.refined_checks_cover_the_cluster"],
+   "input": {"table": "invitations", "check": "invitations_revoked_after_created"},
+   "id": "check/invitations_revoked_after_created",
+   "expected":
+   {"sql": "\"invitations\".\"revoked_at\" is null or \"invitations\".\"revoked_at\" >= \"invitations\".\"created_at\"",
+    "refused": [{"revoked_at": "9", "created_at": "10"}],
+    "pattern": null,
+    "column": null,
+    "accepted": [{"created_at": "10"}, {"revoked_at": "12", "created_at": "10"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.invitations_not_accepted_and_revoked_renders_as_snapshot",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.invitations_not_accepted_and_revoked_separates_its_samples",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.refined_checks_cover_the_cluster"],
+   "input": {"table": "invitations", "check": "invitations_not_accepted_and_revoked"},
+   "id": "check/invitations_not_accepted_and_revoked",
+   "expected":
+   {"sql": "\"invitations\".\"accepted_at\" is null or \"invitations\".\"revoked_at\" is null",
+    "refused": [{"revoked_at": "12", "accepted_at": "11"}],
+    "pattern": null,
+    "column": null,
+    "accepted": [{}, {"accepted_at": "11"}, {"revoked_at": "11"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.browser_tokens_scope_xor_renders_as_snapshot",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.browser_tokens_scope_xor_separates_its_samples",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.refined_checks_cover_the_cluster"],
+   "input": {"table": "browser_tokens", "check": "browser_tokens_scope_xor"},
+   "id": "check/browser_tokens_scope_xor",
+   "expected":
+   {"sql":
+    "(\"browser_tokens\".\"scope_kind\" = 'run' and \"browser_tokens\".\"run_id\" is not null and \"browser_tokens\".\"session_id\" is null)\n        or (\"browser_tokens\".\"scope_kind\" = 'session' and \"browser_tokens\".\"session_id\" is not null and \"browser_tokens\".\"run_id\" is null)",
+    "refused":
+    [{"scope_kind": "run"},
+     {"scope_kind": "session"},
+     {"session_id": "s1", "scope_kind": "run", "run_id": "r1"},
+     {"session_id": "s1", "scope_kind": "run"},
+     {"scope_kind": "session", "run_id": "r1"},
+     {}],
+    "pattern": null,
+    "column": null,
+    "accepted": [{"scope_kind": "run", "run_id": "r1"}, {"session_id": "s1", "scope_kind": "session"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.browser_tokens_expiry_after_created_renders_as_snapshot",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.browser_tokens_expiry_after_created_separates_its_samples",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.refined_checks_cover_the_cluster"],
+   "input": {"table": "browser_tokens", "check": "browser_tokens_expiry_after_created"},
+   "id": "check/browser_tokens_expiry_after_created",
+   "expected":
+   {"sql": "\"browser_tokens\".\"expires_at\" > \"browser_tokens\".\"created_at\"",
+    "refused": [{"expires_at": "10", "created_at": "10"}, {"expires_at": "5", "created_at": "10"}],
+    "pattern": null,
+    "column": null,
+    "accepted": [{"expires_at": "310", "created_at": "10"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.browser_tokens_revoked_after_created_renders_as_snapshot",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.browser_tokens_revoked_after_created_separates_its_samples",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.refined_checks_cover_the_cluster"],
+   "input": {"table": "browser_tokens", "check": "browser_tokens_revoked_after_created"},
+   "id": "check/browser_tokens_revoked_after_created",
+   "expected":
+   {"sql":
+    "\"browser_tokens\".\"revoked_at\" is null or \"browser_tokens\".\"revoked_at\" >= \"browser_tokens\".\"created_at\"",
+    "refused": [{"revoked_at": "9", "created_at": "10"}],
+    "pattern": null,
+    "column": null,
+    "accepted": [{"created_at": "10"}, {"revoked_at": "10", "created_at": "10"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.cli_sessions_user_code_shape_renders_as_snapshot",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.cli_sessions_user_code_shape_separates_its_samples",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.refined_checks_cover_the_cluster"],
+   "input": {"table": "cli_sessions", "check": "cli_sessions_user_code_shape"},
+   "id": "check/cli_sessions_user_code_shape",
+   "expected":
+   {"sql": "\"cli_sessions\".\"user_code\" ~ '^[A-Z]{8}$'",
+    "refused":
+    [{"user_code": "ABCDEFG"},
+     {"user_code": "ABCDEFGHI"},
+     {"user_code": "abcdefgh"},
+     {"user_code": "ABCD-EFG"},
+     {"user_code": "ABCDEFG1"},
+     {"user_code": ""}],
+    "pattern": null,
+    "column": null,
+    "accepted": [{"user_code": "ABCDEFGH"}, {"user_code": "ZZZZZZZZ"}, {}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.cli_sessions_token_iff_issued_renders_as_snapshot",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.cli_sessions_token_iff_issued_separates_its_samples",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.refined_checks_cover_the_cluster"],
+   "input": {"table": "cli_sessions", "check": "cli_sessions_token_iff_issued"},
+   "id": "check/cli_sessions_token_iff_issued",
+   "expected":
+   {"sql":
+    "(\"cli_sessions\".\"status\" in ('active', 'revoked')) = (\"cli_sessions\".\"token_hash\" is not null and \"cli_sessions\".\"expires_at\" is not null)",
+    "refused":
+    [{"status": "active"},
+     {"token_hash": "ab12", "status": "active"},
+     {"status": "revoked", "expires_at": "11"},
+     {"token_hash": "ab12", "status": "approved", "expires_at": "11"}],
+    "pattern": null,
+    "column": null,
+    "accepted":
+    [{"status": "approved"},
+     {"status": "denied"},
+     {"token_hash": "ab12", "status": "active", "expires_at": "11"},
+     {"token_hash": "ab12", "status": "revoked", "expires_at": "11"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.cli_sessions_revoked_iff_status_renders_as_snapshot",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.cli_sessions_revoked_iff_status_separates_its_samples",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.refined_checks_cover_the_cluster"],
+   "input": {"table": "cli_sessions", "check": "cli_sessions_revoked_iff_status"},
+   "id": "check/cli_sessions_revoked_iff_status",
+   "expected":
+   {"sql": "(\"cli_sessions\".\"status\" = 'revoked') = (\"cli_sessions\".\"revoked_at\" is not null)",
+    "refused":
+    [{"status": "revoked"}, {"status": "active", "revoked_at": "12"}, {"status": "approved", "revoked_at": "12"}],
+    "pattern": null,
+    "column": null,
+    "accepted": [{"status": "active"}, {"status": "revoked", "revoked_at": "12"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.cli_sessions_expiry_after_created_renders_as_snapshot",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.cli_sessions_expiry_after_created_separates_its_samples",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.refined_checks_cover_the_cluster"],
+   "input": {"table": "cli_sessions", "check": "cli_sessions_expiry_after_created"},
+   "id": "check/cli_sessions_expiry_after_created",
+   "expected":
+   {"sql":
+    "\"cli_sessions\".\"expires_at\" is null or \"cli_sessions\".\"expires_at\" > \"cli_sessions\".\"created_at\"",
+    "refused": [{"expires_at": "10", "created_at": "10"}, {"expires_at": "9", "created_at": "10"}],
+    "pattern": null,
+    "column": null,
+    "accepted": [{"created_at": "10"}, {"expires_at": "11", "created_at": "10"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.endpoint_clients_tool_names_mcp_only_renders_as_snapshot",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.endpoint_clients_tool_names_mcp_only_separates_its_samples",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.refined_checks_cover_the_cluster"],
+   "input": {"table": "endpoint_clients", "check": "endpoint_clients_tool_names_mcp_only"},
+   "id": "check/endpoint_clients_tool_names_mcp_only",
+   "expected":
+   {"sql": "\"endpoint_clients\".\"tool_names\" is null or \"endpoint_clients\".\"kind\" = 'mcp-project'",
+    "refused": [{"tool_names": "{search}", "kind": "a2a-agent"}, {"tool_names": "{}", "kind": "a2a-agent"}],
+    "pattern": null,
+    "column": null,
+    "accepted":
+    [{"kind": "a2a-agent"},
+     {"kind": "mcp-project"},
+     {"tool_names": "{search}", "kind": "mcp-project"},
+     {"tool_names": "{search}"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.endpoint_clients_redirect_uris_max_renders_as_snapshot",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.endpoint_clients_redirect_uris_max_separates_its_samples",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.refined_checks_cover_the_cluster"],
+   "input": {"table": "endpoint_clients", "check": "endpoint_clients_redirect_uris_max"},
+   "id": "check/endpoint_clients_redirect_uris_max",
+   "expected":
+   {"sql": "cardinality(\"endpoint_clients\".\"redirect_uris\") <= 10",
+    "refused": [{"redirect_uris": "{a,b,c,d,e,f,g,h,i,j,k}"}],
+    "pattern": null,
+    "column": null,
+    "accepted":
+    [{"redirect_uris": "{}"},
+     {"redirect_uris": "{https://a.example/cb}"},
+     {"redirect_uris": "{a,b,c,d,e,f,g,h,i,j}"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.endpoint_clients_revoked_after_created_renders_as_snapshot",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.endpoint_clients_revoked_after_created_separates_its_samples",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.refined_checks_cover_the_cluster"],
+   "input": {"table": "endpoint_clients", "check": "endpoint_clients_revoked_after_created"},
+   "id": "check/endpoint_clients_revoked_after_created",
+   "expected":
+   {"sql":
+    "\"endpoint_clients\".\"revoked_at\" is null or \"endpoint_clients\".\"revoked_at\" >= \"endpoint_clients\".\"created_at\"",
+    "refused": [{"revoked_at": "9", "created_at": "10"}],
+    "pattern": null,
+    "column": null,
+    "accepted": [{"created_at": "10"}, {"revoked_at": "10", "created_at": "10"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.oauth_tokens_code_fields_renders_as_snapshot",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.oauth_tokens_code_fields_separates_its_samples",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.refined_checks_cover_the_cluster"],
+   "input": {"table": "oauth_tokens", "check": "oauth_tokens_code_fields"},
+   "id": "check/oauth_tokens_code_fields",
+   "expected":
+   {"sql":
+    "(\"oauth_tokens\".\"kind\" = 'code') = (\"oauth_tokens\".\"code_challenge\" is not null and \"oauth_tokens\".\"redirect_uri\" is not null)",
+    "refused":
+    [{"kind": "code"},
+     {"kind": "code", "code_challenge": "ch1"},
+     {"redirect_uri": "https://a.example/cb", "kind": "access", "code_challenge": "ch1"}],
+    "pattern": null,
+    "column": null,
+    "accepted":
+    [{"redirect_uri": "https://a.example/cb", "kind": "code", "code_challenge": "ch1"},
+     {"kind": "access"},
+     {"kind": "refresh"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.oauth_tokens_expiry_after_created_renders_as_snapshot",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.oauth_tokens_expiry_after_created_separates_its_samples",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.refined_checks_cover_the_cluster"],
+   "input": {"table": "oauth_tokens", "check": "oauth_tokens_expiry_after_created"},
+   "id": "check/oauth_tokens_expiry_after_created",
+   "expected":
+   {"sql": "\"oauth_tokens\".\"expires_at\" > \"oauth_tokens\".\"created_at\"",
+    "refused": [{"expires_at": "10", "created_at": "10"}, {"expires_at": "9", "created_at": "10"}],
+    "pattern": null,
+    "column": null,
+    "accepted": [{"expires_at": "11", "created_at": "10"}]}}],
+ "family": "concept-identity",
+ "description": "The 31 refined checks of the identity tables: SQL and boundary rows"}

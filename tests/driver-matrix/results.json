@@ -1,0 +1,20 @@
+{
+  "local": {
+    "basis": "A.12 local suite on 2026-09-09",
+    "values": ["-", "-", "-", "-", "-", "✓", "-", "ms", "-", "-"]
+  },
+  "sbx-rt": { "basis": "driver not registered by the control plane", "unverified": true },
+  "docker": {
+    "basis": "A.12 Docker suite on 2026-09-09",
+    "values": ["ctr", "✓", "✓", "-", "✓", "✓", "-", "~1s", "✓", "-"]
+  },
+  "k8s": {
+    "basis": "driver registered; a live A.12 cluster run was not completed",
+    "unverified": true
+  },
+  "gke-as": { "basis": "D-04 default selected no managed driver", "outOfScope": true },
+  "aca-sess": { "basis": "D-04 default selected no managed driver", "outOfScope": true },
+  "agentcore": { "basis": "D-04 default selected no managed driver", "outOfScope": true },
+  "ecs": { "basis": "D-04 default selected no managed driver", "outOfScope": true },
+  "cloudrun": { "basis": "D-04 default selected no managed driver", "outOfScope": true }
+}

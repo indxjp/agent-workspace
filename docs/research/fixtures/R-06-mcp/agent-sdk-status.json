@@ -1,0 +1,387 @@
+{
+  "snapshots": [
+    {
+      "when": "at-init",
+      "status": [
+        {
+          "name": "ok_http",
+          "status": "connected",
+          "serverInfo": {
+            "name": "r06-probe-http",
+            "version": "0.0.1"
+          },
+          "config": {
+            "type": "http",
+            "url": "http://127.0.0.1:8953/mcp",
+            "headers": {
+              "Authorization": "Bearer s3cret"
+            }
+          },
+          "scope": "dynamic",
+          "tools": [
+            {
+              "name": "ping",
+              "annotations": {}
+            }
+          ]
+        },
+        {
+          "name": "bad_token_http",
+          "status": "failed",
+          "error": "Server rejected the configured Authorization header (HTTP 401). Check that the token is valid for this MCP endpoint — OAuth fallback is disabled when headers.Authorization is set.",
+          "config": {
+            "type": "http",
+            "url": "http://127.0.0.1:8953/mcp",
+            "headers": {
+              "Authorization": "Bearer WRONG"
+            }
+          },
+          "scope": "dynamic"
+        },
+        {
+          "name": "unreachable_http",
+          "status": "failed",
+          "error": "Unable to connect. Is the computer able to access the url?",
+          "config": {
+            "type": "http",
+            "url": "http://127.0.0.1:8999/mcp",
+            "headers": {
+              "Authorization": "Bearer s3cret"
+            }
+          },
+          "scope": "dynamic"
+        },
+        {
+          "name": "nxdomain_http",
+          "status": "failed",
+          "error": "getaddrinfo ENOTFOUND r06-probe-does-not-exist.invalid",
+          "config": {
+            "type": "http",
+            "url": "https://r06-probe-does-not-exist.invalid/mcp"
+          },
+          "scope": "dynamic"
+        },
+        {
+          "name": "ok_sse",
+          "status": "failed",
+          "error": "SSE error: Unable to connect. Is the computer able to access the url?",
+          "config": {
+            "type": "sse",
+            "url": "http://127.0.0.1:8999/sse"
+          },
+          "scope": "dynamic"
+        },
+        {
+          "name": "bad_cred_stdio",
+          "status": "failed",
+          "error": "Unauthorized: environment variable MCP_TOKEN is set but rejected",
+          "config": {
+            "type": "stdio",
+            "command": "C:\\Program Files\\nodejs\\node.exe",
+            "args": [
+              "C:\\Users\\user\\AppData\\Local\\Temp\\claude\\probe-r06\\rp/server-stdio.mjs",
+              "--mode",
+              "ok",
+              "--require-env",
+              "MCP_TOKEN=s3cret"
+            ]
+          },
+          "scope": "dynamic"
+        },
+        {
+          "name": "missing_command_stdio",
+          "status": "failed",
+          "error": "Connection closed",
+          "config": {
+            "type": "stdio",
+            "command": "r06-no-such-binary",
+            "args": []
+          },
+          "scope": "dynamic"
+        },
+        {
+          "name": "hang_stdio",
+          "status": "failed",
+          "error": "MCP server \"hang_stdio\" connection timed out after 30000ms",
+          "config": {
+            "type": "stdio",
+            "command": "C:\\Program Files\\nodejs\\node.exe",
+            "args": [
+              "C:\\Users\\user\\AppData\\Local\\Temp\\claude\\probe-r06\\rp/server-stdio.mjs",
+              "--mode",
+              "hang"
+            ]
+          },
+          "scope": "dynamic"
+        }
+      ]
+    },
+    {
+      "when": "init+8s",
+      "status": [
+        {
+          "name": "ok_http",
+          "status": "connected",
+          "serverInfo": {
+            "name": "r06-probe-http",
+            "version": "0.0.1"
+          },
+          "config": {
+            "type": "http",
+            "url": "http://127.0.0.1:8953/mcp",
+            "headers": {
+              "Authorization": "Bearer s3cret"
+            }
+          },
+          "scope": "dynamic",
+          "tools": [
+            {
+              "name": "ping",
+              "annotations": {}
+            }
+          ]
+        },
+        {
+          "name": "bad_token_http",
+          "status": "failed",
+          "error": "Server rejected the configured Authorization header (HTTP 401). Check that the token is valid for this MCP endpoint — OAuth fallback is disabled when headers.Authorization is set.",
+          "config": {
+            "type": "http",
+            "url": "http://127.0.0.1:8953/mcp",
+            "headers": {
+              "Authorization": "Bearer WRONG"
+            }
+          },
+          "scope": "dynamic"
+        },
+        {
+          "name": "unreachable_http",
+          "status": "failed",
+          "error": "Unable to connect. Is the computer able to access the url?",
+          "config": {
+            "type": "http",
+            "url": "http://127.0.0.1:8999/mcp",
+            "headers": {
+              "Authorization": "Bearer s3cret"
+            }
+          },
+          "scope": "dynamic"
+        },
+        {
+          "name": "nxdomain_http",
+          "status": "failed",
+          "error": "getaddrinfo ENOTFOUND r06-probe-does-not-exist.invalid",
+          "config": {
+            "type": "http",
+            "url": "https://r06-probe-does-not-exist.invalid/mcp"
+          },
+          "scope": "dynamic"
+        },
+        {
+          "name": "ok_sse",
+          "status": "failed",
+          "error": "SSE error: Unable to connect. Is the computer able to access the url?",
+          "config": {
+            "type": "sse",
+            "url": "http://127.0.0.1:8999/sse"
+          },
+          "scope": "dynamic"
+        },
+        {
+          "name": "bad_cred_stdio",
+          "status": "failed",
+          "error": "Unauthorized: environment variable MCP_TOKEN is set but rejected",
+          "config": {
+            "type": "stdio",
+            "command": "C:\\Program Files\\nodejs\\node.exe",
+            "args": [
+              "C:\\Users\\user\\AppData\\Local\\Temp\\claude\\probe-r06\\rp/server-stdio.mjs",
+              "--mode",
+              "ok",
+              "--require-env",
+              "MCP_TOKEN=s3cret"
+            ]
+          },
+          "scope": "dynamic"
+        },
+        {
+          "name": "missing_command_stdio",
+          "status": "failed",
+          "error": "Connection closed",
+          "config": {
+            "type": "stdio",
+            "command": "r06-no-such-binary",
+            "args": []
+          },
+          "scope": "dynamic"
+        },
+        {
+          "name": "hang_stdio",
+          "status": "failed",
+          "error": "MCP server \"hang_stdio\" connection timed out after 30000ms",
+          "config": {
+            "type": "stdio",
+            "command": "C:\\Program Files\\nodejs\\node.exe",
+            "args": [
+              "C:\\Users\\user\\AppData\\Local\\Temp\\claude\\probe-r06\\rp/server-stdio.mjs",
+              "--mode",
+              "hang"
+            ]
+          },
+          "scope": "dynamic"
+        }
+      ]
+    },
+    {
+      "when": "at-result",
+      "status": [
+        {
+          "name": "ok_http",
+          "status": "connected",
+          "serverInfo": {
+            "name": "r06-probe-http",
+            "version": "0.0.1"
+          },
+          "config": {
+            "type": "http",
+            "url": "http://127.0.0.1:8953/mcp",
+            "headers": {
+              "Authorization": "Bearer s3cret"
+            }
+          },
+          "scope": "dynamic",
+          "tools": [
+            {
+              "name": "ping",
+              "annotations": {}
+            }
+          ]
+        },
+        {
+          "name": "bad_token_http",
+          "status": "failed",
+          "error": "Server rejected the configured Authorization header (HTTP 401). Check that the token is valid for this MCP endpoint — OAuth fallback is disabled when headers.Authorization is set.",
+          "config": {
+            "type": "http",
+            "url": "http://127.0.0.1:8953/mcp",
+            "headers": {
+              "Authorization": "Bearer WRONG"
+            }
+          },
+          "scope": "dynamic"
+        },
+        {
+          "name": "unreachable_http",
+          "status": "failed",
+          "error": "Unable to connect. Is the computer able to access the url?",
+          "config": {
+            "type": "http",
+            "url": "http://127.0.0.1:8999/mcp",
+            "headers": {
+              "Authorization": "Bearer s3cret"
+            }
+          },
+          "scope": "dynamic"
+        },
+        {
+          "name": "nxdomain_http",
+          "status": "failed",
+          "error": "getaddrinfo ENOTFOUND r06-probe-does-not-exist.invalid",
+          "config": {
+            "type": "http",
+            "url": "https://r06-probe-does-not-exist.invalid/mcp"
+          },
+          "scope": "dynamic"
+        },
+        {
+          "name": "ok_sse",
+          "status": "failed",
+          "error": "SSE error: Unable to connect. Is the computer able to access the url?",
+          "config": {
+            "type": "sse",
+            "url": "http://127.0.0.1:8999/sse"
+          },
+          "scope": "dynamic"
+        },
+        {
+          "name": "bad_cred_stdio",
+          "status": "failed",
+          "error": "Unauthorized: environment variable MCP_TOKEN is set but rejected",
+          "config": {
+            "type": "stdio",
+            "command": "C:\\Program Files\\nodejs\\node.exe",
+            "args": [
+              "C:\\Users\\user\\AppData\\Local\\Temp\\claude\\probe-r06\\rp/server-stdio.mjs",
+              "--mode",
+              "ok",
+              "--require-env",
+              "MCP_TOKEN=s3cret"
+            ]
+          },
+          "scope": "dynamic"
+        },
+        {
+          "name": "missing_command_stdio",
+          "status": "failed",
+          "error": "Connection closed",
+          "config": {
+            "type": "stdio",
+            "command": "r06-no-such-binary",
+            "args": []
+          },
+          "scope": "dynamic"
+        },
+        {
+          "name": "hang_stdio",
+          "status": "failed",
+          "error": "MCP server \"hang_stdio\" connection timed out after 30000ms",
+          "config": {
+            "type": "stdio",
+            "command": "C:\\Program Files\\nodejs\\node.exe",
+            "args": [
+              "C:\\Users\\user\\AppData\\Local\\Temp\\claude\\probe-r06\\rp/server-stdio.mjs",
+              "--mode",
+              "hang"
+            ]
+          },
+          "scope": "dynamic"
+        }
+      ]
+    }
+  ],
+  "initMcpServers": [
+    {
+      "name": "ok_http",
+      "status": "connected"
+    },
+    {
+      "name": "bad_token_http",
+      "status": "failed"
+    },
+    {
+      "name": "unreachable_http",
+      "status": "failed"
+    },
+    {
+      "name": "nxdomain_http",
+      "status": "failed"
+    },
+    {
+      "name": "ok_sse",
+      "status": "failed"
+    },
+    {
+      "name": "bad_cred_stdio",
+      "status": "failed"
+    },
+    {
+      "name": "missing_command_stdio",
+      "status": "failed"
+    },
+    {
+      "name": "hang_stdio",
+      "status": "failed"
+    }
+  ],
+  "resultSubtype": "success"
+}

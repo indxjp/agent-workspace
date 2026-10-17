@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Users — Agent Workspace</title>
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<script>window.PAGE = { nav: "users", crumbs: [["Administration"], ["Users"]] };</script>
+
+<div class="app">
+  <div class="main">
+    <div class="page">
+
+      <div class="page-head">
+        <div>
+          <h1>Users</h1>
+          <div class="sub">14 members in Meridian Manufacturing · one workspace, four roles.</div>
+        </div>
+        <div class="actions">
+          <button class="btn" data-modal-open="m-sso">Single sign-on</button>
+          <button class="btn primary" data-modal-open="m-invite">Invite user</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="table-wrap">
+        <table class="tbl">
+          <thead><tr><th>User</th><th>Role</th><th>Sign-in</th><th>Agents</th><th>Last active</th><th></th></tr></thead>
+          <tbody>
+            <tr>
+              <td><div class="cell-main">Aya Ito</div><div class="cell-sub">aya.ito@meridian.example</div></td>
+              <td><span class="badge info">Owner</span></td>
+              <td>Local administrator</td>
+              <td>All</td>
+              <td class="nowrap">Now</td>
+              <td><span class="muted small">You</span></td>
+            </tr>
+            <tr>
+              <td><div class="cell-main">Kenji Sato</div><div class="cell-sub">kenji.sato@meridian.example</div></td>
+              <td><span class="badge">Admin</span></td>
+              <td>OIDC · Entra ID</td>
+              <td>All</td>
+              <td class="nowrap">12 min ago</td>
+              <td><button class="btn sm" data-toast="Role editor opened">Edit</button></td>
+            </tr>
+            <tr>
+              <td><div class="cell-main">Marie Dupont</div><div class="cell-sub">marie.dupont@meridian.example</div></td>
+              <td><span class="badge">Builder</span></td>
+              <td>OIDC · Entra ID</td>
+              <td>4 of 6</td>
+              <td class="nowrap">2 hours ago</td>
+              <td><button class="btn sm" data-toast="Role editor opened">Edit</button></td>
+            </tr>
+            <tr>
+              <td><div class="cell-main">Tomás Rivera</div><div class="cell-sub">tomas.rivera@meridian.example</div></td>
+              <td><span class="badge">Builder</span></td>
+              <td>OIDC · Entra ID</td>
+              <td>2 of 6</td>
+              <td class="nowrap">Yesterday</td>
+              <td><button class="btn sm" data-toast="Role editor opened">Edit</button></td>
+            </tr>
+            <tr>
+              <td><div class="cell-main">Nguyen Thi Lan</div><div class="cell-sub">lan.nguyen@meridian.example</div></td>
+              <td><span class="badge muted">Viewer</span></td>
+              <td>OIDC · Entra ID</td>
+              <td>1 of 6</td>
+              <td class="nowrap">3 days ago</td>
+              <td><button class="btn sm" data-toast="Role editor opened">Edit</button></td>
+            </tr>
+            <tr>
+              <td><div class="cell-main">priya.raman@meridian.example</div><div class="cell-sub">Invitation sent 2 days ago</div></td>
+              <td><span class="badge muted">Viewer</span></td>
+              <td><span class="badge outline">Pending</span></td>
+              <td>—</td>
+              <td class="nowrap">—</td>
+              <td><button class="btn sm" data-toast="Invitation resent">Resend</button></td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+      </div>
+
+      <div class="section-head"><h2>What each role can do</h2></div>
+      <div class="card">
+        <div class="table-wrap">
+        <table class="tbl matrix">
+          <thead><tr><th>Capability</th><th>Owner</th><th>Admin</th><th>Builder</th><th>Viewer</th></tr></thead>
+          <tbody>
+            <tr><td>Run permitted agents</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+            <tr><td>See own sessions</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+            <tr><td>Create and edit agents, skills, files, connectors</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="n">—</td></tr>
+            <tr><td>Share own work to the workspace</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="a">~</td></tr>
+            <tr><td>Create public links</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="a">~</td></tr>
+            <tr><td>Create a <b>runnable</b> public link</td><td class="y">✓</td><td class="y">✓</td><td class="n">—</td><td class="n">—</td></tr>
+            <tr><td>Manage users, models, API keys, connectors, runtimes</td><td class="y">✓</td><td class="y">✓</td><td class="n">—</td><td class="n">—</td></tr>
+            <tr><td>Revoke any share in the workspace</td><td class="y">✓</td><td class="y">✓</td><td class="n">—</td><td class="n">—</td></tr>
+            <tr><td>Change the public-sharing policy</td><td class="y">✓</td><td class="n">—</td><td class="n">—</td><td class="n">—</td></tr>
+          </tbody>
+        </table>
+        </div>
+        <div class="card-foot small muted">
+          <span style="color:var(--warn);font-weight:700">~</span> only when the workspace policy allows it.
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="scrim" id="m-invite" hidden>
+  <div class="modal">
+    <div class="m-head"><h3>Invite user</h3></div>
+    <div class="m-body">
+      <div class="field"><label>Email</label><input type="email" placeholder="name@meridian.example"></div>
+      <div class="field mb0">
+        <label>Role</label>
+        <div class="choices">
+          <div class="choice"><div class="mark"></div><div class="grow"><div class="t">Admin</div><div class="d">Users, agents, models, API keys, connectors, runtimes</div></div></div>
+          <div class="choice selected"><div class="mark"></div><div class="grow"><div class="t">Builder</div><div class="d">Create, edit and run agents, skills, files and connectors</div></div></div>
+          <div class="choice"><div class="mark"></div><div class="grow"><div class="t">Viewer</div><div class="d">Run permitted agents and see their own sessions</div></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="m-foot"><button class="btn" data-modal-close>Cancel</button><button class="btn primary" data-modal-close data-toast="Invitation sent">Send invitation</button></div>
+  </div>
+</div>
+
+<div class="scrim" id="m-sso" hidden>
+  <div class="modal">
+    <div class="m-head"><h3>Single sign-on</h3><div class="sub">Generic OIDC. No provider-specific logic — Entra ID, Okta and Keycloak all work the same way.</div></div>
+    <div class="m-body">
+      <div class="field"><label>Issuer URL</label><input type="text" class="mono-input" value="https://login.microsoftonline.com/8f2a…/v2.0"></div>
+      <div class="field row2">
+        <div><label>Client ID</label><input type="text" class="mono-input" value="4c1e9a7b-…"></div>
+        <div><label>Client secret</label><input type="password" value="••••••••••••"></div>
+      </div>
+      <div class="field"><label>Redirect URL</label><input type="text" class="mono-input" value="https://agents.meridian.example/api/auth/callback" readonly></div>
+      <div class="field mb0">
+        <label>Default role for new users</label>
+        <select><option>Viewer</option><option>Builder</option></select>
+      </div>
+      <div class="callout mt16">
+        <span class="ico">ℹ</span>
+        <div class="grow">The local administrator account stays usable after SSO is enabled, so a broken identity
+          provider cannot lock you out of your own deployment.</div>
+      </div>
+    </div>
+    <div class="m-foot"><button class="btn" data-modal-close>Cancel</button><button class="btn primary" data-modal-close data-toast="SSO configuration saved">Save</button></div>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

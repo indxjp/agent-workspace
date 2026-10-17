@@ -1,0 +1,408 @@
+---
+title: "platforms"
+description: "The @indx-workspace/contracts/platforms exports, sorted alphabetically."
+---
+
+<Note>This page is generated from `packages/contracts/src/platform-ids.ts`, `packages/contracts/src/platforms.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## FieldVerdict
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | `string` | Yes |  |
+| `verdict` | `"native" \| "mapped" \| "dropped"` | Yes |  |
+| `note` | `string` | Yes |  |
+| `code` | `undefined \| "code_tool_needs_public_mcp" \| "stdio_mcp_unsupported" \| "subagents_unsupported" \| "skills_unsupported" \| "knowledge_unsupported" \| "builtin_unsupported" \| "limits_unsupported" \| "permissions_unsupported" \| "field_unsupported"` | No |  |
+
+## FieldVerdictSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | `string` | Yes |  |
+| `verdict` | `"native" \| "mapped" \| "dropped"` | Yes |  |
+| `note` | `string` | Yes |  |
+| `code` | `undefined \| "code_tool_needs_public_mcp" \| "stdio_mcp_unsupported" \| "subagents_unsupported" \| "skills_unsupported" \| "knowledge_unsupported" \| "builtin_unsupported" \| "limits_unsupported" \| "permissions_unsupported" \| "field_unsupported"` | No |  |
+
+## HOSTED_PLATFORM_IDS
+
+The platforms that host and run the agent (publish targets); the eject-* ids only export code.
+
+- `'claude-managed-agents'`
+- `'copilot-studio'`
+- `'m365-declarative-agent'`
+- `'microsoft-foundry'`
+- `'gemini-enterprise'`
+- `'aws-agentcore'`
+
+## HostedPlatformId
+
+- `"aws-agentcore"`
+- `"claude-managed-agents"`
+- `"copilot-studio"`
+- `"m365-declarative-agent"`
+- `"microsoft-foundry"`
+- `"gemini-enterprise"`
+
+## PLATFORM_CAPABILITY_KEYS
+
+- `'description'`
+- `'instructions'`
+- `'model'`
+- `'engine'`
+- `'permissions'`
+- `'mcpRemote'`
+- `'mcpStdio'`
+- `'codeTools'`
+- `'openapiTools'`
+- `'builtinTools'`
+- `'skills'`
+- `'knowledgeFiles'`
+- `'knowledgeUrls'`
+- `'knowledgeConnectors'`
+- `'subagents'`
+- `'limits'`
+
+## PLATFORM_DROP_CODES
+
+ADR-0133 D8: why a field was dropped. New codes are added by amending the ADR.
+
+- `'code_tool_needs_public_mcp'`
+- `'stdio_mcp_unsupported'`
+- `'subagents_unsupported'`
+- `'skills_unsupported'`
+- `'knowledge_unsupported'`
+- `'builtin_unsupported'`
+- `'limits_unsupported'`
+- `'permissions_unsupported'`
+- `'field_unsupported'`
+
+## PLATFORM_EXPORT_MAX_BYTES
+
+Bound of all file contents of one export, in decoded bytes.
+
+Value: `8 * 1024 * 1024`
+
+## PLATFORM_EXPORT_PROBLEM_CODES
+
+Problem codes the platform export routes answer, with the status each travels under (issue #968).
+A code the version routes own keeps that table's status, read from it rather than retyped.
+
+| Key | Value |
+| --- | --- |
+| `invalid_agent_id` | `AGENT_VERSION_PROBLEM_CODES.invalid_agent_id` |
+| `invalid_platform_export` | `400` |
+| `platform_options_invalid` | `400` |
+| `agent_not_found` | `AGENT_VERSION_PROBLEM_CODES.agent_not_found` |
+| `agent_version_not_found` | `AGENT_VERSION_PROBLEM_CODES.agent_version_not_found` |
+| `agent_name_not_portable` | `422` |
+| `platform_model_unsupported` | `422` |
+| `platform_limit_exceeded` | `422` |
+| `platform_agent_not_found` | `422` |
+| `platform_export_too_large` | `422` |
+| `agent_policy_not_configured` | `AGENT_VERSION_PROBLEM_CODES.agent_policy_not_configured` |
+
+## PLATFORM_EXPORT_REQUEST_MAX_BYTES
+
+Bound of the export request body: options are a platform's own block, small by nature.
+
+Value: `16 * 1024`
+
+## PLATFORM_IDS
+
+ADR-0133 D1: the external hosts an agent is exported or published to, in wire order. This leaf
+module holds only the ids so `portable-agent.ts` can name them without importing `platforms.ts`,
+which in turn imports the portable path schema; `platforms.ts` re-exports everything here.
+
+`aws-agentcore` here names the managed AWS agent host an agent is published to. It is not the
+runtime driver `aws-agentcore` (`RUNTIME_DRIVERS` in `./runtimes.ts`), which names where a run's
+sandbox executes; the two share a word and nothing else.
+
+- `'claude-managed-agents'`
+- `'copilot-studio'`
+- `'m365-declarative-agent'`
+- `'microsoft-foundry'`
+- `'gemini-enterprise'`
+- `'aws-agentcore'`
+- `'eject-claude-agent-sdk'`
+- `'eject-mastra'`
+- `'eject-openai-agents'`
+
+## PLATFORM_REFUSAL_CODES
+
+ADR-0133 D8: the only reasons a compile refuses instead of dropping.
+
+- `'platform_model_unsupported'`
+- `'platform_limit_exceeded'`
+- `'platform_options_invalid'`
+- `'platform_agent_not_found'`
+
+## PLATFORM_SUPPORT
+
+How a platform carries one capability of the portable agent (ADR-0133 D7).
+
+- `'native'`
+- `'mapped'`
+- `'unsupported'`
+
+## PLATFORM_VERDICTS
+
+- `'native'`
+- `'mapped'`
+- `'dropped'`
+
+## PlatformCapabilities
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `description` | `"unsupported" \| "native" \| "mapped"` | Yes |  |
+| `instructions` | `"unsupported" \| "native" \| "mapped"` | Yes |  |
+| `model` | `"unsupported" \| "native" \| "mapped"` | Yes |  |
+| `engine` | `"unsupported" \| "native" \| "mapped"` | Yes |  |
+| `permissions` | `"unsupported" \| "native" \| "mapped"` | Yes |  |
+| `mcpRemote` | `"unsupported" \| "native" \| "mapped"` | Yes |  |
+| `mcpStdio` | `"unsupported" \| "native" \| "mapped"` | Yes |  |
+| `codeTools` | `"unsupported" \| "native" \| "mapped"` | Yes |  |
+| `openapiTools` | `"unsupported" \| "native" \| "mapped"` | Yes |  |
+| `builtinTools` | `"unsupported" \| "native" \| "mapped"` | Yes |  |
+| `skills` | `"unsupported" \| "native" \| "mapped"` | Yes |  |
+| `knowledgeFiles` | `"unsupported" \| "native" \| "mapped"` | Yes |  |
+| `knowledgeUrls` | `"unsupported" \| "native" \| "mapped"` | Yes |  |
+| `knowledgeConnectors` | `"unsupported" \| "native" \| "mapped"` | Yes |  |
+| `subagents` | `"unsupported" \| "native" \| "mapped"` | Yes |  |
+| `limits` | `"unsupported" \| "native" \| "mapped"` | Yes |  |
+
+## PlatformCapabilitiesSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `description` | `"unsupported" \| "native" \| "mapped"` | Yes |  |
+| `instructions` | `"unsupported" \| "native" \| "mapped"` | Yes |  |
+| `model` | `"unsupported" \| "native" \| "mapped"` | Yes |  |
+| `engine` | `"unsupported" \| "native" \| "mapped"` | Yes |  |
+| `permissions` | `"unsupported" \| "native" \| "mapped"` | Yes |  |
+| `mcpRemote` | `"unsupported" \| "native" \| "mapped"` | Yes |  |
+| `mcpStdio` | `"unsupported" \| "native" \| "mapped"` | Yes |  |
+| `codeTools` | `"unsupported" \| "native" \| "mapped"` | Yes |  |
+| `openapiTools` | `"unsupported" \| "native" \| "mapped"` | Yes |  |
+| `builtinTools` | `"unsupported" \| "native" \| "mapped"` | Yes |  |
+| `skills` | `"unsupported" \| "native" \| "mapped"` | Yes |  |
+| `knowledgeFiles` | `"unsupported" \| "native" \| "mapped"` | Yes |  |
+| `knowledgeUrls` | `"unsupported" \| "native" \| "mapped"` | Yes |  |
+| `knowledgeConnectors` | `"unsupported" \| "native" \| "mapped"` | Yes |  |
+| `subagents` | `"unsupported" \| "native" \| "mapped"` | Yes |  |
+| `limits` | `"unsupported" \| "native" \| "mapped"` | Yes |  |
+
+## PlatformCapabilityKey
+
+- `"description"`
+- `"skills"`
+- `"permissions"`
+- `"instructions"`
+- `"model"`
+- `"engine"`
+- `"subagents"`
+- `"limits"`
+- `"mcpRemote"`
+- `"mcpStdio"`
+- `"codeTools"`
+- `"openapiTools"`
+- `"builtinTools"`
+- `"knowledgeFiles"`
+- `"knowledgeUrls"`
+- `"knowledgeConnectors"`
+
+## PlatformDescriptor
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `"aws-agentcore" \| "claude-managed-agents" \| "copilot-studio" \| "m365-declarative-agent" \| "microsoft-foundry" \| "gemini-enterprise" \| "eject-claude-agent-sdk" \| "eject-mastra" \| "eject-openai-agents"` | Yes |  |
+| `displayName` | `string` | Yes |  |
+| `docsUrl` | `string` | Yes |  |
+| `capabilities` | `PlatformCapabilities` | Yes |  |
+
+## PlatformDescriptorSchema
+
+One platform as `GET /api/platforms` lists it; the target's `optionsSchema` is code, not wire.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `"aws-agentcore" \| "claude-managed-agents" \| "copilot-studio" \| "m365-declarative-agent" \| "microsoft-foundry" \| "gemini-enterprise" \| "eject-claude-agent-sdk" \| "eject-mastra" \| "eject-openai-agents"` | Yes |  |
+| `displayName` | `string` | Yes |  |
+| `docsUrl` | `string` | Yes |  |
+| `capabilities` | `PlatformCapabilities` | Yes |  |
+
+## PlatformDropCode
+
+- `"code_tool_needs_public_mcp"`
+- `"stdio_mcp_unsupported"`
+- `"subagents_unsupported"`
+- `"skills_unsupported"`
+- `"knowledge_unsupported"`
+- `"builtin_unsupported"`
+- `"limits_unsupported"`
+- `"permissions_unsupported"`
+- `"field_unsupported"`
+
+## PlatformExportFile
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | `string` | Yes |  |
+| `encoding` | `"utf8" \| "base64"` | Yes |  |
+| `content` | `string` | Yes |  |
+
+## PlatformExportFileSchema
+
+One emitted file on the wire. A `PlatformFile` may carry bytes (a skill asset), which JSON
+cannot, so text travels as `utf8` and bytes as `base64`. The path rules are the emitted file's own.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | `string` | Yes |  |
+| `encoding` | `"utf8" \| "base64"` | Yes |  |
+| `content` | `string` | Yes |  |
+
+## PlatformExportProblemCode
+
+- `"invalid_agent_id"`
+- `"agent_not_found"`
+- `"agent_policy_not_configured"`
+- `"agent_version_not_found"`
+- `"invalid_platform_export"`
+- `"platform_options_invalid"`
+- `"agent_name_not_portable"`
+- `"platform_model_unsupported"`
+- `"platform_limit_exceeded"`
+- `"platform_agent_not_found"`
+- `"platform_export_too_large"`
+
+## PlatformExportRequest
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `version` | `number` | Yes |  |
+| `platform` | `"aws-agentcore" \| "claude-managed-agents" \| "copilot-studio" \| "m365-declarative-agent" \| "microsoft-foundry" \| "gemini-enterprise"` | Yes | A hosted target; the `eject-*` ids have no compiler here, so they are refused as a bad request. |
+| `options` | `undefined \| Record<string, unknown>` | No | `extensions.platforms[platform]`; validated by that target's `optionsSchema`, never here. |
+
+## PlatformExportRequestInput
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `version` | `number` | Yes |  |
+| `platform` | `"aws-agentcore" \| "claude-managed-agents" \| "copilot-studio" \| "m365-declarative-agent" \| "microsoft-foundry" \| "gemini-enterprise"` | Yes | A hosted target; the `eject-*` ids have no compiler here, so they are refused as a bad request. |
+| `options` | `undefined \| Record<string, unknown>` | No | `extensions.platforms[platform]`; validated by that target's `optionsSchema`, never here. |
+
+## PlatformExportRequestSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `version` | `number` | Yes |  |
+| `platform` | `"aws-agentcore" \| "claude-managed-agents" \| "copilot-studio" \| "m365-declarative-agent" \| "microsoft-foundry" \| "gemini-enterprise"` | Yes | A hosted target; the `eject-*` ids have no compiler here, so they are refused as a bad request. |
+| `options` | `undefined \| Record<string, unknown>` | No | `extensions.platforms[platform]`; validated by that target's `optionsSchema`, never here. |
+
+## PlatformExportResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `agentId` | `string` | Yes |  |
+| `version` | `number` | Yes |  |
+| `platform` | `"aws-agentcore" \| "claude-managed-agents" \| "copilot-studio" \| "m365-declarative-agent" \| "microsoft-foundry" \| "gemini-enterprise" \| "eject-claude-agent-sdk" \| "eject-mastra" \| "eject-openai-agents"` | Yes |  |
+| `files` | `readonly PlatformExportFile[]` | Yes | Every file the target emitted, plus `PLATFORM_REPORT.md`, sorted by `path`. |
+| `report` | `readonly FieldVerdict[]` | Yes |  |
+
+## PlatformExportResponseSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `agentId` | `string` | Yes |  |
+| `version` | `number` | Yes |  |
+| `platform` | `"aws-agentcore" \| "claude-managed-agents" \| "copilot-studio" \| "m365-declarative-agent" \| "microsoft-foundry" \| "gemini-enterprise" \| "eject-claude-agent-sdk" \| "eject-mastra" \| "eject-openai-agents"` | Yes |  |
+| `files` | `readonly PlatformExportFile[]` | Yes | Every file the target emitted, plus `PLATFORM_REPORT.md`, sorted by `path`. |
+| `report` | `readonly FieldVerdict[]` | Yes |  |
+
+## PlatformFile
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | `string` | Yes |  |
+| `content` | `string \| Uint8Array<ArrayBuffer>` | Yes |  |
+
+## PlatformFileSchema
+
+One emitted file. `content` is UTF-8 text, or bytes when the source was binary (a skill asset).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | `string` | Yes |  |
+| `content` | `string \| Uint8Array<ArrayBuffer>` | Yes |  |
+
+## PlatformId
+
+- `"aws-agentcore"`
+- `"claude-managed-agents"`
+- `"copilot-studio"`
+- `"m365-declarative-agent"`
+- `"microsoft-foundry"`
+- `"gemini-enterprise"`
+- `"eject-claude-agent-sdk"`
+- `"eject-mastra"`
+- `"eject-openai-agents"`
+
+## PlatformIdSchema
+
+- `"aws-agentcore"`
+- `"claude-managed-agents"`
+- `"copilot-studio"`
+- `"m365-declarative-agent"`
+- `"microsoft-foundry"`
+- `"gemini-enterprise"`
+- `"eject-claude-agent-sdk"`
+- `"eject-mastra"`
+- `"eject-openai-agents"`
+
+## PlatformListResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `platforms` | `readonly PlatformDescriptor[]` | Yes |  |
+
+## PlatformListResponseSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `platforms` | `readonly PlatformDescriptor[]` | Yes |  |
+
+## PlatformRefusal
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `code` | `"platform_options_invalid" \| "platform_model_unsupported" \| "platform_limit_exceeded" \| "platform_agent_not_found"` | Yes |  |
+| `message` | `string` | Yes |  |
+| `details` | `readonly string[]` | Yes |  |
+
+## PlatformRefusalCode
+
+- `"platform_options_invalid"`
+- `"platform_model_unsupported"`
+- `"platform_limit_exceeded"`
+- `"platform_agent_not_found"`
+
+## PlatformRefusalSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `code` | `"platform_options_invalid" \| "platform_model_unsupported" \| "platform_limit_exceeded" \| "platform_agent_not_found"` | Yes |  |
+| `message` | `string` | Yes |  |
+| `details` | `readonly string[]` | Yes |  |
+
+## PlatformSupport
+
+- `"unsupported"`
+- `"native"`
+- `"mapped"`
+
+## PlatformVerdict
+
+- `"native"`
+- `"mapped"`
+- `"dropped"`

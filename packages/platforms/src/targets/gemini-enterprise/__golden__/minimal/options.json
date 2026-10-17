@@ -1,0 +1,6 @@
+{
+  "projectId": "acme-agents",
+  "location": "global",
+  "engineId": "acme-support-app",
+  "publicBaseUrl": "https://aw.example.com"
+}

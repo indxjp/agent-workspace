@@ -1,0 +1,9 @@
+{
+  // The test view: all of `src`, the conformance kit and tests included, with Node types. The kit's
+  // `golden.ts` reads and writes golden files, and the tests use `node:*` and `vitest`.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "exclude": []
+}

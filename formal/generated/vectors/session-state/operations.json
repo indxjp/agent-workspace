@@ -1,0 +1,90 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.SessionState.replace_all_yields_exactly_those_entries",
+    "AgentWorkspace.Theorems.Invariants.SessionState.append_of_a_known_key_does_not_grow_the_stream",
+    "AgentWorkspace.Theorems.Invariants.SessionState.append_of_a_keyless_entry_always_grows_the_stream",
+    "AgentWorkspace.Theorems.Invariants.SessionState.delete_last_removes_exactly_the_last"],
+   "input": {"operations": []},
+   "id": "never-written",
+   "expected": {"entries": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.SessionState.replace_all_yields_exactly_those_entries",
+    "AgentWorkspace.Theorems.Invariants.SessionState.append_of_a_known_key_does_not_grow_the_stream",
+    "AgentWorkspace.Theorems.Invariants.SessionState.append_of_a_keyless_entry_always_grows_the_stream",
+    "AgentWorkspace.Theorems.Invariants.SessionState.delete_last_removes_exactly_the_last"],
+   "input": {"operations": [{"op": "append", "entries": []}]},
+   "id": "empty-batch-creates-the-stream",
+   "expected": {"entries": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.SessionState.replace_all_yields_exactly_those_entries",
+    "AgentWorkspace.Theorems.Invariants.SessionState.append_of_a_known_key_does_not_grow_the_stream",
+    "AgentWorkspace.Theorems.Invariants.SessionState.append_of_a_keyless_entry_always_grows_the_stream",
+    "AgentWorkspace.Theorems.Invariants.SessionState.delete_last_removes_exactly_the_last"],
+   "input":
+   {"operations":
+    [{"op": "append", "entries": [{"payload": "first", "entryKey": "a"}, {"payload": "second", "entryKey": "b"}]}]},
+   "id": "two-entries",
+   "expected": {"entries": [{"payload": "first", "entryKey": "a"}, {"payload": "second", "entryKey": "b"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.SessionState.replace_all_yields_exactly_those_entries",
+    "AgentWorkspace.Theorems.Invariants.SessionState.append_of_a_known_key_does_not_grow_the_stream",
+    "AgentWorkspace.Theorems.Invariants.SessionState.append_of_a_keyless_entry_always_grows_the_stream",
+    "AgentWorkspace.Theorems.Invariants.SessionState.delete_last_removes_exactly_the_last"],
+   "input":
+   {"operations":
+    [{"op": "append", "entries": [{"payload": "first", "entryKey": "a"}, {"payload": "second", "entryKey": "b"}]},
+     {"op": "append", "entries": [{"payload": "redelivered", "entryKey": "a"}]}]},
+   "id": "redelivery-upserts-in-place",
+   "expected": {"entries": [{"payload": "redelivered", "entryKey": "a"}, {"payload": "second", "entryKey": "b"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.SessionState.replace_all_yields_exactly_those_entries",
+    "AgentWorkspace.Theorems.Invariants.SessionState.append_of_a_known_key_does_not_grow_the_stream",
+    "AgentWorkspace.Theorems.Invariants.SessionState.append_of_a_keyless_entry_always_grows_the_stream",
+    "AgentWorkspace.Theorems.Invariants.SessionState.delete_last_removes_exactly_the_last"],
+   "input":
+   {"operations":
+    [{"op": "append", "entries": [{"payload": "summary", "entryKey": null}]},
+     {"op": "append", "entries": [{"payload": "summary", "entryKey": null}]}]},
+   "id": "keyless-entries-are-never-deduped",
+   "expected": {"entries": [{"payload": "summary", "entryKey": null}, {"payload": "summary", "entryKey": null}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.SessionState.replace_all_yields_exactly_those_entries",
+    "AgentWorkspace.Theorems.Invariants.SessionState.append_of_a_known_key_does_not_grow_the_stream",
+    "AgentWorkspace.Theorems.Invariants.SessionState.append_of_a_keyless_entry_always_grows_the_stream",
+    "AgentWorkspace.Theorems.Invariants.SessionState.delete_last_removes_exactly_the_last"],
+   "input":
+   {"operations":
+    [{"op": "append", "entries": [{"payload": "first", "entryKey": "a"}, {"payload": "second", "entryKey": "b"}]},
+     {"op": "delete-last"}]},
+   "id": "delete-last-removes-one",
+   "expected": {"entries": [{"payload": "first", "entryKey": "a"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.SessionState.replace_all_yields_exactly_those_entries",
+    "AgentWorkspace.Theorems.Invariants.SessionState.append_of_a_known_key_does_not_grow_the_stream",
+    "AgentWorkspace.Theorems.Invariants.SessionState.append_of_a_keyless_entry_always_grows_the_stream",
+    "AgentWorkspace.Theorems.Invariants.SessionState.delete_last_removes_exactly_the_last"],
+   "input": {"operations": [{"op": "append", "entries": []}, {"op": "delete-last"}]},
+   "id": "delete-last-of-an-empty-stream",
+   "expected": {"entries": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.SessionState.replace_all_yields_exactly_those_entries",
+    "AgentWorkspace.Theorems.Invariants.SessionState.append_of_a_known_key_does_not_grow_the_stream",
+    "AgentWorkspace.Theorems.Invariants.SessionState.append_of_a_keyless_entry_always_grows_the_stream",
+    "AgentWorkspace.Theorems.Invariants.SessionState.delete_last_removes_exactly_the_last"],
+   "input":
+   {"operations":
+    [{"op": "append", "entries": [{"payload": "first", "entryKey": "a"}]},
+     {"op": "replace-all", "entries": [{"payload": "only", "entryKey": "z"}]}]},
+   "id": "replace-all-renumbers",
+   "expected": {"entries": [{"payload": "only", "entryKey": "z"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.SessionState.replace_all_yields_exactly_those_entries",
+    "AgentWorkspace.Theorems.Invariants.SessionState.append_of_a_known_key_does_not_grow_the_stream",
+    "AgentWorkspace.Theorems.Invariants.SessionState.append_of_a_keyless_entry_always_grows_the_stream",
+    "AgentWorkspace.Theorems.Invariants.SessionState.delete_last_removes_exactly_the_last"],
+   "input":
+   {"operations": [{"op": "append", "entries": [{"payload": "first", "entryKey": "a"}]}, {"op": "delete-stream"}]},
+   "id": "delete-stream-is-not-an-empty-stream",
+   "expected": {"entries": null}}],
+ "family": "session-state",
+ "description": "Append, replace-all and delete-last over one stream"}

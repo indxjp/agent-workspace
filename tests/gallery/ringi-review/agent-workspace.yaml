@@ -1,0 +1,27 @@
+apiVersion: agentworkspace.dev/v2
+kind: Project
+name: ringi-review
+engine: claude-agent-sdk
+# The rule book, the authority matrix and the ringi archive are your own MCP server
+# (mcp/ringi-archive.mjs). A project file names only remote connectors, so run it over Streamable
+# HTTP for `aw dev`:
+#   MCP_TRANSPORT=http PORT=8790 node mcp/ringi-archive.mjs
+connectors:
+  ringi-archive:
+    url: http://127.0.0.1:8790/mcp
+    transport: http
+policy:
+  # The ceiling no agent in this project can widen: the reviewer reads, it never writes.
+  permissions:
+    writeFiles: false
+    runCommands: false
+    unrestrictedNetwork: false
+  limits:
+    maxBudgetUsd: 1
+  promotion:
+    minEvalScore: 0.9
+environments:
+  local:
+    cloud: local
+    identity:
+      bootstrapAdmin: admin@localhost.test

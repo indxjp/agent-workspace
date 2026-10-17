@@ -1,0 +1,21 @@
+{
+  // The emit view. The only config in this package that writes to dist/, and
+  // therefore the only one that needs to exclude tests. `src/testing.ts` is built: it ships as
+  // the public `./testing` subpath (P-2, ADR-0082).
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "rootDir": "src",
+    "outDir": "dist",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true
+  },
+  "exclude": [
+    "src/project/starters",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.ts",
+    "**/*.spec.tsx"
+  ]
+}

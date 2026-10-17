@@ -1,0 +1,78 @@
+import { z } from 'zod';
+
+import { IsoDateTimeSchema, UuidSchema } from './identifiers.js';
+
+/** The ratings a visitor may give one run's answer (C19; ADR-0108 SD10, issue #537). */
+export const RUN_FEEDBACK_RATINGS = ['up', 'down'] as const;
+export type RunFeedbackRating = (typeof RUN_FEEDBACK_RATINGS)[number];
+
+/** The longest feedback comment, in characters (C19; issue #537). */
+export const RUN_FEEDBACK_COMMENT_MAX_LENGTH = 1000;
+
+/**
+ * The body a surface sends to rate one run (C19; issue #537): a thumbs-up or -down and an
+ * optional non-blank comment. The route and its problem codes are S2-05c's.
+ */
+export const RunFeedbackRequestSchema = z
+  .object({
+    rating: z.enum(RUN_FEEDBACK_RATINGS),
+    comment: z
+      .string()
+      .max(RUN_FEEDBACK_COMMENT_MAX_LENGTH)
+      .refine((comment) => comment.trim().length > 0, { message: 'comment must not be blank' })
+      .optional(),
+  })
+  .strict()
+  .readonly();
+/** A parsed {@link RunFeedbackRequestSchema} (C19; issue #537). */
+export type RunFeedbackRequest = z.infer<typeof RunFeedbackRequestSchema>;
+
+/** The most items `GET /api/agents/:id/feedback` answers: the newest ones (issue #620). */
+export const RUN_FEEDBACK_LIST_LIMIT = 50;
+
+/**
+ * The query of `GET /api/agents/:id/feedback` (issue #620). Every key is optional and any other is
+ * refused: one rating, the ratings at or after `since`, or the ratings of one run.
+ */
+export const RunFeedbackListQuerySchema = z
+  .object({
+    rating: z.enum(RUN_FEEDBACK_RATINGS).optional(),
+    since: IsoDateTimeSchema.optional(),
+    runId: UuidSchema.optional(),
+  })
+  .strict()
+  .readonly();
+export type RunFeedbackListQuery = z.infer<typeof RunFeedbackListQuerySchema>;
+
+/**
+ * One rating of a run of the agent (issue #620), with what an evaluation case needs from the run:
+ * `input`, the prompt it started with (`null` for a run recorded before prompts were stored), and
+ * `answer`, the text of its last assistant message (`''` when it said nothing).
+ */
+export const RunFeedbackItemSchema = z
+  .object({
+    runId: UuidSchema,
+    rating: z.enum(RUN_FEEDBACK_RATINGS),
+    comment: z.string().nullable(),
+    input: z.string().nullable(),
+    answer: z.string(),
+    createdAt: IsoDateTimeSchema,
+  })
+  .strict()
+  .readonly();
+export type RunFeedbackItem = z.infer<typeof RunFeedbackItemSchema>;
+
+/** `GET /api/agents/:id/feedback`: at most {@link RUN_FEEDBACK_LIST_LIMIT} items, newest first. */
+export const RunFeedbackListResponseSchema = z
+  .object({ items: z.array(RunFeedbackItemSchema).readonly() })
+  .strict()
+  .readonly();
+export type RunFeedbackListResponse = z.infer<typeof RunFeedbackListResponseSchema>;
+
+/** The refusals of `GET /api/agents/:id/feedback` (issue #620). */
+export const RUN_FEEDBACK_LIST_PROBLEM_CODES = {
+  invalid_agent_id: 400,
+  invalid_query: 400,
+  agent_not_found: 404,
+  run_api_not_configured: 503,
+} as const;

@@ -1,0 +1,164 @@
+{"vectors":
+ [{"witnesses": ["AgentWorkspace.Theorems.Normative.EngineImages.catalogue_is_the_map"],
+   "input":
+   {"requireDigest": false,
+    "knownEngineIds": ["claude-agent-sdk", "pi"],
+    "entries":
+    [["claude-agent-sdk", "registry.example/secret-project-7/runtime-claude-agent-sdk:v1"],
+     ["pi", "registry.example/secret-project-7/runtime-pi:v1"]]},
+   "id": "two-engines",
+   "expected":
+   {"ok": true,
+    "images":
+    [["claude-agent-sdk", "registry.example/secret-project-7/runtime-claude-agent-sdk:v1"],
+     ["pi", "registry.example/secret-project-7/runtime-pi:v1"]]}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.EngineImages.catalogue_is_the_map"],
+   "input": {"requireDigest": false, "knownEngineIds": ["claude-agent-sdk", "pi"], "entries": []},
+   "id": "empty-map",
+   "expected": {"ok": true, "images": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.EngineImages.malformed_map_fails_parsing",
+    "AgentWorkspace.Theorems.Normative.EngineImages.refusal_names_no_value",
+    "AgentWorkspace.Theorems.Normative.EngineImages.refusal_names_only_configured_keys"],
+   "input":
+   {"requireDigest": false,
+    "knownEngineIds": ["claude-agent-sdk", "pi"],
+    "entries": [["pie", "registry.example/secret-project-7/runtime-pi:v1"]]},
+   "id": "unpublished-key",
+   "expected": {"unpinned": [], "unknown": ["pie"], "ok": false, "malformed": [], "keys": ["pie"], "duplicates": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.EngineImages.malformed_map_fails_parsing",
+    "AgentWorkspace.Theorems.Normative.EngineImages.refusal_names_no_value",
+    "AgentWorkspace.Theorems.Normative.EngineImages.refusal_names_only_configured_keys"],
+   "input":
+   {"requireDigest": false,
+    "knownEngineIds": ["claude-agent-sdk", "pi"],
+    "entries": [["Claude-Agent-SDK", "registry.example/secret-project-7/runtime-claude-agent-sdk:v1"]]},
+   "id": "unpublished-casing",
+   "expected":
+   {"unpinned": [],
+    "unknown": ["Claude-Agent-SDK"],
+    "ok": false,
+    "malformed": [],
+    "keys": ["Claude-Agent-SDK"],
+    "duplicates": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.EngineImages.malformed_map_fails_parsing",
+    "AgentWorkspace.Theorems.Normative.EngineImages.refusal_names_no_value",
+    "AgentWorkspace.Theorems.Normative.EngineImages.refusal_names_only_configured_keys"],
+   "input":
+   {"requireDigest": false,
+    "knownEngineIds": ["claude-agent-sdk", "pi"],
+    "entries": [["claude-agent-sdk", "two words"]]},
+   "id": "whitespace-value",
+   "expected":
+   {"unpinned": [],
+    "unknown": [],
+    "ok": false,
+    "malformed": ["claude-agent-sdk"],
+    "keys": ["claude-agent-sdk"],
+    "duplicates": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.EngineImages.malformed_map_fails_parsing",
+    "AgentWorkspace.Theorems.Normative.EngineImages.refusal_names_no_value",
+    "AgentWorkspace.Theorems.Normative.EngineImages.refusal_names_only_configured_keys"],
+   "input": {"requireDigest": false, "knownEngineIds": ["claude-agent-sdk", "pi"], "entries": [["pi", ""]]},
+   "id": "empty-value",
+   "expected": {"unpinned": [], "unknown": [], "ok": false, "malformed": ["pi"], "keys": ["pi"], "duplicates": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.EngineImages.malformed_map_fails_parsing",
+    "AgentWorkspace.Theorems.Normative.EngineImages.refusal_names_no_value",
+    "AgentWorkspace.Theorems.Normative.EngineImages.refusal_names_only_configured_keys"],
+   "input":
+   {"requireDigest": false,
+    "knownEngineIds": ["claude-agent-sdk", "pi"],
+    "entries": [["pi", "-registry.example/runtime-pi:v1"]]},
+   "id": "leading-dash",
+   "expected": {"unpinned": [], "unknown": [], "ok": false, "malformed": ["pi"], "keys": ["pi"], "duplicates": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.EngineImages.malformed_map_fails_parsing",
+    "AgentWorkspace.Theorems.Normative.EngineImages.refusal_names_no_value",
+    "AgentWorkspace.Theorems.Normative.EngineImages.refusal_names_only_configured_keys"],
+   "input":
+   {"requireDigest": false,
+    "knownEngineIds": ["claude-agent-sdk", "pi"],
+    "entries": [["pi", "registry.example/run$time-pi:v1"]]},
+   "id": "illegal-character",
+   "expected": {"unpinned": [], "unknown": [], "ok": false, "malformed": ["pi"], "keys": ["pi"], "duplicates": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.EngineImages.malformed_map_fails_parsing",
+    "AgentWorkspace.Theorems.Normative.EngineImages.refusal_names_no_value",
+    "AgentWorkspace.Theorems.Normative.EngineImages.refusal_names_only_configured_keys"],
+   "input":
+   {"requireDigest": true,
+    "knownEngineIds": ["claude-agent-sdk", "pi"],
+    "entries": [["claude-agent-sdk", "registry.example/secret-project-7/runtime-claude-agent-sdk:v1"]]},
+   "id": "digest-required-tag",
+   "expected":
+   {"unpinned": ["claude-agent-sdk"],
+    "unknown": [],
+    "ok": false,
+    "malformed": [],
+    "keys": ["claude-agent-sdk"],
+    "duplicates": []}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.EngineImages.catalogue_is_the_map"],
+   "input":
+   {"requireDigest": true,
+    "knownEngineIds": ["claude-agent-sdk", "pi"],
+    "entries":
+    [["claude-agent-sdk",
+      "registry.example/agent-workspace/runtime-claude-agent-sdk@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+     ["pi",
+      "registry.example/agent-workspace/runtime-pi@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]]},
+   "id": "digest-required-digest",
+   "expected":
+   {"ok": true,
+    "images":
+    [["claude-agent-sdk",
+      "registry.example/agent-workspace/runtime-claude-agent-sdk@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+     ["pi",
+      "registry.example/agent-workspace/runtime-pi@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.EngineImages.malformed_map_fails_parsing",
+    "AgentWorkspace.Theorems.Normative.EngineImages.refusal_names_no_value",
+    "AgentWorkspace.Theorems.Normative.EngineImages.refusal_names_only_configured_keys"],
+   "input":
+   {"requireDigest": false,
+    "knownEngineIds": ["claude-agent-sdk", "pi"],
+    "entries":
+    [["claude-agent-sdk", "registry.example/secret-project-7/runtime-claude-agent-sdk:v1"],
+     ["claude-agent-sdk",
+      "registry.example/agent-workspace/runtime-claude-agent-sdk@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]]},
+   "id": "duplicate-key",
+   "expected":
+   {"unpinned": [],
+    "unknown": [],
+    "ok": false,
+    "malformed": [],
+    "keys": ["claude-agent-sdk"],
+    "duplicates": ["claude-agent-sdk"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.EngineImages.malformed_map_fails_parsing",
+    "AgentWorkspace.Theorems.Normative.EngineImages.refusal_names_no_value",
+    "AgentWorkspace.Theorems.Normative.EngineImages.refusal_names_only_configured_keys"],
+   "input":
+   {"requireDigest": true,
+    "knownEngineIds": ["claude-agent-sdk", "pi"],
+    "entries":
+    [["claude-agent-sdk",
+      "registry.example/agent-workspace/runtime-claude-agent-sdk@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+     ["pie",
+      "registry.example/agent-workspace/runtime-pi@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"],
+     ["pi", "registry.example/secret-project-7/runtime-pi:v1"],
+     ["claude-agent-sdk",
+      "registry.example/other/runtime@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"]]},
+   "id": "every-fault-in-order",
+   "expected":
+   {"unpinned": ["pi"],
+    "unknown": ["pie"],
+    "ok": false,
+    "malformed": [],
+    "keys": ["pie", "pi", "claude-agent-sdk"],
+    "duplicates": ["claude-agent-sdk"]}}],
+ "family": "engine-images",
+ "description": "parseEngineImageMap: the whole map or the faulting keys, never a value"}

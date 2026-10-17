@@ -1,0 +1,34 @@
+# The throwaway registry of the slice-1 exit test (tests/journey/run.mjs, S1-19, issue #457).
+#
+# So that a pull request is judged on its own code (ADR-0082 D5), `npm create @indx-workspace@latest`
+# resolves the packages this checkout packed and published here, not the ones on npm (those are
+# install-live's, ADR-0130). `@indx-workspace/*` is local only, with NO
+# proxy: a later public publish can never leak into the run. Everything else comes from npmjs.
+storage: /verdaccio/storage/data
+auth:
+  htpasswd:
+    file: /verdaccio/storage/htpasswd
+    # The run creates one throwaway publisher; nobody else may register.
+    max_users: 1
+uplinks:
+  npmjs:
+    url: https://registry.npmjs.org/
+    timeout: 60s
+    max_fails: 5
+packages:
+  '@indx-workspace/*':
+    access: $all
+    publish: $authenticated
+    unpublish: $authenticated
+  '**':
+    access: $all
+    proxy: npmjs
+# @indx-workspace/embedded carries the web, gateway and runner bundles.
+max_body_size: 300mb
+listen: 0.0.0.0:4873
+web:
+  enable: false
+log:
+  type: stdout
+  format: pretty
+  level: warn

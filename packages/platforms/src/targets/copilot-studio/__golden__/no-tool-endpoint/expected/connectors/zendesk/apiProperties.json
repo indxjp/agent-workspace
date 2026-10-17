@@ -1,0 +1,23 @@
+{
+  "properties": {
+    "connectionParameters": {
+      "api_key": {
+        "type": "securestring",
+        "uiDefinition": {
+          "displayName": "ZENDESK_TOKEN",
+          "description": "The value of secret ZENDESK_TOKEN, as 'Bearer <token>'",
+          "tooltip": "Agent Workspace secret ZENDESK_TOKEN",
+          "constraints": {
+            "tabIndex": 2,
+            "clearText": false,
+            "required": "true"
+          }
+        }
+      }
+    },
+    "iconBrandColor": "#007ee5",
+    "capabilities": [],
+    "publisher": "Agent Workspace",
+    "stackOwner": "Agent Workspace"
+  }
+}

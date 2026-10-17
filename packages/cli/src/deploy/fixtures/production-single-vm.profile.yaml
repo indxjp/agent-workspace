@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://unpkg.com/@indx-workspace/cli@0.6.9/schema/agent-workspace.schema.json
+# The deployment profile: where this deployment keeps state, bytes, secrets, sandboxes and
+# identity. `agent-workspace validate` checks it; the installer renders .env, the Compose
+# file, Helm values and Terraform variables from it. No secret belongs in this file.
+apiVersion: agentworkspace.dev/v1
+kind: Deployment
+cloud: local
+storage:
+  relational: compose-postgres
+  objects: s3://agent-workspace
+  secrets: local-key
+runtime:
+  default: docker
+identity:
+  oidc: https://login.acme.example
+  bootstrapAdmin: owner@acme.example

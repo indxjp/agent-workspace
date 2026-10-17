@@ -1,0 +1,29 @@
+{
+  "main": "gateway-worker.mjs",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "containers": [
+    {
+      "class_name": "Gateway",
+      "image": "registry.example/gateway@sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "max_instances": 1,
+      "instance_type": "standard-1"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "GATEWAY",
+        "class_name": "Gateway"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "Gateway"
+      ]
+    }
+  ]
+}

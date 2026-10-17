@@ -1,0 +1,62 @@
+[
+  {
+    "matrix": "A.10",
+    "columns": [
+      "local",
+      "sbx-rt",
+      "docker",
+      "k8s",
+      "gke-as",
+      "aca-sess",
+      "agentcore",
+      "ecs",
+      "cloudrun"
+    ],
+    "rows": [
+      "Isolation",
+      "Custom image",
+      "Start latency",
+      "Needs Docker socket",
+      "Runs on Fargate"
+    ],
+    "cause": "no-scenario",
+    "scenariosChecked": "all ten A.12 scenarios"
+  },
+  {
+    "matrix": "A.10",
+    "columns": ["gke-as", "aca-sess", "agentcore", "ecs", "cloudrun"],
+    "rows": [
+      "Per-session isolation",
+      "Domain allowlist",
+      "Deny-all egress",
+      "Persistent filesystem",
+      "Bounded session life"
+    ],
+    "cause": "out-of-scope",
+    "decision": "D-04",
+    "default": "docker + kubernetes only; no managed driver in 0.1.0"
+  },
+  {
+    "matrix": "§41",
+    "columns": ["openai", "openai-compatible"],
+    "rows": [
+      "basic-response",
+      "streaming",
+      "system-prompt",
+      "multi-turn-conversation",
+      "tool-call",
+      "tool-result",
+      "multiple-tool-calls",
+      "errors",
+      "usage",
+      "cancellation",
+      "thinking",
+      "prompt-caching",
+      "structured-output",
+      "context-management"
+    ],
+    "cause": "out-of-scope",
+    "decision": "D-03",
+    "default": "Anthropic + Azure OpenAI only; OpenAI and OpenAI-compatible ship untested and are marked unverified"
+  }
+]

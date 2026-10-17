@@ -1,0 +1,124 @@
+{{- $ports := dict "web" 3000 "gateway" 4000 "runner-manager" 8080 }}
+{{- $healthPaths := dict "web" "/" "gateway" "/health" "runner-manager" "/healthz" }}
+{{- $images := dict "web" .Values.images.web "gateway" .Values.images.gateway "runner-manager" .Values.images.runnerManager }}
+{{- range $name, $replicas := dict "web" .Values.replicas.web "gateway" .Values.replicas.gateway "runner-manager" .Values.replicas.runnerManager }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-workspace-{{ $name }}
+spec:
+  {{- if or (not $.Values.autoscaling.enabled) (eq $name "runner-manager") }}
+  replicas: {{ $replicas }}
+  {{- end }}
+  minReadySeconds: {{ $.Values.rollout.minReadySeconds }}
+  progressDeadlineSeconds: {{ $.Values.rollout.progressDeadlineSeconds }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: {{ $.Values.rollout.maxUnavailable }}
+      maxSurge: {{ $.Values.rollout.maxSurge }}
+  selector:
+    matchLabels: { app.kubernetes.io/name: "agent-workspace-{{ $name }}" }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: "agent-workspace-{{ $name }}" }
+      annotations:
+        agent-workspace.io/rollout-revision: {{ $.Values.rollout.revision | quote }}
+    spec:
+      terminationGracePeriodSeconds: 30
+      {{- if eq $name "runner-manager" }}
+      serviceAccountName: agent-workspace-runner-manager
+      {{- else }}
+      serviceAccountName: {{ $.Values.serviceAccount.name | quote }}
+      {{- end }}
+      securityContext: { runAsNonRoot: true, {{- with $.Values.runAsUser }} runAsUser: {{ . }},{{ end }} seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: {{ $name }}
+          image: {{ index $images $name | quote }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: {{ index $ports $name }}
+              protocol: TCP
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+          env:
+            # `env` wins over `envFrom` whatever their order here, so stating PORT from the same
+            # dict the containerPort comes from is what keeps a Secret from moving the listener
+            # away from the port this pod publishes and every probe dials.
+            - { name: PORT, value: {{ index $ports $name | quote }} }
+            {{- if and $.Values.runtime.driver (or (eq $name "web") (eq $name "runner-manager")) }}
+            - { name: RUNTIME_DRIVER, value: {{ $.Values.runtime.driver | quote }} }
+            {{- end }}
+            {{- if and (eq $name "runner-manager") (eq $.Values.runtime.driver "kubernetes") }}
+            # The driver runs sandboxes in this namespace, under the Role in serviceaccount.yaml.
+            - name: RUNTIME_KUBERNETES_NAMESPACE
+              valueFrom:
+                fieldRef: { fieldPath: metadata.namespace }
+            - { name: RUNTIME_GATEWAY_SERVICE, value: "agent-workspace-gateway" }
+            {{- with $.Values.runtime.egressProxyImage }}
+            - { name: AGENT_WORKSPACE_EGRESS_PROXY_IMAGE, value: {{ . | quote }} }
+            {{- end }}
+            {{- with $.Values.runtimeClassName }}
+            - { name: RUNTIME_CLASS_NAME, value: {{ . | quote }} }
+            {{- end }}
+            {{- end }}
+            {{- if and (eq $name "web") $.Values.deploymentPolicy }}
+            - { name: AW_DEPLOYMENT_POLICY, value: {{ $.Values.deploymentPolicy | quote }} }
+            {{- end }}
+            {{- if and (eq $name "web") $.Values.publicUrl }}
+            - { name: AW_PUBLIC_URL, value: {{ $.Values.publicUrl | quote }} }
+            {{- end }}
+            # ENG-07 (docs/adr/0073-one-runtime-image-per-engine.md): one variable per engine the
+            # `images.runtime` map names. A pre-ENG-07 values file that sets `images.runtime` to a
+            # single string still renders the legacy RUNTIME_IMAGE, which both the control plane
+            # and the runner manager read as the claude-agent-sdk entry.
+            {{- if kindIs "string" $.Values.images.runtime }}
+            - { name: RUNTIME_IMAGE, value: {{ $.Values.images.runtime | quote }} }
+            {{- else }}
+            {{- range $engine, $image := $.Values.images.runtime }}
+            - { name: {{ printf "AGENT_WORKSPACE_RUNTIME_IMAGE_%s" (upper (replace "-" "_" $engine)) | quote }}, value: {{ $image | quote }} }
+            {{- end }}
+            {{- end }}
+            # The object-store Secret is built from the generated `.env`, which names the
+            # credential `OBJECT_STORAGE_*`; `apps/web/server/composition/storage.ts` builds its
+            # S3 client from the `AWS_*` names. `packages/cli/templates/compose.yaml` performs
+            # that translation for the Compose project, so the chart has to perform it too — an
+            # `envFrom` alone would deliver a key nothing reads, and an operator who filled it in
+            # exactly as `docs/deploy/kubernetes.md` instructs would get 503 from every
+            # /api/files* route. `optional: true` is what keeps an IAM or workload-identity
+            # install — which leaves both keys out of the Secret — starting: the S3 client then
+            # signs with the identity the pod already has.
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.external.objectStoreSecret | quote }}
+                  key: OBJECT_STORAGE_ACCESS_KEY_ID
+                  optional: true
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.external.objectStoreSecret | quote }}
+                  key: OBJECT_STORAGE_SECRET_ACCESS_KEY
+                  optional: true
+          envFrom:
+            - secretRef: { name: {{ $.Values.external.databaseUrlSecret | quote }} }
+            - secretRef: { name: {{ $.Values.external.objectStoreSecret | quote }} }
+            - secretRef: { name: {{ $.Values.secrets.applicationSecret | quote }} }
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: "1", memory: 1Gi }
+          startupProbe:
+            httpGet: { path: {{ index $healthPaths $name | quote }}, port: http }
+            failureThreshold: {{ $.Values.probes.startup.failureThreshold }}
+            periodSeconds: {{ $.Values.probes.startup.periodSeconds }}
+          readinessProbe:
+            httpGet: { path: {{ index $healthPaths $name | quote }}, port: http }
+            failureThreshold: {{ $.Values.probes.readiness.failureThreshold }}
+            periodSeconds: {{ $.Values.probes.readiness.periodSeconds }}
+          livenessProbe:
+            httpGet: { path: {{ index $healthPaths $name | quote }}, port: http }
+            failureThreshold: {{ $.Values.probes.liveness.failureThreshold }}
+            periodSeconds: {{ $.Values.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ $.Values.probes.liveness.timeoutSeconds }}
+---
+{{- end }}

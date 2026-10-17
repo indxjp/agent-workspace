@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Q3 contract summary — shared conversation</title>
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .ptop { border-bottom: 1px solid var(--border); background: var(--surface); }
+  .ptop .inner { max-width: 760px; margin: 0 auto; padding: 12px 20px; display: flex; align-items: center; gap: 10px; }
+  .ptop .mark { width: 24px; height: 24px; border-radius: 7px; background: var(--text); color: var(--surface); display: grid; place-items: center; font-size: 12px; font-weight: 700; }
+  .pwrap { max-width: 760px; margin: 0 auto; padding: 30px 20px 80px; }
+  .pfooter { max-width: 760px; margin: 0 auto; padding: 0 20px 60px; color: var(--muted); font-size: 12.5px; }
+</style>
+</head>
+<body>
+
+<div class="ptop">
+  <div class="inner">
+    <div class="mark">M</div>
+    <div>
+      <div style="font-size:13px;font-weight:600">Shared from Meridian Manufacturing</div>
+      <div class="small muted">Read-only conversation · published 4 minutes ago</div>
+    </div>
+    <span style="flex:1"></span>
+    <span class="badge outline">Public link</span>
+  </div>
+</div>
+
+<div class="pwrap">
+
+  <h1 style="font-size:22px">Q3 contract summary</h1>
+  <div class="muted small mt8 mb16">
+    Customer Support Agent · Claude Sonnet 5 · 6 turns · 23 s · shared by Aya Ito
+  </div>
+
+  <div class="card mb16"><div class="card-body">
+    <div class="chat">
+      <div class="msg user">
+        <div class="who">AI</div>
+        <div class="body"><div class="name">Aya Ito</div>
+          <p class="mb0">Prepare a summary of the three supplier contracts in <span class="mono">contracts/2026-q3/</span>, and tell me which ones deviate from our standard payment terms.</p></div>
+      </div>
+
+      <div class="msg agent">
+        <div class="who">CS</div>
+        <div class="body"><div class="name">Customer Support Agent</div>
+          <p>Reviewing the uploaded files…</p>
+          <div class="activity">
+            <div class="act"><span class="tick">✓</span> Read a file<span class="dur">0.6 s</span></div>
+            <div class="act"><span class="tick">✓</span> Read a file<span class="dur">0.5 s</span></div>
+            <div class="act"><span class="tick">✓</span> Read a file<span class="dur">0.7 s</span></div>
+            <div class="act"><span class="tick">✓</span> Internal Search<span class="dur">1.2 s</span></div>
+            <div class="act"><span class="tick">✓</span> Wrote a file<span class="dur">3.4 s</span></div>
+          </div>
+          <p><b>Summary of the three Q3 supplier contracts</b></p>
+          <p><b>1. Kobayashi Precision Parts.</b> Two-year supply agreement, ¥48M annual cap, net 30 payment
+            terms, standard limitation of liability. Matches the standard clause set.</p>
+          <p><b>2. Nordwind Logistics.</b> One-year framework, indexed fuel surcharge, <b>net 60 payment
+            terms</b> — a deviation from our standard net 30.</p>
+          <p><b>3. Tanaka Tooling.</b> Renewal, ¥12M cap, net 30, but the <b>termination-for-convenience
+            clause is missing</b>.</p>
+          <p class="mb0"><b>Deviations to review:</b> agreement-02 (payment terms) and agreement-03 (termination).</p>
+        </div>
+      </div>
+    </div>
+  </div></div>
+
+  <div class="callout">
+    <span class="ico">ℹ</span>
+    <div class="grow">
+      This page is a <b>snapshot</b> taken when the conversation was published. Tool arguments, file
+      contents, technical details and workspace configuration were excluded by the publisher.
+    </div>
+  </div>
+
+</div>
+
+<div class="pfooter">
+  Published with Agent Workspace, a self-hosted control plane for the Claude Agent SDK.
+  The publisher can revoke this link at any time.
+</div>
+
+</body>
+</html>

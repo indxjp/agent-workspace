@@ -1,0 +1,133 @@
+---
+title: "Microsoft Foundry"
+description: "Export an agent to Microsoft Foundry Agent Service as a prompt-agent definition per agent plus a project plan, learn the model deployment option, and publish with your own az login, plan first."
+---
+
+<Info>
+**Chapter 7 · Run it on other platforms — step 5 of 9** · [the chapter map](/path/platforms)
+
+- **You will:** export `assistant` to Foundry prompt-agent definitions and a plan of the connections they need.
+- **You will learn:** why you name a model deployment, how credentials become project connections, and how `aw platforms publish` sends them with your `az` login.
+- **You need:** [step 1](/platforms/overview).
+</Info>
+
+## What you can do
+
+Microsoft Foundry Agent Service runs prompt agents in your Azure project. The export writes what to
+create. Publishing sends it to your project's REST API, plan first.
+
+## Before you start
+
+Name the model deployment. Foundry runs a deployment, not a model id. If you leave
+`modelDeployment` out, the deployment name is assumed to equal the agent's model id, and the report
+says so. A fresh project's agent names no model, so without `modelDeployment` the export is refused
+with `platform_options_invalid`.
+
+```yaml title="agent-workspace.yaml (illustrative)" claim="illustrative"
+platforms:
+  microsoft-foundry:
+    enabled: true
+    options:
+      modelDeployment: my-gpt-deployment
+      projectEndpoint: https://my-resource.services.ai.azure.com/api/projects/my-project
+```
+
+| Option            | What it does                                                                          |
+| ----------------- | ------------------------------------------------------------------------------------- |
+| `modelDeployment` | The deployment used as the agent's model                                              |
+| `projectEndpoint` | Read only by publish: the https project endpoint, with no query or fragment          |
+| `requireApproval` | `always` (the default) or `never` for every MCP tool                                  |
+| `connections`     | The project connection to use for a tool or subagent, by its name                     |
+| `vectorStores`    | An existing vector store id per agent name, to search files                           |
+
+To publish you need the Azure CLI (`az`), installed from
+`https://learn.microsoft.com/cli/azure/install-azure-cli` (that install line is unverified against a
+live tenant), and signed in with `az login`. Export needs no vendor tool.
+
+## Export
+
+```sh title="Export to Microsoft Foundry (illustrative)" claim="illustrative"
+npx aw platforms export --platform microsoft-foundry
+```
+
+| Path                              | What it is                                                                         |
+| --------------------------------- | ---------------------------------------------------------------------------------- |
+| `agents/<name>.version.json`      | One per agent: the description, model and instructions, and its tools              |
+| `agents/<name>.endpoint.json`     | For a subagent: the endpoint that lets another agent call it over A2A              |
+| `project.plan.json`               | The connections, agents and notes for whoever creates them                         |
+
+## What maps and what is dropped
+
+These are the verdicts the Foundry compiler writes to the export report, with the reason for
+each. The [platform compatibility matrix](/platforms/matrix) shows what the platform supports, so
+a cell there can differ from the verdict a field gets here:
+
+| Your agent has…                    | On Foundry                                                                              |
+| ---------------------------------- | --------------------------------------------------------------------------------------- |
+| Description, instructions          | `native`                                                                                |
+| Model                              | `mapped` to the deployment; the model id is kept in the agent's metadata                |
+| Web search, code interpreter       | `native`                                                                                |
+| Web fetch, file access             | dropped, `builtin_unsupported`; Foundry has no direct tool for them                     |
+| Engine                             | dropped, `field_unsupported`; Foundry runs its own loop                                 |
+| Remote MCP servers                 | `native` with no credential; `mapped` to an MCP tool backed by a project connection when it needs one |
+| Remote MCP servers over SSE        | `mapped`, with the note that SSE support is unconfirmed (V2): Foundry's documentation says only "remote" |
+| OpenAPI tools                      | `mapped` to an OpenAPI tool with the spec inline; dropped, `permissions_unsupported`, when `allow` cannot be narrowed |
+| Code tools                         | `mapped` to MCP tools backed by a project connection; dropped, `code_tool_needs_public_mcp`, when the project has no tool endpoint |
+| Subagents                          | `mapped` to an A2A call through a project connection                                    |
+| Permissions                        | any permission you grant is dropped, `permissions_unsupported`; one you leave off holds, because a prompt agent has no file system or shell |
+| Skills                             | dropped, `skills_unsupported`                                                           |
+| Knowledge files                    | dropped, `knowledge_unsupported`, unless you set `vectorStores`                         |
+| Knowledge URLs, connectors         | dropped, `knowledge_unsupported`; Foundry has no such knowledge source                  |
+| Local (stdio) MCP servers          | dropped, `stdio_mcp_unsupported`                                                        |
+| Turn and budget limits             | dropped, `limits_unsupported`                                                           |
+
+## Publish
+
+```sh title="Plan, then apply (illustrative)" claim="illustrative"
+npx aw platforms publish --platform microsoft-foundry
+npx aw platforms publish --platform microsoft-foundry --yes
+```
+
+Publishing reads `project.plan.json` and the files it names, then calls the Foundry Agent Service
+REST API at your `projectEndpoint`. It takes a token from
+`az account get-access-token --resource https://ai.azure.com`; the token is never printed and is
+not stored. An export whose OpenAPI tool is still a `$ref` is refused: set `allow` on the tool so
+the export inlines the spec.
+
+For each agent in the plan, in order, it asks Foundry for the agent. It creates the agent
+(`POST …/versions`) when Foundry does not know it, and adds a new version when the instructions,
+model or tools differ or the answer cannot be read. When an endpoint file exists, it also sends a
+`PATCH` that turns on A2A when Foundry's card or endpoint differs from that file, or the agent is
+new or cannot be read. An agent that already matches prints "is current in Foundry".
+
+Without `--yes`, a plan with changes only prints those calls and lists each project connection the
+plan names, to create in the Foundry portal before publishing. A plan with changes exits 3. Re-run with `--yes` to
+send the calls. Publishing does not create project connections.
+
+Three things in this path are unverified against a live tenant: the token audience, the shape of
+the agent response (the test fixture is inferred from the vendor's page, not captured), and the
+`az` install line.
+
+## Your tools
+
+A credential is never written. The plan names the secret each connection holds, as a
+`secretRef`; you create the connection in your Azure project and put the secret there.
+`connections` reuses a connection you already have, and `requireApproval` sets whether every MCP
+tool call needs approval.
+
+To reach your code tools, add `publicBaseUrl` and `toolAuth`
+([how that works](/platforms/overview#your-code-tools-on-another-platform)). Without them every
+code tool is dropped with `code_tool_needs_public_mcp`.
+
+## What is not there yet
+
+- Project connections are created by hand in the Foundry portal; publish only lists them.
+- The token audience, the agent response shape and the `az` install line are unverified against a
+  live tenant.
+- Two points are marked unconfirmed in the plan's notes: whether a Claude deployment is accepted as
+  a prompt agent's model, and the exact connection type Azure expects for an MCP connection. Check
+  both before you rely on the export.
+
+<Card title="Next: Gemini Enterprise" icon="arrow-right" href="/platforms/gemini-enterprise">
+  Register your agent in Google's agent gallery.
+</Card>

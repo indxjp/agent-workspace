@@ -1,0 +1,81 @@
+---
+title: "aw vs. the SDK"
+description: "When to reach for the CLI instead of the SDK, a command-to-method table, and what only the SDK can do."
+---
+
+<Info>
+
+- **Read this when:** you are deciding between a shell script with `aw` and code on the SDK, or
+  looking for the command behind an SDK method.
+- **You will learn:** when each one fits, a command-to-method table, and what only the SDK can do.
+- **Used in:** [Chapter 4: Put it in your product](/path/embed) and [Chapter 5: Ship it to your
+  servers](/path/ship).
+
+</Info>
+
+`aw` is a thin wrapper: nearly every command is one `@indx-workspace/sdk` method call plus argument parsing and rendering. Reaching for one over the other is mostly a question of where the code runs, not what it can do. Neither is mandatory: both go through `/api/**`, and a consumer in a language the SDK doesn't ship for calls the same routes directly — see [Call the API without the SDK](/building/http-api).
+
+## When to use which
+
+<CardGroup cols={2}>
+  <Card title="Use aw">
+    - A shell script, a Makefile target, or a CI step — pipe a credential in with `--api-key-stdin`, no process to write.
+    - An operator at a terminal looking around a workspace: `aw agents list`, `aw runs follow <id>`.
+    - Anything you'd otherwise write a five-line Node script for that does one SDK call and prints the result.
+  </Card>
+  <Card title="Use the SDK">
+    - Your own backend, job, or app — anywhere you're already writing TypeScript and want typed results, not text to re-parse.
+    - Anything on the SDK-only surface below: workspace administration, invitations, session auth, injected `fetch` for tests.
+    - Multi-step logic with branching on typed errors (`instanceof ApiProblemError`), not a shell `$?` check.
+  </Card>
+</CardGroup>
+
+Both go through the same HTTP calls and the same contracts, so there is no capability you get from one that silently behaves differently in the other — `aw`'s CLI tests prove the JSON each command prints round-trips through the same `@indx-workspace/contracts` schema the SDK method returns.
+
+## Command-to-method table
+
+A representative sample — the full command tree is in [CLI commands](/reference/cli/commands), and the full method reference is under **Reference → SDK** in the navigation.
+
+| SDK call                                                    | CLI command                                                            |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `aw.agents.list()`                                          | `aw agents list`                                                       |
+| `aw.agents.create(body)`                                    | `aw agents create --file <json>`                                       |
+| `aw.agents.getResourceAssignments(id)`                      | `aw agents assignments get <id>`                                       |
+| `aw.runs.start(agentId, input)`                             | `aw runs start <agent> --prompt <text>`                                |
+| `aw.runs.follow(id)`                                        | `aw runs follow <id>`                                                  |
+| `aw.runs.waitForOutcome(id)`                                | `aw runs wait <id>` (also `runs start --wait`)                         |
+| `aw.runs.rate(id, { rating, comment })`                     | `aw runs rate <id> --up\|--down [--comment <text>]`                    |
+| `aw.agents.evaluations.create(agentId, { version, cases })` | `aw eval [agent] [version]`                                            |
+| `aw.agents.pointers.promote(agentId, request)` / `rollback` | `aw promote [agent] [version] [--yes]` / `aw rollback [agent] [--yes]` |
+| `aw.agents.versions.list(agentId)`                          | `aw versions [agent]`                                                  |
+| `aw.agents.feedback.list(agentId, query)`                   | `aw feedback [agent] [--negative] [--since <7d\|12h>]`                 |
+| `aw.runs.list(query)`                                       | `aw runs list [--status] [--cursor]`                                   |
+| `aw.sessions.transcript.read(id, opts)`                     | `aw sessions transcript <provider-session-id>`                         |
+| `aw.projects.startSession(id, opts)`                        | `aw projects start-session <id> [agent-id]`                            |
+| `aw.secrets.create(body)`                                   | `aw secrets create --name <NAME> --value-stdin`                        |
+| `aw.models.connections.rotateCredential(id, value)`         | `aw models connections rotate-credential <id> --value-stdin`           |
+| `aw.models.discover()`                                      | `aw models discover`                                                   |
+| `aw.files.upload(path, bytes)`                              | `aw files upload <path> <local-file>`                                  |
+| `aw.skills.export(name)`                                    | `aw skills export <name> <dir>` (also writes the files locally)        |
+| `aw.connectors.testDraft(input)`                            | `aw connectors test-draft --file <json>`                               |
+| `aw.team.apiKeys.create(body)`                              | `aw team api-keys create --name <name> --role <role>`                  |
+| `aw.shares.revoke(id)`                                      | `aw shares revoke <id>`                                                |
+| `aw.observability.audit.list(query)`                        | `aw audit list [--limit] [--cursor] [--all]`                           |
+| `aw.observability.audit.listAll(query)`                     | `aw audit list --all`                                                  |
+| `aw.sessions.listAll(query)`                                | `aw sessions list --all`                                               |
+| `aw.workspaces.sharingPolicy.set(body)`                     | `aw workspaces sharing-policy set <true\|false>`                       |
+
+A few methods stand behind more than one command (`aw.sessions.update` backs `sessions rename`, `sessions archive` and `sessions restore`; `aw.skills.update` backs `skills update`, `skills enable` and `skills disable`), and a few commands compose more than one call (`runs start --wait` calls `runs.start` then `runs.waitForOutcome`; `sessions transcript` without `--project-key` calls `sessions.list` first to discover it). The project commands (`aw dev`, `aw check`, `aw push`, `aw init`, `aw chat`) compose several calls around files on disk and have no single SDK method. See [aw overview](/cli/overview) for the family list and [CLI commands](/reference/cli/commands) for every command's exact usage line.
+
+## The SDK-only surface
+
+Nothing here has a CLI command, and for most of it there is a specific, documented reason — see [Deliberately absent](/cli/overview#deliberately-absent) for the two categories ("waiting on a server change" vs. "refused to API keys"):
+
+- **`aw.workspaces.list/get/create/update`** and **`aw.team.invitations.*`** — every `/api/workspaces` and `/api/invitations` route refuses an API-key principal (`403 api_key_not_permitted`). With an API key, `aw` cannot call them. `aw login` signs a person in, and `aw workspaces` and `aw team invitations` then work; an automation that holds only a key has no CLI counterpart, so call the methods from a browser page or backend using `auth: { kind: 'session' }` instead.
+- **Session auth itself** (`auth: { kind: 'session' }`) — `aw` authenticates with an API key, or with the short-lived token `aw login` stores. It never holds a browser session cookie.
+- **`ClientOptions.fetch` injection and `@indx-workspace/sdk/testing`** — the SDK lets a consumer supply its own `fetch` implementation (a fake, a proxy, a test double), and `@indx-workspace/sdk/testing` ships a recording double and contract-valid fixtures ([Testing](/guides/testing)). `aw` always uses the real global `fetch`.
+- **`@indx-workspace/sdk/events`** (the SSE parser, `classifyRunEventFrame`, the `AgentEvent` types) — `aw` consumes this subpath internally to render `runs events`/`follow` output, but nothing exposes it as a CLI primitive; a TypeScript consumer that wants to classify frames itself imports the subpath directly.
+
+## Round-tripping `--json` through the contracts
+
+`aw <command> --json` prints exactly the value the underlying SDK method returned (see [Output and exit codes](/cli/output-and-exit-codes)), and that value is exactly what the corresponding `@indx-workspace/contracts` schema produces — the SDK never adds or strips fields on the way out. Each command family's tests prove this directly: they run the CLI against a fixture response, capture stdout, and parse it back through that family's contract schema (for example `RunListResponseSchema.parse(stdoutJson(result))`), so a change that broke the round trip would fail the family's own tests, not just a schema unit test.

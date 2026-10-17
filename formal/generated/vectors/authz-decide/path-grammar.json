@@ -1,0 +1,1847 @@
+{"vectors":
+ [{"witnesses": ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api", "method": "GET"},
+   "id": "grammar/owner/GET /api",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "does not begin /api/<resource>"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api", "method": "POST"},
+   "id": "grammar/owner/POST /api",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "does not begin /api/<resource>"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api/", "method": "GET"},
+   "id": "grammar/owner/GET /api/",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api/", "method": "POST"},
+   "id": "grammar/owner/POST /api/",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_runs",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "owner", "path": "/api/runs/", "method": "GET"},
+   "id": "grammar/owner/GET /api/runs/",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "runs", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.AuthzDecide.revoke_capability_matches_roles"],
+   "input": {"scope": null, "role": "owner", "path": "/api/runs/", "method": "POST"},
+   "id": "grammar/owner/POST /api/runs/",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "runs", "operation": "revoke", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api//runs", "method": "GET"},
+   "id": "grammar/owner/GET /api//runs",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api//runs", "method": "POST"},
+   "id": "grammar/owner/POST /api//runs",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/API/runs", "method": "GET"},
+   "id": "grammar/owner/GET /API/runs",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "does not begin /api/<resource>"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/API/runs", "method": "POST"},
+   "id": "grammar/owner/POST /API/runs",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "does not begin /api/<resource>"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/Api/runs/x", "method": "GET"},
+   "id": "grammar/owner/GET /Api/runs/x",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "does not begin /api/<resource>"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/Api/runs/x", "method": "POST"},
+   "id": "grammar/owner/POST /Api/runs/x",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "does not begin /api/<resource>"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api/Runs", "method": "GET"},
+   "id": "grammar/owner/GET /api/Runs",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api/Runs", "method": "POST"},
+   "id": "grammar/owner/POST /api/Runs",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.path_deeper_than_sub_is_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api/runs/x/events/y", "method": "GET"},
+   "id": "grammar/owner/GET /api/runs/x/events/y",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is deeper than"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.path_deeper_than_sub_is_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api/runs/x/events/y", "method": "POST"},
+   "id": "grammar/owner/POST /api/runs/x/events/y",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is deeper than"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.path_deeper_than_sub_is_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api/runs/x/events/", "method": "GET"},
+   "id": "grammar/owner/GET /api/runs/x/events/",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is deeper than"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.path_deeper_than_sub_is_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api/runs/x/events/", "method": "POST"},
+   "id": "grammar/owner/POST /api/runs/x/events/",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is deeper than"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.path_deeper_than_sub_is_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api/agents/:id/runs/:runId/events", "method": "GET"},
+   "id": "grammar/owner/GET /api/agents/:id/runs/:runId/events",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is deeper than"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.path_deeper_than_sub_is_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api/agents/:id/runs/:runId/events", "method": "POST"},
+   "id": "grammar/owner/POST /api/agents/:id/runs/:runId/events",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is deeper than"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unclassified_sub_is_refused_not_inherited",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api/agents/x/secrets", "method": "GET"},
+   "id": "grammar/owner/GET /api/agents/x/secrets",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a sub-resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unclassified_sub_is_refused_not_inherited",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api/agents/x/secrets", "method": "POST"},
+   "id": "grammar/owner/POST /api/agents/x/secrets",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a sub-resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unclassified_sub_is_refused_not_inherited",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api/agents/x/Runs", "method": "GET"},
+   "id": "grammar/owner/GET /api/agents/x/Runs",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a sub-resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unclassified_sub_is_refused_not_inherited",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api/agents/x/Runs", "method": "POST"},
+   "id": "grammar/owner/POST /api/agents/x/Runs",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a sub-resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api/widgets", "method": "GET"},
+   "id": "grammar/owner/GET /api/widgets",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api/widgets", "method": "POST"},
+   "id": "grammar/owner/POST /api/widgets",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api/widgets/x/y/z", "method": "GET"},
+   "id": "grammar/owner/GET /api/widgets/x/y/z",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api/widgets/x/y/z", "method": "POST"},
+   "id": "grammar/owner/POST /api/widgets/x/y/z",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unclassified_sub_is_refused_not_inherited",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api/runs/../agents", "method": "GET"},
+   "id": "grammar/owner/GET /api/runs/../agents",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a sub-resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unclassified_sub_is_refused_not_inherited",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api/runs/../agents", "method": "POST"},
+   "id": "grammar/owner/POST /api/runs/../agents",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a sub-resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_agents",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "owner", "path": "/api/agents/../runs", "method": "GET"},
+   "id": "grammar/owner/GET /api/agents/../runs",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "agents", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_agents",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "owner", "path": "/api/agents/../runs", "method": "POST"},
+   "id": "grammar/owner/POST /api/agents/../runs",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "agents", "operation": "run", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api/%72uns", "method": "GET"},
+   "id": "grammar/owner/GET /api/%72uns",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api/%72uns", "method": "POST"},
+   "id": "grammar/owner/POST /api/%72uns",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api/runs%2Fx", "method": "GET"},
+   "id": "grammar/owner/GET /api/runs%2Fx",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api/runs%2Fx", "method": "POST"},
+   "id": "grammar/owner/POST /api/runs%2Fx",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api\\runs", "method": "GET"},
+   "id": "grammar/owner/GET /api\\runs",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "does not begin /api/<resource>"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api\\runs", "method": "POST"},
+   "id": "grammar/owner/POST /api\\runs",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "does not begin /api/<resource>"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_runs",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "owner", "path": "/api/runs/x\\events", "method": "GET"},
+   "id": "grammar/owner/GET /api/runs/x\\events",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "runs", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.AuthzDecide.revoke_capability_matches_roles"],
+   "input": {"scope": null, "role": "owner", "path": "/api/runs/x\\events", "method": "POST"},
+   "id": "grammar/owner/POST /api/runs/x\\events",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "runs", "operation": "revoke", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.AuthzDecide.public_allowed_page_refused"],
+   "input": {"scope": null, "role": "owner", "path": "/p/x", "method": "GET"},
+   "id": "grammar/owner/GET /p/x",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.AuthzDecide.public_allowed_page_refused"],
+   "input": {"scope": null, "role": "owner", "path": "/p/x", "method": "POST"},
+   "id": "grammar/owner/POST /p/x",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.AuthzDecide.public_allowed_page_refused"],
+   "input": {"scope": null, "role": "owner", "path": "/p/", "method": "GET"},
+   "id": "grammar/owner/GET /p/",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.AuthzDecide.public_allowed_page_refused"],
+   "input": {"scope": null, "role": "owner", "path": "/p/", "method": "POST"},
+   "id": "grammar/owner/POST /p/",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.public_allowed_page_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/P/x", "method": "GET"},
+   "id": "grammar/owner/GET /P/x",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is a browser page"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.public_allowed_page_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/P/x", "method": "POST"},
+   "id": "grammar/owner/POST /P/x",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is a browser page"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/p/../api/runs", "method": "GET"},
+   "id": "grammar/owner/GET /p/../api/runs",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "does not begin /api/<resource>"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/p/../api/runs", "method": "POST"},
+   "id": "grammar/owner/POST /p/../api/runs",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "does not begin /api/<resource>"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/p/%2e%2e/api/runs", "method": "GET"},
+   "id": "grammar/owner/GET /p/%2e%2e/api/runs",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "does not begin /api/<resource>"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/p/%2e%2e/api/runs", "method": "POST"},
+   "id": "grammar/owner/POST /p/%2e%2e/api/runs",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "does not begin /api/<resource>"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.public_allowed_page_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/agents", "method": "GET"},
+   "id": "grammar/owner/GET /agents",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is a browser page"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.public_allowed_page_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/agents", "method": "POST"},
+   "id": "grammar/owner/POST /agents",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is a browser page"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.public_allowed_page_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/apiary", "method": "GET"},
+   "id": "grammar/owner/GET /apiary",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is a browser page"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.public_allowed_page_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/apiary", "method": "POST"},
+   "id": "grammar/owner/POST /apiary",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is a browser page"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.public_allowed_page_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/", "method": "GET"},
+   "id": "grammar/owner/GET /",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is a browser page"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.public_allowed_page_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/", "method": "POST"},
+   "id": "grammar/owner/POST /",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is a browser page"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "", "method": "GET"},
+   "id": "grammar/owner/GET ",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "does not begin /api/<resource>"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "", "method": "POST"},
+   "id": "grammar/owner/POST ",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "does not begin /api/<resource>"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "api/runs", "method": "GET"},
+   "id": "grammar/owner/GET api/runs",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "does not begin /api/<resource>"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "api/runs", "method": "POST"},
+   "id": "grammar/owner/POST api/runs",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "does not begin /api/<resource>"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_me",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "owner", "path": "/api/me", "method": "GET"},
+   "id": "grammar/owner/GET /api/me",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "me", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_me",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "owner", "path": "/api/me", "method": "POST"},
+   "id": "grammar/owner/POST /api/me",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "me", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_me",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "owner", "path": "/api/me/x", "method": "GET"},
+   "id": "grammar/owner/GET /api/me/x",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "me", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_me",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "owner", "path": "/api/me/x", "method": "POST"},
+   "id": "grammar/owner/POST /api/me/x",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "me", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unclassified_sub_is_refused_not_inherited",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api/me/x/y", "method": "GET"},
+   "id": "grammar/owner/GET /api/me/x/y",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a sub-resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unclassified_sub_is_refused_not_inherited",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api/me/x/y", "method": "POST"},
+   "id": "grammar/owner/POST /api/me/x/y",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a sub-resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_tokens",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "owner", "path": "/api/tokens/x", "method": "GET"},
+   "id": "grammar/owner/GET /api/tokens/x",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "tokens", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_tokens",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "owner", "path": "/api/tokens/x", "method": "POST"},
+   "id": "grammar/owner/POST /api/tokens/x",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "tokens", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_setup",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "owner", "path": "/api/setup/runtime-detect", "method": "GET"},
+   "id": "grammar/owner/GET /api/setup/runtime-detect",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "setup", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_setup",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "owner", "path": "/api/setup/runtime-detect", "method": "POST"},
+   "id": "grammar/owner/POST /api/setup/runtime-detect",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "setup", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api/auth/login", "method": "GET"},
+   "id": "grammar/owner/GET /api/auth/login",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api/auth/login", "method": "POST"},
+   "id": "grammar/owner/POST /api/auth/login",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unclassified_sub_is_refused_not_inherited",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api/invitations/x/accept", "method": "GET"},
+   "id": "grammar/owner/GET /api/invitations/x/accept",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a sub-resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unclassified_sub_is_refused_not_inherited",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api/invitations/x/accept", "method": "POST"},
+   "id": "grammar/owner/POST /api/invitations/x/accept",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a sub-resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_runs",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "owner", "path": "/api/runs/x/revoke-tokens", "method": "GET"},
+   "id": "grammar/owner/GET /api/runs/x/revoke-tokens",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "runs", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.AuthzDecide.revoke_capability_matches_roles"],
+   "input": {"scope": null, "role": "owner", "path": "/api/runs/x/revoke-tokens", "method": "POST"},
+   "id": "grammar/owner/POST /api/runs/x/revoke-tokens",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "runs", "operation": "revoke", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_runs",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "owner", "path": "/api/runs/%zz", "method": "GET"},
+   "id": "grammar/owner/GET /api/runs/%zz",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "runs", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.AuthzDecide.revoke_capability_matches_roles"],
+   "input": {"scope": null, "role": "owner", "path": "/api/runs/%zz", "method": "POST"},
+   "id": "grammar/owner/POST /api/runs/%zz",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "runs", "operation": "revoke", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api", "method": "GET"},
+   "id": "grammar/viewer/GET /api",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "does not begin /api/<resource>"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api", "method": "POST"},
+   "id": "grammar/viewer/POST /api",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "does not begin /api/<resource>"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/", "method": "GET"},
+   "id": "grammar/viewer/GET /api/",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/", "method": "POST"},
+   "id": "grammar/viewer/POST /api/",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_runs",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/runs/", "method": "GET"},
+   "id": "grammar/viewer/GET /api/runs/",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "runs", "operation": "read", "grant": "own"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "allow", "other": "deny", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.AuthzDecide.revoke_capability_matches_roles"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/runs/", "method": "POST"},
+   "id": "grammar/viewer/POST /api/runs/",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "runs", "operation": "revoke", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "run_token_revoke_forbidden",
+     "because": "only a workspace owner or admin"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api//runs", "method": "GET"},
+   "id": "grammar/viewer/GET /api//runs",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api//runs", "method": "POST"},
+   "id": "grammar/viewer/POST /api//runs",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/API/runs", "method": "GET"},
+   "id": "grammar/viewer/GET /API/runs",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "does not begin /api/<resource>"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/API/runs", "method": "POST"},
+   "id": "grammar/viewer/POST /API/runs",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "does not begin /api/<resource>"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/Api/runs/x", "method": "GET"},
+   "id": "grammar/viewer/GET /Api/runs/x",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "does not begin /api/<resource>"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/Api/runs/x", "method": "POST"},
+   "id": "grammar/viewer/POST /Api/runs/x",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "does not begin /api/<resource>"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/Runs", "method": "GET"},
+   "id": "grammar/viewer/GET /api/Runs",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/Runs", "method": "POST"},
+   "id": "grammar/viewer/POST /api/Runs",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.path_deeper_than_sub_is_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/runs/x/events/y", "method": "GET"},
+   "id": "grammar/viewer/GET /api/runs/x/events/y",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is deeper than"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.path_deeper_than_sub_is_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/runs/x/events/y", "method": "POST"},
+   "id": "grammar/viewer/POST /api/runs/x/events/y",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is deeper than"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.path_deeper_than_sub_is_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/runs/x/events/", "method": "GET"},
+   "id": "grammar/viewer/GET /api/runs/x/events/",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is deeper than"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.path_deeper_than_sub_is_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/runs/x/events/", "method": "POST"},
+   "id": "grammar/viewer/POST /api/runs/x/events/",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is deeper than"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.path_deeper_than_sub_is_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/agents/:id/runs/:runId/events", "method": "GET"},
+   "id": "grammar/viewer/GET /api/agents/:id/runs/:runId/events",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is deeper than"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.path_deeper_than_sub_is_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/agents/:id/runs/:runId/events", "method": "POST"},
+   "id": "grammar/viewer/POST /api/agents/:id/runs/:runId/events",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is deeper than"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unclassified_sub_is_refused_not_inherited",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/agents/x/secrets", "method": "GET"},
+   "id": "grammar/viewer/GET /api/agents/x/secrets",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a sub-resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unclassified_sub_is_refused_not_inherited",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/agents/x/secrets", "method": "POST"},
+   "id": "grammar/viewer/POST /api/agents/x/secrets",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a sub-resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unclassified_sub_is_refused_not_inherited",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/agents/x/Runs", "method": "GET"},
+   "id": "grammar/viewer/GET /api/agents/x/Runs",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a sub-resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unclassified_sub_is_refused_not_inherited",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/agents/x/Runs", "method": "POST"},
+   "id": "grammar/viewer/POST /api/agents/x/Runs",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a sub-resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/widgets", "method": "GET"},
+   "id": "grammar/viewer/GET /api/widgets",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/widgets", "method": "POST"},
+   "id": "grammar/viewer/POST /api/widgets",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/widgets/x/y/z", "method": "GET"},
+   "id": "grammar/viewer/GET /api/widgets/x/y/z",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/widgets/x/y/z", "method": "POST"},
+   "id": "grammar/viewer/POST /api/widgets/x/y/z",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unclassified_sub_is_refused_not_inherited",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/runs/../agents", "method": "GET"},
+   "id": "grammar/viewer/GET /api/runs/../agents",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a sub-resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unclassified_sub_is_refused_not_inherited",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/runs/../agents", "method": "POST"},
+   "id": "grammar/viewer/POST /api/runs/../agents",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a sub-resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_agents",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/agents/../runs", "method": "GET"},
+   "id": "grammar/viewer/GET /api/agents/../runs",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "agents", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_agents",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/agents/../runs", "method": "POST"},
+   "id": "grammar/viewer/POST /api/agents/../runs",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "agents", "operation": "run", "grant": "permitted"},
+     "effects": {"unknown": "deny", "permitted": "allow", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/%72uns", "method": "GET"},
+   "id": "grammar/viewer/GET /api/%72uns",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/%72uns", "method": "POST"},
+   "id": "grammar/viewer/POST /api/%72uns",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/runs%2Fx", "method": "GET"},
+   "id": "grammar/viewer/GET /api/runs%2Fx",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/runs%2Fx", "method": "POST"},
+   "id": "grammar/viewer/POST /api/runs%2Fx",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api\\runs", "method": "GET"},
+   "id": "grammar/viewer/GET /api\\runs",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "does not begin /api/<resource>"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api\\runs", "method": "POST"},
+   "id": "grammar/viewer/POST /api\\runs",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "does not begin /api/<resource>"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_runs",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/runs/x\\events", "method": "GET"},
+   "id": "grammar/viewer/GET /api/runs/x\\events",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "runs", "operation": "read", "grant": "own"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "allow", "other": "deny", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.AuthzDecide.revoke_capability_matches_roles"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/runs/x\\events", "method": "POST"},
+   "id": "grammar/viewer/POST /api/runs/x\\events",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "runs", "operation": "revoke", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "run_token_revoke_forbidden",
+     "because": "only a workspace owner or admin"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.AuthzDecide.public_allowed_page_refused"],
+   "input": {"scope": null, "role": "viewer", "path": "/p/x", "method": "GET"},
+   "id": "grammar/viewer/GET /p/x",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.AuthzDecide.public_allowed_page_refused"],
+   "input": {"scope": null, "role": "viewer", "path": "/p/x", "method": "POST"},
+   "id": "grammar/viewer/POST /p/x",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.AuthzDecide.public_allowed_page_refused"],
+   "input": {"scope": null, "role": "viewer", "path": "/p/", "method": "GET"},
+   "id": "grammar/viewer/GET /p/",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.AuthzDecide.public_allowed_page_refused"],
+   "input": {"scope": null, "role": "viewer", "path": "/p/", "method": "POST"},
+   "id": "grammar/viewer/POST /p/",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.public_allowed_page_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/P/x", "method": "GET"},
+   "id": "grammar/viewer/GET /P/x",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is a browser page"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.public_allowed_page_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/P/x", "method": "POST"},
+   "id": "grammar/viewer/POST /P/x",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is a browser page"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/p/../api/runs", "method": "GET"},
+   "id": "grammar/viewer/GET /p/../api/runs",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "does not begin /api/<resource>"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/p/../api/runs", "method": "POST"},
+   "id": "grammar/viewer/POST /p/../api/runs",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "does not begin /api/<resource>"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/p/%2e%2e/api/runs", "method": "GET"},
+   "id": "grammar/viewer/GET /p/%2e%2e/api/runs",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "does not begin /api/<resource>"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/p/%2e%2e/api/runs", "method": "POST"},
+   "id": "grammar/viewer/POST /p/%2e%2e/api/runs",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "does not begin /api/<resource>"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.public_allowed_page_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/agents", "method": "GET"},
+   "id": "grammar/viewer/GET /agents",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is a browser page"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.public_allowed_page_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/agents", "method": "POST"},
+   "id": "grammar/viewer/POST /agents",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is a browser page"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.public_allowed_page_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/apiary", "method": "GET"},
+   "id": "grammar/viewer/GET /apiary",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is a browser page"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.public_allowed_page_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/apiary", "method": "POST"},
+   "id": "grammar/viewer/POST /apiary",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is a browser page"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.public_allowed_page_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/", "method": "GET"},
+   "id": "grammar/viewer/GET /",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is a browser page"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.public_allowed_page_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/", "method": "POST"},
+   "id": "grammar/viewer/POST /",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is a browser page"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "", "method": "GET"},
+   "id": "grammar/viewer/GET ",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "does not begin /api/<resource>"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "", "method": "POST"},
+   "id": "grammar/viewer/POST ",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "does not begin /api/<resource>"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "api/runs", "method": "GET"},
+   "id": "grammar/viewer/GET api/runs",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "does not begin /api/<resource>"}}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "api/runs", "method": "POST"},
+   "id": "grammar/viewer/POST api/runs",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "does not begin /api/<resource>"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_me",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/me", "method": "GET"},
+   "id": "grammar/viewer/GET /api/me",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "me", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_me",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/me", "method": "POST"},
+   "id": "grammar/viewer/POST /api/me",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "me", "operation": "write", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_me",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/me/x", "method": "GET"},
+   "id": "grammar/viewer/GET /api/me/x",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "me", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_me",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/me/x", "method": "POST"},
+   "id": "grammar/viewer/POST /api/me/x",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "me", "operation": "write", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unclassified_sub_is_refused_not_inherited",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/me/x/y", "method": "GET"},
+   "id": "grammar/viewer/GET /api/me/x/y",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a sub-resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unclassified_sub_is_refused_not_inherited",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/me/x/y", "method": "POST"},
+   "id": "grammar/viewer/POST /api/me/x/y",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a sub-resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_tokens",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/tokens/x", "method": "GET"},
+   "id": "grammar/viewer/GET /api/tokens/x",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "tokens", "operation": "read", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_tokens",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/tokens/x", "method": "POST"},
+   "id": "grammar/viewer/POST /api/tokens/x",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "tokens", "operation": "write", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_setup",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/setup/runtime-detect", "method": "GET"},
+   "id": "grammar/viewer/GET /api/setup/runtime-detect",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "setup", "operation": "read", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_setup",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/setup/runtime-detect", "method": "POST"},
+   "id": "grammar/viewer/POST /api/setup/runtime-detect",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "setup", "operation": "write", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/auth/login", "method": "GET"},
+   "id": "grammar/viewer/GET /api/auth/login",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/auth/login", "method": "POST"},
+   "id": "grammar/viewer/POST /api/auth/login",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unclassified_sub_is_refused_not_inherited",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/invitations/x/accept", "method": "GET"},
+   "id": "grammar/viewer/GET /api/invitations/x/accept",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a sub-resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unclassified_sub_is_refused_not_inherited",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/invitations/x/accept", "method": "POST"},
+   "id": "grammar/viewer/POST /api/invitations/x/accept",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a sub-resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_runs",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/runs/x/revoke-tokens", "method": "GET"},
+   "id": "grammar/viewer/GET /api/runs/x/revoke-tokens",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "runs", "operation": "read", "grant": "own"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "allow", "other": "deny", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.AuthzDecide.revoke_capability_matches_roles"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/runs/x/revoke-tokens", "method": "POST"},
+   "id": "grammar/viewer/POST /api/runs/x/revoke-tokens",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "runs", "operation": "revoke", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "run_token_revoke_forbidden",
+     "because": "only a workspace owner or admin"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_runs",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/runs/%zz", "method": "GET"},
+   "id": "grammar/viewer/GET /api/runs/%zz",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "runs", "operation": "read", "grant": "own"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "allow", "other": "deny", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.AuthzDecide.revoke_capability_matches_roles"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/runs/%zz", "method": "POST"},
+   "id": "grammar/viewer/POST /api/runs/%zz",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "runs", "operation": "revoke", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "run_token_revoke_forbidden",
+     "because": "only a workspace owner or admin"}}}],
+ "family": "authz-decide",
+ "description": "Path grammar edge cases"}

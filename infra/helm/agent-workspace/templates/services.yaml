@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent-workspace-web
+  annotations: {{ toYaml .Values.service.annotations | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  selector: { app.kubernetes.io/name: agent-workspace-web }
+  ports: [{ name: http, port: 3000, targetPort: 3000 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: agent-workspace-gateway }
+spec:
+  selector: { app.kubernetes.io/name: agent-workspace-gateway }
+  ports: [{ name: http, port: 4000, targetPort: 4000 }]
+---
+# The runner-manager has a Deployment on 8080 and is reached only from inside the namespace, so it
+# is a ClusterIP. `RUNNER_MANAGER_URL` in the rendered .env names this Service; the pairing is held
+# by `infra/tests/contracts.test.mjs`.
+apiVersion: v1
+kind: Service
+metadata: { name: agent-workspace-runner-manager }
+spec:
+  selector: { app.kubernetes.io/name: agent-workspace-runner-manager }
+  ports: [{ name: http, port: 8080, targetPort: 8080 }]

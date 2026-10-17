@@ -1,0 +1,2026 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`create output > automation theme with an openapi tool 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--yes",
+    "--no-install",
+    "--theme",
+    "automation",
+    "--tools",
+    "openapi",
+    "--openapi",
+    "delivery.json",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "a10a0fc563790043845b3159a4f43f1c67f350d582e78abd79cbe5573db7b066",
+    "README.md": "c8b85a5105a4525694182360ce8c824fe0e80ad2d18973f34219833296f0abd0",
+    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agents/automation.ts": "0c73c9be1b16bc63f38b6b2d935f606a9ee40c14c9b6f8c20ae194e4a5d2870f",
+    "evals/automation.yaml": "521dba2c69b2deffe7901ec939f319a568b82a6c6ca1c22bb857d2cff284c2e8",
+    "fake-api/openapi.json": "d6ab815284e55206b64156bf4290d8ef9a43225773b566ef1feeefefaeb42a9d",
+    "fake-api/server.ts": "10986179b7df45b025a6ac2ec48a93c1a8d2c16eea86503d9f5ab16d106dd52d",
+    "package.json": "1bb3544f3c52d4cd24e497f381532e42248ff8bbdd275cadaf3db2a904733e81",
+    "pnpm-workspace.yaml": "440141dc26ef0388cb28219ec347ad748e1300c0968e4b9cfc2fda0c6527186b",
+    "surfaces/main.ts": "12a3b438bfccffbdea260d2c4205c13260c04fe209fb2b72721dc117ebe1b259",
+    "tools/delivery-estimate.run.ts": "13c5f75b6147c712a037328f29faa16431569d774125a5d7ed76b83b843b421a",
+    "tools/delivery-estimate.ts": "9ab01465c3a2adb0e4a16c5e0fac2b565b88c1a03574e9dd647897344beffff9",
+    "tools/delivery.ts": "9c9669b8b52a5087ed3d6f9d78b77419f83cf276822f95940c071e830b10ac55",
+    "tools/orders.ts": "329ebb596b652c3ba42060a62de289a722d3a5fb4843320685f696695d9ea5c7",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/automation.ts
+  surfaces/main.ts
+  tools/delivery.ts
+  README.md
+  evals/automation.yaml
+  fake-api/openapi.json
+  fake-api/server.ts
+  tools/delivery-estimate.run.ts
+  tools/delivery-estimate.ts
+  tools/orders.ts
+  AGENTS.md
+aw dev reads ANTHROPIC_API_KEY, DELIVERY_TOKEN from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm install
+  npm run dev
+",
+}
+`;
+
+exports[`create output > cloud aws 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--cloud",
+    "aws",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".env": "f473761caf8a2d4ad81865c2afa6dc38b372147615fe68b889abddb89d051d85",
+    ".gitignore": "c16f9ba94511a35255e485b32c17a66600e63e4ae03a4fa8c1cd2064a9151657",
+    "agent-workspace.yaml": "da73ed31e9df74a12c02c92bd60f8cb4b424d74a8256cd64faa32f42a40d3646",
+    "deploy/helm/values.yaml": "e7594bcdab1b24c28ea1b5fc5fd3fddf852af70d6a711af639d2fce20b0941b0",
+    "package.json": "3369610dd93a31e52fd0dc0ce7b8de45f5691a7574029edf9eb025b30d13c9b9",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  agent-workspace.yaml
+  .env
+  .gitignore
+  deploy/helm/values.yaml
+Administrator: admin@localhost.test
+One-time setup password: BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcH
+Next: review <parent>/acme-ai/agent-workspace.yaml, then:
+  helm upgrade --install agent-workspace infra/helm/agent-workspace \\
+    -f infra/helm/agent-workspace/<flavour>.yaml -f <parent>/acme-ai/deploy/helm/values.yaml
+",
+}
+`;
+
+exports[`create output > cloud azure 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--cloud",
+    "azure",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".env": "8a7bf3d75b79704abe40b5e26824437300938172f4e697509299c758af2a3b0b",
+    ".gitignore": "c16f9ba94511a35255e485b32c17a66600e63e4ae03a4fa8c1cd2064a9151657",
+    "agent-workspace.yaml": "cef1cee3bd21c3b2a124e489ce0345ed3405b39dff55ecda5c485fef8dd46371",
+    "deploy/terraform/azure-container-apps.auto.tfvars.json": "c5a108cecaa7751e610aff82c248a08faaa423fc11b03f0a53b391248af2052d",
+    "package.json": "3369610dd93a31e52fd0dc0ce7b8de45f5691a7574029edf9eb025b30d13c9b9",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  agent-workspace.yaml
+  .env
+  .gitignore
+  deploy/terraform/azure-container-apps.auto.tfvars.json
+No chart overlay was rendered: the chart serves a remote object bucket only, and this profile's storage.objects is azblob://acme-ai-files. Its native provider and identity wiring live in the cloud Terraform target, not the chart. Deploy this profile with its Terraform artefact. \`agent-workspace render\` renders no overlay for this profile either, so installing the chart instead means writing the values file yourself — it carries the four image digests and nothing else.
+Administrator: admin@localhost.test
+One-time setup password: BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcH
+Next: review <parent>/acme-ai/agent-workspace.yaml, then:
+  cp <parent>/acme-ai/deploy/terraform/azure-container-apps.auto.tfvars.json infra/terraform/azure-container-apps/
+  terraform -chdir=infra/terraform/azure-container-apps apply
+",
+}
+`;
+
+exports[`create output > cloud cloudflare 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--cloud",
+    "cloudflare",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".env": "a0d079e7095113cd219c36cc4b72e27d7d77901776f911c467c98aaaac805720",
+    ".gitignore": "c16f9ba94511a35255e485b32c17a66600e63e4ae03a4fa8c1cd2064a9151657",
+    "agent-workspace.yaml": "e80ec5138354e51ef09ad3a1aada85497c1a5e7d05e729013b27d5503fcedc3b",
+    "deploy/cloudflare/control-plane-worker.mjs": "5128c1d22a6a6e79ed1db8344668eeb6a12c33935968500cb6847fbe1df06249",
+    "deploy/cloudflare/control-plane.wrangler.jsonc": "ea15f365a80dcc5f327a6d1153fdea906e56892692692a82007a2c1801f90911",
+    "deploy/cloudflare/gateway-worker.mjs": "997f3fdfaabc57547d3766e47e3a64cfbb2eed23221ca286a683dfa22dae0a67",
+    "deploy/cloudflare/gateway.wrangler.jsonc": "5055acb354d2c718b6bc108d7fff80d62540fb9f7e6625552e32e05c54573747",
+    "deploy/cloudflare/manager-worker.mjs": "060e28cccba5785abc795de2ddbd5d95d79cdf818a6d8a542e5b4927037dba9c",
+    "deploy/cloudflare/manager.wrangler.jsonc": "e54ef536b55ad70ee97b44be336723b9ed3885fbb2a6bd43a7b4db93c017b7a3",
+    "deploy/cloudflare/retention-worker.mjs": "85ce1b571b002b896ff64b9f88132f8ef620711060d85172e52e8060b603759b",
+    "deploy/cloudflare/wrangler.jsonc": "7496fe71d98d42f7a448e4c999718c9cc6852745bcb549bccf5eee0aa7552ace",
+    "package.json": "3369610dd93a31e52fd0dc0ce7b8de45f5691a7574029edf9eb025b30d13c9b9",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  agent-workspace.yaml
+  .env
+  .gitignore
+  deploy/cloudflare/wrangler.jsonc
+  deploy/cloudflare/retention-worker.mjs
+  deploy/cloudflare/control-plane.wrangler.jsonc
+  deploy/cloudflare/control-plane-worker.mjs
+  deploy/cloudflare/gateway.wrangler.jsonc
+  deploy/cloudflare/gateway-worker.mjs
+  deploy/cloudflare/manager.wrangler.jsonc
+  deploy/cloudflare/manager-worker.mjs
+Administrator: admin@localhost.test
+One-time setup password: BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcH
+Next: review <parent>/acme-ai/agent-workspace.yaml, then:
+  cd <parent>/acme-ai && npm install
+  CLOUDFLARE_API_TOKEN=<token> CLOUDFLARE_ACCOUNT_ID=<account id> \\
+    CLOUDFLARE_WORKERS_SUBDOMAIN=<workers.dev subdomain> CONTROL_PLANE_URL=<url> npm run deploy
+",
+}
+`;
+
+exports[`create output > cloud gcp 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--cloud",
+    "gcp",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".env": "ba8ee62982d67cfee5618963f2adf2bed4f3166b34b7733ee57b437dceb89e4e",
+    ".gitignore": "c16f9ba94511a35255e485b32c17a66600e63e4ae03a4fa8c1cd2064a9151657",
+    "agent-workspace.yaml": "2a3da33a7ac2de15881e9aed29a58c60f8b0d0eb1c0fccc2ac9a2402c91644a0",
+    "deploy/helm/values.yaml": "b8b45a04f05b17c131a482d4c095f880e4bd1321eaae005734511563847c13e9",
+    "deploy/terraform/gcp-cloudrun.auto.tfvars.json": "5cfd9cd89ef040a4fc21562410b2feb6fd98b7ef61d3e8eba184714ab23ecff2",
+    "package.json": "3369610dd93a31e52fd0dc0ce7b8de45f5691a7574029edf9eb025b30d13c9b9",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  agent-workspace.yaml
+  .env
+  .gitignore
+  deploy/helm/values.yaml
+  deploy/terraform/gcp-cloudrun.auto.tfvars.json
+Administrator: admin@localhost.test
+One-time setup password: BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcH
+Next: review <parent>/acme-ai/agent-workspace.yaml, then:
+  helm upgrade --install agent-workspace infra/helm/agent-workspace \\
+    -f infra/helm/agent-workspace/<flavour>.yaml -f <parent>/acme-ai/deploy/helm/values.yaml
+  cp <parent>/acme-ai/deploy/terraform/gcp-cloudrun.auto.tfvars.json infra/terraform/gcp-cloudrun/
+  terraform -chdir=infra/terraform/gcp-cloudrun apply
+",
+}
+`;
+
+exports[`create output > cloud local, SeaweedFS 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--cloud",
+    "local",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".env": "1422340b63495bdda172e6025cab9dd584232f3753846bcf13bd51a845f8f7ab",
+    ".gitignore": "c16f9ba94511a35255e485b32c17a66600e63e4ae03a4fa8c1cd2064a9151657",
+    "agent-workspace.yaml": "b95bd4ea1ec9bcc0ddec2f2d6b756bbe61375d5161beb0f649a19356088314af",
+    "compose.yaml": "8e24151a08ef962776935de0ef592dafd06922619d74b6d5c1ad10729bba1941",
+    "package.json": "d0cd399ea523f16ca5a0daac82c46d8afdec9dab8eaba72b207514d23d99f96e",
+    "pnpm-workspace.yaml": "b379483d4293500af8e9d3e8d83b4b5a2ad1e844911cd7be7f7e274e4bb80666",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  compose.yaml
+  package.json
+  pnpm-workspace.yaml
+  agent-workspace.yaml
+  .env
+  .gitignore
+Administrator: admin@localhost.test
+One-time setup password: BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcH
+Next: cd <parent>/acme-ai && pnpm install --frozen-lockfile=false && pnpm start
+",
+}
+`;
+
+exports[`create output > cloud local, default answers 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--cloud",
+    "local",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".env": "b99b1ddeb343836b30d6ab9c6865c721d29a95ac6cbc074681c78f416375da6d",
+    ".gitignore": "c16f9ba94511a35255e485b32c17a66600e63e4ae03a4fa8c1cd2064a9151657",
+    "agent-workspace.yaml": "4c2ca21396a2d97b6ec30a29e81a31bb5113bb982a65f8bc0aec9e7c82987b0f",
+    "compose.yaml": "8e24151a08ef962776935de0ef592dafd06922619d74b6d5c1ad10729bba1941",
+    "package.json": "d0cd399ea523f16ca5a0daac82c46d8afdec9dab8eaba72b207514d23d99f96e",
+    "pnpm-workspace.yaml": "b379483d4293500af8e9d3e8d83b4b5a2ad1e844911cd7be7f7e274e4bb80666",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  compose.yaml
+  package.json
+  pnpm-workspace.yaml
+  agent-workspace.yaml
+  .env
+  .gitignore
+Administrator: admin@localhost.test
+One-time setup password: BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcH
+Next: cd <parent>/acme-ai && pnpm install --frozen-lockfile=false && pnpm start
+",
+}
+`;
+
+exports[`create output > cloud vercel 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--cloud",
+    "vercel",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".env": "12fa1ac4989bf28818dd705f6b0e3fed667efda827a1b538e14906d4b192e7b7",
+    ".gitignore": "c16f9ba94511a35255e485b32c17a66600e63e4ae03a4fa8c1cd2064a9151657",
+    "agent-workspace.yaml": "c4135d1084646c00c1e5c9c26f712487247c27448a3140f49b56e1edcbeafc0d",
+    "deploy/vercel/frontend.json": "cf3c33af696790ed665aa18a604448c572c0fb09d1a613b9315e5d30e84b7ca6",
+    "deploy/vercel/gateway.json": "118fedd3575aace65d2e2c045669456a690443249b43ee09cbb13f2f5151fd46",
+    "deploy/vercel/manager.json": "d1d4b8e584e206086a5522f6d96b3a01070204a631f7eba24522e2479f038f1a",
+    "deploy/vercel/vercel.json": "3ce163dac4ab1e8c985829eb6455cc5b50f276dd640296ca481850bb2a05090b",
+    "package.json": "3369610dd93a31e52fd0dc0ce7b8de45f5691a7574029edf9eb025b30d13c9b9",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  agent-workspace.yaml
+  .env
+  .gitignore
+  deploy/vercel/vercel.json
+  deploy/vercel/gateway.json
+  deploy/vercel/manager.json
+  deploy/vercel/frontend.json
+Administrator: admin@localhost.test
+One-time setup password: BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcH
+Next: review <parent>/acme-ai/agent-workspace.yaml, then:
+  cd <parent>/acme-ai && npm install
+  VERCEL_TOKEN=<token> VERCEL_TEAM_ID=<team id> npm run deploy
+",
+}
+`;
+
+exports[`create output > every permission 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--yes",
+    "--no-install",
+    "--permissions",
+    "readFiles,writeFiles,runCommands,unrestrictedNetwork",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+    "README.md": "2d49d93d3062315dd7a44a112fca8acdfaabf0c2d0b88023bd53531d053bbbb0",
+    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agents/assistant.ts": "1186483f776950bd0fca82d956dddf68bf8b1b714d60492bfe27af853038ca6a",
+    "evals/assistant.yaml": "9580ee564923cd7a5f98ea4688b87c4e4c64eefeaa092633e46c9b136b779481",
+    "package.json": "1bb3544f3c52d4cd24e497f381532e42248ff8bbdd275cadaf3db2a904733e81",
+    "pnpm-workspace.yaml": "440141dc26ef0388cb28219ec347ad748e1300c0968e4b9cfc2fda0c6527186b",
+    "skills/refund-policy/SKILL.md": "2927bdc4aa155c9873e4a45c7bcfb660a2bae79b189a5f0e37eac4c3d0c94160",
+    "surfaces/main.ts": "52fc111f2ead4d825d40d0f9dabd997f59d678cddbfdf90fb0188280cd19af39",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/assistant.ts
+  surfaces/main.ts
+  README.md
+  evals/assistant.yaml
+  AGENTS.md
+  skills/refund-policy/SKILL.md
+aw dev reads ANTHROPIC_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm install
+  npm run dev
+",
+}
+`;
+
+exports[`create output > help 1`] = `
+{
+  "argv": [
+    "--help",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {},
+  "stderr": "",
+  "stdout": "Usage: npm create @indx-workspace <dir> -- [options]
+
+Writes a project that \`aw dev\` runs. Each setup question can be answered by a flag; the
+rest are asked on a terminal, and take their default with no terminal or with --yes.
+
+Options:
+  --yes       take the default for every question not answered by a flag, ask nothing,
+              install the dependencies, and do not start the dev server
+  --answers <file>   setup answers in a YAML or JSON file, keyed by question id; flags win
+  --install / --no-install   install the dependencies after writing (asked on a terminal)
+  --start / --no-start       run \`dev\` after installing (asked on a terminal); it stays in
+                             the foreground until Ctrl-C and create exits with its code
+  --help      print this text
+
+With no terminal, or with CI set, nothing is asked: flags, --answers and defaults are used.
+
+Setup flags:
+  --theme <support | copilot | knowledge | automation | review | blank>
+      Which theme should setup start from? (default: support)
+  --sandbox <auto | local>
+      Where should agents run their tools? (default: auto)
+  --provider <anthropic | anthropic-compatible | openai | azure-openai | openai-compatible>
+      Who serves the agent's model? (default: anthropic)
+  --model-base-url <an http(s) URL without a credential, up to 2048 characters>
+      Where is the model provider's endpoint? (required when --provider is anthropic-compatible or openai-compatible or azure-openai; no default)
+  --agent <lower-case letters, digits and hyphens, 1-64 characters, no hyphen at either end>
+      What is your first agent called? (default: assistant)
+  --engine <claude-agent-sdk | openai-agents | pi | mastra>
+      Which agent engine should it use? (default: claude-agent-sdk)
+  --tools <openapi | postgres | none; comma-separated>
+      Which internal tools should the agent call? (default: none)
+  --openapi <a project-relative path to a .json, .yaml or .yml file, or an https URL without a credential, up to 2048 characters>
+      Where is the OpenAPI document? (default: openapi.json)
+  --permissions <readFiles | writeFiles | runCommands | unrestrictedNetwork; comma-separated>
+      Which permissions should the agent have? (default: )
+  --title <1-60 characters, no control or invisible characters, no space at either end>
+      What title should the chat widget show? (default: Assistant)
+  --color <a hex colour, # followed by six hex digits>
+      What is your brand colour? (default: #2f5fd0)
+  --platform <claude-managed-agents | copilot-studio | m365-declarative-agent | microsoft-foundry | gemini-enterprise | aws-agentcore | none; comma-separated>
+      Which agent platforms should this agent also be published to? (default: none)
+
+Deployment project (v1):
+  --cloud <aws | gcp | azure | local | vercel | cloudflare>
+  --validate  with --cloud, probe the generated stores
+  --yes       with --cloud local, take the default of every question below
+  --port <n>  with --cloud local, publish the web service on this host port (default 3000)
+  --database <text>, --storage <text>, --runtime <text>, --auth <text>
+              with --cloud local, answer the question of that name (defaults: PostgreSQL 17 (container); local filesystem (Docker volume); docker; local administrator)
+",
+}
+`;
+
+exports[`create output > provider anthropic 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--yes",
+    "--no-install",
+    "--provider",
+    "anthropic",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+    "README.md": "2d49d93d3062315dd7a44a112fca8acdfaabf0c2d0b88023bd53531d053bbbb0",
+    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agents/assistant.ts": "a1219b4df21ed312b247812426408994c80ea61114522f8e909618465de7add1",
+    "evals/assistant.yaml": "9580ee564923cd7a5f98ea4688b87c4e4c64eefeaa092633e46c9b136b779481",
+    "package.json": "1bb3544f3c52d4cd24e497f381532e42248ff8bbdd275cadaf3db2a904733e81",
+    "pnpm-workspace.yaml": "440141dc26ef0388cb28219ec347ad748e1300c0968e4b9cfc2fda0c6527186b",
+    "skills/refund-policy/SKILL.md": "2927bdc4aa155c9873e4a45c7bcfb660a2bae79b189a5f0e37eac4c3d0c94160",
+    "surfaces/main.ts": "52fc111f2ead4d825d40d0f9dabd997f59d678cddbfdf90fb0188280cd19af39",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/assistant.ts
+  surfaces/main.ts
+  README.md
+  evals/assistant.yaml
+  AGENTS.md
+  skills/refund-policy/SKILL.md
+aw dev reads ANTHROPIC_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm install
+  npm run dev
+",
+}
+`;
+
+exports[`create output > provider anthropic-compatible 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--yes",
+    "--no-install",
+    "--provider",
+    "anthropic-compatible",
+    "--model-base-url",
+    "https://models.example.test/",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+    "README.md": "2d49d93d3062315dd7a44a112fca8acdfaabf0c2d0b88023bd53531d053bbbb0",
+    "agent-workspace.yaml": "e77ed616b1dd2518119a828b8e2fa2b395c91616b849190ba200298c00c0f629",
+    "agents/assistant.ts": "a1219b4df21ed312b247812426408994c80ea61114522f8e909618465de7add1",
+    "evals/assistant.yaml": "9580ee564923cd7a5f98ea4688b87c4e4c64eefeaa092633e46c9b136b779481",
+    "package.json": "1bb3544f3c52d4cd24e497f381532e42248ff8bbdd275cadaf3db2a904733e81",
+    "pnpm-workspace.yaml": "440141dc26ef0388cb28219ec347ad748e1300c0968e4b9cfc2fda0c6527186b",
+    "skills/refund-policy/SKILL.md": "2927bdc4aa155c9873e4a45c7bcfb660a2bae79b189a5f0e37eac4c3d0c94160",
+    "surfaces/main.ts": "52fc111f2ead4d825d40d0f9dabd997f59d678cddbfdf90fb0188280cd19af39",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/assistant.ts
+  surfaces/main.ts
+  README.md
+  evals/assistant.yaml
+  AGENTS.md
+  skills/refund-policy/SKILL.md
+aw dev reads ANTHROPIC_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm install
+  npm run dev
+",
+}
+`;
+
+exports[`create output > provider azure-openai 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--yes",
+    "--no-install",
+    "--provider",
+    "azure-openai",
+    "--model-base-url",
+    "https://models.example.test/",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "738268a4af8182ddeee2c28f2554a06364c1c9f65927cfc3efb1cef5c8b25fe2",
+    "README.md": "2d49d93d3062315dd7a44a112fca8acdfaabf0c2d0b88023bd53531d053bbbb0",
+    "agent-workspace.yaml": "8fe9bc36c730dc67f841f4e873950ecea4088e584dd38e7ea8d0ccd42e8411ad",
+    "agents/assistant.ts": "a1219b4df21ed312b247812426408994c80ea61114522f8e909618465de7add1",
+    "evals/assistant.yaml": "9580ee564923cd7a5f98ea4688b87c4e4c64eefeaa092633e46c9b136b779481",
+    "package.json": "1bb3544f3c52d4cd24e497f381532e42248ff8bbdd275cadaf3db2a904733e81",
+    "pnpm-workspace.yaml": "440141dc26ef0388cb28219ec347ad748e1300c0968e4b9cfc2fda0c6527186b",
+    "skills/refund-policy/SKILL.md": "2927bdc4aa155c9873e4a45c7bcfb660a2bae79b189a5f0e37eac4c3d0c94160",
+    "surfaces/main.ts": "52fc111f2ead4d825d40d0f9dabd997f59d678cddbfdf90fb0188280cd19af39",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/assistant.ts
+  surfaces/main.ts
+  README.md
+  evals/assistant.yaml
+  AGENTS.md
+  skills/refund-policy/SKILL.md
+aw dev reads AZURE_OPENAI_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm install
+  npm run dev
+",
+}
+`;
+
+exports[`create output > provider openai 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--yes",
+    "--no-install",
+    "--provider",
+    "openai",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "4b9eabe459081e600e9c3e0798d2014ff13e618e87128a4b77ebb5527d78f225",
+    "README.md": "2d49d93d3062315dd7a44a112fca8acdfaabf0c2d0b88023bd53531d053bbbb0",
+    "agent-workspace.yaml": "543e77bec2c3c3ae8cff1fdd29d1a9b1eb0442ed6a88343016ca2cebbde2ca1b",
+    "agents/assistant.ts": "a1219b4df21ed312b247812426408994c80ea61114522f8e909618465de7add1",
+    "evals/assistant.yaml": "9580ee564923cd7a5f98ea4688b87c4e4c64eefeaa092633e46c9b136b779481",
+    "package.json": "1bb3544f3c52d4cd24e497f381532e42248ff8bbdd275cadaf3db2a904733e81",
+    "pnpm-workspace.yaml": "440141dc26ef0388cb28219ec347ad748e1300c0968e4b9cfc2fda0c6527186b",
+    "skills/refund-policy/SKILL.md": "2927bdc4aa155c9873e4a45c7bcfb660a2bae79b189a5f0e37eac4c3d0c94160",
+    "surfaces/main.ts": "52fc111f2ead4d825d40d0f9dabd997f59d678cddbfdf90fb0188280cd19af39",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/assistant.ts
+  surfaces/main.ts
+  README.md
+  evals/assistant.yaml
+  AGENTS.md
+  skills/refund-policy/SKILL.md
+aw dev reads OPENAI_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm install
+  npm run dev
+",
+}
+`;
+
+exports[`create output > provider openai-compatible 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--yes",
+    "--no-install",
+    "--provider",
+    "openai-compatible",
+    "--model-base-url",
+    "https://models.example.test/",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "4b9eabe459081e600e9c3e0798d2014ff13e618e87128a4b77ebb5527d78f225",
+    "README.md": "2d49d93d3062315dd7a44a112fca8acdfaabf0c2d0b88023bd53531d053bbbb0",
+    "agent-workspace.yaml": "6ab1590b44c03b304c46043bfa40e97227c9e9d78190716ca64dccdee31290d4",
+    "agents/assistant.ts": "a1219b4df21ed312b247812426408994c80ea61114522f8e909618465de7add1",
+    "evals/assistant.yaml": "9580ee564923cd7a5f98ea4688b87c4e4c64eefeaa092633e46c9b136b779481",
+    "package.json": "1bb3544f3c52d4cd24e497f381532e42248ff8bbdd275cadaf3db2a904733e81",
+    "pnpm-workspace.yaml": "440141dc26ef0388cb28219ec347ad748e1300c0968e4b9cfc2fda0c6527186b",
+    "skills/refund-policy/SKILL.md": "2927bdc4aa155c9873e4a45c7bcfb660a2bae79b189a5f0e37eac4c3d0c94160",
+    "surfaces/main.ts": "52fc111f2ead4d825d40d0f9dabd997f59d678cddbfdf90fb0188280cd19af39",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/assistant.ts
+  surfaces/main.ts
+  README.md
+  evals/assistant.yaml
+  AGENTS.md
+  skills/refund-policy/SKILL.md
+aw dev reads OPENAI_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm install
+  npm run dev
+",
+}
+`;
+
+exports[`create output > refusal: --cloud azure --yes 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--cloud",
+    "azure",
+    "--yes",
+  ],
+  "exit": 2,
+  "exitCode": undefined,
+  "files": {},
+  "stderr": "--yes answers questions; --cloud azure asks no setup questions.
+",
+  "stdout": "",
+}
+`;
+
+exports[`create output > refusal: unknown theme 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--theme",
+    "nope",
+  ],
+  "exit": 2,
+  "exitCode": undefined,
+  "files": {},
+  "stderr": "--theme: "nope" is not accepted: one of support, copilot, knowledge, automation, review, blank
+",
+  "stdout": "",
+}
+`;
+
+exports[`create output > sandbox auto 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--yes",
+    "--no-install",
+    "--sandbox",
+    "auto",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+    "README.md": "2d49d93d3062315dd7a44a112fca8acdfaabf0c2d0b88023bd53531d053bbbb0",
+    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agents/assistant.ts": "a1219b4df21ed312b247812426408994c80ea61114522f8e909618465de7add1",
+    "evals/assistant.yaml": "9580ee564923cd7a5f98ea4688b87c4e4c64eefeaa092633e46c9b136b779481",
+    "package.json": "1bb3544f3c52d4cd24e497f381532e42248ff8bbdd275cadaf3db2a904733e81",
+    "pnpm-workspace.yaml": "440141dc26ef0388cb28219ec347ad748e1300c0968e4b9cfc2fda0c6527186b",
+    "skills/refund-policy/SKILL.md": "2927bdc4aa155c9873e4a45c7bcfb660a2bae79b189a5f0e37eac4c3d0c94160",
+    "surfaces/main.ts": "52fc111f2ead4d825d40d0f9dabd997f59d678cddbfdf90fb0188280cd19af39",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/assistant.ts
+  surfaces/main.ts
+  README.md
+  evals/assistant.yaml
+  AGENTS.md
+  skills/refund-policy/SKILL.md
+aw dev reads ANTHROPIC_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm install
+  npm run dev
+",
+}
+`;
+
+exports[`create output > sandbox local 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--yes",
+    "--no-install",
+    "--sandbox",
+    "local",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+    "README.md": "2d49d93d3062315dd7a44a112fca8acdfaabf0c2d0b88023bd53531d053bbbb0",
+    "agent-workspace.yaml": "a2449b8476316432d4dd42c097325b63c89679df3b7c7d8a34e20f6ba468d5b0",
+    "agents/assistant.ts": "a1219b4df21ed312b247812426408994c80ea61114522f8e909618465de7add1",
+    "evals/assistant.yaml": "9580ee564923cd7a5f98ea4688b87c4e4c64eefeaa092633e46c9b136b779481",
+    "package.json": "1bb3544f3c52d4cd24e497f381532e42248ff8bbdd275cadaf3db2a904733e81",
+    "pnpm-workspace.yaml": "440141dc26ef0388cb28219ec347ad748e1300c0968e4b9cfc2fda0c6527186b",
+    "skills/refund-policy/SKILL.md": "2927bdc4aa155c9873e4a45c7bcfb660a2bae79b189a5f0e37eac4c3d0c94160",
+    "surfaces/main.ts": "52fc111f2ead4d825d40d0f9dabd997f59d678cddbfdf90fb0188280cd19af39",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/assistant.ts
+  surfaces/main.ts
+  README.md
+  evals/assistant.yaml
+  AGENTS.md
+  skills/refund-policy/SKILL.md
+aw dev reads ANTHROPIC_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm install
+  npm run dev
+",
+}
+`;
+
+exports[`create output > sandbox sandbox-runtime 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--yes",
+    "--no-install",
+    "--sandbox",
+    "sandbox-runtime",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+    "README.md": "2d49d93d3062315dd7a44a112fca8acdfaabf0c2d0b88023bd53531d053bbbb0",
+    "agent-workspace.yaml": "a2449b8476316432d4dd42c097325b63c89679df3b7c7d8a34e20f6ba468d5b0",
+    "agents/assistant.ts": "a1219b4df21ed312b247812426408994c80ea61114522f8e909618465de7add1",
+    "evals/assistant.yaml": "9580ee564923cd7a5f98ea4688b87c4e4c64eefeaa092633e46c9b136b779481",
+    "package.json": "1bb3544f3c52d4cd24e497f381532e42248ff8bbdd275cadaf3db2a904733e81",
+    "pnpm-workspace.yaml": "440141dc26ef0388cb28219ec347ad748e1300c0968e4b9cfc2fda0c6527186b",
+    "skills/refund-policy/SKILL.md": "2927bdc4aa155c9873e4a45c7bcfb660a2bae79b189a5f0e37eac4c3d0c94160",
+    "surfaces/main.ts": "52fc111f2ead4d825d40d0f9dabd997f59d678cddbfdf90fb0188280cd19af39",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/assistant.ts
+  surfaces/main.ts
+  README.md
+  evals/assistant.yaml
+  AGENTS.md
+  skills/refund-policy/SKILL.md
+aw dev reads ANTHROPIC_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm install
+  npm run dev
+",
+}
+`;
+
+exports[`create output > theme automation with engine claude-age… 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--yes",
+    "--no-install",
+    "--theme",
+    "automation",
+    "--engine",
+    "claude-agent-sdk",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+    "README.md": "c8b85a5105a4525694182360ce8c824fe0e80ad2d18973f34219833296f0abd0",
+    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agents/automation.ts": "93811f9406117a6d0f1656cb53a4b9a3443d0a0cd30a09bbf22edcadef6313bb",
+    "evals/automation.yaml": "521dba2c69b2deffe7901ec939f319a568b82a6c6ca1c22bb857d2cff284c2e8",
+    "fake-api/openapi.json": "d6ab815284e55206b64156bf4290d8ef9a43225773b566ef1feeefefaeb42a9d",
+    "fake-api/server.ts": "10986179b7df45b025a6ac2ec48a93c1a8d2c16eea86503d9f5ab16d106dd52d",
+    "package.json": "1bb3544f3c52d4cd24e497f381532e42248ff8bbdd275cadaf3db2a904733e81",
+    "pnpm-workspace.yaml": "440141dc26ef0388cb28219ec347ad748e1300c0968e4b9cfc2fda0c6527186b",
+    "surfaces/main.ts": "12a3b438bfccffbdea260d2c4205c13260c04fe209fb2b72721dc117ebe1b259",
+    "tools/delivery-estimate.run.ts": "13c5f75b6147c712a037328f29faa16431569d774125a5d7ed76b83b843b421a",
+    "tools/delivery-estimate.ts": "9ab01465c3a2adb0e4a16c5e0fac2b565b88c1a03574e9dd647897344beffff9",
+    "tools/orders.ts": "329ebb596b652c3ba42060a62de289a722d3a5fb4843320685f696695d9ea5c7",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/automation.ts
+  surfaces/main.ts
+  README.md
+  evals/automation.yaml
+  fake-api/openapi.json
+  fake-api/server.ts
+  tools/delivery-estimate.run.ts
+  tools/delivery-estimate.ts
+  tools/orders.ts
+  AGENTS.md
+aw dev reads ANTHROPIC_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm install
+  npm run dev
+",
+}
+`;
+
+exports[`create output > theme automation with engine mastra 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--yes",
+    "--no-install",
+    "--theme",
+    "automation",
+    "--engine",
+    "mastra",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+    "README.md": "c8b85a5105a4525694182360ce8c824fe0e80ad2d18973f34219833296f0abd0",
+    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agents/automation.ts": "919f00f3e969a16e81d0d010c24133440f066dcfa6b2460049dcaf81d3d7c061",
+    "evals/automation.yaml": "521dba2c69b2deffe7901ec939f319a568b82a6c6ca1c22bb857d2cff284c2e8",
+    "fake-api/openapi.json": "d6ab815284e55206b64156bf4290d8ef9a43225773b566ef1feeefefaeb42a9d",
+    "fake-api/server.ts": "10986179b7df45b025a6ac2ec48a93c1a8d2c16eea86503d9f5ab16d106dd52d",
+    "package.json": "198f88cfa221994cdea3b8d6f279cbbb75f6c24f215e2f770cf24943c657a7b1",
+    "pnpm-workspace.yaml": "440141dc26ef0388cb28219ec347ad748e1300c0968e4b9cfc2fda0c6527186b",
+    "surfaces/main.ts": "12a3b438bfccffbdea260d2c4205c13260c04fe209fb2b72721dc117ebe1b259",
+    "tools/delivery-estimate.run.ts": "13c5f75b6147c712a037328f29faa16431569d774125a5d7ed76b83b843b421a",
+    "tools/delivery-estimate.ts": "9ab01465c3a2adb0e4a16c5e0fac2b565b88c1a03574e9dd647897344beffff9",
+    "tools/orders.ts": "329ebb596b652c3ba42060a62de289a722d3a5fb4843320685f696695d9ea5c7",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/automation.ts
+  surfaces/main.ts
+  README.md
+  evals/automation.yaml
+  fake-api/openapi.json
+  fake-api/server.ts
+  tools/delivery-estimate.run.ts
+  tools/delivery-estimate.ts
+  tools/orders.ts
+  AGENTS.md
+aw dev reads ANTHROPIC_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm install
+  npm run dev
+",
+}
+`;
+
+exports[`create output > theme automation with engine openai-age… 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--yes",
+    "--no-install",
+    "--theme",
+    "automation",
+    "--engine",
+    "openai-agents",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+    "README.md": "c8b85a5105a4525694182360ce8c824fe0e80ad2d18973f34219833296f0abd0",
+    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agents/automation.ts": "fb3ac236a1ff522824cec42e886c3b9419099368d82496a764bb5bbbf980bd9a",
+    "evals/automation.yaml": "521dba2c69b2deffe7901ec939f319a568b82a6c6ca1c22bb857d2cff284c2e8",
+    "fake-api/openapi.json": "d6ab815284e55206b64156bf4290d8ef9a43225773b566ef1feeefefaeb42a9d",
+    "fake-api/server.ts": "10986179b7df45b025a6ac2ec48a93c1a8d2c16eea86503d9f5ab16d106dd52d",
+    "package.json": "536ab2b4589cd02b5f9e1b5bee038b5e011acf12a7010e115a1220d8ac3fd52d",
+    "pnpm-workspace.yaml": "440141dc26ef0388cb28219ec347ad748e1300c0968e4b9cfc2fda0c6527186b",
+    "surfaces/main.ts": "12a3b438bfccffbdea260d2c4205c13260c04fe209fb2b72721dc117ebe1b259",
+    "tools/delivery-estimate.run.ts": "13c5f75b6147c712a037328f29faa16431569d774125a5d7ed76b83b843b421a",
+    "tools/delivery-estimate.ts": "9ab01465c3a2adb0e4a16c5e0fac2b565b88c1a03574e9dd647897344beffff9",
+    "tools/orders.ts": "329ebb596b652c3ba42060a62de289a722d3a5fb4843320685f696695d9ea5c7",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/automation.ts
+  surfaces/main.ts
+  README.md
+  evals/automation.yaml
+  fake-api/openapi.json
+  fake-api/server.ts
+  tools/delivery-estimate.run.ts
+  tools/delivery-estimate.ts
+  tools/orders.ts
+  AGENTS.md
+aw dev reads ANTHROPIC_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm install
+  npm run dev
+",
+}
+`;
+
+exports[`create output > theme automation with engine pi 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--yes",
+    "--no-install",
+    "--theme",
+    "automation",
+    "--engine",
+    "pi",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+    "README.md": "c8b85a5105a4525694182360ce8c824fe0e80ad2d18973f34219833296f0abd0",
+    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agents/automation.ts": "9009a46f3451c2885d2a4abf7e5194a4dacaf324ab9145ec8a6ba723b3c38845",
+    "evals/automation.yaml": "521dba2c69b2deffe7901ec939f319a568b82a6c6ca1c22bb857d2cff284c2e8",
+    "fake-api/openapi.json": "d6ab815284e55206b64156bf4290d8ef9a43225773b566ef1feeefefaeb42a9d",
+    "fake-api/server.ts": "10986179b7df45b025a6ac2ec48a93c1a8d2c16eea86503d9f5ab16d106dd52d",
+    "package.json": "efd1a0d9f11cb012885e25f29d283ea067a86ed94a120ed58a5bc75e8c3408fc",
+    "pnpm-workspace.yaml": "440141dc26ef0388cb28219ec347ad748e1300c0968e4b9cfc2fda0c6527186b",
+    "surfaces/main.ts": "12a3b438bfccffbdea260d2c4205c13260c04fe209fb2b72721dc117ebe1b259",
+    "tools/delivery-estimate.run.ts": "13c5f75b6147c712a037328f29faa16431569d774125a5d7ed76b83b843b421a",
+    "tools/delivery-estimate.ts": "9ab01465c3a2adb0e4a16c5e0fac2b565b88c1a03574e9dd647897344beffff9",
+    "tools/orders.ts": "329ebb596b652c3ba42060a62de289a722d3a5fb4843320685f696695d9ea5c7",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/automation.ts
+  surfaces/main.ts
+  README.md
+  evals/automation.yaml
+  fake-api/openapi.json
+  fake-api/server.ts
+  tools/delivery-estimate.run.ts
+  tools/delivery-estimate.ts
+  tools/orders.ts
+  AGENTS.md
+aw dev reads ANTHROPIC_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm install
+  npm run dev
+",
+}
+`;
+
+exports[`create output > theme blank with engine claude-agent-sdk 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--yes",
+    "--no-install",
+    "--theme",
+    "blank",
+    "--engine",
+    "claude-agent-sdk",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agents/assistant.ts": "989659dcfefc4a42f2f53b0e7e883fa0970301b5af8ea4b16fefada37d12a567",
+    "package.json": "1bb3544f3c52d4cd24e497f381532e42248ff8bbdd275cadaf3db2a904733e81",
+    "pnpm-workspace.yaml": "440141dc26ef0388cb28219ec347ad748e1300c0968e4b9cfc2fda0c6527186b",
+    "surfaces/main.ts": "cedaa483e1dabb6dba1117d60f671c4e36a7063e9cb023404ea8254b544ceb48",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/assistant.ts
+  surfaces/main.ts
+  AGENTS.md
+aw dev reads ANTHROPIC_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm install
+  npm run dev
+",
+}
+`;
+
+exports[`create output > theme blank with engine mastra 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--yes",
+    "--no-install",
+    "--theme",
+    "blank",
+    "--engine",
+    "mastra",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agents/assistant.ts": "f301ac7ab6e6e46aee125643e9eb70a62cb662d537ec764900ffc7bc9585b0db",
+    "package.json": "198f88cfa221994cdea3b8d6f279cbbb75f6c24f215e2f770cf24943c657a7b1",
+    "pnpm-workspace.yaml": "440141dc26ef0388cb28219ec347ad748e1300c0968e4b9cfc2fda0c6527186b",
+    "surfaces/main.ts": "cedaa483e1dabb6dba1117d60f671c4e36a7063e9cb023404ea8254b544ceb48",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/assistant.ts
+  surfaces/main.ts
+  AGENTS.md
+aw dev reads ANTHROPIC_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm install
+  npm run dev
+",
+}
+`;
+
+exports[`create output > theme blank with engine openai-agents 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--yes",
+    "--no-install",
+    "--theme",
+    "blank",
+    "--engine",
+    "openai-agents",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agents/assistant.ts": "2e74f22a1b95f367d2a15c9eeb4aa1327b120ba2a02773c2de0e0eb66ae3a439",
+    "package.json": "536ab2b4589cd02b5f9e1b5bee038b5e011acf12a7010e115a1220d8ac3fd52d",
+    "pnpm-workspace.yaml": "440141dc26ef0388cb28219ec347ad748e1300c0968e4b9cfc2fda0c6527186b",
+    "surfaces/main.ts": "cedaa483e1dabb6dba1117d60f671c4e36a7063e9cb023404ea8254b544ceb48",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/assistant.ts
+  surfaces/main.ts
+  AGENTS.md
+aw dev reads ANTHROPIC_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm install
+  npm run dev
+",
+}
+`;
+
+exports[`create output > theme blank with engine pi 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--yes",
+    "--no-install",
+    "--theme",
+    "blank",
+    "--engine",
+    "pi",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agents/assistant.ts": "d7b94f1be2b3ca5cf7f26a06fcda68035690794a4c6caa72449d7bc5486a658f",
+    "package.json": "efd1a0d9f11cb012885e25f29d283ea067a86ed94a120ed58a5bc75e8c3408fc",
+    "pnpm-workspace.yaml": "440141dc26ef0388cb28219ec347ad748e1300c0968e4b9cfc2fda0c6527186b",
+    "surfaces/main.ts": "cedaa483e1dabb6dba1117d60f671c4e36a7063e9cb023404ea8254b544ceb48",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/assistant.ts
+  surfaces/main.ts
+  AGENTS.md
+aw dev reads ANTHROPIC_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm install
+  npm run dev
+",
+}
+`;
+
+exports[`create output > theme copilot with engine claude-agent-… 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--yes",
+    "--no-install",
+    "--theme",
+    "copilot",
+    "--engine",
+    "claude-agent-sdk",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+    "README.md": "dce284635dd7d5e463d3ec9c537e4a0f89404597575b1d135c17bf68a92cc60c",
+    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agents/copilot.ts": "a965c9ed1b6c8f9e7971831834a0cff93d312e9913dff4e1af671de7eebd8d5d",
+    "evals/copilot.yaml": "dd81c8eac8a104c1a9ec8fcfd04b00ba2bfaaf27dfac3cc6dfb7fc5e02bd7a5f",
+    "package.json": "1bb3544f3c52d4cd24e497f381532e42248ff8bbdd275cadaf3db2a904733e81",
+    "pnpm-workspace.yaml": "440141dc26ef0388cb28219ec347ad748e1300c0968e4b9cfc2fda0c6527186b",
+    "surfaces/main.ts": "5262404efb39671f917a8e61e9c1efc1df59a5a57ec430b4b89921ba0c75ac20",
+    "web/index.html": "397936610e696f215d8e93c7f41b1f44635ed9d68f4f6004dd81d2fed5c89618",
+    "web/main.jsx": "e02cd0987f4e7638e6111af651c592ab16b6fceec44ca81ddfb83f4a84530bd4",
+    "web/package.json": "d7358710b8717a77b2de6725c0fcf42aa49b71ba68fab8162ee34a2b8ce51786",
+    "web/vite.config.js": "050ab35fe9551b769816a138843bc9ad6e856aa08826d05d45745ec0fedb7465",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/copilot.ts
+  surfaces/main.ts
+  README.md
+  evals/copilot.yaml
+  web/index.html
+  web/main.jsx
+  web/package.json
+  web/vite.config.js
+  AGENTS.md
+aw dev reads ANTHROPIC_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm install
+  npm run dev
+",
+}
+`;
+
+exports[`create output > theme copilot with engine mastra 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--yes",
+    "--no-install",
+    "--theme",
+    "copilot",
+    "--engine",
+    "mastra",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+    "README.md": "dce284635dd7d5e463d3ec9c537e4a0f89404597575b1d135c17bf68a92cc60c",
+    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agents/copilot.ts": "ea6bb0db90a8e1cc8dc191819b6f2fa69a7f8b16c86e66a6ce437bebb9383e25",
+    "evals/copilot.yaml": "dd81c8eac8a104c1a9ec8fcfd04b00ba2bfaaf27dfac3cc6dfb7fc5e02bd7a5f",
+    "package.json": "198f88cfa221994cdea3b8d6f279cbbb75f6c24f215e2f770cf24943c657a7b1",
+    "pnpm-workspace.yaml": "440141dc26ef0388cb28219ec347ad748e1300c0968e4b9cfc2fda0c6527186b",
+    "surfaces/main.ts": "5262404efb39671f917a8e61e9c1efc1df59a5a57ec430b4b89921ba0c75ac20",
+    "web/index.html": "397936610e696f215d8e93c7f41b1f44635ed9d68f4f6004dd81d2fed5c89618",
+    "web/main.jsx": "e02cd0987f4e7638e6111af651c592ab16b6fceec44ca81ddfb83f4a84530bd4",
+    "web/package.json": "d7358710b8717a77b2de6725c0fcf42aa49b71ba68fab8162ee34a2b8ce51786",
+    "web/vite.config.js": "050ab35fe9551b769816a138843bc9ad6e856aa08826d05d45745ec0fedb7465",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/copilot.ts
+  surfaces/main.ts
+  README.md
+  evals/copilot.yaml
+  web/index.html
+  web/main.jsx
+  web/package.json
+  web/vite.config.js
+  AGENTS.md
+aw dev reads ANTHROPIC_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm install
+  npm run dev
+",
+}
+`;
+
+exports[`create output > theme copilot with engine openai-agents 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--yes",
+    "--no-install",
+    "--theme",
+    "copilot",
+    "--engine",
+    "openai-agents",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+    "README.md": "dce284635dd7d5e463d3ec9c537e4a0f89404597575b1d135c17bf68a92cc60c",
+    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agents/copilot.ts": "5e9a3d286f431f37581b706df877f0ee499d46376a4ace3e0d18849847262ab3",
+    "evals/copilot.yaml": "dd81c8eac8a104c1a9ec8fcfd04b00ba2bfaaf27dfac3cc6dfb7fc5e02bd7a5f",
+    "package.json": "536ab2b4589cd02b5f9e1b5bee038b5e011acf12a7010e115a1220d8ac3fd52d",
+    "pnpm-workspace.yaml": "440141dc26ef0388cb28219ec347ad748e1300c0968e4b9cfc2fda0c6527186b",
+    "surfaces/main.ts": "5262404efb39671f917a8e61e9c1efc1df59a5a57ec430b4b89921ba0c75ac20",
+    "web/index.html": "397936610e696f215d8e93c7f41b1f44635ed9d68f4f6004dd81d2fed5c89618",
+    "web/main.jsx": "e02cd0987f4e7638e6111af651c592ab16b6fceec44ca81ddfb83f4a84530bd4",
+    "web/package.json": "d7358710b8717a77b2de6725c0fcf42aa49b71ba68fab8162ee34a2b8ce51786",
+    "web/vite.config.js": "050ab35fe9551b769816a138843bc9ad6e856aa08826d05d45745ec0fedb7465",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/copilot.ts
+  surfaces/main.ts
+  README.md
+  evals/copilot.yaml
+  web/index.html
+  web/main.jsx
+  web/package.json
+  web/vite.config.js
+  AGENTS.md
+aw dev reads ANTHROPIC_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm install
+  npm run dev
+",
+}
+`;
+
+exports[`create output > theme copilot with engine pi 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--yes",
+    "--no-install",
+    "--theme",
+    "copilot",
+    "--engine",
+    "pi",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+    "README.md": "dce284635dd7d5e463d3ec9c537e4a0f89404597575b1d135c17bf68a92cc60c",
+    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agents/copilot.ts": "1a97831adea74db29ce377da35950bbecfb2b3ac749d4257456882b77f41fd2c",
+    "evals/copilot.yaml": "dd81c8eac8a104c1a9ec8fcfd04b00ba2bfaaf27dfac3cc6dfb7fc5e02bd7a5f",
+    "package.json": "efd1a0d9f11cb012885e25f29d283ea067a86ed94a120ed58a5bc75e8c3408fc",
+    "pnpm-workspace.yaml": "440141dc26ef0388cb28219ec347ad748e1300c0968e4b9cfc2fda0c6527186b",
+    "surfaces/main.ts": "5262404efb39671f917a8e61e9c1efc1df59a5a57ec430b4b89921ba0c75ac20",
+    "web/index.html": "397936610e696f215d8e93c7f41b1f44635ed9d68f4f6004dd81d2fed5c89618",
+    "web/main.jsx": "e02cd0987f4e7638e6111af651c592ab16b6fceec44ca81ddfb83f4a84530bd4",
+    "web/package.json": "d7358710b8717a77b2de6725c0fcf42aa49b71ba68fab8162ee34a2b8ce51786",
+    "web/vite.config.js": "050ab35fe9551b769816a138843bc9ad6e856aa08826d05d45745ec0fedb7465",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/copilot.ts
+  surfaces/main.ts
+  README.md
+  evals/copilot.yaml
+  web/index.html
+  web/main.jsx
+  web/package.json
+  web/vite.config.js
+  AGENTS.md
+aw dev reads ANTHROPIC_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm install
+  npm run dev
+",
+}
+`;
+
+exports[`create output > theme knowledge with engine claude-agen… 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--yes",
+    "--no-install",
+    "--theme",
+    "knowledge",
+    "--engine",
+    "claude-agent-sdk",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+    "README.md": "740cf860f4c6d416e6f77dbbfe93fc90c3199be0c579ad530919363a36e773df",
+    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agents/knowledge.ts": "8342fb6aa534af2febf0c768245028a30db5f7360bc123ff0b82744605766722",
+    "evals/knowledge.yaml": "26ea5500325624d2186d97a97b0c7017efde3fe65418bd61635dc1c38de7aa64",
+    "package.json": "1bb3544f3c52d4cd24e497f381532e42248ff8bbdd275cadaf3db2a904733e81",
+    "pnpm-workspace.yaml": "440141dc26ef0388cb28219ec347ad748e1300c0968e4b9cfc2fda0c6527186b",
+    "skills/cite-sources/SKILL.md": "e315445f3bbf16f6406c929fd031f840bada25a92229c94867bc96d3b355f68f",
+    "surfaces/main.ts": "a19096c663747675b0d4266557d9e91834c6fbafe406c18a76cbd59ee2925816",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/knowledge.ts
+  surfaces/main.ts
+  README.md
+  AGENTS.md
+  evals/knowledge.yaml
+  skills/cite-sources/SKILL.md
+aw dev reads ANTHROPIC_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm install
+  npm run dev
+",
+}
+`;
+
+exports[`create output > theme knowledge with engine mastra 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--yes",
+    "--no-install",
+    "--theme",
+    "knowledge",
+    "--engine",
+    "mastra",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+    "README.md": "740cf860f4c6d416e6f77dbbfe93fc90c3199be0c579ad530919363a36e773df",
+    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agents/knowledge.ts": "8e229bcfce99f6e3ee3501fb6e5aaccd1dd2bcce13fe8cec6667791e54b93637",
+    "evals/knowledge.yaml": "26ea5500325624d2186d97a97b0c7017efde3fe65418bd61635dc1c38de7aa64",
+    "package.json": "198f88cfa221994cdea3b8d6f279cbbb75f6c24f215e2f770cf24943c657a7b1",
+    "pnpm-workspace.yaml": "440141dc26ef0388cb28219ec347ad748e1300c0968e4b9cfc2fda0c6527186b",
+    "skills/cite-sources/SKILL.md": "e315445f3bbf16f6406c929fd031f840bada25a92229c94867bc96d3b355f68f",
+    "surfaces/main.ts": "a19096c663747675b0d4266557d9e91834c6fbafe406c18a76cbd59ee2925816",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/knowledge.ts
+  surfaces/main.ts
+  README.md
+  AGENTS.md
+  evals/knowledge.yaml
+  skills/cite-sources/SKILL.md
+aw dev reads ANTHROPIC_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm install
+  npm run dev
+",
+}
+`;
+
+exports[`create output > theme knowledge with engine openai-agen… 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--yes",
+    "--no-install",
+    "--theme",
+    "knowledge",
+    "--engine",
+    "openai-agents",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+    "README.md": "740cf860f4c6d416e6f77dbbfe93fc90c3199be0c579ad530919363a36e773df",
+    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agents/knowledge.ts": "709c1e23eb1620aaddd2bfc21e5f1bfbd8733cc715620c4a8da400d517da057b",
+    "evals/knowledge.yaml": "26ea5500325624d2186d97a97b0c7017efde3fe65418bd61635dc1c38de7aa64",
+    "package.json": "536ab2b4589cd02b5f9e1b5bee038b5e011acf12a7010e115a1220d8ac3fd52d",
+    "pnpm-workspace.yaml": "440141dc26ef0388cb28219ec347ad748e1300c0968e4b9cfc2fda0c6527186b",
+    "skills/cite-sources/SKILL.md": "e315445f3bbf16f6406c929fd031f840bada25a92229c94867bc96d3b355f68f",
+    "surfaces/main.ts": "a19096c663747675b0d4266557d9e91834c6fbafe406c18a76cbd59ee2925816",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/knowledge.ts
+  surfaces/main.ts
+  README.md
+  AGENTS.md
+  evals/knowledge.yaml
+  skills/cite-sources/SKILL.md
+aw dev reads ANTHROPIC_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm install
+  npm run dev
+",
+}
+`;
+
+exports[`create output > theme knowledge with engine pi 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--yes",
+    "--no-install",
+    "--theme",
+    "knowledge",
+    "--engine",
+    "pi",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+    "README.md": "740cf860f4c6d416e6f77dbbfe93fc90c3199be0c579ad530919363a36e773df",
+    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agents/knowledge.ts": "f5c10dd154366e074250975791664bc4c053d8f705f14a4901ef5d80e0039da6",
+    "evals/knowledge.yaml": "26ea5500325624d2186d97a97b0c7017efde3fe65418bd61635dc1c38de7aa64",
+    "package.json": "efd1a0d9f11cb012885e25f29d283ea067a86ed94a120ed58a5bc75e8c3408fc",
+    "pnpm-workspace.yaml": "440141dc26ef0388cb28219ec347ad748e1300c0968e4b9cfc2fda0c6527186b",
+    "skills/cite-sources/SKILL.md": "e315445f3bbf16f6406c929fd031f840bada25a92229c94867bc96d3b355f68f",
+    "surfaces/main.ts": "a19096c663747675b0d4266557d9e91834c6fbafe406c18a76cbd59ee2925816",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/knowledge.ts
+  surfaces/main.ts
+  README.md
+  AGENTS.md
+  evals/knowledge.yaml
+  skills/cite-sources/SKILL.md
+aw dev reads ANTHROPIC_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm install
+  npm run dev
+",
+}
+`;
+
+exports[`create output > theme review with engine claude-agent-s… 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--yes",
+    "--no-install",
+    "--theme",
+    "review",
+    "--engine",
+    "claude-agent-sdk",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+    "README.md": "d5c7a2c327a7b0a7310fa340fb9fd5f96de0f372c293eec66e4eb2b0d45d3a33",
+    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agents/reviewer.ts": "681d4ee382cf416ecfdd3ee76de556fd2dc9e42121b0f6d92b25f73e28ef9372",
+    "evals/reviewer.yaml": "c19029e9986ba2f208817354fd27c6d74ad0ee7133fbbca56ad6b06c7a06a46c",
+    "package.json": "1bb3544f3c52d4cd24e497f381532e42248ff8bbdd275cadaf3db2a904733e81",
+    "pnpm-workspace.yaml": "440141dc26ef0388cb28219ec347ad748e1300c0968e4b9cfc2fda0c6527186b",
+    "surfaces/main.ts": "82613f8a694a50345aa74c2a8ba2dfcd0d2bf146028568a2f277b9e9772714c4",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/reviewer.ts
+  surfaces/main.ts
+  README.md
+  AGENTS.md
+  evals/reviewer.yaml
+aw dev reads ANTHROPIC_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm install
+  npm run dev
+",
+}
+`;
+
+exports[`create output > theme review with engine mastra 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--yes",
+    "--no-install",
+    "--theme",
+    "review",
+    "--engine",
+    "mastra",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+    "README.md": "d5c7a2c327a7b0a7310fa340fb9fd5f96de0f372c293eec66e4eb2b0d45d3a33",
+    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agents/reviewer.ts": "7def38c49aaf6206ea7900883b5005db473c786f614fef2942ef14389e78acd7",
+    "evals/reviewer.yaml": "c19029e9986ba2f208817354fd27c6d74ad0ee7133fbbca56ad6b06c7a06a46c",
+    "package.json": "198f88cfa221994cdea3b8d6f279cbbb75f6c24f215e2f770cf24943c657a7b1",
+    "pnpm-workspace.yaml": "440141dc26ef0388cb28219ec347ad748e1300c0968e4b9cfc2fda0c6527186b",
+    "surfaces/main.ts": "82613f8a694a50345aa74c2a8ba2dfcd0d2bf146028568a2f277b9e9772714c4",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/reviewer.ts
+  surfaces/main.ts
+  README.md
+  AGENTS.md
+  evals/reviewer.yaml
+aw dev reads ANTHROPIC_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm install
+  npm run dev
+",
+}
+`;
+
+exports[`create output > theme review with engine openai-agents 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--yes",
+    "--no-install",
+    "--theme",
+    "review",
+    "--engine",
+    "openai-agents",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+    "README.md": "d5c7a2c327a7b0a7310fa340fb9fd5f96de0f372c293eec66e4eb2b0d45d3a33",
+    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agents/reviewer.ts": "adc40356cd8d404480e266786ebf061480c31ae22a120e2152c230c2cbb896ee",
+    "evals/reviewer.yaml": "c19029e9986ba2f208817354fd27c6d74ad0ee7133fbbca56ad6b06c7a06a46c",
+    "package.json": "536ab2b4589cd02b5f9e1b5bee038b5e011acf12a7010e115a1220d8ac3fd52d",
+    "pnpm-workspace.yaml": "440141dc26ef0388cb28219ec347ad748e1300c0968e4b9cfc2fda0c6527186b",
+    "surfaces/main.ts": "82613f8a694a50345aa74c2a8ba2dfcd0d2bf146028568a2f277b9e9772714c4",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/reviewer.ts
+  surfaces/main.ts
+  README.md
+  AGENTS.md
+  evals/reviewer.yaml
+aw dev reads ANTHROPIC_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm install
+  npm run dev
+",
+}
+`;
+
+exports[`create output > theme review with engine pi 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--yes",
+    "--no-install",
+    "--theme",
+    "review",
+    "--engine",
+    "pi",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+    "README.md": "d5c7a2c327a7b0a7310fa340fb9fd5f96de0f372c293eec66e4eb2b0d45d3a33",
+    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agents/reviewer.ts": "64ae9ef91bcd5ed781987ec90b7694c1b27f4d6b671081d7f394f400000a97b1",
+    "evals/reviewer.yaml": "c19029e9986ba2f208817354fd27c6d74ad0ee7133fbbca56ad6b06c7a06a46c",
+    "package.json": "efd1a0d9f11cb012885e25f29d283ea067a86ed94a120ed58a5bc75e8c3408fc",
+    "pnpm-workspace.yaml": "440141dc26ef0388cb28219ec347ad748e1300c0968e4b9cfc2fda0c6527186b",
+    "surfaces/main.ts": "82613f8a694a50345aa74c2a8ba2dfcd0d2bf146028568a2f277b9e9772714c4",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/reviewer.ts
+  surfaces/main.ts
+  README.md
+  AGENTS.md
+  evals/reviewer.yaml
+aw dev reads ANTHROPIC_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm install
+  npm run dev
+",
+}
+`;
+
+exports[`create output > theme support with engine claude-agent-… 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--yes",
+    "--no-install",
+    "--theme",
+    "support",
+    "--engine",
+    "claude-agent-sdk",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+    "README.md": "2d49d93d3062315dd7a44a112fca8acdfaabf0c2d0b88023bd53531d053bbbb0",
+    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agents/assistant.ts": "a1219b4df21ed312b247812426408994c80ea61114522f8e909618465de7add1",
+    "evals/assistant.yaml": "9580ee564923cd7a5f98ea4688b87c4e4c64eefeaa092633e46c9b136b779481",
+    "package.json": "1bb3544f3c52d4cd24e497f381532e42248ff8bbdd275cadaf3db2a904733e81",
+    "pnpm-workspace.yaml": "440141dc26ef0388cb28219ec347ad748e1300c0968e4b9cfc2fda0c6527186b",
+    "skills/refund-policy/SKILL.md": "2927bdc4aa155c9873e4a45c7bcfb660a2bae79b189a5f0e37eac4c3d0c94160",
+    "surfaces/main.ts": "52fc111f2ead4d825d40d0f9dabd997f59d678cddbfdf90fb0188280cd19af39",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/assistant.ts
+  surfaces/main.ts
+  README.md
+  evals/assistant.yaml
+  AGENTS.md
+  skills/refund-policy/SKILL.md
+aw dev reads ANTHROPIC_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm install
+  npm run dev
+",
+}
+`;
+
+exports[`create output > theme support with engine mastra 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--yes",
+    "--no-install",
+    "--theme",
+    "support",
+    "--engine",
+    "mastra",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+    "README.md": "2d49d93d3062315dd7a44a112fca8acdfaabf0c2d0b88023bd53531d053bbbb0",
+    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agents/assistant.ts": "068d6f5b16dee92f35c78a7a828f97074623f52a6ba5b03c725aff454c8e63af",
+    "evals/assistant.yaml": "9580ee564923cd7a5f98ea4688b87c4e4c64eefeaa092633e46c9b136b779481",
+    "package.json": "198f88cfa221994cdea3b8d6f279cbbb75f6c24f215e2f770cf24943c657a7b1",
+    "pnpm-workspace.yaml": "440141dc26ef0388cb28219ec347ad748e1300c0968e4b9cfc2fda0c6527186b",
+    "skills/refund-policy/SKILL.md": "2927bdc4aa155c9873e4a45c7bcfb660a2bae79b189a5f0e37eac4c3d0c94160",
+    "surfaces/main.ts": "52fc111f2ead4d825d40d0f9dabd997f59d678cddbfdf90fb0188280cd19af39",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/assistant.ts
+  surfaces/main.ts
+  README.md
+  evals/assistant.yaml
+  AGENTS.md
+  skills/refund-policy/SKILL.md
+aw dev reads ANTHROPIC_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm install
+  npm run dev
+",
+}
+`;
+
+exports[`create output > theme support with engine openai-agents 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--yes",
+    "--no-install",
+    "--theme",
+    "support",
+    "--engine",
+    "openai-agents",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+    "README.md": "2d49d93d3062315dd7a44a112fca8acdfaabf0c2d0b88023bd53531d053bbbb0",
+    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agents/assistant.ts": "1fba95f1b551c0b5201df361a1a7ae96eac914881d2e35ee507ba9ba8926129a",
+    "evals/assistant.yaml": "9580ee564923cd7a5f98ea4688b87c4e4c64eefeaa092633e46c9b136b779481",
+    "package.json": "536ab2b4589cd02b5f9e1b5bee038b5e011acf12a7010e115a1220d8ac3fd52d",
+    "pnpm-workspace.yaml": "440141dc26ef0388cb28219ec347ad748e1300c0968e4b9cfc2fda0c6527186b",
+    "skills/refund-policy/SKILL.md": "2927bdc4aa155c9873e4a45c7bcfb660a2bae79b189a5f0e37eac4c3d0c94160",
+    "surfaces/main.ts": "52fc111f2ead4d825d40d0f9dabd997f59d678cddbfdf90fb0188280cd19af39",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/assistant.ts
+  surfaces/main.ts
+  README.md
+  evals/assistant.yaml
+  AGENTS.md
+  skills/refund-policy/SKILL.md
+aw dev reads ANTHROPIC_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm install
+  npm run dev
+",
+}
+`;
+
+exports[`create output > theme support with engine pi 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--yes",
+    "--no-install",
+    "--theme",
+    "support",
+    "--engine",
+    "pi",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+    "README.md": "2d49d93d3062315dd7a44a112fca8acdfaabf0c2d0b88023bd53531d053bbbb0",
+    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agents/assistant.ts": "34b5bf3348cbce0a7dc3ae357ff883c3f77025fae65dbf9d098a19dbb3897361",
+    "evals/assistant.yaml": "9580ee564923cd7a5f98ea4688b87c4e4c64eefeaa092633e46c9b136b779481",
+    "package.json": "efd1a0d9f11cb012885e25f29d283ea067a86ed94a120ed58a5bc75e8c3408fc",
+    "pnpm-workspace.yaml": "440141dc26ef0388cb28219ec347ad748e1300c0968e4b9cfc2fda0c6527186b",
+    "skills/refund-policy/SKILL.md": "2927bdc4aa155c9873e4a45c7bcfb660a2bae79b189a5f0e37eac4c3d0c94160",
+    "surfaces/main.ts": "52fc111f2ead4d825d40d0f9dabd997f59d678cddbfdf90fb0188280cd19af39",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/assistant.ts
+  surfaces/main.ts
+  README.md
+  evals/assistant.yaml
+  AGENTS.md
+  skills/refund-policy/SKILL.md
+aw dev reads ANTHROPIC_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm install
+  npm run dev
+",
+}
+`;
+
+exports[`create output > tools openapi and postgres 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--yes",
+    "--no-install",
+    "--tools",
+    "openapi,postgres",
+    "--openapi",
+    "openapi.json",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "9c6b08efa8b08c5104d80fe30d99d66bfbba4630fe80f346f241211c2ecdf5fe",
+    "README.md": "2d49d93d3062315dd7a44a112fca8acdfaabf0c2d0b88023bd53531d053bbbb0",
+    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agents/assistant.ts": "0c0e42e95e1ddb14ae1423f7ffab7e0833f5a0695894bbd3b44303a9ce64e2a4",
+    "evals/assistant.yaml": "9580ee564923cd7a5f98ea4688b87c4e4c64eefeaa092633e46c9b136b779481",
+    "package.json": "1bb3544f3c52d4cd24e497f381532e42248ff8bbdd275cadaf3db2a904733e81",
+    "pnpm-workspace.yaml": "440141dc26ef0388cb28219ec347ad748e1300c0968e4b9cfc2fda0c6527186b",
+    "skills/refund-policy/SKILL.md": "2927bdc4aa155c9873e4a45c7bcfb660a2bae79b189a5f0e37eac4c3d0c94160",
+    "surfaces/main.ts": "52fc111f2ead4d825d40d0f9dabd997f59d678cddbfdf90fb0188280cd19af39",
+    "tools/openapi.ts": "044482b126a6d63a084f917fe331765e8fd25e1401c1033bdc673e780b35cdc6",
+    "tools/postgres.ts": "1ba3c5166960697821767555e3f583c051a11108d0130d35bb27c46106f6f34b",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/assistant.ts
+  surfaces/main.ts
+  tools/openapi.ts
+  tools/postgres.ts
+  README.md
+  evals/assistant.yaml
+  AGENTS.md
+  skills/refund-policy/SKILL.md
+aw dev reads ANTHROPIC_API_KEY, OPENAPI_TOKEN, POSTGRES_URL from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm install
+  npm run dev
+",
+}
+`;

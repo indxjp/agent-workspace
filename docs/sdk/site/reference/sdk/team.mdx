@@ -1,0 +1,257 @@
+---
+title: "TeamClient"
+description: "Every method of TeamClient, its parameters, return type, and route."
+---
+
+<Note>This page is generated from `packages/sdk/src/resources/team.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+Principals — spec §5.2 `aw.team`: members, users, invitations and API keys.
+
+## members.list
+
+```ts
+async list(options?: RequestOptions): Promise<readonly MembershipResource[]>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<readonly MembershipResource[]>`
+
+**Route:** `GET /api/memberships`
+
+## members.add
+
+Attach a user that already exists to the workspace. `404 no_such_user` when the address is
+unknown (use `users.create` or an invitation instead), `409 already_a_member` when it already
+belongs, `403 forbidden_role_conferral` for a role the caller may not confer.
+
+```ts
+async add(input: AddMemberInput, options?: RequestOptions): Promise<MembershipResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `input` | `AddMemberInput` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<MembershipResource>`
+
+**Route:** `POST /api/memberships`
+
+## members.setRole
+
+Move a member to another of §21's four roles. `409 last_owner` refuses demoting the
+workspace's only Owner; `404 no_such_membership` for an id the workspace does not hold.
+
+```ts
+async setRole(membershipId: string, role: MembershipRoleName, options?: RequestOptions): Promise<MembershipResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `membershipId` | `string` | Yes |
+| `role` | `MembershipRoleName` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<MembershipResource>`
+
+**Route:** `PATCH /api/memberships/:membershipId`
+
+## members.remove
+
+Remove a member. `409 last_owner` refuses removing the only Owner; `409 membership_in_use`
+refuses while the member still owns projects (reassignment is RF-202's).
+
+```ts
+async remove(membershipId: string, options?: RequestOptions): Promise<void>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `membershipId` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<void>`
+
+**Route:** `DELETE /api/memberships/:membershipId`
+
+## users.list
+
+The users who are members of the caller's workspace, and no other workspace's.
+
+```ts
+async list(options?: RequestOptions): Promise<readonly UserResource[]>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<readonly UserResource[]>`
+
+**Route:** `GET /api/users`
+
+## users.create
+
+Create (or reuse) the global user and make it a member in one transaction; returns both
+rows. `409 email_taken` when the address already belongs to the workspace.
+
+```ts
+create(input: CreateUserInput, options?: RequestOptions): Promise<CreatedUserResponse>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `input` | `CreateUserInput` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<CreatedUserResponse>`
+
+**Route:** `POST /api/users`
+
+## invitations.list
+
+Every invitation the workspace has sent, newest first; state is derived from timestamps.
+
+```ts
+async list(options?: RequestOptions): Promise<readonly InvitationResource[]>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<readonly InvitationResource[]>`
+
+**Route:** `GET /api/invitations`
+
+## invitations.create
+
+Invite an address. The `token` and `link` in the answer are shown once and never again;
+`409 already_invited` while a pending invitation to the address exists.
+
+```ts
+create(input: CreateInvitationInput, options?: RequestOptions): Promise<IssuedInvitationResponse>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `input` | `CreateInvitationInput` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<IssuedInvitationResponse>`
+
+**Route:** `POST /api/invitations`
+
+## invitations.resend
+
+Rotate the token and extend the expiry; the previous token stops working. `409
+already_accepted` and `409 invitation_revoked` for a row that is no longer pending.
+
+```ts
+async resend(invitationId: string, options?: RequestOptions): Promise<IssuedInvitationResponse>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `invitationId` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<IssuedInvitationResponse>`
+
+**Route:** `POST /api/invitations/:invitationId/resend`
+
+## invitations.revoke
+
+Revoke; a second revoke answers the same `200`. `409 already_accepted` once redeemed.
+
+```ts
+async revoke(invitationId: string, options?: RequestOptions): Promise<InvitationResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `invitationId` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<InvitationResource>`
+
+**Route:** `DELETE /api/invitations/:invitationId`
+
+## invitations.accept
+
+Redeem an invitation as the invitee. The route proves identity through the invitation
+cookie the OIDC sign-in set — not through a bearer or a workspace session — so this works
+only from the browser that completed that sign-in, with `auth: { kind: 'session' }`. A
+wrong id, token or address is `404 invitation_not_valid` alike; `410 invitation_expired`,
+`410 invitation_revoked`, `409 invitation_already_used`, and `409 already_a_member` when the
+invitee already belonged (the invitation is consumed either way).
+
+```ts
+async accept(invitationId: string, token: string, options?: RequestOptions): Promise<AcceptedInvitationResponse>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `invitationId` | `string` | Yes |
+| `token` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<AcceptedInvitationResponse>`
+
+**Route:** `POST /api/invitations/:invitationId/accept`
+
+## apiKeys.list
+
+Every key of the workspace, revoked ones included. Prefixes and timestamps; never a secret.
+
+```ts
+async list(options?: RequestOptions): Promise<readonly ApiKeyResource[]>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<readonly ApiKeyResource[]>`
+
+**Route:** `GET /api/api-keys`
+
+## apiKeys.create
+
+Mint a key. `key` in the answer is the whole credential and this is the only time it exists
+outside the caller's hands. `409 name_taken` for a duplicate name; `400 invalid_field` for a
+blank or oversized name, an unparseable `expiresAt`, or one that is not later than now.
+
+```ts
+create(input: CreateApiKeyInput, options?: RequestOptions): Promise<MintedApiKeyResponse>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `input` | `CreateApiKeyInput` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<MintedApiKeyResponse>`
+
+**Route:** `POST /api/api-keys`
+
+## apiKeys.revoke
+
+Revoke a key: `revokedAt` is written, the row stays, and the next request with the key is a
+`401`. Idempotent — a second revoke returns the same row. `404 no_such_api_key` otherwise.
+
+```ts
+async revoke(apiKeyId: string, options?: RequestOptions): Promise<ApiKeyResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `apiKeyId` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<ApiKeyResource>`
+
+**Route:** `DELETE /api/api-keys/:apiKeyId`

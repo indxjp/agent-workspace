@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://docs.agentworkspace.indx.jp
+    about: Guides, concepts and the API reference.
+  - name: Questions
+    url: https://github.com/indxjp/agent-workspace/discussions
+    about: Ask how something works or share what you are building.
+  - name: Security
+    url: https://github.com/indxjp/agent-workspace/security/advisories/new
+    about: Report a vulnerability privately. Do not open a public issue.

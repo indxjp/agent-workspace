@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agents — Agent Workspace</title>
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<script>window.PAGE = { nav: "agents", crumbs: [["Agents"]] };</script>
+
+<div class="app">
+  <div class="main">
+    <div class="page">
+
+      <div class="page-head">
+        <div>
+          <h1>Agents</h1>
+          <div class="sub">6 agents · 5 deployed · 1 draft</div>
+        </div>
+        <div class="actions">
+          <div class="search">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="7" cy="7" r="4.2"/><path d="m10.2 10.2 3 3"/></svg>
+            <input type="search" placeholder="Search agents">
+          </div>
+          <a class="btn primary" href="agent-new.html">New Agent</a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="table-wrap">
+        <table class="tbl">
+          <thead>
+            <tr>
+              <th>Agent</th>
+              <th>Status</th>
+              <th>Model</th>
+              <th>Runtime</th>
+              <th class="num">Runs (7d)</th>
+              <th class="num">Cost (7d)</th>
+              <th>Last run</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <div class="cell-main"><a href="agent.html">Customer Support Agent</a></div>
+                <div class="cell-sub">Answers employee questions from the handbook and Jira</div>
+              </td>
+              <td><span class="badge ok"><span class="dot"></span>Ready</span></td>
+              <td>Claude Sonnet 5<div class="cell-sub">Anthropic</div></td>
+              <td>Standard Sandbox<div class="cell-sub">Docker</div></td>
+              <td class="num">128</td>
+              <td class="num">$9.84</td>
+              <td class="nowrap">2 min ago</td>
+              <td><a class="btn sm" href="agent-run.html">Run</a></td>
+            </tr>
+            <tr>
+              <td>
+                <div class="cell-main"><a href="agent.html">Contract Review</a></div>
+                <div class="cell-sub">Summarises supplier agreements against the standard clause set</div>
+              </td>
+              <td><span class="badge ok"><span class="dot"></span>Ready</span> <span class="badge warn">Notice</span></td>
+              <td>GPT‑4.1<div class="cell-sub">Azure OpenAI</div></td>
+              <td>Read Only<div class="cell-sub">Docker</div></td>
+              <td class="num">41</td>
+              <td class="num">$14.20</td>
+              <td class="nowrap">1 hour ago</td>
+              <td><a class="btn sm" href="agent-run.html">Run</a></td>
+            </tr>
+            <tr>
+              <td>
+                <div class="cell-main"><a href="agent.html">Invoice Triage</a></div>
+                <div class="cell-sub">Classifies incoming invoices and files exceptions</div>
+              </td>
+              <td><span class="badge ok"><span class="dot"></span>Ready</span></td>
+              <td>Claude Haiku 4.5<div class="cell-sub">Anthropic</div></td>
+              <td>Standard Sandbox<div class="cell-sub">Docker</div></td>
+              <td class="num">356</td>
+              <td class="num">$4.02</td>
+              <td class="nowrap">Yesterday</td>
+              <td><a class="btn sm" href="agent-run.html">Run</a></td>
+            </tr>
+            <tr>
+              <td>
+                <div class="cell-main"><a href="agent.html">Security Review Bot</a></div>
+                <div class="cell-sub">Reviews merge requests against the internal security checklist</div>
+              </td>
+              <td><span class="badge ok"><span class="dot"></span>Ready</span></td>
+              <td>Claude Opus 5<div class="cell-sub">Anthropic</div></td>
+              <td>Heavy<div class="cell-sub">Kubernetes</div></td>
+              <td class="num">12</td>
+              <td class="num">$22.61</td>
+              <td class="nowrap">3 days ago</td>
+              <td><a class="btn sm" href="agent-run.html">Run</a></td>
+            </tr>
+            <tr>
+              <td>
+                <div class="cell-main"><a href="agent.html">Weekly Report Writer</a></div>
+                <div class="cell-sub">Drafts the Monday operations report from the shared folder</div>
+              </td>
+              <td><span class="badge ok"><span class="dot"></span>Ready</span></td>
+              <td>Claude Sonnet 5<div class="cell-sub">Anthropic</div></td>
+              <td>Standard Sandbox<div class="cell-sub">Docker</div></td>
+              <td class="num">4</td>
+              <td class="num">$1.13</td>
+              <td class="nowrap">4 days ago</td>
+              <td><a class="btn sm" href="agent-run.html">Run</a></td>
+            </tr>
+            <tr>
+              <td>
+                <div class="cell-main"><a href="agent-new.html">Onboarding Helper</a></div>
+                <div class="cell-sub">Draft — model and runtime not selected yet</div>
+              </td>
+              <td><span class="badge muted">Draft</span></td>
+              <td class="muted">—</td>
+              <td class="muted">—</td>
+              <td class="num muted">—</td>
+              <td class="num muted">—</td>
+              <td class="muted nowrap">Never</td>
+              <td><a class="btn sm" href="agent-new.html">Continue</a></td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+      </div>
+
+      <p class="small muted mt16">
+        Deleting an agent keeps its runs and audit history. Files, skills and connectors are workspace
+        resources and are never deleted with an agent.
+      </p>
+
+    </div>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,155 @@
+[
+  {
+    "path": "support-triage.description",
+    "verdict": "native",
+    "note": "declarative agent and app description"
+  },
+  {
+    "path": "support-triage.instructions",
+    "verdict": "native",
+    "note": "declarative agent instructions"
+  },
+  {
+    "path": "support-triage.model",
+    "verdict": "dropped",
+    "code": "field_unsupported",
+    "note": "Microsoft 365 Copilot selects the model"
+  },
+  {
+    "path": "support-triage.permissions.readFiles",
+    "verdict": "dropped",
+    "code": "permissions_unsupported",
+    "note": "the host has no sandbox to grant it in"
+  },
+  {
+    "path": "support-triage.permissions.writeFiles",
+    "verdict": "native",
+    "note": "not granted; nothing to configure"
+  },
+  {
+    "path": "support-triage.permissions.runCommands",
+    "verdict": "native",
+    "note": "not granted; nothing to configure"
+  },
+  {
+    "path": "support-triage.permissions.unrestrictedNetwork",
+    "verdict": "native",
+    "note": "not granted; nothing to configure"
+  },
+  {
+    "path": "support-triage.tools.0",
+    "verdict": "mapped",
+    "note": "secret ZENDESK_TOKEN is not used; register an OAuth/Entra SSO auth config for this server in Teams Developer Portal and set MCP_ZENDESK_AUTH_REFERENCE_ID in env/.env.dev"
+  },
+  {
+    "path": "support-triage.tools.1",
+    "verdict": "dropped",
+    "code": "stdio_mcp_unsupported",
+    "note": "Microsoft 365 cannot start a local process"
+  },
+  {
+    "path": "support-triage.tools.2",
+    "verdict": "dropped",
+    "code": "code_tool_needs_public_mcp",
+    "note": "get_order needs a public tool endpoint (project.toolEndpoint); Microsoft 365 cannot run it"
+  },
+  {
+    "path": "support-triage.tools.3",
+    "verdict": "dropped",
+    "code": "permissions_unsupported",
+    "note": "allow rule 0 is refused: admits no operation"
+  },
+  {
+    "path": "support-triage.tools.4",
+    "verdict": "native",
+    "note": "WebSearch capability"
+  },
+  {
+    "path": "support-triage.tools.5",
+    "verdict": "native",
+    "note": "CodeInterpreter capability"
+  },
+  {
+    "path": "support-triage.skills.0",
+    "verdict": "dropped",
+    "code": "skills_unsupported",
+    "note": "the declarative agent manifest has no skill reference"
+  },
+  {
+    "path": "support-triage.knowledge.0",
+    "verdict": "dropped",
+    "code": "knowledge_unsupported",
+    "note": "EmbeddedKnowledge is not enabled by Microsoft yet and accepts only doc/ppt/xls/txt/pdf up to 1 MB; upload the files to SharePoint and add OneDriveAndSharePoint by hand"
+  },
+  {
+    "path": "support-triage.knowledge.1",
+    "verdict": "mapped",
+    "note": "covered by the unrestricted WebSearch capability"
+  },
+  {
+    "path": "support-triage.subagents.0",
+    "verdict": "dropped",
+    "code": "subagents_unsupported",
+    "note": "worker_agents is a preview and needs the title id of a published app; an app holds one declarative agent"
+  },
+  {
+    "path": "support-triage.limits.maxTurns",
+    "verdict": "dropped",
+    "code": "limits_unsupported",
+    "note": "the platform sets its own limits"
+  },
+  {
+    "path": "support-triage.limits.maxBudgetUsd",
+    "verdict": "dropped",
+    "code": "limits_unsupported",
+    "note": "the platform sets its own limits"
+  },
+  {
+    "path": "billing-specialist.description",
+    "verdict": "dropped",
+    "code": "subagents_unsupported",
+    "note": "only the root agent becomes the declarative agent (one per app)"
+  },
+  {
+    "path": "billing-specialist.instructions",
+    "verdict": "dropped",
+    "code": "subagents_unsupported",
+    "note": "only the root agent becomes the declarative agent (one per app)"
+  },
+  {
+    "path": "billing-specialist.model",
+    "verdict": "dropped",
+    "code": "subagents_unsupported",
+    "note": "only the root agent becomes the declarative agent (one per app)"
+  },
+  {
+    "path": "billing-specialist.permissions.readFiles",
+    "verdict": "dropped",
+    "code": "subagents_unsupported",
+    "note": "only the root agent becomes the declarative agent (one per app)"
+  },
+  {
+    "path": "billing-specialist.permissions.writeFiles",
+    "verdict": "dropped",
+    "code": "subagents_unsupported",
+    "note": "only the root agent becomes the declarative agent (one per app)"
+  },
+  {
+    "path": "billing-specialist.permissions.runCommands",
+    "verdict": "dropped",
+    "code": "subagents_unsupported",
+    "note": "only the root agent becomes the declarative agent (one per app)"
+  },
+  {
+    "path": "billing-specialist.permissions.unrestrictedNetwork",
+    "verdict": "dropped",
+    "code": "subagents_unsupported",
+    "note": "only the root agent becomes the declarative agent (one per app)"
+  },
+  {
+    "path": "billing-specialist.skills.0",
+    "verdict": "dropped",
+    "code": "subagents_unsupported",
+    "note": "only the root agent becomes the declarative agent (one per app)"
+  }
+]

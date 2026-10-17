@@ -1,0 +1,48 @@
+{
+  "SS400": {
+    "material": "SS400",
+    "name": "一般構造用圧延鋼材",
+    "densityGPerCm3": 7.85,
+    "pricePerKg": 150,
+    "yield": 0.8,
+    "cuttingPerMeter": [
+      { "maxThicknessMm": 3.2, "yenPerMeter": 80 },
+      { "maxThicknessMm": 6, "yenPerMeter": 120 },
+      { "maxThicknessMm": 12, "yenPerMeter": 200 }
+    ],
+    "bendPerHit": 40,
+    "setupPerLot": 6000,
+    "marginRate": 0.25,
+    "effectiveFrom": "2026-04-01"
+  },
+  "SUS304": {
+    "material": "SUS304",
+    "name": "ステンレス鋼板（オーステナイト系）",
+    "densityGPerCm3": 7.93,
+    "pricePerKg": 620,
+    "yield": 0.75,
+    "cuttingPerMeter": [
+      { "maxThicknessMm": 3, "yenPerMeter": 110 },
+      { "maxThicknessMm": 6, "yenPerMeter": 180 }
+    ],
+    "bendPerHit": 60,
+    "setupPerLot": 9000,
+    "marginRate": 0.25,
+    "effectiveFrom": "2026-04-01"
+  },
+  "A5052": {
+    "material": "A5052",
+    "name": "アルミニウム合金板",
+    "densityGPerCm3": 2.68,
+    "pricePerKg": 900,
+    "yield": 0.8,
+    "cuttingPerMeter": [
+      { "maxThicknessMm": 3, "yenPerMeter": 70 },
+      { "maxThicknessMm": 6, "yenPerMeter": 100 }
+    ],
+    "bendPerHit": 50,
+    "setupPerLot": 5000,
+    "marginRate": 0.3,
+    "effectiveFrom": "2026-04-01"
+  }
+}

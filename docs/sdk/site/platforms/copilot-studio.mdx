@@ -1,0 +1,130 @@
+---
+title: "Copilot Studio"
+description: "Export an agent to Microsoft Copilot Studio as a cloned-agent folder with MCP actions and knowledge files, learn the options and limits, and pack it with the Power Platform CLI."
+---
+
+<Info>
+**Chapter 7 · Run it on other platforms — step 3 of 9** · [the chapter map](/path/platforms)
+
+- **You will:** export `assistant` to a Copilot Studio agent folder and pack it as a solution.
+- **You will learn:** the one required option, the 8,000-character instruction limit, and why pushing the agent live is still experimental.
+- **You need:** [step 1](/platforms/overview); to publish, the Power Platform CLI `pac`.
+</Info>
+
+## What you can do
+
+Copilot Studio is Microsoft's low-code agent builder. The export is a folder in the shape the
+Copilot Studio VS Code extension clones, so you can open it there, or pack it as a solution.
+
+## Before you start
+
+One option is required, `publisherPrefix`: the Dataverse publisher prefix, 2 to 8 lowercase
+letters and digits, starting with a letter (this rule is unverified against a live tenant). Without
+it the export is refused with `platform_options_invalid`.
+
+```yaml title="agent-workspace.yaml (illustrative)" claim="illustrative"
+platforms:
+  copilot-studio:
+    enabled: true
+    options:
+      publisherPrefix: acme
+```
+
+| Option                | What it does                                                                          |
+| --------------------- | ------------------------------------------------------------------------------------- |
+| `publisherPrefix`     | Required. The publisher prefix                                                        |
+| `schemaName`          | The agent's schema name; default `<prefix>_<agentName>` in camel case                 |
+| `modelNameHint`       | Pins the primary model; left out, the environment's default model is used             |
+| `mcpConnectionMode`   | `Maker` (one shared credential, the default) or `Invoker` (each user's own)           |
+| `language`            | The primary language as a number, default `1033` (English)                            |
+| `conversationStarters`| Up to 12 entries with a `title` and a `text`                                          |
+| `topics`              | Topic files, copied as they are; each must be `kind: AdaptiveDialog`, or the export is refused with `platform_options_invalid` |
+
+To publish you need the Power Platform CLI `pac`, version 2.4.1 or later. Install it with
+`dotnet tool install --global Microsoft.PowerApps.CLI.Tool` (the install line and how the version
+is read are unverified against a live tenant). `pac` uses your active `pac auth` profile; create one
+with `pac auth create`.
+
+## Export
+
+```sh title="Export to Copilot Studio (illustrative)" claim="illustrative"
+npx aw platforms export --platform copilot-studio
+```
+
+| Path                                  | What it is                                                                          |
+| ------------------------------------- | ----------------------------------------------------------------------------------- |
+| `agent/agent.mcs.yml`                 | The agent: instructions, description, its built-in capabilities and the model hint  |
+| `agent/settings.mcs.yml`              | Name, schema name and language                                                      |
+| `agent/actions/<server>.mcs.yml`      | One MCP action per remote MCP server, and one for the project's tool endpoint, with the connection mode |
+| `connectors/<server>/…`               | The connector for each of those servers                                             |
+| `agent/knowledge/…`                   | Uploaded knowledge files and public-website sources                                 |
+| `agent/agents/<name>/agent.mcs.yml`   | One child agent per subagent                                                        |
+
+## What maps and what is dropped
+
+These are the verdicts the Copilot Studio compiler writes to the export report, with the reason for
+each. The [platform compatibility matrix](/platforms/matrix) shows what the platform supports, so
+a cell there can differ from the verdict a field gets here:
+
+| Your agent has…                    | On Copilot Studio                                                                      |
+| ---------------------------------- | -------------------------------------------------------------------------------------- |
+| Instructions                       | `native`                                                                               |
+| Description, model                 | `mapped`; the environment's default model unless you set `modelNameHint`               |
+| Remote MCP servers, code tools     | `mapped` to MCP actions with a connector, when the server or the tool endpoint uses `bearer` |
+| Remote MCP servers over SSE        | dropped, `field_unsupported`; Copilot Studio no longer supports SSE for MCP, use streamable HTTP |
+| An MCP server or tool endpoint whose auth is not `bearer` | dropped, `field_unsupported`; only `bearer` is emitted                 |
+| Code tools with no tool endpoint   | dropped, `code_tool_needs_public_mcp`                                                  |
+| Knowledge files                    | `native`; knowledge URLs are `mapped` to a public-website source                       |
+| Knowledge connectors               | dropped, `knowledge_unsupported`                                                       |
+| Subagents                          | `mapped` to child agents, which run on the parent's model                              |
+| Web search, code interpreter       | `mapped` to the agent's capabilities                                                   |
+| Web fetch, file access             | dropped, `builtin_unsupported`; there is no fetch-URL capability and no agent file system |
+| Engine                             | dropped, `field_unsupported`; Copilot Studio's generative orchestrator runs the loop   |
+| Permissions                        | any permission you grant is dropped, `permissions_unsupported`; one you leave off holds, because the platform has no such tool |
+| Skills                             | dropped, `skills_unsupported`; upload `SKILL.md` by hand                               |
+| Local (stdio) MCP servers          | dropped, `stdio_mcp_unsupported`                                                       |
+| OpenAPI tools                      | dropped, `field_unsupported`; use the project's MCP endpoint                           |
+| Turn and budget limits             | dropped, `limits_unsupported`                                                          |
+
+Instructions longer than 8,000 characters are refused with `platform_limit_exceeded`. So are more
+than 500 knowledge sources, 500 uploaded files or 1,000 topics.
+
+## Publish
+
+```sh title="Pack the solution (illustrative)" claim="illustrative"
+npx aw platforms publish --platform copilot-studio
+```
+
+`aw platforms publish --platform copilot-studio` runs `pac solution pack` and writes
+`<solution>.zip` inside the export folder, then exits 3. The solution's name is derived from the
+agent's name: letters, digits and `_`, not starting with a digit (unverified against a live tenant).
+With `--yes` but without `--experimental` it refuses and tells you to import the zip in Copilot
+Studio or the VS Code extension.
+
+Pushing it live needs `--experimental --yes`, which runs `pac solution import --publish-changes`.
+That path is experimental: nobody has yet confirmed that Power Platform accepts the exported folder
+as a solution, so both the pack and the import are unverified against a live tenant.
+
+## Your tools
+
+Each remote MCP server becomes an MCP action with a connector. A secret never enters a file. The
+report names the secret each connection needs, and you enter `Bearer <token>` when you create the
+connection in Copilot Studio. `mcpConnectionMode` chooses whether everyone shares that connection
+(`Maker`) or each user signs in with their own (`Invoker`).
+
+To reach your code tools, add `publicBaseUrl` and `toolAuth`
+([how that works](/platforms/overview#your-code-tools-on-another-platform)); the project's tool
+endpoint becomes one more MCP action. OpenAPI tools are dropped: reach them through that endpoint.
+
+## What is not there yet
+
+- Pushing the solution live is behind `--experimental`: the exported folder has not been confirmed
+  as a solution Power Platform accepts, so the pack and the import are unverified against a live
+  tenant.
+- The `pac` version floor and install line, the solution name rule and the publisher prefix rule
+  are unverified against a live tenant.
+- Skills are dropped; upload `SKILL.md` by hand.
+
+<Card title="Next: Microsoft 365 declarative agent" icon="arrow-right" href="/platforms/m365-declarative-agent">
+  Export to Microsoft 365 Copilot.
+</Card>

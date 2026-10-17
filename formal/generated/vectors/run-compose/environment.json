@@ -1,0 +1,38 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Normative.RunCompose.environment_derives_scope_and_identity",
+    "AgentWorkspace.Theorems.Adversarial.RunCompose.master_key_never_compiles"],
+   "input": {},
+   "id": "empty",
+   "expected":
+   {"env":
+    {"CLAUDE_CONFIG_DIR": "/run/claude/tenant-a/.claude",
+     "CLAUDE_CODE_PROJECT_DIR_NAME": "tenant-a",
+     "AGENT_WORKSPACE_SESSION_ID": "2b0f5f2a-91a4-4a0e-9a1a-9f7a1b2c3d4e",
+     "AGENT_WORKSPACE_RUN_ID": "6f1d0d0a-8b0a-4a1f-9b3e-1c2d3e4f5a6b"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.RunCompose.environment_derives_scope_and_identity",
+    "AgentWorkspace.Theorems.Adversarial.RunCompose.master_key_never_compiles"],
+   "input": {"CUSTOM": "value"},
+   "id": "custom",
+   "expected":
+   {"env":
+    {"CUSTOM": "value",
+     "CLAUDE_CONFIG_DIR": "/run/claude/tenant-a/.claude",
+     "CLAUDE_CODE_PROJECT_DIR_NAME": "tenant-a",
+     "AGENT_WORKSPACE_SESSION_ID": "2b0f5f2a-91a4-4a0e-9a1a-9f7a1b2c3d4e",
+     "AGENT_WORKSPACE_RUN_ID": "6f1d0d0a-8b0a-4a1f-9b3e-1c2d3e4f5a6b"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.RunCompose.environment_derives_scope_and_identity",
+    "AgentWorkspace.Theorems.Adversarial.RunCompose.master_key_never_compiles"],
+   "input": {"ANTHROPIC_API_KEY": "secret"},
+   "id": "master-key",
+   "expected": {"env": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.RunCompose.environment_derives_scope_and_identity",
+    "AgentWorkspace.Theorems.Adversarial.RunCompose.master_key_never_compiles"],
+   "input": {"Anthropic_Api_Key": "secret"},
+   "id": "master-key-mixed-case",
+   "expected": {"env": null}}],
+ "family": "run-compose",
+ "description": "Derived scope and identity, master-key refusal"}

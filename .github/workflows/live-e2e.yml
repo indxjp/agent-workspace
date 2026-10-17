@@ -1,0 +1,128 @@
+name: Live provider acceptance
+
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: Provider configured for this protected environment
+        required: true
+        type: choice
+        options: [anthropic, openai, azure-openai]
+      model:
+        description: Exact provider model identifier
+        required: true
+        type: string
+
+concurrency:
+  group: live-provider-${{ inputs.provider }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  eleven-step:
+    runs-on: ubuntu-latest
+    environment: live-provider-acceptance
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: agent_workspace_e2e
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d agent_workspace_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      E2E_PROVIDER: ${{ inputs.provider }}
+      E2E_MODEL: ${{ inputs.model }}
+      E2E_PROVIDER_API_KEY: ${{ secrets.E2E_PROVIDER_API_KEY }}
+      E2E_ADMIN_EMAIL: e2e-admin@example.invalid
+      E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
+      E2E_MCP_URL: http://aw-e2e-mcp:4319/mcp
+      DATABASE_URL: postgres://agent_workspace:agent_workspace@postgres:5432/agent_workspace
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/agent_workspace_e2e
+      MASTER_ENCRYPTION_KEY: ${{ secrets.E2E_MASTER_ENCRYPTION_KEY }}
+      SESSION_SECRET: ${{ secrets.E2E_SESSION_SECRET }}
+      BOOTSTRAP_ADMIN: e2e-admin@example.invalid
+      BOOTSTRAP_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
+      E2E_RUNTIME: docker
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Refuse missing protected credentials
+        run: |
+          set -euo pipefail
+          test -n "$E2E_PROVIDER_API_KEY"
+          test -n "$E2E_ADMIN_PASSWORD"
+          test -n "$MASTER_ENCRYPTION_KEY"
+          test -n "$SESSION_SECRET"
+      - run: pnpm db:migrate
+      - run: pnpm db:seed
+      - name: Build and start the production-shaped stack
+        run: docker compose up --detach --build --wait
+      - name: Start deterministic MCP fixture on the private application network
+        run: |
+          set -euo pipefail
+          web_id="$(docker compose ps -q web)"
+          network="$(docker inspect "$web_id" --format '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}}{{end}}')"
+          docker run --detach --rm --name aw-e2e-mcp --network "$network" \
+            --volume "$PWD:/workspace:ro" --workdir /workspace \
+            --env E2E_MCP_HOST=0.0.0.0 node:24-alpine node tests/e2e/mcp-fixture.mjs
+          for attempt in $(seq 1 30); do
+            docker exec aw-e2e-mcp wget -qO- http://127.0.0.1:4319/healthz && exit 0
+            sleep 1
+          done
+          docker logs aw-e2e-mcp
+          exit 1
+      - name: Execute all eleven acceptance steps
+        run: pnpm e2e
+      - name: Validate evidence is complete and redacted
+        run: |
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const p = "tests/e2e/results/flow.json";
+            const d = JSON.parse(readFileSync(p, "utf8"));
+            if (!Array.isArray(d.steps) || d.steps.length !== 11 || d.steps.some((s) => s.ok !== true)) process.exit(1);
+            const text = JSON.stringify(d);
+            for (const secret of [process.env.E2E_PROVIDER_API_KEY, process.env.E2E_ADMIN_PASSWORD, process.env.MASTER_ENCRYPTION_KEY, process.env.SESSION_SECRET]) {
+              if (secret && text.includes(secret)) throw new Error("acceptance evidence contains a configured secret");
+            }
+          '
+      - name: Collect redacted service logs
+        if: always()
+        run: |
+          docker compose logs --no-color > e2e-services.log || true
+          docker logs aw-e2e-mcp >> e2e-services.log 2>&1 || true
+          node --input-type=module -e '
+            import { readFileSync, writeFileSync } from "node:fs";
+            const p = "e2e-services.log";
+            let text = readFileSync(p, "utf8");
+            for (const value of [process.env.E2E_PROVIDER_API_KEY, process.env.E2E_ADMIN_PASSWORD, process.env.MASTER_ENCRYPTION_KEY, process.env.SESSION_SECRET]) {
+              if (value) text = text.replaceAll(value, "[REDACTED]");
+            }
+            writeFileSync(p, text);
+          '
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: live-e2e-${{ inputs.provider }}-${{ github.sha }}
+          path: |
+            tests/e2e/results/flow.json
+            e2e-services.log
+          if-no-files-found: error
+          retention-days: 30
+      - if: always()
+        run: |
+          docker rm --force aw-e2e-mcp || true
+          docker compose down --volumes

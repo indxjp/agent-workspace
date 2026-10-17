@@ -1,0 +1,193 @@
+---
+title: "Pagination"
+description: "Walk every run, session or audit event with one cursor loop or a built-in listAll. Every other list method returns the whole collection in one call."
+---
+
+<Info>
+
+- **Read this when:** you list runs, sessions or audit events and need more than one page, or wonder
+  whether another list is complete.
+- **You will learn:** which three lists are cursor-paged, how to walk them with `listAll` or a
+  cursor loop, and what a cursor promises.
+- **Used in:** [Chapter 3: Test and improve it](/path/test) and [Chapter 6: Run it for your
+  team](/path/operate).
+
+</Info>
+
+Three list methods are cursor-paged: `runs.list`, `sessions.list` and
+`observability.audit.list`. Everything else returns the whole collection, so there is nothing to
+walk.
+
+**What you can do**
+
+- [Walk every session or audit event](#walk-every-session-or-audit-event)
+- [Walk every run that matches a filter](#walk-every-run-that-matches-a-filter)
+- [Page through results from the CLI](#page-through-results-from-the-cli)
+- [Know which lists need no paging](#every-other-list-returns-the-whole-collection)
+
+## Walk every session or audit event
+
+`sessions.listAll` and `observability.audit.listAll` follow the cursor for you:
+
+```ts title="illustrative" claim="illustrative"
+for await (const session of aw.sessions.listAll({ status: 'active', limit: 50 })) {
+  console.log(session.id, session.title);
+}
+```
+
+Reading the audit trail is Owner-only; everyone else gets `403 forbidden` before any cursor is
+read.
+
+<Accordion title="sessions.list and audit.list options">
+
+**`aw.sessions.list`** (`GET /api/sessions`) takes `SessionListQuery`
+(`packages/contracts/src/sessions.ts`):
+
+| Field    | Type            | Notes                                                                                                                                    |
+| -------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `status` | `SessionStatus` | A filter, kept on every page.                                                                                                            |
+| `limit`  | `number`        | 1 to `SESSION_LIST_MAX_LIMIT` (200). **Omitted, the route answers every remaining row in one page**, so an unpaged caller keeps working. |
+| `cursor` | `string`        | Exactly the `nextCursor` of a previous page.                                                                                             |
+
+It resolves `{ sessions, projectKey, nextCursor }`, newest **created** first (not most recently
+updated: a rename moves `updatedAt`, and a list ordered by it could not be walked exactly once).
+Each page holds only the sessions the caller may see, so a page is never short because of
+visibility.
+
+**`aw.observability.audit.list`** (`GET /api/audit-events`) takes `AuditListQuery`
+`{ limit?, cursor? }`. `limit` defaults to `AUDIT_LIST_DEFAULT_LIMIT` (100), maximum
+`AUDIT_LIST_MAX_LIMIT` (500); a value outside that range is `400 invalid_limit`. It resolves
+`{ events, nextCursor }`, newest first.
+
+```ts title="illustrative" claim="illustrative"
+for await (const event of aw.observability.audit.listAll({ limit: 500 })) {
+  console.log(event.createdAt, event.action);
+}
+```
+
+</Accordion>
+
+## Walk every run that matches a filter
+
+`runs.list` has no `listAll`. Request a page, read `runs`, and pass `nextCursor` back as `cursor`
+until it is `null`:
+
+```ts title="illustrative" claim="illustrative"
+let cursor: string | undefined;
+do {
+  const page = await aw.runs.list({
+    status: 'failed',
+    ...(cursor === undefined ? {} : { cursor }),
+  });
+  for (const run of page.runs) console.log(run.id, run.createdAt);
+  cursor = page.nextCursor ?? undefined;
+} while (cursor !== undefined);
+```
+
+Each page is **newest first**. Nothing in the response tells you the total count or how many pages
+remain.
+
+<AccordionGroup>
+
+<Accordion title="RunListQuery filters">
+
+`RunListQuery` (`packages/contracts/src/runs.ts`) is every filter `GET /api/runs` accepts, all
+optional:
+
+| Field         | Type            | Notes                                                                                                                       |
+| ------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `status`      | `RunStatus`     |                                                                                                                             |
+| `agent`       | `string`        | Agent id.                                                                                                                   |
+| `project`     | `string`        | Project id.                                                                                                                 |
+| `provider`    | `ModelProvider` |                                                                                                                             |
+| `model`       | `string`        |                                                                                                                             |
+| `from` / `to` | `string`        | ISO-8601 instants.                                                                                                          |
+| `user`        | `string`        | Honoured only for a caller whose grant covers the whole workspace (`owner`/`admin`); otherwise `403 user_filter_forbidden`. |
+| `limit`       | `number`        | Default `RUN_LIST_DEFAULT_LIMIT` (20), maximum `RUN_LIST_MAX_LIMIT` (200).                                                  |
+| `cursor`      | `string`        | Exactly the `nextCursor` of a previous page — opaque, don't construct or parse it.                                          |
+
+`aw.runs.list(query, options)` resolves a `RunListResponse`, `{ runs, nextCursor }`.
+
+</Accordion>
+
+<Accordion title="A reusable allRuns generator">
+
+```ts title="all-runs.ts" claim="compile"
+import type { AgentWorkspaceClient } from '@indx-workspace/sdk';
+import type { RunListQuery, RunResource } from '@indx-workspace/contracts/runs';
+
+async function* allRuns(
+  aw: AgentWorkspaceClient,
+  query: RunListQuery = {},
+): AsyncGenerator<RunResource, void, void> {
+  let cursor = query.cursor;
+  for (;;) {
+    // `cursor` is optional, so it is spread in only when there is one (exactOptionalPropertyTypes).
+    const page = await aw.runs.list({ ...query, ...(cursor === undefined ? {} : { cursor }) });
+    for (const run of page.runs) yield run;
+    if (page.nextCursor === null) return;
+    cursor = page.nextCursor;
+  }
+}
+```
+
+</Accordion>
+
+<Accordion title="Build the same query string outside the SDK">
+
+`runListSearchParams(query)` is the function `runs.list` uses internally to render a
+`RunListQuery` into `URLSearchParams`, omitting every field left `undefined`. It is exported so a
+proxy or a test can match the route's own parsing exactly:
+
+```ts claim="compile"
+import { runListSearchParams } from '@indx-workspace/contracts/runs';
+
+runListSearchParams({ status: 'completed', limit: 50 }).toString();
+// "status=completed&limit=50"
+```
+
+</Accordion>
+
+</AccordionGroup>
+
+## What a cursor promises
+
+- **Opaque.** Pass a `nextCursor` back unchanged. Don't construct, parse or edit one.
+- **Stable under concurrent writes.** Pages are keyed on each row's immutable `(createdAt, id)`,
+  never an offset: a row created while you walk sorts ahead of the page you are on, so a walk sees
+  every row that existed when it started exactly once, and ends.
+- **Bound to its list and workspace** (sessions and audit events). A cursor minted for another
+  workspace, or for the other list, or one whose text was altered, is refused with
+  `400 invalid_cursor`; it is never re-read as a position somewhere else.
+
+## Page through results from the CLI
+
+`aw runs list`, `aw sessions list` and `aw audit list` take `--limit` and `--cursor`.
+`aw sessions list --all` and `aw audit list --all` walk every page and print all the rows.
+`aw runs list` also takes `--status`, `--agent` and `--project`. In table output,
+when there is a next page it prints a `next page: --cursor ...` notice instead of silently dropping
+the rest; re-run with that flag to fetch the following page.
+
+```sh title="illustrative" claim="illustrative"
+aw runs list --status failed --limit 50
+```
+
+`--json` output skips the notice and returns the raw page (`{ runs, nextCursor }`) for a script to
+read; `--jsonl` prints one run per line and keeps the notice on stderr. See
+[Output and exit codes](/cli/output-and-exit-codes).
+
+## Every other `list` returns the whole collection
+
+`agents.list`, `projects.list`, `workspaces.list`, `team.members.list`, `team.users.list`,
+`team.invitations.list`, `team.apiKeys.list`, `shares.list`, `skills.list`, `connectors.list`,
+`models.connections.list`, `runtimes.profiles.list`, `runtimes.connections.list`, `secrets.list`,
+and `observability.metrics.recentRuns` return the **complete** collection as a plain
+`readonly T[]`. None take a `cursor` or a `limit`; `projects.list({ archived })` and
+`files.list({ path })` are filters, not page controls. Call once, read the array.
+
+## See also
+
+- [Runs](/resources/runs), [Sessions](/resources/sessions) and
+  [Observability](/resources/observability): each list method in context.
+- [RunsClient](/reference/sdk/runs), [runs](/reference/contracts/runs) and
+  [observability](/reference/contracts/observability): generated signatures and schemas.

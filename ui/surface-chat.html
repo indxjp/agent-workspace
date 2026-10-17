@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Invoice Help — surface chat</title>
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .ptop { border-bottom: 1px solid var(--border); background: var(--surface); }
+  .ptop .inner { max-width: 760px; margin: 0 auto; padding: 12px 20px; display: flex; align-items: center; gap: 10px; }
+  .ptop .mark { width: 24px; height: 24px; border-radius: 7px; background: var(--text); color: var(--surface); display: grid; place-items: center; font-size: 12px; font-weight: 700; }
+  .pwrap { max-width: 760px; margin: 0 auto; padding: 30px 20px 80px; }
+  .transcript { display: flex; flex-direction: column; gap: 18px; }
+</style>
+</head>
+<body>
+
+<div class="ptop">
+  <div class="inner">
+    <div class="mark">I</div>
+    <div>
+      <div style="font-size:13px;font-weight:600">Invoice Help</div>
+      <div class="small muted">Surface “main” · this machine only</div>
+    </div>
+  </div>
+</div>
+
+<div class="pwrap">
+
+  <p class="muted">Hi. Paste an invoice or ask about one, and I will tell you whether it can be paid.</p>
+
+  <div class="transcript mt24">
+    <div class="msg user">
+      <div class="who">You</div>
+      <div class="body"><div class="name">You</div>
+        <p class="mb0">Is invoice 2026-0412 from Hokuto Supply ready to pay?</p></div>
+    </div>
+    <div class="msg agent">
+      <div class="who">IH</div>
+      <div class="body"><div class="name">Invoice Help</div>
+        <p class="mb0">The totals match the purchase order and the tax rate is 10%. It can be paid
+          automatically on the due date, 15 October…</p></div>
+    </div>
+  </div>
+
+  <div class="composer mt24">
+    <textarea aria-label="Message" placeholder="Write a message…"></textarea>
+    <div class="tools">
+      <span class="spacer"></span>
+      <button class="btn primary sm" data-toast="Message sent">Send</button>
+    </div>
+  </div>
+
+</div>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

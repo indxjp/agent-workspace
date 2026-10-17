@@ -1,0 +1,26 @@
+apiVersion: agentworkspace.dev/v2
+kind: Project
+name: cad-drafting
+engine: claude-agent-sdk
+# The drawing index is your own MCP server (mcp/drawing-index.mjs). A project file names only
+# remote connectors, so run it over Streamable HTTP for `aw dev`:
+#   MCP_TRANSPORT=http PORT=8788 node mcp/drawing-index.mjs
+connectors:
+  drawing-index:
+    url: http://127.0.0.1:8788/mcp
+    transport: http
+policy:
+  permissions:
+    # The agent runs the dxf-draft script and writes drafts; it never needs the open network.
+    writeFiles: true
+    runCommands: true
+    unrestrictedNetwork: false
+  limits:
+    maxBudgetUsd: 2
+  promotion:
+    minEvalScore: 0.9
+environments:
+  local:
+    cloud: local
+    identity:
+      bootstrapAdmin: admin@localhost.test

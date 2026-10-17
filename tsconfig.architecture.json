@@ -1,0 +1,139 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowJs": true,
+    "checkJs": false,
+    "paths": {
+      "@/*": ["./apps/web/*"],
+      "@indx-workspace/aw": ["./packages/aw/src/index.ts"],
+      "@indx-workspace/aw/tools/host": ["./packages/aw/src/tools/host.ts"],
+      "@indx-workspace/cli": ["./packages/cli/src/index.ts"],
+      "@indx-workspace/cli/create": ["./packages/cli/src/create.ts"],
+      "@indx-workspace/cli/deploy": ["./packages/cli/src/deploy/project.ts"],
+      "@indx-workspace/cli/publish": ["./packages/cli/src/publish/index.ts"],
+      "@indx-workspace/create": ["./packages/create/src/run.ts"],
+      "@indx-workspace/platforms": ["./packages/platforms/src/index.ts"],
+      "@indx-workspace/platforms/claude-managed-agents": [
+        "./packages/platforms/src/targets/claude-managed-agents/index.ts"
+      ],
+      "@indx-workspace/platforms/copilot-studio": [
+        "./packages/platforms/src/targets/copilot-studio/index.ts"
+      ],
+      "@indx-workspace/platforms/m365-declarative-agent": [
+        "./packages/platforms/src/targets/m365-declarative-agent/index.ts"
+      ],
+      "@indx-workspace/platforms/microsoft-foundry": [
+        "./packages/platforms/src/targets/microsoft-foundry/index.ts"
+      ],
+      "@indx-workspace/platforms/gemini-enterprise": [
+        "./packages/platforms/src/targets/gemini-enterprise/index.ts"
+      ],
+      "@indx-workspace/platforms/aws-agentcore": [
+        "./packages/platforms/src/targets/aws-agentcore/index.ts"
+      ],
+      "@indx-workspace/platforms/eject-claude-agent-sdk": [
+        "./packages/platforms/src/targets/eject-claude-agent-sdk/index.ts"
+      ],
+      "@indx-workspace/platforms/eject-mastra": [
+        "./packages/platforms/src/targets/eject-mastra/index.ts"
+      ],
+      "@indx-workspace/platforms/eject-openai-agents": [
+        "./packages/platforms/src/targets/eject-openai-agents/index.ts"
+      ],
+      "@indx-workspace/platforms/testing": ["./packages/platforms/src/testing/index.ts"],
+      "@indx-workspace/embedded/launch": ["./packages/embedded/src/bin.ts"],
+      "@indx-workspace/embedded/package.json": ["./packages/embedded/package.json"],
+      "@indx-workspace/contracts": ["./packages/contracts/src/index.ts"],
+      "@indx-workspace/contracts/a2a": ["./packages/contracts/src/a2a.ts"],
+      "@indx-workspace/contracts/agent-versions": ["./packages/contracts/src/agent-versions.ts"],
+      "@indx-workspace/contracts/agents": ["./packages/contracts/src/agents.ts"],
+      "@indx-workspace/contracts/api-keys": ["./packages/contracts/src/api-keys.ts"],
+      "@indx-workspace/contracts/cli-auth": ["./packages/contracts/src/cli-auth.ts"],
+      "@indx-workspace/contracts/connectors": ["./packages/contracts/src/connectors.ts"],
+      "@indx-workspace/contracts/endpoint-clients": [
+        "./packages/contracts/src/endpoint-clients.ts"
+      ],
+      "@indx-workspace/contracts/engines": ["./packages/contracts/src/engines.ts"],
+      "@indx-workspace/contracts/evaluations": ["./packages/contracts/src/evaluations.ts"],
+      "@indx-workspace/contracts/feedback": ["./packages/contracts/src/feedback.ts"],
+      "@indx-workspace/contracts/files": ["./packages/contracts/src/files.ts"],
+      "@indx-workspace/contracts/invitations": ["./packages/contracts/src/invitations.ts"],
+      "@indx-workspace/contracts/local-runtime": ["./packages/contracts/src/local-runtime.ts"],
+      "@indx-workspace/contracts/models": ["./packages/contracts/src/models.ts"],
+      "@indx-workspace/contracts/observability": ["./packages/contracts/src/observability.ts"],
+      "@indx-workspace/contracts/platforms": ["./packages/contracts/src/platforms.ts"],
+      "@indx-workspace/contracts/policy-ceiling": ["./packages/contracts/src/policy-ceiling.ts"],
+      "@indx-workspace/contracts/portable-agent": ["./packages/contracts/src/portable-agent.ts"],
+      "@indx-workspace/contracts/project-file": ["./packages/contracts/src/project-file.ts"],
+      "@indx-workspace/contracts/projects": ["./packages/contracts/src/projects.ts"],
+      "@indx-workspace/contracts/routes": ["./packages/contracts/src/routes.ts"],
+      "@indx-workspace/contracts/run-events": ["./packages/contracts/src/run-events.ts"],
+      "@indx-workspace/contracts/runs": ["./packages/contracts/src/runs.ts"],
+      "@indx-workspace/contracts/runtimes": ["./packages/contracts/src/runtimes.ts"],
+      "@indx-workspace/contracts/secret-reference": [
+        "./packages/contracts/src/secret-reference.ts"
+      ],
+      "@indx-workspace/contracts/secrets": ["./packages/contracts/src/secrets.ts"],
+      "@indx-workspace/contracts/sessions": ["./packages/contracts/src/sessions.ts"],
+      "@indx-workspace/contracts/setup": ["./packages/contracts/src/setup.ts"],
+      "@indx-workspace/contracts/shares": ["./packages/contracts/src/shares.ts"],
+      "@indx-workspace/contracts/skills": ["./packages/contracts/src/skills.ts"],
+      "@indx-workspace/contracts/surfaces": ["./packages/contracts/src/surfaces.ts"],
+      "@indx-workspace/contracts/team": ["./packages/contracts/src/team.ts"],
+      "@indx-workspace/contracts/tokens": ["./packages/contracts/src/tokens.ts"],
+      "@indx-workspace/contracts/tool-connectors": ["./packages/contracts/src/tool-connectors.ts"],
+      "@indx-workspace/contracts/workspaces": ["./packages/contracts/src/workspaces.ts"],
+      "@agent-workspace/core": ["./packages/core/src/index.ts"],
+      "@agent-workspace/core/audit": ["./packages/core/src/audit/index.ts"],
+      "@agent-workspace/core/auth": ["./packages/core/src/auth/index.ts"],
+      "@agent-workspace/core/db": ["./packages/core/src/db/index.ts"],
+      "@agent-workspace/core/db/unscoped": ["./packages/core/src/db/repositories/unscoped.ts"],
+      "@agent-workspace/core/posture": ["./packages/core/src/posture.ts"],
+      "@agent-workspace/core/secrets": ["./packages/core/src/secrets/index.ts"],
+      "@agent-workspace/core/storage": ["./packages/core/src/storage/index.ts"],
+      "@agent-workspace/core/telemetry": ["./packages/core/src/telemetry/index.ts"],
+      "@agent-workspace/egress-proxy": ["./packages/egress-proxy/src/index.ts"],
+      "@agent-workspace/engine": ["./packages/engine/src/index.ts"],
+      "@agent-workspace/engine/testing": ["./packages/engine/src/testing/index.ts"],
+      "@agent-workspace/engine-claude-agent-sdk": [
+        "./packages/engine-claude-agent-sdk/src/index.ts"
+      ],
+      "@agent-workspace/engine-mastra": ["./packages/engine-mastra/src/index.ts"],
+      "@agent-workspace/engine-openai-agents": ["./packages/engine-openai-agents/src/index.ts"],
+      "@agent-workspace/engine-pi": ["./packages/engine-pi/src/index.ts"],
+      "@agent-workspace/gateway": ["./packages/gateway/src/index.ts"],
+      "@agent-workspace/gateway/providers/registry": [
+        "./packages/gateway/src/providers/registry.ts"
+      ],
+      "@agent-workspace/gateway/start": ["./packages/gateway/src/start.ts"],
+      "@agent-workspace/gateway/tokens": ["./packages/gateway/src/tokens/run-token.ts"],
+      "@agent-workspace/runner": ["./apps/runner/src/index.ts"],
+      "@agent-workspace/runner/start": ["./apps/runner/src/start.ts"],
+      "@agent-workspace/runner/manager-start": ["./apps/runner/src/manager-start.ts"],
+      "@agent-workspace/runtime": ["./packages/runtime/src/index.ts"],
+      "@agent-workspace/schemas/agent-workspace.schema.json": [
+        "./packages/schemas/agent-workspace.schema.json"
+      ],
+      "@indx-workspace/react": ["./packages/react/src/index.ts"],
+      "@indx-workspace/react/locale": ["./packages/react/src/locale.ts"],
+      "@indx-workspace/react/run-model": ["./packages/react/src/run-model.ts"],
+      "@indx-workspace/react/styles.css": ["./packages/react/src/styles.css"],
+      "@indx-workspace/react/theme": ["./packages/react/src/theme.ts"],
+      "@indx-workspace/sdk": ["./packages/sdk/src/index.ts"],
+      "@indx-workspace/sdk/define": ["./packages/sdk/src/define/index.ts"],
+      "@indx-workspace/sdk/events": ["./packages/sdk/src/events/index.ts"],
+      "@indx-workspace/sdk/portable": ["./packages/sdk/src/portable/index.ts"],
+      "@indx-workspace/sdk/project": ["./packages/sdk/src/project/index.ts"],
+      "@indx-workspace/sdk/testing": ["./packages/sdk/src/testing.ts"],
+      "@agent-workspace/tool-host": ["./packages/tool-host/src/index.ts"],
+      "@agent-workspace/web/server/cli-auth/local-credential": [
+        "./apps/web/server/cli-auth/local-credential.ts"
+      ],
+      "@agent-workspace/web/server/start": ["./apps/web/server/start.ts"],
+      "embedded-postgres": ["./packages/embedded/node_modules/embedded-postgres/dist/index.js"]
+    }
+  },
+  "include": ["apps/**/*.ts", "apps/**/*.tsx", "packages/**/*.ts", "packages/**/*.tsx"],
+  "exclude": ["**/node_modules/**", "**/dist/**", "**/.next/**", "**/coverage/**"]
+}

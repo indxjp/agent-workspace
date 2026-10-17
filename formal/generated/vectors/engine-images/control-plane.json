@@ -1,0 +1,84 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Normative.EngineImages.catalogue_is_the_map",
+    "AgentWorkspace.Theorems.Normative.EngineImages.control_plane_never_requires_a_digest"],
+   "input":
+   {"env":
+    {"NODE_ENV": "production",
+     "AGENT_WORKSPACE_RUNTIME_IMAGE_CLAUDE_AGENT_SDK":
+     "registry.example/agent-workspace/runtime-claude-agent-sdk@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},
+   "id": "production-digest",
+   "expected":
+   {"ok": true,
+    "images":
+    [["claude-agent-sdk",
+      "registry.example/agent-workspace/runtime-claude-agent-sdk@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.EngineImages.catalogue_is_the_map",
+    "AgentWorkspace.Theorems.Normative.EngineImages.control_plane_never_requires_a_digest"],
+   "input":
+   {"env":
+    {"RUNTIME_IMAGE":
+     "registry.example/agent-workspace/runtime-claude-agent-sdk@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "NODE_ENV": "production"}},
+   "id": "production-legacy-digest",
+   "expected":
+   {"ok": true,
+    "images":
+    [["claude-agent-sdk",
+      "registry.example/agent-workspace/runtime-claude-agent-sdk@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.EngineImages.catalogue_is_the_map",
+    "AgentWorkspace.Theorems.Normative.EngineImages.control_plane_never_requires_a_digest"],
+   "input":
+   {"env":
+    {"NODE_ENV": "production",
+     "AGENT_WORKSPACE_RUNTIME_IMAGE_CLAUDE_AGENT_SDK":
+     "registry.example/secret-project-7/runtime-claude-agent-sdk:v1"}},
+   "id": "production-tag-admitted",
+   "expected":
+   {"ok": true, "images": [["claude-agent-sdk", "registry.example/secret-project-7/runtime-claude-agent-sdk:v1"]]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.EngineImages.catalogue_is_the_map",
+    "AgentWorkspace.Theorems.Normative.EngineImages.control_plane_never_requires_a_digest"],
+   "input":
+   {"env": {"NODE_ENV": "production", "AGENT_WORKSPACE_RUNTIME_IMAGE_CLAUDE_AGENT_SDK": "agent-workspace/runtime:dev"}},
+   "id": "production-compose-default-admitted",
+   "expected": {"ok": true, "images": [["claude-agent-sdk", "agent-workspace/runtime:dev"]]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.EngineImages.catalogue_is_the_map",
+    "AgentWorkspace.Theorems.Normative.EngineImages.control_plane_never_requires_a_digest"],
+   "input": {"env": {"NODE_ENV": "production"}},
+   "id": "production-nothing-configured",
+   "expected": {"ok": true, "images": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.EngineImages.catalogue_is_the_map",
+    "AgentWorkspace.Theorems.Normative.EngineImages.control_plane_never_requires_a_digest"],
+   "input": {"env": {"NODE_ENV": "development"}},
+   "id": "development-default",
+   "expected": {"ok": true, "images": [["claude-agent-sdk", "agent-workspace/runtime:dev"]]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.EngineImages.catalogue_is_the_map",
+    "AgentWorkspace.Theorems.Normative.EngineImages.control_plane_never_requires_a_digest"],
+   "input":
+   {"env":
+    {"NODE_ENV": "development",
+     "AGENT_WORKSPACE_RUNTIME_IMAGE_CLAUDE_AGENT_SDK":
+     "registry.example/secret-project-7/runtime-claude-agent-sdk:v1"}},
+   "id": "development-tag",
+   "expected":
+   {"ok": true, "images": [["claude-agent-sdk", "registry.example/secret-project-7/runtime-claude-agent-sdk:v1"]]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.EngineImages.startup_refusal_names_only_engine_ids",
+    "AgentWorkspace.Theorems.Normative.EngineImages.control_plane_never_requires_a_digest"],
+   "input": {"env": {"NODE_ENV": "development", "AGENT_WORKSPACE_RUNTIME_IMAGE_CLAUDE_AGENT_SDK": "two words"}},
+   "id": "development-malformed-refused",
+   "expected":
+   {"unpinned": [],
+    "unknown": [],
+    "ok": false,
+    "malformed": ["claude-agent-sdk"],
+    "keys": ["claude-agent-sdk"],
+    "duplicates": []}}],
+ "family": "engine-images",
+ "description": "readConfiguredEngineImages: shape only, never a digest; the development default outside production"}

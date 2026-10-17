@@ -1,0 +1,14 @@
+{
+  // The type-checking view: the whole of `src`, tests included, emitting nothing. A Node program:
+  // `node` types are wanted, and `DOM` is in `lib` because the CLI it runs reaches the SDK, whose
+  // surface is the Web platform's (`fetch`, `Response`, `AbortSignal`).
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "noEmit": true,
+    // `@indx-workspace/cli/create` resolves to the CLI's sources, which import with `.ts`.
+    "rewriteRelativeImportExtensions": true
+  },
+  "include": ["src"]
+}

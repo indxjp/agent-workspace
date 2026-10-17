@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>API Keys — Agent Workspace</title>
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<script>window.PAGE = { nav: "apikeys", crumbs: [["Administration"], ["API Keys"]] };</script>
+
+<div class="app">
+  <div class="main">
+    <div class="page">
+
+      <div class="page-head">
+        <div>
+          <h1>API Keys</h1>
+          <div class="sub">Programmatic access to this workspace’s control-plane API.</div>
+        </div>
+        <div class="actions">
+          <button class="btn primary" data-modal-open="m-new-key">+ Create API Key</button>
+        </div>
+      </div>
+
+      <div class="rows">
+        <div class="row">
+          <div class="grow">
+            <div class="title">Production <span class="badge ok">Active</span></div>
+            <div class="meta mono">ak_live_9f2c••••••••••••••••</div>
+          </div>
+          <div class="right">
+            <span>Runs agents · read files</span>
+            <span>Last used 2 h ago</span>
+            <button class="btn sm danger" data-modal-open="m-revoke">Revoke</button>
+          </div>
+        </div>
+        <div class="row">
+          <div class="grow">
+            <div class="title">CI <span class="badge ok">Active</span></div>
+            <div class="meta mono">ak_live_41ab••••••••••••••••</div>
+          </div>
+          <div class="right">
+            <span>Runs agents</span>
+            <span>Last used yesterday</span>
+            <button class="btn sm danger" data-modal-open="m-revoke">Revoke</button>
+          </div>
+        </div>
+        <div class="row">
+          <div class="grow">
+            <div class="title">Data team sandbox <span class="badge warn">Expires in 6 days</span></div>
+            <div class="meta mono">ak_live_77de••••••••••••••••</div>
+          </div>
+          <div class="right">
+            <span>Read only</span>
+            <span>Last used 3 days ago</span>
+            <button class="btn sm danger" data-modal-open="m-revoke">Revoke</button>
+          </div>
+        </div>
+        <div class="row">
+          <div class="grow">
+            <div class="title">Old integration <span class="badge muted">Revoked</span></div>
+            <div class="meta mono">ak_live_0c58••••••••••••••••</div>
+          </div>
+          <div class="right">
+            <span class="muted">Revoked 12 Aug 2026 by Aya Ito</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout mt24">
+        <span class="ico">🔒</span>
+        <div class="grow">
+          Only a hash of each key is stored. The raw secret is shown once, at creation, and cannot be
+          recovered afterwards — create a new key instead.
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- create -->
+<div class="scrim" id="m-new-key" hidden>
+  <div class="modal">
+    <div class="m-head"><h3>Create API key</h3></div>
+    <div class="m-body">
+      <div class="field"><label>Name</label><input type="text" placeholder="e.g. Production"></div>
+      <div class="field">
+        <label>Permissions</label>
+        <div class="checks">
+          <label class="check on"><span class="box"></span><span class="grow"><span class="t">Run agents</span><span class="d">POST /api/agents/:id/runs</span></span></label>
+          <label class="check on"><span class="box"></span><span class="grow"><span class="t">Read runs and sessions</span></span></label>
+          <label class="check"><span class="box"></span><span class="grow"><span class="t">Manage files</span></span></label>
+          <label class="check"><span class="box"></span><span class="grow"><span class="t">Manage agents</span><span class="d">Create, edit and delete agent definitions</span></span></label>
+        </div>
+      </div>
+      <div class="field mb0">
+        <label>Expires</label>
+        <select><option>Never</option><option selected>In 90 days</option><option>In 30 days</option></select>
+      </div>
+    </div>
+    <div class="m-foot"><button class="btn" data-modal-close>Cancel</button><button class="btn primary" data-modal-close data-modal-open="m-key-created">Create key</button></div>
+  </div>
+</div>
+
+<!-- shown once -->
+<div class="scrim" id="m-key-created" hidden>
+  <div class="modal">
+    <div class="m-head"><h3>API key created</h3><div class="sub">Copy it now. This is the only time it is shown.</div></div>
+    <div class="m-body">
+      <div class="secret"><span class="grow">ak_live_9f2c8b41d7e04a6f93c15ab2ee7740db</span><button class="btn sm" data-toast="Copied to clipboard">Copy</button></div>
+      <div class="callout warn mt16">
+        <span class="ico">⚠</span>
+        <div class="grow">Store it in your own secret manager. The platform keeps only a hash and cannot show it again.</div>
+      </div>
+      <pre class="code mt16">curl https://agents.meridian.example/api/agents/ag_7c21/runs \
+  -H <span class="s">"Authorization: Bearer ak_live_…"</span> \
+  -H <span class="s">"Content-Type: application/json"</span> \
+  -d <span class="s">'{"prompt":"Summarise the Q3 contracts"}'</span></pre>
+    </div>
+    <div class="m-foot"><button class="btn primary" data-modal-close>Done</button></div>
+  </div>
+</div>
+
+<!-- revoke -->
+<div class="scrim" id="m-revoke" hidden>
+  <div class="modal" style="max-width:440px">
+    <div class="m-head"><h3>Revoke this key?</h3></div>
+    <div class="m-body">
+      <p class="mb0">Any integration using it stops working immediately. This cannot be undone; issue a new key instead.</p>
+    </div>
+    <div class="m-foot"><button class="btn" data-modal-close>Cancel</button><button class="btn danger" data-modal-close data-toast="API key revoked">Revoke key</button></div>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

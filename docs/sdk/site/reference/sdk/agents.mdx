@@ -1,0 +1,670 @@
+---
+title: "AgentsClient"
+description: "Every method of AgentsClient, its parameters, return type, and route."
+---
+
+<Note>This page is generated from `packages/sdk/src/resources/agents.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+`/api/agents/**` — spec §17 and §34.
+
+## list
+
+```ts
+async list(options?: RequestOptions): Promise<readonly AgentResource[]>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<readonly AgentResource[]>`
+
+**Route:** `GET /api/agents`
+
+## get
+
+```ts
+async get(agentId: string, options?: RequestOptions): Promise<AgentResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `agentId` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<AgentResource>`
+
+**Route:** `GET /api/agents/:agentId`
+
+## create
+
+S1-09 (issue #447; ADR-0101): run the create-from-version pipeline on `input.version` and write
+nothing (`POST /api/agents {version, dryRun: true}`, `200`; C8). The answer is the number the
+first version would be saved as (`1`). It refuses exactly what the save below refuses.
+
+```ts
+create(input: CreateAgentFromVersionRequestInput & { readonly dryRun: true }, options?: RequestOptions): Promise<AgentVersionCheckResponse>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `input` | `CreateAgentFromVersionRequestInput & { readonly dryRun: true }` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<AgentVersionCheckResponse>`
+
+## create
+
+S1-09 (issue #447; ADR-0101): create the agent from its first version
+(`POST /api/agents {version}`, `201`). The agent's name is
+`version.body.definition.agent.name`; the answer is the agent and its version `1`. Requests are
+not validated here — the server's save pipeline is the one validator.
+
+Throws `ApiProblemError` with a code from `AGENT_VERSION_PROBLEM_CODES`:
+
+- `400 invalid_agent_version` — the body is not a create-from-version request; each `details`
+  entry is one parse issue. Passing `options.assignments` beside a version is refused this way:
+  the key is sent, never silently dropped;
+- `409 agent_name_conflict` — another agent of this workspace already has the name (issue
+  #480); no `details`;
+- `409 surface_name_taken` — a surface name is already another agent's (C9); `details` is
+  `[surface:<name>]` for each;
+- `422 agent_definition_references_missing` — each `details` entry is `<kind>:<name>`;
+- the policy and engine refusals `agents.versions.create` lists.
+
+```ts
+create(input: CreateAgentFromVersionRequestInput & { readonly dryRun?: undefined }, options?: RequestOptions): Promise<CreateAgentFromVersionResponse>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `input` | `CreateAgentFromVersionRequestInput & { readonly dryRun?: undefined }` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<CreateAgentFromVersionResponse>`
+
+## create
+
+Creates the agent alone.
+
+```ts
+create(input: CreateAgentInput, options?: RequestOptions): Promise<AgentResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `input` | `CreateAgentInput` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<AgentResource>`
+
+## create
+
+K-2: creates the agent and its resource assignments in one request — the same rows
+`create` followed by `replaceResourceAssignments` would produce, written atomically by the
+server (`apps/web/app/api/agents/route.ts`'s `POST`, which compensates by deleting the agent
+if the assignment write fails). Posting two requests from the client would risk exactly the
+orphan a single atomic write avoids.
+
+Throws `ApiProblemError`. The engine-specific code (ADR-0065,
+`AGENT_POLICY_PROBLEM_CODES` in the contracts) is:
+
+- `422 engine_capability_unsupported` — the engine cannot honour a connector or a skill in
+  `assignments`. `details` is exactly one entry, the capability (`mcp` or `skills`), so the
+  caller branches on that rather than on the message. Nothing is written: the agent is not
+  created and the resources are never silently dropped.
+
+```ts
+create(input: CreateAgentInput, options: RequestOptions & Required<Pick<CreateAgentOptions, 'assignments'>>): Promise<CreateAgentWithAssignmentsResponse>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `input` | `CreateAgentInput` | Yes |
+| `options` | `RequestOptions & Required<Pick<CreateAgentOptions, 'assignments'>>` | Yes |
+
+**Returns:** `Promise<CreateAgentWithAssignmentsResponse>`
+
+## create
+
+```ts
+create(input: CreateAgentInput | CreateAgentFromVersionRequestInput, options?: RequestOptions & CreateAgentOptions): Promise< | AgentResource | CreateAgentWithAssignmentsResponse | CreateAgentFromVersionResponse | AgentVersionCheckResponse >
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `input` | `CreateAgentInput \| CreateAgentFromVersionRequestInput` | Yes |
+| `options` | `RequestOptions & CreateAgentOptions` | No |
+
+**Returns:** `Promise< | AgentResource | CreateAgentWithAssignmentsResponse | CreateAgentFromVersionResponse | AgentVersionCheckResponse >`
+
+**Route:** `POST /api/agents`
+
+## update
+
+```ts
+async update(agentId: string, patch: UpdateAgentPatch, options?: RequestOptions): Promise<AgentResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `agentId` | `string` | Yes |
+| `patch` | `UpdateAgentPatch` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<AgentResource>`
+
+**Route:** `PATCH /api/agents/:agentId`
+
+## remove
+
+```ts
+async remove(agentId: string, options?: RequestOptions): Promise<void>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `agentId` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<void>`
+
+**Route:** `DELETE /api/agents/:agentId`
+
+## getResourceAssignments
+
+The files, skills and connectors the agent may reach (`GET /api/agents/:id/resources`).
+
+```ts
+async getResourceAssignments(agentId: string, options?: RequestOptions): Promise<AgentResourceAssignments>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `agentId` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<AgentResourceAssignments>`
+
+**Route:** `GET /api/agents/:agentId/resources`
+
+## replaceResourceAssignments
+
+Replace every assignment at once (`PUT /api/agents/:id/resources`). The agent's own
+`writeFiles` permission is a ceiling on a `read-write` file grant; the server applies it and
+answers with what it actually stored.
+
+```ts
+async replaceResourceAssignments(agentId: string, assignments: AgentResourceAssignments, options?: RequestOptions): Promise<AgentResourceAssignments>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `agentId` | `string` | Yes |
+| `assignments` | `AgentResourceAssignments` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<AgentResourceAssignments>`
+
+**Route:** `PUT /api/agents/:agentId/resources`
+
+## getGrants
+
+Membership principals explicitly permitted to run this agent.
+
+```ts
+async getGrants(agentId: string, options?: RequestOptions): Promise<AgentGrants['principalIds']>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `agentId` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<AgentGrants['principalIds']>`
+
+**Route:** `GET /api/agents/:agentId/grants`
+
+## replaceGrants
+
+Atomically replace every membership principal permitted to run this agent.
+
+```ts
+async replaceGrants(agentId: string, principalIds: readonly string[], options?: RequestOptions): Promise<AgentGrants['principalIds']>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `agentId` | `string` | Yes |
+| `principalIds` | `readonly string[]` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<AgentGrants['principalIds']>`
+
+**Route:** `PUT /api/agents/:agentId/grants`
+
+## getPolicy
+
+S-13: the agent's policy (`GET /api/agents/:id/policy`) — the stored one if a `replacePolicy`
+has ever run, otherwise the one compiled from `permissions` and the assigned resources.
+
+```ts
+async getPolicy(agentId: string, options?: RequestOptions): Promise<AgentPolicy>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `agentId` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<AgentPolicy>`
+
+**Route:** `GET /api/agents/:agentId/policy`
+
+## replacePolicy
+
+S-13: replace the agent's policy as one operation (`PUT /api/agents/:id/policy`). The server
+answers exactly what it stored. The agent's permission checkboxes and read-only file grants
+are applied on top when a run is composed, so a stored policy may restrict the agent further
+but never widens it past them.
+
+Throws `ApiProblemError`. The engine-specific codes (ADR-0065,
+`ENGINE_PROBLEM_CODES` and `AGENT_POLICY_PROBLEM_CODES` in the contracts) are:
+
+- `400 unsupported_engine` — `policy.engine` is not an engine this deployment registers;
+- `422 engine_capability_unsupported` — the engine cannot honour a connector or a skill this
+  agent is assigned. `details` is exactly one entry, the capability (`mcp` or `skills`), so the
+  caller branches on that rather than on the message. The resources are never silently dropped.
+- `422 engine_switch_would_widen` — `policy.engine` differs from the stored policy's, and the
+  stored arm denies something the new arm cannot express (an MCP tool, an MCP glob, a
+  wildcard). `details` names each such rule. Everything else the stored arm withheld is carried
+  into the new arm (`translatePolicyForEngineSwitch`, ADR-0074 D12), so the policy this answers
+  can be narrower than the one sent.
+
+```ts
+async replacePolicy(agentId: string, policy: AgentPolicy, options?: RequestOptions): Promise<AgentPolicy>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `agentId` | `string` | Yes |
+| `policy` | `AgentPolicy` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<AgentPolicy>`
+
+**Route:** `PUT /api/agents/:agentId/policy`
+
+## export
+
+K-1: the agent as a portable `AgentDefinition` (`agentworkspace.dev/v1`) — its record,
+policy and assignments, with every reference to another resource written as that resource's
+**name** (a file as its workspace path). It carries no id, no credential and no skill bytes;
+run grants are not exported, because they name principals of this workspace only.
+
+Composes `get`, `getPolicy`, `getResourceAssignments` and the skill, connector, model
+connection, runtime profile and file reads, so it needs the read access each of those needs.
+Throws `ApiProblemError` `409 agent_definition_reference_unresolvable` when an assigned
+resource's name cannot be read back; `details` lists each as `<kind>:<id>`.
+`policySource` records whether the policy was stored or compiled (`GET …/policy`'s `source`).
+
+```ts
+export(agentId: string, options?: RequestOptions): Promise<AgentDefinition>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `agentId` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<AgentDefinition>`
+
+## import
+
+K-1: recreate an exported agent in the workspace this client is bound to, resolving every
+name inside it. Validates the file first (`400 invalid_agent_definition`), then refuses — before
+anything is written — an engine this deployment does not install (`400 unsupported_engine`), a
+name two resources share (`409 agent_definition_reference_ambiguous`), and, unless
+`onMissing: 'skip'`, any name the workspace lacks (`422 agent_definition_references_missing`).
+The missing and ambiguous refusals list the offending references in `details` as
+`<kind>:<name>`; `AGENT_DEFINITION_PROBLEM_CODES` documents every code's `details`.
+
+It then creates the agent with its assignments in one call and stores the policy — only when
+`policySource` is `'stored'`; a compiled policy stays compiled. If a later step fails (the
+policy is refused with `422 engine_capability_unsupported`, for one, or the call is aborted),
+the new agent is removed again so a retry never makes a second; if that removal fails too, the
+original refusal gains an `agent:<id>` entry in `details` (`409
+agent_definition_import_incomplete` when the failure was not a problem). Skill bytes and
+credentials never cross: a skill or connector must already exist in the destination under the
+same name.
+
+```ts
+import(definition: unknown, options?: ImportAgentDefinitionOptions): Promise<ImportAgentDefinitionResult>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `definition` | `unknown` | Yes |
+| `options` | `ImportAgentDefinitionOptions` | No |
+
+**Returns:** `Promise<ImportAgentDefinitionResult>`
+
+## versions.list
+
+The agent's versions and its environment pointers (`GET /api/agents/:id/versions`). The whole
+answer is returned because the pointers — which version each environment runs — are part of
+it.
+
+Throws `ApiProblemError`: `400 invalid_agent_id` (the id is not a UUID) and
+`404 agent_not_found`.
+
+```ts
+async list(agentId: string, options?: RequestOptions): Promise<AgentVersionListResponse>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `agentId` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<AgentVersionListResponse>`
+
+**Route:** `GET /api/agents/:agentId/versions`
+
+## versions.create
+
+Save `draft` as the agent's next version (`POST /api/agents/:id/versions`, `201`). The pointers
+do not move. To run the same pipeline without writing, call `check`; a `dryRun` key
+smuggled into `draft` from untyped code makes the server answer `200`, which this method does
+not expect and reports as an `ApiProblemError` (`unrecognised_error_body`) — the key is
+sent as given, never stripped.
+
+Throws `ApiProblemError` with a code from `AGENT_VERSION_PROBLEM_CODES`:
+
+- `400 invalid_agent_version` — the body is not a version; each `details` entry is one parse
+  issue, `<dotted.path>: <message>`;
+- `400 unsupported_engine`, `400 dangerous_permission_mode_refused` — the definition's policy;
+- `404 agent_not_found`, `503 agent_policy_not_configured`;
+- `422 agent_definition_references_missing` / `409 agent_definition_reference_ambiguous` — each
+  `details` entry is `<kind>:<name>`;
+- `422 engine_capability_unsupported` — `details` is the capability (`mcp` or `skills`);
+- `422 engine_switch_would_widen` — each `details` entry is a rule the new engine cannot keep.
+
+```ts
+async create(agentId: string, draft: AgentVersionDraftInput, options?: RequestOptions): Promise<AgentVersionResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `agentId` | `string` | Yes |
+| `draft` | `AgentVersionDraftInput` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<AgentVersionResource>`
+
+**Route:** `POST /api/agents/:agentId/versions`
+
+## versions.check
+
+Run the whole save pipeline on `draft` and write nothing (`POST /api/agents/:id/versions` with
+`dryRun: true`, `200`; C8). The answer is the number the version would be saved as. It refuses
+exactly what `create` refuses, with the same codes and `details`.
+
+```ts
+async check(agentId: string, draft: AgentVersionDraftInput, options?: RequestOptions): Promise<AgentVersionCheckResponse>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `agentId` | `string` | Yes |
+| `draft` | `AgentVersionDraftInput` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<AgentVersionCheckResponse>`
+
+**Route:** `POST /api/agents/:agentId/versions`
+
+## pointers.set
+
+Point `request.environment` at version `request.version` (`PUT /api/agents/:id/pointers`). The
+answer is the agent as it now runs and the pointer.
+
+Throws `ApiProblemError` with a code from `AGENT_VERSION_PROBLEM_CODES`:
+
+- `400 invalid_agent_version` — the body is not a pointer move (an unknown environment, for
+  one); each `details` entry is one parse issue;
+- `404 agent_not_found`; `404 agent_version_not_found` — `details` is `[version:<n>]`;
+- `409 agent_name_conflict` — the version renames the agent to a name another agent holds
+  (issue #480); no `details`;
+- `409 surface_name_taken` — the version's surfaces would give the workspace two surfaces of
+  one name (C9); `details` is `[surface:<name>]` for each;
+- the definition refusals `AgentVersionsClient.create` lists, when the stored version no
+  longer applies to this workspace.
+
+```ts
+async set(agentId: string, request: SetAgentPointerRequest, options?: RequestOptions): Promise<SetAgentPointerResponse>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `agentId` | `string` | Yes |
+| `request` | `SetAgentPointerRequest` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<SetAgentPointerResponse>`
+
+**Route:** `PUT /api/agents/:agentId/pointers`
+
+## pointers.promote
+
+Point `production` at the version `local` points at, or at `request.version`
+(`POST /api/agents/:id/promote`, issue #615). The answer is `production`'s version before and
+after the move, with `saved: true`. To decide and validate the move without writing, call
+`checkPromote`.
+
+Throws `ApiProblemError` with whatever code the server answers, among them:
+
+- `409 no_pointer` — `local` points at no version, so there is nothing to promote;
+- `404 agent_not_found`; `404 agent_version_not_found` — `details` is `[version:<n>]`;
+- `400 invalid_agent_version` — the body is not a promote request;
+- the refusals `set` lists, when the version no longer applies to this workspace.
+
+```ts
+async promote(agentId: string, request?: PromoteAgentInput, options?: RequestOptions): Promise<AgentPointerMoveResponse>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `agentId` | `string` | Yes |
+| `request` | `PromoteAgentInput` | No |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<AgentPointerMoveResponse>`
+
+**Route:** `POST /api/agents/:agentId/promote`
+
+## pointers.checkPromote
+
+`promote` with `dryRun: true`: the same decision and refusals, and nothing is written
+(`saved: false`).
+
+```ts
+async checkPromote(agentId: string, request?: PromoteAgentInput, options?: RequestOptions): Promise<AgentPointerMoveResponse>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `agentId` | `string` | Yes |
+| `request` | `PromoteAgentInput` | No |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<AgentPointerMoveResponse>`
+
+**Route:** `POST /api/agents/:agentId/promote`
+
+## pointers.rollback
+
+Point `request.environment` (default `production`) back at the version before its pointer's
+(`POST /api/agents/:id/rollback`, issue #615). A rollback steps back past the version it left,
+so rolling back twice goes two versions back, never forward again. To check the move without
+writing, call `checkRollback`.
+
+Throws `ApiProblemError` with whatever code the server answers, among them
+`409 nothing_to_roll_back` (no history entry before the pointer), `404 agent_not_found`,
+`400 invalid_agent_version`, and the refusals `set` lists when the earlier version no
+longer applies to this workspace.
+
+```ts
+async rollback(agentId: string, request?: RollbackAgentInput, options?: RequestOptions): Promise<AgentPointerMoveResponse>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `agentId` | `string` | Yes |
+| `request` | `RollbackAgentInput` | No |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<AgentPointerMoveResponse>`
+
+**Route:** `POST /api/agents/:agentId/rollback`
+
+## pointers.checkRollback
+
+`rollback` with `dryRun: true`: the same decision and refusals, and nothing is written
+(`saved: false`).
+
+```ts
+async checkRollback(agentId: string, request?: RollbackAgentInput, options?: RequestOptions): Promise<AgentPointerMoveResponse>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `agentId` | `string` | Yes |
+| `request` | `RollbackAgentInput` | No |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<AgentPointerMoveResponse>`
+
+**Route:** `POST /api/agents/:agentId/rollback`
+
+## evaluations.create
+
+Run `request.cases` against version `request.version`, whatever `local` points at, and store
+the score (`POST /api/agents/:id/evaluations`, `201`). Synchronous: the server answers once
+every case has run, after at most about 225 s, so a configured `timeoutMs` must allow for that
+and a host that cuts long requests (a Worker relay, say) can drop it. All the cases share that
+budget, so a slow agent's last cases fail `deadline_exceeded`: prefer `createRun` plus
+`advanceRun`, which give each case its own deadline and resume after a dropped step, though one
+step can still last about 220 s. A failed case is a result, not an error: read `passed`,
+`total` and each result's `failures`.
+
+Throws `ApiProblemError` with a code from `EVALUATION_PROBLEM_CODES`:
+
+- `400 invalid_body` — each `details` entry is one parse issue; `400 invalid_agent_id`;
+- `404 agent_not_found`; `404 agent_version_not_found` — `details` is `[version:<n>]`;
+- the first case's refused start (`RUN_START_PROBLEM_CODES`, `422 engine_not_installed`,
+  `409 session_not_usable`); nothing is stored then;
+- `503 agent_policy_not_configured`, `503 run_api_not_configured`.
+
+```ts
+async create(agentId: string, request: CreateEvaluationRequest, options?: RequestOptions): Promise<EvaluationResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `agentId` | `string` | Yes |
+| `request` | `CreateEvaluationRequest` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<EvaluationResource>`
+
+**Route:** `POST /api/agents/:agentId/evaluations`
+
+## evaluations.createRun
+
+Store an evaluation run of up to 200 cases against version `request.version`
+(`POST /api/agents/:id/evaluation-runs`, `202`; issue #799). Nothing runs yet: call
+`advanceRun` until the returned run's `status` is `completed`. Refusals are the
+`400 invalid_body`, `404 agent_not_found`, `404 agent_version_not_found` and
+`503 run_api_not_configured` of `create`.
+
+```ts
+async createRun(agentId: string, request: CreateEvaluationRunRequest, options?: RequestOptions): Promise<EvaluationRunResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `agentId` | `string` | Yes |
+| `request` | `CreateEvaluationRunRequest` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<EvaluationRunResource>`
+
+**Route:** `POST /api/agents/:agentId/evaluation-runs`
+
+## evaluations.advanceRun
+
+Run the next cases of run `evaluationId` (`POST /api/agents/:id/evaluation-advance`, `200`)
+and read how far it is. A call answers after at most about 225 s, so a configured `timeoutMs`
+must allow for that; it stops starting cases after about 120 s and always runs at least one.
+Call it until `status` is `completed`; a completed run is answered unchanged.
+
+Throws `404 evaluation_not_found`, `409 evaluation_run_busy` (another call is advancing the
+run: retry in a moment), `400 invalid_body` or `503 run_api_not_configured`.
+
+```ts
+async advanceRun(agentId: string, evaluationId: string, options?: RequestOptions): Promise<EvaluationRunResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `agentId` | `string` | Yes |
+| `evaluationId` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<EvaluationRunResource>`
+
+**Route:** `POST /api/agents/:agentId/evaluation-advance`
+
+## evaluations.getRun
+
+Read run `evaluationId` at any status (`GET /api/agents/:id/evaluation-runs?evaluation=<id>`).
+Throws `404 evaluation_not_found` for an id that is not a run of this agent.
+
+```ts
+async getRun(agentId: string, evaluationId: string, options?: RequestOptions): Promise<EvaluationRunResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `agentId` | `string` | Yes |
+| `evaluationId` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<EvaluationRunResource>`
+
+**Route:** `GET /api/agents/:agentId/evaluation-runs`
+
+## feedback.list
+
+The newest ratings of the agent's runs, at most 50, each with its run's prompt (`input`, `null`
+for a run recorded before prompts were stored) and final answer (`GET /api/agents/:id/feedback`).
+A caller who reads only their own runs gets only the ratings of those.
+
+Throws `ApiProblemError` with a code from `RUN_FEEDBACK_LIST_PROBLEM_CODES`:
+`400 invalid_agent_id`, `400 invalid_query`, `404 agent_not_found`,
+`503 run_api_not_configured`.
+
+```ts
+async list(agentId: string, query?: RunFeedbackListQuery, options?: RequestOptions): Promise<readonly RunFeedbackItem[]>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `agentId` | `string` | Yes |
+| `query` | `RunFeedbackListQuery` | No |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<readonly RunFeedbackItem[]>`
+
+**Route:** `GET /api/agents/:agentId/feedback`

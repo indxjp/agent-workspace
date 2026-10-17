@@ -1,0 +1,346 @@
+---
+title: "models"
+description: "The @indx-workspace/contracts/models exports, sorted alphabetically."
+---
+
+<Note>This page is generated from `packages/contracts/src/models.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## CreateModelConnectionInput
+
+The body of `POST /api/model-connections`. `apiKey` is the provider credential, written once
+here and afterwards only through `RotateModelConnectionCredentialInput`; it never comes
+back. `config` may be omitted for a provider that requires nothing.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `provider` | `"anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible"` | Yes |  |
+| `apiKey` | `string` | Yes |  |
+| `config` | `undefined \| ModelConnectionConfigInput` | No |  |
+
+## DeleteModelConnectionResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `deleted` | `true` | Yes |  |
+| `referencedBy` | `readonly Readonly<{ agentId: string; agentName: string; }>[]` | Yes |  |
+
+## DeleteModelConnectionResponseSchema
+
+The `200` body of `DELETE /api/model-connections/:id`. The connection is gone; every agent
+that pointed at it is named, because their reference was cleared by the same transaction and
+they now fall back to the workspace default.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `deleted` | `true` | Yes |  |
+| `referencedBy` | `readonly Readonly<{ agentId: string; agentName: string; }>[]` | Yes |  |
+
+## DISCOVERED_MODEL_CAPABILITY_KEYS
+
+The capability flags every discovered model reports, in the specification's order.
+
+- `'streaming'`
+- `'toolUse'`
+- `'thinking'`
+- `'promptCaching'`
+- `'structuredOutput'`
+- `'contextManagement'`
+- `'webSearch'`
+- `'tokenCounting'`
+
+## DiscoveredModel
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `connectionId` | `string` | Yes |  |
+| `providerModelId` | `string` | Yes |  |
+| `displayName` | `string` | Yes | The provider's own label, passed through; a provider may leave it empty. |
+| `capabilities` | `DiscoveredModelCapabilities` | Yes |  |
+
+## DiscoveredModelCapabilities
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `streaming` | `false \| true` | Yes |  |
+| `toolUse` | `false \| true` | Yes |  |
+| `thinking` | `false \| true` | Yes |  |
+| `promptCaching` | `false \| true` | Yes |  |
+| `structuredOutput` | `false \| true` | Yes |  |
+| `contextManagement` | `false \| true` | Yes |  |
+| `webSearch` | `false \| true` | Yes |  |
+| `tokenCounting` | `false \| true` | Yes |  |
+
+## DiscoveredModelCapabilitiesSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `streaming` | `false \| true` | Yes |  |
+| `toolUse` | `false \| true` | Yes |  |
+| `thinking` | `false \| true` | Yes |  |
+| `promptCaching` | `false \| true` | Yes |  |
+| `structuredOutput` | `false \| true` | Yes |  |
+| `contextManagement` | `false \| true` | Yes |  |
+| `webSearch` | `false \| true` | Yes |  |
+| `tokenCounting` | `false \| true` | Yes |  |
+
+## DiscoveredModelSchema
+
+One row of `GET /api/models`: a provider-side model one ready connection offers. Model choice
+anywhere in the platform is the pair `(connectionId, providerModelId)`, never one alone.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `connectionId` | `string` | Yes |  |
+| `providerModelId` | `string` | Yes |  |
+| `displayName` | `string` | Yes | The provider's own label, passed through; a provider may leave it empty. |
+| `capabilities` | `DiscoveredModelCapabilities` | Yes |  |
+
+## DiscoveredModelsResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `models` | `readonly DiscoveredModel[]` | Yes |  |
+| `unavailable` | `undefined \| readonly UnavailableModelConnection[]` | No |  |
+
+## DiscoveredModelsResponseSchema
+
+The body of `GET /api/models`. Only ready connections are discovered; an unready one is
+skipped without a trace. `unavailable` is present only when at least one discovery failed.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `models` | `readonly DiscoveredModel[]` | Yes |  |
+| `unavailable` | `undefined \| readonly UnavailableModelConnection[]` | No |  |
+
+## MODEL_CONNECTION_CONFIG_FIELDS
+
+The non-credential settings a model connection can carry; which ones apply is per provider.
+
+- `'baseUrl'`
+- `'deployment'`
+- `'apiVersion'`
+
+## MODEL_PROVIDER_CONFIG_RULES
+
+Per-provider config rules, exactly as `POST`/`PATCH /api/model-connections` enforce them:
+`anthropic`, `anthropic-compatible` and `openai` take an optional `baseUrl`;
+`openai-compatible` requires one; `azure-openai` requires `baseUrl`, `apiVersion` and
+`deployment`. A `baseUrl` must be an absolute URL the workspace's egress policy allows.
+
+| Key | Value |
+| --- | --- |
+| `anthropic` | `{ allowed: ['baseUrl'], required: [] }` |
+| `'anthropic-compatible'` | `{ allowed: ['baseUrl'], required: [] }` |
+| `openai` | `{ allowed: ['baseUrl'], required: [] }` |
+| `'openai-compatible'` | `{ allowed: ['baseUrl'], required: ['baseUrl'] }` |
+| `'azure-openai'` | `{ allowed: ['baseUrl', 'apiVersion', 'deployment'], required: ['baseUrl', 'apiVersion', 'deployment'], }` |
+
+## ModelConnectionConfig
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `baseUrl` | `undefined \| string` | No |  |
+| `deployment` | `undefined \| string` | No |  |
+| `apiVersion` | `undefined \| string` | No |  |
+
+## ModelConnectionConfigField
+
+- `"apiVersion"`
+- `"baseUrl"`
+- `"deployment"`
+
+## ModelConnectionConfigInput
+
+The `config` a caller sends; the server checks it against `MODEL_PROVIDER_CONFIG_RULES`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `baseUrl` | `undefined \| string` | No |  |
+| `deployment` | `undefined \| string` | No |  |
+| `apiVersion` | `undefined \| string` | No |  |
+
+## ModelConnectionConfigSchema
+
+A connection's stored settings as every response renders them. Never the credential.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `baseUrl` | `undefined \| string` | No |  |
+| `deployment` | `undefined \| string` | No |  |
+| `apiVersion` | `undefined \| string` | No |  |
+
+## ModelConnectionListResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `models` | `readonly ModelConnectionResource[]` | Yes |  |
+
+## ModelConnectionListResponseSchema
+
+The body of `GET /api/model-connections`. The route names its list `models` although the
+items are connections (a discovered model is a `GET /api/models` row); the SDK returns the
+array so a caller never meets the key.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `models` | `readonly ModelConnectionResource[]` | Yes |  |
+
+## ModelConnectionResource
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `name` | `string` | Yes |  |
+| `provider` | `"anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible"` | Yes |  |
+| `config` | `ModelConnectionConfig` | Yes |  |
+| `hasCredential` | `false \| true` | Yes |  |
+| `ready` | `false \| true` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+| `updatedAt` | `string` | Yes |  |
+
+## ModelConnectionResourceSchema
+
+One model connection as `GET /api/model-connections/:id`, the `201` of
+`POST /api/model-connections`, the `200` of `PATCH …/:id`, and every list item render it —
+a bare item, not wrapped.
+
+The credential is write-only and has no field here. `hasCredential` says whether one is
+stored; `ready` is derived on every read as `hasCredential` plus every config field the
+provider requires (`MODEL_PROVIDER_CONFIG_RULES`) being present.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `name` | `string` | Yes |  |
+| `provider` | `"anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible"` | Yes |  |
+| `config` | `ModelConnectionConfig` | Yes |  |
+| `hasCredential` | `false \| true` | Yes |  |
+| `ready` | `false \| true` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+| `updatedAt` | `string` | Yes |  |
+
+## ModelConnectionTestOutcome
+
+- `Readonly<{ latencyMs: number; message: string; ok: true; status: number; }>`
+- `Readonly<{ latencyMs: number; message: string; ok: false; status: number | null; }>`
+
+## ModelConnectionTestOutcomeSchema
+
+The body of `POST /api/model-connections/:id/test`, under `200` when `ok` and `502` when not.
+The `502` carries this outcome, not the error envelope: an unreachable provider answers with
+`status: null`, a provider that answered a non-2xx with that status.
+
+- `Readonly<{ latencyMs: number; message: string; ok: true; status: number; }>`
+- `Readonly<{ latencyMs: number; message: string; ok: false; status: number | null; }>`
+
+## ModelProviderConfigRule
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `allowed` | `readonly ("apiVersion" \| "baseUrl" \| "deployment")[]` | Yes | The config keys the server accepts for this provider; any other key is an `invalid_body`. |
+| `required` | `readonly ("apiVersion" \| "baseUrl" \| "deployment")[]` | Yes | The subset that must be present for the connection to be `ready` (with a credential). |
+
+## RotateModelConnectionCredentialInput
+
+The body of `POST /api/model-connections/:id/credential`; the answer is an empty `204`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `apiKey` | `string` | Yes |  |
+
+## SCRIPTED_MODEL_NAME_PATTERN
+
+What follows `SCRIPTED_MODEL_PREFIX`: the script's file name without `.json`.
+
+Value: `/^[a-z0-9][a-z0-9-]{0,63}$/u`
+
+## SCRIPTED_MODEL_PREFIX
+
+The reserved model-id prefix of a scripted model: a test tool that replays a file of turns
+instead of calling a provider. It is served by the gateway only when the process opted in with
+`AW_SCRIPTED_MODELS_DIR` in the `local` deployment posture, and only on an Anthropic-family
+connection. Never use it in a production agent.
+
+Value: `'scripted:'`
+
+## ScriptedModelScript
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `turns` | `readonly Readonly<{ text?: string \| undefined; toolUses?: readonly Readonly<{ name: string; input: Record<string, unknown>; }>[] \| undefined; }>[]` | Yes |  |
+
+## ScriptedModelScriptSchema
+
+The file `<AW_SCRIPTED_MODELS_DIR>/<name>.json` a scripted model replays. The turn to answer with
+is the number of assistant messages already in the conversation, so a tool call followed by its
+result advances to the next turn.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `turns` | `readonly Readonly<{ text?: string \| undefined; toolUses?: readonly Readonly<{ name: string; input: Record<string, unknown>; }>[] \| undefined; }>[]` | Yes |  |
+
+## ScriptedModelTurnSchema
+
+One scripted assistant turn: text, tool calls, or both (text first). A turn with tool calls ends
+with `stop_reason: tool_use`, any other turn with `end_turn`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `text` | `undefined \| string` | No |  |
+| `toolUses` | `undefined \| readonly Readonly<{ name: string; input: Record<string, unknown>; }>[]` | No |  |
+
+## ScriptedToolUseSchema
+
+One scripted tool call.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `input` | `ModelConnectionConfig` | Yes |  |
+
+## UNAVAILABLE_MODEL_CONNECTION_KINDS
+
+Why a connection's discovery call failed; only `credential-rejected` is about the key.
+
+- `'credential-rejected'`
+- `'provider-error'`
+- `'connection-failed'`
+- `'unreachable'`
+- `'unsupported-provider'`
+
+## UnavailableModelConnection
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `connectionId` | `string` | Yes |  |
+| `connectionName` | `string` | Yes |  |
+| `reason` | `string` | Yes |  |
+| `kind` | `undefined \| "credential-rejected" \| "unreachable" \| "provider-error" \| "connection-failed" \| "unsupported-provider"` | No | Absent from a server older than #690; a caller then treats the failure as unclassified. |
+| `status` | `undefined \| number` | No | The provider's HTTP status when it answered (`credential-rejected`, `provider-error`). |
+
+## UnavailableModelConnectionSchema
+
+A ready connection whose discovery call failed, named rather than silently dropped.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `connectionId` | `string` | Yes |  |
+| `connectionName` | `string` | Yes |  |
+| `reason` | `string` | Yes |  |
+| `kind` | `undefined \| "credential-rejected" \| "unreachable" \| "provider-error" \| "connection-failed" \| "unsupported-provider"` | No | Absent from a server older than #690; a caller then treats the failure as unclassified. |
+| `status` | `undefined \| number` | No | The provider's HTTP status when it answered (`credential-rejected`, `provider-error`). |
+
+## UpdateModelConnectionPatch
+
+The body of `PATCH /api/model-connections/:id`; omitted fields remain unchanged. The provider
+is immutable. `apiKey` replaces the saved key. A `config.baseUrl` that changes on a connection
+with a saved key needs a new `apiKey` in the same body, or it is
+`409 credential_required_on_retarget` and nothing changes — the saved key never follows the
+connection to a new destination (ADR-0077 D5).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `undefined \| string` | No |  |
+| `config` | `undefined \| ModelConnectionConfigInput` | No |  |
+| `apiKey` | `undefined \| string` | No |  |

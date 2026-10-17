@@ -1,0 +1,135 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.PathGrant.allowed_write_is_outside_every_read_only_grant",
+    "AgentWorkspace.Theorems.Adversarial.PathGrant.every_spelling_of_a_covered_path_is_refused",
+    "AgentWorkspace.Theorems.Adversarial.PathGrant.a_name_that_starts_with_a_grant_is_not_inside_it"],
+   "input":
+   {"grants":
+    [{"path": "docs", "kind": "directory", "access": "read"},
+     {"path": "config/app.yaml", "kind": "file", "access": "read"},
+     {"path": "scratch", "kind": "directory", "access": "read-write"}],
+    "candidate": "docs/spec.md"},
+   "id": "covered-file",
+   "expected": {"refusal": "escapes_root", "ok": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.PathGrant.allowed_write_is_outside_every_read_only_grant",
+    "AgentWorkspace.Theorems.Adversarial.PathGrant.every_spelling_of_a_covered_path_is_refused",
+    "AgentWorkspace.Theorems.Adversarial.PathGrant.a_name_that_starts_with_a_grant_is_not_inside_it"],
+   "input":
+   {"grants":
+    [{"path": "docs", "kind": "directory", "access": "read"},
+     {"path": "config/app.yaml", "kind": "file", "access": "read"},
+     {"path": "scratch", "kind": "directory", "access": "read-write"}],
+    "candidate": "docs/./spec.md"},
+   "id": "covered-dotted",
+   "expected": {"refusal": "escapes_root", "ok": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.PathGrant.allowed_write_is_outside_every_read_only_grant",
+    "AgentWorkspace.Theorems.Adversarial.PathGrant.every_spelling_of_a_covered_path_is_refused",
+    "AgentWorkspace.Theorems.Adversarial.PathGrant.a_name_that_starts_with_a_grant_is_not_inside_it"],
+   "input":
+   {"grants":
+    [{"path": "docs", "kind": "directory", "access": "read"},
+     {"path": "config/app.yaml", "kind": "file", "access": "read"},
+     {"path": "scratch", "kind": "directory", "access": "read-write"}],
+    "candidate": "notes/../docs/spec.md"},
+   "id": "covered-through-parent",
+   "expected": {"refusal": "escapes_root", "ok": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.PathGrant.allowed_write_is_outside_every_read_only_grant",
+    "AgentWorkspace.Theorems.Adversarial.PathGrant.every_spelling_of_a_covered_path_is_refused",
+    "AgentWorkspace.Theorems.Adversarial.PathGrant.a_name_that_starts_with_a_grant_is_not_inside_it"],
+   "input":
+   {"grants":
+    [{"path": "docs", "kind": "directory", "access": "read"},
+     {"path": "config/app.yaml", "kind": "file", "access": "read"},
+     {"path": "scratch", "kind": "directory", "access": "read-write"}],
+    "candidate": "docs/nested/../spec.md"},
+   "id": "covered-nested-parent",
+   "expected": {"refusal": "escapes_root", "ok": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.PathGrant.allowed_write_is_outside_every_read_only_grant",
+    "AgentWorkspace.Theorems.Adversarial.PathGrant.every_spelling_of_a_covered_path_is_refused",
+    "AgentWorkspace.Theorems.Adversarial.PathGrant.a_name_that_starts_with_a_grant_is_not_inside_it"],
+   "input":
+   {"grants":
+    [{"path": "docs", "kind": "directory", "access": "read"},
+     {"path": "config/app.yaml", "kind": "file", "access": "read"},
+     {"path": "scratch", "kind": "directory", "access": "read-write"}],
+    "candidate": "docs"},
+   "id": "covered-directory-itself",
+   "expected": {"refusal": "escapes_root", "ok": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.PathGrant.allowed_write_is_outside_every_read_only_grant",
+    "AgentWorkspace.Theorems.Adversarial.PathGrant.every_spelling_of_a_covered_path_is_refused",
+    "AgentWorkspace.Theorems.Adversarial.PathGrant.a_name_that_starts_with_a_grant_is_not_inside_it"],
+   "input":
+   {"grants":
+    [{"path": "docs", "kind": "directory", "access": "read"},
+     {"path": "config/app.yaml", "kind": "file", "access": "read"},
+     {"path": "scratch", "kind": "directory", "access": "read-write"}],
+    "candidate": "config/app.yaml"},
+   "id": "covered-file-grant",
+   "expected": {"refusal": "escapes_root", "ok": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.PathGrant.allowed_write_is_outside_every_read_only_grant",
+    "AgentWorkspace.Theorems.Adversarial.PathGrant.every_spelling_of_a_covered_path_is_refused",
+    "AgentWorkspace.Theorems.Adversarial.PathGrant.a_name_that_starts_with_a_grant_is_not_inside_it"],
+   "input":
+   {"grants":
+    [{"path": "docs", "kind": "directory", "access": "read"},
+     {"path": "config/app.yaml", "kind": "file", "access": "read"},
+     {"path": "scratch", "kind": "directory", "access": "read-write"}],
+    "candidate": "config/other.yaml"},
+   "id": "sibling-of-file-grant",
+   "expected": {"path": "config/other.yaml", "ok": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.PathGrant.allowed_write_is_outside_every_read_only_grant",
+    "AgentWorkspace.Theorems.Adversarial.PathGrant.every_spelling_of_a_covered_path_is_refused",
+    "AgentWorkspace.Theorems.Adversarial.PathGrant.a_name_that_starts_with_a_grant_is_not_inside_it"],
+   "input":
+   {"grants":
+    [{"path": "docs", "kind": "directory", "access": "read"},
+     {"path": "config/app.yaml", "kind": "file", "access": "read"},
+     {"path": "scratch", "kind": "directory", "access": "read-write"}],
+    "candidate": "docs-private/secret.md"},
+   "id": "prefix-not-inside",
+   "expected": {"path": "docs-private/secret.md", "ok": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.PathGrant.allowed_write_is_outside_every_read_only_grant",
+    "AgentWorkspace.Theorems.Adversarial.PathGrant.every_spelling_of_a_covered_path_is_refused",
+    "AgentWorkspace.Theorems.Adversarial.PathGrant.a_name_that_starts_with_a_grant_is_not_inside_it"],
+   "input":
+   {"grants":
+    [{"path": "docs", "kind": "directory", "access": "read"},
+     {"path": "config/app.yaml", "kind": "file", "access": "read"},
+     {"path": "scratch", "kind": "directory", "access": "read-write"}],
+    "candidate": "scratch/output.md"},
+   "id": "read-write-grant",
+   "expected": {"path": "scratch/output.md", "ok": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.PathGrant.allowed_write_is_outside_every_read_only_grant",
+    "AgentWorkspace.Theorems.Adversarial.PathGrant.every_spelling_of_a_covered_path_is_refused",
+    "AgentWorkspace.Theorems.Adversarial.PathGrant.a_name_that_starts_with_a_grant_is_not_inside_it"],
+   "input":
+   {"grants":
+    [{"path": "docs", "kind": "directory", "access": "read"},
+     {"path": "config/app.yaml", "kind": "file", "access": "read"},
+     {"path": "scratch", "kind": "directory", "access": "read-write"}],
+    "candidate": "notes.md"},
+   "id": "outside-every-grant",
+   "expected": {"path": "notes.md", "ok": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.PathGrant.allowed_write_is_outside_every_read_only_grant",
+    "AgentWorkspace.Theorems.Adversarial.PathGrant.every_spelling_of_a_covered_path_is_refused",
+    "AgentWorkspace.Theorems.Adversarial.PathGrant.a_name_that_starts_with_a_grant_is_not_inside_it"],
+   "input":
+   {"grants":
+    [{"path": "docs", "kind": "directory", "access": "read"},
+     {"path": "config/app.yaml", "kind": "file", "access": "read"},
+     {"path": "scratch", "kind": "directory", "access": "read-write"}],
+    "candidate": "../../etc/passwd"},
+   "id": "does-not-normalise",
+   "expected": {"refusal": "escapes_root", "ok": false}}],
+ "family": "path-grant",
+ "description": "The write decision against a read-only grant list"}

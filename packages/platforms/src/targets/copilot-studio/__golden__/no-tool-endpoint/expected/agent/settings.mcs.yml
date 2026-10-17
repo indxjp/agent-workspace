@@ -1,0 +1,10 @@
+displayName: support-triage
+schemaName: acme_supportTriage
+accessControlPolicy: ChatbotReaders
+authenticationMode: None
+configuration:
+  settings:
+    GenerativeActionsEnabled: true
+  recognizer:
+    kind: GenerativeAIRecognizer
+language: 1033

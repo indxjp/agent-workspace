@@ -1,0 +1,34 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Normative.EngineImages.catalogue_is_the_map",
+    "AgentWorkspace.Theorems.Refinement.EngineImages.shipped_registry_is_installed_through_the_map"],
+   "input":
+   {"registered": ["claude-agent-sdk", "pi"],
+    "images": [["claude-agent-sdk", "registry.example/secret-project-7/runtime-claude-agent-sdk:v1"]]},
+   "id": "map-lacks-pi",
+   "expected": {"engines": [{"installed": true, "id": "claude-agent-sdk"}, {"installed": false, "id": "pi"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.EngineImages.catalogue_is_the_map",
+    "AgentWorkspace.Theorems.Refinement.EngineImages.shipped_registry_is_installed_through_the_map"],
+   "input":
+   {"registered": ["claude-agent-sdk", "pi"],
+    "images":
+    [["claude-agent-sdk", "registry.example/secret-project-7/runtime-claude-agent-sdk:v1"],
+     ["pi", "registry.example/secret-project-7/runtime-pi:v1"]]},
+   "id": "map-has-both",
+   "expected": {"engines": [{"installed": true, "id": "claude-agent-sdk"}, {"installed": true, "id": "pi"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.EngineImages.catalogue_is_the_map",
+    "AgentWorkspace.Theorems.Refinement.EngineImages.shipped_registry_is_installed_through_the_map"],
+   "input": {"registered": ["claude-agent-sdk", "pi"], "images": []},
+   "id": "map-is-empty",
+   "expected": {"engines": [{"installed": false, "id": "claude-agent-sdk"}, {"installed": false, "id": "pi"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.EngineImages.catalogue_is_the_map",
+    "AgentWorkspace.Theorems.Refinement.EngineImages.shipped_registry_is_installed_through_the_map"],
+   "input":
+   {"registered": ["claude-agent-sdk", "pi"], "images": [["pi", "registry.example/secret-project-7/runtime-pi:v1"]]},
+   "id": "map-has-only-pi",
+   "expected": {"engines": [{"installed": false, "id": "claude-agent-sdk"}, {"installed": true, "id": "pi"}]}}],
+ "family": "engine-images",
+ "description": "GET /api/engines' installed is the configured map"}

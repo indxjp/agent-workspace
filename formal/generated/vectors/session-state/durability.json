@@ -1,0 +1,33 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.SessionState.a_failed_store_write_is_not_durable",
+    "AgentWorkspace.Theorems.Invariants.SessionState.a_clean_store_returns_the_adapters_answer"],
+   "input": {"storeWriteFailures": 0, "adapterSaysDurable": true},
+   "id": "clean-store-durable-adapter",
+   "expected": {"durable": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.SessionState.a_failed_store_write_is_not_durable",
+    "AgentWorkspace.Theorems.Invariants.SessionState.a_clean_store_returns_the_adapters_answer"],
+   "input": {"storeWriteFailures": 0, "adapterSaysDurable": false},
+   "id": "clean-store-undurable-adapter",
+   "expected": {"durable": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.SessionState.a_failed_store_write_is_not_durable",
+    "AgentWorkspace.Theorems.Invariants.SessionState.a_clean_store_returns_the_adapters_answer"],
+   "input": {"storeWriteFailures": 1, "adapterSaysDurable": true},
+   "id": "one-failed-write",
+   "expected": {"durable": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.SessionState.a_failed_store_write_is_not_durable",
+    "AgentWorkspace.Theorems.Invariants.SessionState.a_clean_store_returns_the_adapters_answer"],
+   "input": {"storeWriteFailures": 7, "adapterSaysDurable": true},
+   "id": "many-failed-writes",
+   "expected": {"durable": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.SessionState.a_failed_store_write_is_not_durable",
+    "AgentWorkspace.Theorems.Invariants.SessionState.a_clean_store_returns_the_adapters_answer"],
+   "input": {"storeWriteFailures": 2, "adapterSaysDurable": false},
+   "id": "failed-write-and-undurable-adapter",
+   "expected": {"durable": false}}],
+ "family": "session-state",
+ "description": "The durability verdict, for any engine"}

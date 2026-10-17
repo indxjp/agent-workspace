@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settings — Agent Workspace</title>
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<script>window.PAGE = { nav: "settings", crumbs: [["Administration"], ["Settings"]] };</script>
+
+<div class="app">
+  <div class="main">
+    <div class="page">
+
+      <div class="page-head">
+        <div>
+          <h1>Settings</h1>
+          <div class="sub">Workspace configuration. Deployment values (database, storage, master key) stay in the environment.</div>
+        </div>
+      </div>
+
+      <div class="tabs" data-tabs>
+        <button data-tab="general" class="active">General</button>
+        <button data-tab="secrets">Secrets</button>
+        <button data-tab="sharing">Sharing</button>
+        <button data-tab="observability">Observability</button>
+        <button data-tab="audit">Audit log</button>
+      </div>
+
+      <!-- ---------------- general ---------------- -->
+      <section class="tabpanel active" data-panel="general">
+        <div class="card"><div class="card-body">
+          <div class="field"><label>Workspace name</label><input type="text" value="Meridian Manufacturing"></div>
+          <div class="field"><label>Default model for new agents</label>
+            <select><option>Claude Sonnet 5</option><option>Claude Haiku 4.5</option><option>Claude Opus 5</option></select></div>
+          <div class="field mb0"><label>Default runtime profile</label>
+            <select><option>Standard</option><option>Read Only</option><option>Heavy</option></select></div>
+        </div></div>
+
+        <div class="section-head"><h2>Policy</h2></div>
+        <div class="rows">
+          <div class="row"><div class="grow"><div class="title">Block the local runtime for deployed agents</div>
+            <div class="meta">“This machine” has no isolation and stays available for development only</div></div>
+            <div class="right"><span class="toggle on"></span></div></div>
+          <div class="row"><div class="grow"><div class="title">Require a verified runtime before deploying</div>
+            <div class="meta">An agent cannot be deployed onto a profile that has never passed create → echo → destroy</div></div>
+            <div class="right"><span class="toggle on"></span></div></div>
+          <div class="row"><div class="grow"><div class="title">Warn on capability gaps instead of blocking</div>
+            <div class="meta">Off means a model or runtime that cannot meet the agent’s requirements is refused outright</div></div>
+            <div class="right"><span class="toggle on"></span></div></div>
+          <div class="row"><div class="grow"><div class="title">Store assistant thinking in run history</div>
+            <div class="meta">Off means thinking blocks are streamed to the browser but never persisted</div></div>
+            <div class="right"><span class="toggle"></span></div></div>
+        </div>
+
+        <div class="section-head"><h2>Deployment</h2></div>
+        <div class="card"><div class="card-body">
+          <dl class="kv">
+            <dt>Version</dt><dd>0.4.2 <span class="muted small">· control-plane image @sha256:11ae…</span></dd>
+            <dt>Mode</dt><dd>Simple (Docker Compose) <span class="muted small">· web · runner · gateway · postgres · storage</span></dd>
+            <dt>Database</dt><dd class="mono">postgres://…@postgres:5432/agent_workspace</dd>
+            <dt>Object storage</dt><dd class="mono">http://seaweedfs:8333 (SeaweedFS)</dd>
+            <dt>Agent SDK</dt><dd class="mono">@anthropic-ai/claude-agent-sdk 0.9.x</dd>
+          </dl>
+          <p class="small muted mt16 mb0">These come from environment variables and are shown read-only. Normal
+            application configuration belongs in this UI, not in <span class="mono">.env</span>.</p>
+        </div></div>
+      </section>
+
+      <!-- ---------------- secrets ---------------- -->
+      <section class="tabpanel" data-panel="secrets">
+        <div class="section-head mt0"><h2>Secrets</h2>
+          <div class="hint">Encrypted in PostgreSQL with the deployment master key. Injected into a runtime only when an agent needs them.</div>
+          <div class="actions"><button class="btn sm primary" data-modal-open="m-new-secret">Add secret</button></div>
+        </div>
+
+        <div class="card">
+          <div class="table-wrap">
+          <table class="tbl">
+            <thead><tr><th>Name</th><th>Used by</th><th>Value</th><th>Updated</th><th></th></tr></thead>
+            <tbody>
+              <tr><td class="mono">ANTHROPIC_API_KEY</td><td>Gateway only</td><td class="muted">Never displayed</td><td>12 Aug 2026</td><td><button class="btn sm" data-toast="Rotation dialog opened">Rotate</button></td></tr>
+              <tr><td class="mono">AZURE_OPENAI_API_KEY</td><td>Gateway only</td><td class="muted">Never displayed</td><td>2 Sep 2026</td><td><button class="btn sm" data-toast="Rotation dialog opened">Rotate</button></td></tr>
+              <tr><td class="mono">INTERNAL_SEARCH_TOKEN</td><td>Connector “Internal Search” · 3 agents</td><td class="muted">Never displayed</td><td>28 Aug 2026</td><td><button class="btn sm" data-toast="Rotation dialog opened">Rotate</button></td></tr>
+              <tr><td class="mono">JIRA_TOKEN</td><td>Connector “Jira” · 2 agents</td><td class="muted">Never displayed</td><td>28 Aug 2026</td><td><button class="btn sm" data-toast="Rotation dialog opened">Rotate</button></td></tr>
+              <tr><td class="mono">GITHUB_TOKEN</td><td>Connector “GitHub” · 2 agents</td><td class="muted">Never displayed</td><td>19 Aug 2026</td><td><button class="btn sm" data-toast="Rotation dialog opened">Rotate</button></td></tr>
+              <tr><td class="mono">ACA_SESSION_POOL_CREDENTIAL</td><td>Runtime “Azure Sessions”</td><td class="muted">Never displayed</td><td>1 Sep 2026</td><td><button class="btn sm" data-toast="Rotation dialog opened">Rotate</button></td></tr>
+            </tbody>
+          </table>
+          </div>
+        </div>
+
+        <div class="callout mt16">
+          <span class="ico">🔒</span>
+          <div class="grow">
+            Provider master credentials never enter a sandbox. The sandbox receives a short-lived token that only
+            the gateway accepts, and the gateway holds the real keys.
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------------- sharing ---------------- -->
+      <section class="tabpanel" data-panel="sharing">
+        <div class="section-head mt0"><h2>Sharing policy</h2>
+          <div class="actions"><a class="btn sm" href="shares.html">Shared links</a></div>
+        </div>
+        <div class="rows">
+          <div class="row"><div class="grow"><div class="title">Public sharing</div>
+            <div class="meta">Allow links that anyone on the internet can open. Turning this off suspends existing links rather than deleting them.</div></div>
+            <div class="right"><span class="toggle on"></span></div></div>
+          <div class="row"><div class="grow"><div class="title">Runnable public agent links</div>
+            <div class="meta">Anonymous visitors can send messages, spending this workspace’s budget. Owner and Admin only.</div></div>
+            <div class="right"><span class="toggle on"></span></div></div>
+          <div class="row"><div class="grow"><div class="title">Viewers may create public links</div>
+            <div class="meta">Off means Viewer-role users can share to the workspace but not to the internet</div></div>
+            <div class="right"><span class="toggle"></span></div></div>
+          <div class="row"><div class="grow"><div class="title">Require expiry on public links</div>
+            <div class="meta">Maximum lifetime for any newly created public link</div></div>
+            <div class="right"><select style="width:150px"><option>No requirement</option><option selected>30 days</option><option>7 days</option></select></div></div>
+          <div class="row"><div class="grow"><div class="title">Default budget cap for runnable links</div>
+            <div class="meta">The publisher can lower this, never raise it</div></div>
+            <div class="right"><input type="text" value="$20.00" style="width:110px"></div></div>
+        </div>
+
+        <div class="callout mt16">
+          <span class="ico">ℹ</span>
+          <div class="grow">
+            Published transcripts are redacted <b>at snapshot time</b>: secrets, environment values, connector
+            credentials and internal endpoints are removed before the page exists, not hidden when it renders.
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------------- observability ---------------- -->
+      <section class="tabpanel" data-panel="observability">
+        <div class="card"><div class="card-body">
+          <div class="field"><label>OTLP endpoint</label>
+            <input type="text" class="mono-input" value="http://otel-collector.meridian.internal:4318">
+            <div class="help">The Agent SDK’s OpenTelemetry output is forwarded here. The platform does not try to be an observability product.</div>
+          </div>
+          <div class="field row2">
+            <div><label>Traces</label><select><option>Enabled</option><option>Disabled</option></select></div>
+            <div><label>Metrics</label><select><option>Enabled</option><option>Disabled</option></select></div>
+          </div>
+          <div class="field mb0"><label>Run retention</label>
+            <select><option>30 days</option><option>90 days</option><option>1 year</option></select>
+          </div>
+        </div></div>
+      </section>
+
+      <!-- ---------------- audit ---------------- -->
+      <section class="tabpanel" data-panel="audit">
+        <div class="section-head mt0"><h2>Audit log</h2>
+          <div class="hint">Control-plane actions. Never secrets.</div>
+          <div class="actions"><button class="btn sm" data-toast="Exported 1 284 events as CSV">Export</button></div>
+        </div>
+        <div class="rows">
+          <div class="row"><div class="grow"><div class="title">Aya Ito changed Customer Support Agent</div>
+            <div class="meta">Runtime profile: Standard → Standard (network: restricted) · 2 minutes ago</div></div>
+            <div class="right"><span class="mono small">203.0.113.24</span></div></div>
+          <div class="row"><div class="grow"><div class="title">Aya Ito published a session</div>
+            <div class="meta">“Q3 contract summary” · public link · expires in 30 days · 4 minutes ago</div></div>
+            <div class="right"><span class="mono small">203.0.113.24</span></div></div>
+          <div class="row"><div class="grow"><div class="title">Kenji Sato created a runnable public link</div>
+            <div class="meta">Agent “Invoice Triage” · budget cap $20.00 · 2 days ago</div></div>
+            <div class="right"><span class="mono small">203.0.113.61</span></div></div>
+          <div class="row"><div class="grow"><div class="title">Admin added Azure OpenAI</div>
+            <div class="meta">Provider credential created · deployment gpt-41-japaneast · 1 hour ago</div></div>
+            <div class="right"><span class="mono small">198.51.100.7</span></div></div>
+          <div class="row"><div class="grow"><div class="title">Aya Ito revoked API key “Old integration”</div>
+            <div class="meta">12 Aug 2026</div></div>
+            <div class="right"><span class="mono small">203.0.113.24</span></div></div>
+          <div class="row"><div class="grow"><div class="title">Marie Dupont changed connector “Jira”</div>
+            <div class="meta">Authentication: API key → OAuth · 3 days ago</div></div>
+            <div class="right"><span class="mono small">203.0.113.90</span></div></div>
+          <div class="row"><div class="grow"><div class="title">Kenji Sato added runtime profile “Azure Sessions”</div>
+            <div class="meta">Driver aca-sessions · pool agent-workspace-runtimes · unverified · 4 days ago</div></div>
+            <div class="right"><span class="mono small">203.0.113.61</span></div></div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<div class="scrim" id="m-new-secret" hidden>
+  <div class="modal">
+    <div class="m-head"><h3>Add secret</h3></div>
+    <div class="m-body">
+      <div class="field"><label>Name</label><input type="text" class="mono-input" placeholder="INTERNAL_DATABASE_TOKEN"></div>
+      <div class="field"><label>Value</label><input type="password" placeholder="Stored encrypted; never shown again"></div>
+      <div class="field mb0"><label>Available to</label>
+        <select><option>Gateway only</option><option>Agents that reference it</option></select>
+        <div class="help">A runtime receives only the secrets its agent actually needs.</div>
+      </div>
+    </div>
+    <div class="m-foot"><button class="btn" data-modal-close>Cancel</button><button class="btn primary" data-modal-close data-toast="Secret stored">Save</button></div>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

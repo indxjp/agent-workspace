@@ -1,0 +1,13 @@
+{
+  // The type-checking view: the whole of `src`, tests included, emitting nothing. `DOM` is in
+  // `lib` for the same reason `packages/contracts` has it and no `@types/node`: the port uses
+  // `TextEncoder`, `AbortController` and `setTimeout`, which are Web platform globals both a
+  // browser and Node 24 provide. An adapter may be bundled for either, so the port must not
+  // require the one that is only in Node.
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "noEmit": true
+  },
+  "include": ["src"]
+}

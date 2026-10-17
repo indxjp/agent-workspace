@@ -1,0 +1,28 @@
+{{- if .Values.ingress.enabled }}
+{{- $host := required "ingress.host is required when ingress.enabled" .Values.ingress.host }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: agent-workspace
+  {{- if .Values.ingress.tls.clusterIssuer }}
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.tls.clusterIssuer | quote }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . | quote }}
+  {{- end }}
+  {{- if .Values.ingress.tls.clusterIssuer }}
+  tls:
+    - hosts: [{{ $host | quote }}]
+      secretName: agent-workspace-tls
+  {{- end }}
+  rules:
+    - host: {{ $host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: agent-workspace-web, port: { number: 3000 } }
+{{- end }}

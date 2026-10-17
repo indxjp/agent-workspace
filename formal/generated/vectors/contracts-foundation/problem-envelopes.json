@@ -1,0 +1,648 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_parse_exactly_the_values_with_a_code",
+    "AgentWorkspace.Theorems.Normative.ContractsFoundation.standard_envelope_is_read_as_itself",
+    "AgentWorkspace.Theorems.Normative.ContractsFoundation.envelopes_are_pairwise_disjoint",
+    "AgentWorkspace.Theorems.Refinement.ContractsFoundation.normalise_target_refines_current"],
+   "input": {"error": {"message": "No.", "code": "forbidden"}},
+   "id": "standard/minimal",
+   "expected":
+   {"standard": {"error": {"message": "No.", "code": "forbidden"}},
+    "read": {"message": "No.", "code": "forbidden"},
+    "normalised": {"message": "No.", "code": "forbidden"},
+    "detail": null,
+    "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.api_problem_accepts_any_details_list",
+    "AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_parse_exactly_the_values_with_a_code",
+    "AgentWorkspace.Theorems.Normative.ContractsFoundation.standard_envelope_is_read_as_itself",
+    "AgentWorkspace.Theorems.Normative.ContractsFoundation.envelopes_are_pairwise_disjoint",
+    "AgentWorkspace.Theorems.Refinement.ContractsFoundation.normalise_target_refines_current"],
+   "input": {"error": {"message": "Bad.", "details": ["name is required", "x"], "code": "invalid_field"}},
+   "id": "standard/details",
+   "expected":
+   {"standard": {"error": {"message": "Bad.", "details": ["name is required", "x"], "code": "invalid_field"}},
+    "read": {"message": "Bad.", "details": ["name is required", "x"], "code": "invalid_field"},
+    "normalised": {"message": "Bad.", "details": ["name is required", "x"], "code": "invalid_field"},
+    "detail": null,
+    "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.api_problem_accepts_any_details_list",
+    "AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_parse_exactly_the_values_with_a_code",
+    "AgentWorkspace.Theorems.Normative.ContractsFoundation.standard_envelope_is_read_as_itself",
+    "AgentWorkspace.Theorems.Normative.ContractsFoundation.envelopes_are_pairwise_disjoint",
+    "AgentWorkspace.Theorems.Refinement.ContractsFoundation.normalise_target_refines_current"],
+   "input": {"error": {"message": "y", "details": [], "code": "x"}},
+   "id": "standard/empty-details",
+   "expected":
+   {"standard": {"error": {"message": "y", "details": [], "code": "x"}},
+    "read": {"message": "y", "details": [], "code": "x"},
+    "normalised": {"message": "y", "details": [], "code": "x"},
+    "detail": null,
+    "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_parse_exactly_the_values_with_a_code",
+    "AgentWorkspace.Theorems.Normative.ContractsFoundation.standard_envelope_is_read_as_itself",
+    "AgentWorkspace.Theorems.Normative.ContractsFoundation.envelopes_are_pairwise_disjoint",
+    "AgentWorkspace.Theorems.Refinement.ContractsFoundation.normalise_target_refines_current"],
+   "input": {"error": {"message": "", "code": "x"}},
+   "id": "standard/empty-message",
+   "expected":
+   {"standard": {"error": {"message": "", "code": "x"}},
+    "read": {"message": "", "code": "x"},
+    "normalised": {"message": "", "code": "x"},
+    "detail": null,
+    "bare": null}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_code_min_one"],
+   "input": {"error": {"message": "y", "code": "😀"}},
+   "id": "standard/astral-code",
+   "expected":
+   {"standard": {"error": {"message": "y", "code": "😀"}},
+    "read": {"message": "y", "code": "😀"},
+    "normalised": {"message": "y", "code": "😀"},
+    "detail": null,
+    "bare": null}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_code_min_one"],
+   "input": {"error": {"message": "y", "code": " "}},
+   "id": "standard/whitespace-code",
+   "expected":
+   {"standard": {"error": {"message": "y", "code": " "}},
+    "read": {"message": "y", "code": " "},
+    "normalised": {"message": "y", "code": " "},
+    "detail": null,
+    "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_parse_exactly_the_values_with_a_code",
+    "AgentWorkspace.Theorems.Normative.ContractsFoundation.standard_envelope_is_read_as_itself",
+    "AgentWorkspace.Theorems.Normative.ContractsFoundation.envelopes_are_pairwise_disjoint",
+    "AgentWorkspace.Theorems.Refinement.ContractsFoundation.normalise_target_refines_current"],
+   "input": {"error": {"message": "y", "code": "x"}},
+   "id": "standard/reordered",
+   "expected":
+   {"standard": {"error": {"message": "y", "code": "x"}},
+    "read": {"message": "y", "code": "x"},
+    "normalised": {"message": "y", "code": "x"},
+    "detail": null,
+    "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_parse_exactly_the_values_with_a_code",
+    "AgentWorkspace.Theorems.Normative.ContractsFoundation.detail_becomes_message",
+    "AgentWorkspace.Theorems.Refinement.ContractsFoundation.normalise_current_differs_from_target_iff"],
+   "input": {"error": {"detail": "The last owner cannot leave.", "code": "last_owner"}},
+   "id": "detail/minimal",
+   "expected":
+   {"standard": null,
+    "read": {"message": "The last owner cannot leave.", "code": "last_owner"},
+    "normalised": {"message": "The last owner cannot leave.", "code": "last_owner"},
+    "detail": {"error": {"detail": "The last owner cannot leave.", "code": "last_owner"}},
+    "bare": null}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_code_has_no_upper_bound"],
+   "input":
+   {"error":
+    {"message": "",
+     "code":
+     "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}},
+   "id": "long-code/standard",
+   "expected":
+   {"standard":
+    {"error":
+     {"message": "",
+      "code":
+      "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}},
+    "read":
+    {"message": "",
+     "code":
+     "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+    "normalised":
+    {"message": "",
+     "code":
+     "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+    "detail": null,
+    "bare": null}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_code_has_no_upper_bound"],
+   "input":
+   {"error":
+    {"detail": "",
+     "code":
+     "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}},
+   "id": "long-code/detail",
+   "expected":
+   {"standard": null,
+    "read":
+    {"message": "",
+     "code":
+     "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+    "normalised":
+    {"message": "",
+     "code":
+     "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+    "detail":
+    {"error":
+     {"detail": "",
+      "code":
+      "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}},
+    "bare": null}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_code_has_no_upper_bound"],
+   "input":
+   {"error":
+    "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+   "id": "long-code/bare",
+   "expected":
+   {"standard": null,
+    "read":
+    {"message": "",
+     "code":
+     "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+    "normalised":
+    {"message": "",
+     "code":
+     "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+    "detail": null,
+    "bare":
+    {"error":
+     "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_parse_exactly_the_values_with_a_code",
+    "AgentWorkspace.Theorems.Normative.ContractsFoundation.standard_envelope_is_read_as_itself",
+    "AgentWorkspace.Theorems.Normative.ContractsFoundation.envelopes_are_pairwise_disjoint"],
+   "input": {"error": {"message": "No.", "detail": "No.", "code": "forbidden"}},
+   "id": "standard/deprecated-detail",
+   "expected":
+   {"standard": {"error": {"message": "No.", "detail": "No.", "code": "forbidden"}},
+    "read": {"message": "No.", "detail": "No.", "code": "forbidden"},
+    "normalised": {"message": "No.", "detail": "No.", "code": "forbidden"},
+    "detail": null,
+    "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_parse_exactly_the_values_with_a_code",
+    "AgentWorkspace.Theorems.Normative.ContractsFoundation.standard_envelope_is_read_as_itself",
+    "AgentWorkspace.Theorems.Normative.ContractsFoundation.envelopes_are_pairwise_disjoint",
+    "AgentWorkspace.Theorems.WellFormed.ContractsFoundation.api_problem_detail_refuses_unknown_inner_key"],
+   "input": {"error": {"message": "y", "detail": "z", "code": "x"}},
+   "id": "standard/message-and-detail-differ",
+   "expected":
+   {"standard": {"error": {"message": "y", "detail": "z", "code": "x"}},
+    "read": {"message": "y", "detail": "z", "code": "x"},
+    "normalised": {"message": "y", "detail": "z", "code": "x"},
+    "detail": null,
+    "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_parse_exactly_the_values_with_a_code",
+    "AgentWorkspace.Theorems.Normative.ContractsFoundation.bare_message_defaults_to_empty",
+    "AgentWorkspace.Theorems.Refinement.ContractsFoundation.normalise_current_differs_from_target_iff"],
+   "input": {"error": "invalid_limit"},
+   "id": "bare/code-only",
+   "expected":
+   {"standard": null,
+    "read": {"message": "", "code": "invalid_limit"},
+    "normalised": {"message": "", "code": "invalid_limit"},
+    "detail": null,
+    "bare": {"error": "invalid_limit"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_parse_exactly_the_values_with_a_code",
+    "AgentWorkspace.Theorems.Normative.ContractsFoundation.bare_message_defaults_to_empty"],
+   "input": {"message": "No docker.", "error": "driver_unavailable"},
+   "id": "bare/with-message",
+   "expected":
+   {"standard": null,
+    "read": {"message": "No docker.", "code": "driver_unavailable"},
+    "normalised": {"message": "No docker.", "code": "driver_unavailable"},
+    "detail": null,
+    "bare": {"message": "No docker.", "error": "driver_unavailable"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_code_min_one",
+    "AgentWorkspace.Theorems.Adversarial.ContractsFoundation.accepted_problem_has_a_code"],
+   "input": {"error": {"message": "x", "code": ""}},
+   "id": "empty-code/standard",
+   "expected": {"standard": null, "read": null, "normalised": null, "detail": null, "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_code_min_one",
+    "AgentWorkspace.Theorems.Adversarial.ContractsFoundation.accepted_problem_has_a_code"],
+   "input": {"error": {"detail": "x", "code": ""}},
+   "id": "empty-code/detail",
+   "expected": {"standard": null, "read": null, "normalised": null, "detail": null, "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_code_min_one",
+    "AgentWorkspace.Theorems.Adversarial.ContractsFoundation.accepted_problem_has_a_code"],
+   "input": {"error": ""},
+   "id": "empty-code/bare",
+   "expected": {"standard": null, "read": null, "normalised": null, "detail": null, "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_refuse_missing_and_mistyped_fields"],
+   "input": {"error": {"code": "x"}},
+   "id": "missing/message",
+   "expected": {"standard": null, "read": null, "normalised": null, "detail": null, "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_refuse_missing_and_mistyped_fields"],
+   "input": {"error": {"message": "x"}},
+   "id": "missing/code",
+   "expected": {"standard": null, "read": null, "normalised": null, "detail": null, "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_refuse_missing_and_mistyped_fields"],
+   "input": {"error": {"message": "y", "details": null, "code": "x"}},
+   "id": "null/details",
+   "expected": {"standard": null, "read": null, "normalised": null, "detail": null, "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_refuse_missing_and_mistyped_fields"],
+   "input": {"error": {"message": null, "code": "x"}},
+   "id": "null/message",
+   "expected": {"standard": null, "read": null, "normalised": null, "detail": null, "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_refuse_missing_and_mistyped_fields"],
+   "input": {"message": null, "error": "x"},
+   "id": "null/bare-message",
+   "expected": {"standard": null, "read": null, "normalised": null, "detail": null, "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_refuse_missing_and_mistyped_fields"],
+   "input": {"message": 1, "error": "x"},
+   "id": "mistyped/bare-message",
+   "expected": {"standard": null, "read": null, "normalised": null, "detail": null, "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_refuse_missing_and_mistyped_fields"],
+   "input": {"error": {"message": "y", "details": [1], "code": "x"}},
+   "id": "mistyped/detail-item",
+   "expected": {"standard": null, "read": null, "normalised": null, "detail": null, "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_refuse_missing_and_mistyped_fields"],
+   "input": {"error": {"message": "y", "details": "a", "code": "x"}},
+   "id": "mistyped/details-string",
+   "expected": {"standard": null, "read": null, "normalised": null, "detail": null, "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_refuse_missing_and_mistyped_fields"],
+   "input": {"error": {"message": "y", "code": 400}},
+   "id": "mistyped/code-number",
+   "expected": {"standard": null, "read": null, "normalised": null, "detail": null, "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ContractsFoundation.envelopes_are_pairwise_disjoint",
+    "AgentWorkspace.Theorems.WellFormed.ContractsFoundation.api_problem_detail_refuses_unknown_inner_key"],
+   "input": {"error": {"details": [], "detail": "y", "code": "x"}},
+   "id": "detail-with-details",
+   "expected":
+   {"standard": null, "read": {"message": "y", "code": "x"}, "normalised": null, "detail": null, "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_refuse_unknown_top_level_key"],
+   "input": {"error": "x", "code": "y"},
+   "id": "bare-with-code",
+   "expected":
+   {"standard": null, "read": {"message": "", "code": "x"}, "normalised": null, "detail": null, "bare": null}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.ContractsFoundation.foreign_bodies_are_unrecognised"],
+   "input": "<html>Bad Gateway</html>",
+   "id": "foreign/html",
+   "expected": {"standard": null, "read": null, "normalised": null, "detail": null, "bare": null}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.ContractsFoundation.foreign_bodies_are_unrecognised"],
+   "input": null,
+   "id": "foreign/null",
+   "expected": {"standard": null, "read": null, "normalised": null, "detail": null, "bare": null}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.ContractsFoundation.foreign_bodies_are_unrecognised"],
+   "input": {},
+   "id": "foreign/empty-object",
+   "expected": {"standard": null, "read": null, "normalised": null, "detail": null, "bare": null}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.ContractsFoundation.foreign_bodies_are_unrecognised"],
+   "input": {"message": "y", "code": "x"},
+   "id": "foreign/flat",
+   "expected": {"standard": null, "read": null, "normalised": null, "detail": null, "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_refuse_missing_and_mistyped_fields"],
+   "input": [{"error": {"message": "y", "code": "x"}}],
+   "id": "foreign/array",
+   "expected": {"standard": null, "read": null, "normalised": null, "detail": null, "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_refuse_missing_and_mistyped_fields"],
+   "input": {"error": []},
+   "id": "foreign/error-array",
+   "expected": {"standard": null, "read": null, "normalised": null, "detail": null, "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_refuse_missing_and_mistyped_fields"],
+   "input": {"error": null},
+   "id": "foreign/error-null",
+   "expected": {"standard": null, "read": null, "normalised": null, "detail": null, "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Meta.ContractsFoundation.additive_top_level_field_loses_the_code",
+    "AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_refuse_unknown_top_level_key"],
+   "input": {"status": "v", "error": {"message": "No.", "code": "forbidden"}},
+   "id": "additive/top/status",
+   "expected":
+   {"standard": null,
+    "read": {"message": "No.", "code": "forbidden"},
+    "normalised": null,
+    "detail": null,
+    "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Meta.ContractsFoundation.additive_top_level_field_loses_the_code",
+    "AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_refuse_unknown_top_level_key"],
+   "input": {"requestId": "v", "error": {"message": "No.", "code": "forbidden"}},
+   "id": "additive/top/requestId",
+   "expected":
+   {"standard": null,
+    "read": {"message": "No.", "code": "forbidden"},
+    "normalised": null,
+    "detail": null,
+    "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Meta.ContractsFoundation.additive_top_level_field_loses_the_code",
+    "AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_refuse_unknown_top_level_key"],
+   "input": {"traceId": "v", "error": {"message": "No.", "code": "forbidden"}},
+   "id": "additive/top/traceId",
+   "expected":
+   {"standard": null,
+    "read": {"message": "No.", "code": "forbidden"},
+    "normalised": null,
+    "detail": null,
+    "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Meta.ContractsFoundation.additive_top_level_field_loses_the_code",
+    "AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_refuse_unknown_top_level_key"],
+   "input": {"type": "v", "error": {"message": "No.", "code": "forbidden"}},
+   "id": "additive/top/type",
+   "expected":
+   {"standard": null,
+    "read": {"message": "No.", "code": "forbidden"},
+    "normalised": null,
+    "detail": null,
+    "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Meta.ContractsFoundation.additive_top_level_field_loses_the_code",
+    "AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_refuse_unknown_top_level_key"],
+   "input": {"title": "v", "error": {"message": "No.", "code": "forbidden"}},
+   "id": "additive/top/title",
+   "expected":
+   {"standard": null,
+    "read": {"message": "No.", "code": "forbidden"},
+    "normalised": null,
+    "detail": null,
+    "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Meta.ContractsFoundation.additive_top_level_field_loses_the_code",
+    "AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_refuse_unknown_top_level_key"],
+   "input": {"error": {"message": "No.", "code": "forbidden"}, "__proto__": "v"},
+   "id": "additive/top/__proto__",
+   "expected":
+   {"standard": null,
+    "read": {"message": "No.", "code": "forbidden"},
+    "normalised": null,
+    "detail": null,
+    "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Meta.ContractsFoundation.additive_top_level_field_loses_the_code",
+    "AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_refuse_unknown_top_level_key"],
+   "input": {"error": {"message": "No.", "code": "forbidden"}, "Code": "v"},
+   "id": "additive/top/Code",
+   "expected":
+   {"standard": null,
+    "read": {"message": "No.", "code": "forbidden"},
+    "normalised": null,
+    "detail": null,
+    "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Meta.ContractsFoundation.additive_top_level_field_loses_the_code",
+    "AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_refuse_unknown_top_level_key"],
+   "input": {"error": {"message": "No.", "code": "forbidden"}, "detail": "v"},
+   "id": "additive/top/detail",
+   "expected":
+   {"standard": null,
+    "read": {"message": "No.", "code": "forbidden"},
+    "normalised": null,
+    "detail": null,
+    "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Meta.ContractsFoundation.additive_top_level_field_loses_the_code",
+    "AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_refuse_unknown_top_level_key"],
+   "input": {"message": "v", "error": {"message": "No.", "code": "forbidden"}},
+   "id": "additive/top/message",
+   "expected":
+   {"standard": null,
+    "read": {"message": "No.", "code": "forbidden"},
+    "normalised": null,
+    "detail": null,
+    "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Meta.ContractsFoundation.additive_inner_field_loses_the_code",
+    "AgentWorkspace.Theorems.WellFormed.ContractsFoundation.api_problem_refuses_unknown_inner_key"],
+   "input": {"error": {"status": "v", "message": "No.", "code": "forbidden"}},
+   "id": "additive/inner/status",
+   "expected":
+   {"standard": null,
+    "read": {"message": "No.", "code": "forbidden"},
+    "normalised": null,
+    "detail": null,
+    "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Meta.ContractsFoundation.additive_inner_field_loses_the_code",
+    "AgentWorkspace.Theorems.WellFormed.ContractsFoundation.api_problem_refuses_unknown_inner_key"],
+   "input": {"error": {"requestId": "v", "message": "No.", "code": "forbidden"}},
+   "id": "additive/inner/requestId",
+   "expected":
+   {"standard": null,
+    "read": {"message": "No.", "code": "forbidden"},
+    "normalised": null,
+    "detail": null,
+    "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Meta.ContractsFoundation.additive_inner_field_loses_the_code",
+    "AgentWorkspace.Theorems.WellFormed.ContractsFoundation.api_problem_refuses_unknown_inner_key"],
+   "input": {"error": {"traceId": "v", "message": "No.", "code": "forbidden"}},
+   "id": "additive/inner/traceId",
+   "expected":
+   {"standard": null,
+    "read": {"message": "No.", "code": "forbidden"},
+    "normalised": null,
+    "detail": null,
+    "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Meta.ContractsFoundation.additive_inner_field_loses_the_code",
+    "AgentWorkspace.Theorems.WellFormed.ContractsFoundation.api_problem_refuses_unknown_inner_key"],
+   "input": {"error": {"type": "v", "message": "No.", "code": "forbidden"}},
+   "id": "additive/inner/type",
+   "expected":
+   {"standard": null,
+    "read": {"message": "No.", "code": "forbidden"},
+    "normalised": null,
+    "detail": null,
+    "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Meta.ContractsFoundation.additive_inner_field_loses_the_code",
+    "AgentWorkspace.Theorems.WellFormed.ContractsFoundation.api_problem_refuses_unknown_inner_key"],
+   "input": {"error": {"title": "v", "message": "No.", "code": "forbidden"}},
+   "id": "additive/inner/title",
+   "expected":
+   {"standard": null,
+    "read": {"message": "No.", "code": "forbidden"},
+    "normalised": null,
+    "detail": null,
+    "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Meta.ContractsFoundation.additive_inner_field_loses_the_code",
+    "AgentWorkspace.Theorems.WellFormed.ContractsFoundation.api_problem_refuses_unknown_inner_key"],
+   "input": {"error": {"message": "No.", "code": "forbidden", "__proto__": "v"}},
+   "id": "additive/inner/__proto__",
+   "expected":
+   {"standard": null,
+    "read": {"message": "No.", "code": "forbidden"},
+    "normalised": null,
+    "detail": null,
+    "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Meta.ContractsFoundation.additive_inner_field_loses_the_code",
+    "AgentWorkspace.Theorems.WellFormed.ContractsFoundation.api_problem_refuses_unknown_inner_key"],
+   "input": {"error": {"message": "No.", "code": "forbidden", "Code": "v"}},
+   "id": "additive/inner/Code",
+   "expected":
+   {"standard": null,
+    "read": {"message": "No.", "code": "forbidden"},
+    "normalised": null,
+    "detail": null,
+    "bare": null}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.api_problem_detail_refuses_unknown_inner_key"],
+   "input": {"error": {"status": "v", "detail": "No.", "code": "last_owner"}},
+   "id": "additive/detail-inner/status",
+   "expected":
+   {"standard": null,
+    "read": {"message": "No.", "code": "last_owner"},
+    "normalised": null,
+    "detail": null,
+    "bare": null}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.api_problem_detail_refuses_unknown_inner_key"],
+   "input": {"error": {"requestId": "v", "detail": "No.", "code": "last_owner"}},
+   "id": "additive/detail-inner/requestId",
+   "expected":
+   {"standard": null,
+    "read": {"message": "No.", "code": "last_owner"},
+    "normalised": null,
+    "detail": null,
+    "bare": null}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.api_problem_detail_refuses_unknown_inner_key"],
+   "input": {"error": {"traceId": "v", "detail": "No.", "code": "last_owner"}},
+   "id": "additive/detail-inner/traceId",
+   "expected":
+   {"standard": null,
+    "read": {"message": "No.", "code": "last_owner"},
+    "normalised": null,
+    "detail": null,
+    "bare": null}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.api_problem_detail_refuses_unknown_inner_key"],
+   "input": {"error": {"type": "v", "detail": "No.", "code": "last_owner"}},
+   "id": "additive/detail-inner/type",
+   "expected":
+   {"standard": null,
+    "read": {"message": "No.", "code": "last_owner"},
+    "normalised": null,
+    "detail": null,
+    "bare": null}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.api_problem_detail_refuses_unknown_inner_key"],
+   "input": {"error": {"title": "v", "detail": "No.", "code": "last_owner"}},
+   "id": "additive/detail-inner/title",
+   "expected":
+   {"standard": null,
+    "read": {"message": "No.", "code": "last_owner"},
+    "normalised": null,
+    "detail": null,
+    "bare": null}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.api_problem_detail_refuses_unknown_inner_key"],
+   "input": {"error": {"detail": "No.", "code": "last_owner", "__proto__": "v"}},
+   "id": "additive/detail-inner/__proto__",
+   "expected":
+   {"standard": null,
+    "read": {"message": "No.", "code": "last_owner"},
+    "normalised": null,
+    "detail": null,
+    "bare": null}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.api_problem_detail_refuses_unknown_inner_key"],
+   "input": {"error": {"detail": "No.", "code": "last_owner", "Code": "v"}},
+   "id": "additive/detail-inner/Code",
+   "expected":
+   {"standard": null,
+    "read": {"message": "No.", "code": "last_owner"},
+    "normalised": null,
+    "detail": null,
+    "bare": null}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.api_problem_detail_refuses_unknown_inner_key"],
+   "input": {"error": {"details": "v", "detail": "No.", "code": "last_owner"}},
+   "id": "additive/detail-inner/details",
+   "expected":
+   {"standard": null,
+    "read": {"message": "No.", "code": "last_owner"},
+    "normalised": null,
+    "detail": null,
+    "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_refuse_unknown_top_level_key"],
+   "input": {"status": "v", "error": "invalid_limit"},
+   "id": "additive/bare/status",
+   "expected":
+   {"standard": null,
+    "read": {"message": "", "code": "invalid_limit"},
+    "normalised": null,
+    "detail": null,
+    "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_refuse_unknown_top_level_key"],
+   "input": {"requestId": "v", "error": "invalid_limit"},
+   "id": "additive/bare/requestId",
+   "expected":
+   {"standard": null,
+    "read": {"message": "", "code": "invalid_limit"},
+    "normalised": null,
+    "detail": null,
+    "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_refuse_unknown_top_level_key"],
+   "input": {"traceId": "v", "error": "invalid_limit"},
+   "id": "additive/bare/traceId",
+   "expected":
+   {"standard": null,
+    "read": {"message": "", "code": "invalid_limit"},
+    "normalised": null,
+    "detail": null,
+    "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_refuse_unknown_top_level_key"],
+   "input": {"type": "v", "error": "invalid_limit"},
+   "id": "additive/bare/type",
+   "expected":
+   {"standard": null,
+    "read": {"message": "", "code": "invalid_limit"},
+    "normalised": null,
+    "detail": null,
+    "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_refuse_unknown_top_level_key"],
+   "input": {"title": "v", "error": "invalid_limit"},
+   "id": "additive/bare/title",
+   "expected":
+   {"standard": null,
+    "read": {"message": "", "code": "invalid_limit"},
+    "normalised": null,
+    "detail": null,
+    "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_refuse_unknown_top_level_key"],
+   "input": {"error": "invalid_limit", "__proto__": "v"},
+   "id": "additive/bare/__proto__",
+   "expected":
+   {"standard": null,
+    "read": {"message": "", "code": "invalid_limit"},
+    "normalised": null,
+    "detail": null,
+    "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_refuse_unknown_top_level_key"],
+   "input": {"error": "invalid_limit", "Code": "v"},
+   "id": "additive/bare/Code",
+   "expected":
+   {"standard": null,
+    "read": {"message": "", "code": "invalid_limit"},
+    "normalised": null,
+    "detail": null,
+    "bare": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ContractsFoundation.problem_envelopes_refuse_unknown_top_level_key"],
+   "input": {"error": "invalid_limit", "detail": "v"},
+   "id": "additive/bare/detail",
+   "expected":
+   {"standard": null,
+    "read": {"message": "", "code": "invalid_limit"},
+    "normalised": null,
+    "detail": null,
+    "bare": null}}],
+ "family": "contracts-foundation",
+ "description": "The three problem envelopes on valid, invalid and additive-field bodies"}

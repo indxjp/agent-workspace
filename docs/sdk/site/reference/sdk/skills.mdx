@@ -1,0 +1,121 @@
+---
+title: "SkillsClient"
+description: "Every method of SkillsClient, its parameters, return type, and route."
+---
+
+<Note>This page is generated from `packages/sdk/src/resources/skills.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+`/api/skills/**` — spec §5.7. A skill is the Claude Agent SDK's native directory (`SKILL.md`
+plus supporting files), addressed by its slug name; file bytes travel as base64 inside JSON
+bodies in both directions. Every response is `{ skill }`-wrapped and unwrapped here.
+
+## list
+
+Every skill of the caller's workspace, by name, each in full detail.
+
+```ts
+async list(options?: RequestOptions): Promise<readonly SkillDetail[]>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<readonly SkillDetail[]>`
+
+**Route:** `GET /api/skills`
+
+## import
+
+Create a skill from a `SKILL.md`, or import a whole directory. `400 invalid_name` for a name
+outside the slug grammar, `400 missing_skill_md` when no entry is `SKILL.md`,
+`400 inadmissible_path` for a path outside the server's grammar, `409 skill_already_exists`
+when the name is taken, `409 colliding_paths` for two paths that differ only by letter case.
+
+```ts
+async import(input: ImportSkillInput, options?: RequestOptions): Promise<SkillDetail>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `input` | `ImportSkillInput` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<SkillDetail>`
+
+**Route:** `POST /api/skills`
+
+## get
+
+`404 skill_not_found` for a missing skill and for a name outside the slug grammar alike.
+
+```ts
+async get(name: string, options?: RequestOptions): Promise<SkillDetail>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `name` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<SkillDetail>`
+
+**Route:** `GET /api/skills/:name`
+
+## export
+
+The skill's directory, every file byte for byte; importing it elsewhere reproduces it.
+
+```ts
+async export(name: string, options?: RequestOptions): Promise<SkillExport>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `name` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<SkillExport>`
+
+**Route:** `GET /api/skills/:name`
+
+## update
+
+Enable or disable a skill, write or overwrite files, remove files — any combination, at
+least one (`400 empty_patch`). `400 cannot_remove_skill_md` when `removeFiles` names
+`SKILL.md`; `409 colliding_paths` when a written path differs only by letter case from one
+the skill already has.
+
+```ts
+async update(name: string, patch: UpdateSkillPatch, options?: RequestOptions): Promise<SkillDetail>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `name` | `string` | Yes |
+| `patch` | `UpdateSkillPatch` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<SkillDetail>`
+
+**Route:** `PATCH /api/skills/:name`
+
+## remove
+
+Delete a skill: its catalog row, its files and its record. `409 skill_in_use` while any agent
+has it assigned — the problem's `details` name each agent as `agent:<id>` (read them with
+`parseInUseReferrers`), and nothing is deleted. `404 skill_not_found` for a name the workspace
+does not hold.
+
+```ts
+async remove(name: string, options?: RequestOptions): Promise<void>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `name` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<void>`
+
+**Route:** `DELETE /api/skills/:name`

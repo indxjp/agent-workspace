@@ -1,0 +1,6 @@
+Preview  ./claude-lock.json
+
+± Name                    Plan
+~ ./agents/summarizer.md  update
+
+Resources  ~ 1 to update

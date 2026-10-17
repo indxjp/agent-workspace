@@ -1,0 +1,377 @@
+name: Install live
+
+# Issue #881 (VC-3, ADR-0130): the docs' install commands and the ten use cases, from the public npm
+# registry, with the real model, on a clean ubuntu, macOS and Windows machine. After every
+# `packages-v*` publish, nightly, and on demand. Nothing is built from this checkout except the
+# harness: the packages under test are whatever registry.npmjs.org serves as `latest`.
+#
+#   claims    tests/docs-claims/run.mjs: every `claim="run"` block of README.md, packages/aw/README.md
+#             and docs/sdk/site, command by command, plus the compile claims. ubuntu runs in the
+#             journey's clean-machine container; macOS and Windows run on the runner itself
+#             (`--machine host`), Windows in PowerShell and in Git Bash.
+#   use-cases tests/docs-claims/use-cases.mjs: the ten tests/gallery projects, each with `aw dev`,
+#             `aw check`, `aw chat` and `aw eval` against the real model.
+#   report    one table over all lanes (job summary and the `install-live-summary` artifact), and an
+#             issue labelled `install-live`. tests/docs-claims/install-live-known.json lists known
+#             failures (a product bug with its own issue): they read `known failure (#N)` and keep
+#             the run red.
+#
+# It is NOT a required check and not in ci-success.needs: a model or registry outage must not block a
+# merge. It never runs on a pull request, because it holds the live model key and would run the
+# pull request's code with it. Test a change to it with workflow_dispatch from the branch.
+#
+# The repository secret ANTHROPIC_API_KEY is passed only to the two steps that run the harness, never
+# echoed or written to a file. A missing key is not a pass: every row from the first `npm run dev` on
+# reads `skipped`, the report reads `skipped` and goes red. A run with only skipped rows files nothing
+# (a configuration gap, named in the table); FAIL rows still file, deduplicated by failure set.
+# Before any upload, the evidence is scanned for `sk-ant-`
+# followed by key characters; if one is found the job fails and nothing is uploaded.
+on:
+  workflow_run:
+    workflows: ['Publish packages']
+    types: [completed]
+  schedule:
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'The published version to test; it must be the npm `latest`'
+        required: false
+        default: latest
+        type: string
+      force_failure:
+        description: 'Treat the run as failed, to prove the issue path'
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: install-live
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: https://registry.npmjs.org/
+
+jobs:
+  # Which version to test, and which commit's harness to test it with. A publish run waits for the
+  # registry to serve the new version, and refuses one that is not the `latest` tag: the docs
+  # of that tag describe `latest`, and an older or pre-release version would fail them for no reason.
+  resolve:
+    name: resolve the published version
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      ref: ${{ steps.resolve.outputs.ref }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 1
+
+      - name: Resolve
+        id: resolve
+        env:
+          EVENT: ${{ github.event_name }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          INPUT_VERSION: ${{ inputs.version }}
+          DEFAULT_REF: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          case "$EVENT" in
+            workflow_run) requested="${HEAD_BRANCH#packages-v}" ;;
+            workflow_dispatch) requested="${INPUT_VERSION:-latest}" ;;
+            *) requested=latest ;;
+          esac
+          if [ "$requested" != latest ] && ! printf '%s' "$requested" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error title=Bad version::'$requested' is neither 'latest' nor a version such as 0.5.1."
+            exit 1
+          fi
+          echo "Registry: $REGISTRY"
+          version=
+          for attempt in $(seq 1 40); do
+            latest="$(npm view @indx-workspace/create dist-tags.latest --registry "$REGISTRY" || true)"
+            if [ -n "$latest" ] && { [ "$requested" = latest ] || [ "$requested" = "$latest" ]; }; then
+              version="$latest"
+              break
+            fi
+            if [ -n "$latest" ] && [ -n "$(npm view "@indx-workspace/create@$requested" version --registry "$REGISTRY" || true)" ]; then
+              echo "::error title=Not the latest version::$requested is published, but npm's latest is $latest. install-live tests only the latest."
+              exit 1
+            fi
+            echo "attempt $attempt: $requested is not on $REGISTRY yet (latest: ${latest:-none})"
+            sleep 15
+          done
+          if [ -z "$version" ]; then
+            echo "::error title=Not published::@indx-workspace/create@$requested did not appear on $REGISTRY within 10 minutes."
+            exit 1
+          fi
+          for package in contracts sdk react aw cli embedded create; do
+            found=
+            for attempt in $(seq 1 20); do
+              found="$(npm view "@indx-workspace/$package@$version" version --registry "$REGISTRY" || true)"
+              [ -n "$found" ] && break
+              sleep 15
+            done
+            if [ -z "$found" ]; then
+              echo "::error title=Incomplete release::@indx-workspace/$package@$version is not on $REGISTRY."
+              exit 1
+            fi
+          done
+          echo "Testing @indx-workspace/*@$version from $REGISTRY"
+          ref="$DEFAULT_REF"
+          tag="packages-v$version"
+          harness='tests/docs-claims/run.mjs tests/docs-claims/host.mjs tests/docs-claims/use-cases.mjs tests/docs-claims/scan-secrets.mjs'
+          if git fetch --depth=1 origin "refs/tags/$tag:refs/tags/$tag" 2>/dev/null; then
+            ref="$tag"
+            for file in $harness; do
+              if ! git cat-file -e "$tag:$file" 2>/dev/null; then
+                ref="$DEFAULT_REF"
+                echo "::notice title=Harness from the workflow's commit::$tag has no $file (it predates install-live), so the harness of $DEFAULT_REF tests @indx-workspace/*@$version."
+                break
+              fi
+            done
+          else
+            echo "::notice title=Harness from the workflow's commit::the tag $tag is not in this repository, so the harness of $DEFAULT_REF tests @indx-workspace/*@$version."
+          fi
+          {
+            echo "version=$version"
+            echo "ref=$ref"
+          } >> "$GITHUB_OUTPUT"
+
+  claims:
+    name: claims · ${{ matrix.lane }}
+    needs: resolve
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - lane: ubuntu
+            os: ubuntu-latest
+            machine: ''
+          - lane: macos
+            os: macos-latest
+            machine: '--machine host --shell sh'
+          - lane: windows-pwsh
+            os: windows-latest
+            machine: '--machine host --shell pwsh'
+          - lane: windows-bash
+            os: windows-latest
+            machine: '--machine host --shell bash'
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.resolve.outputs.ref }}
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install the harness
+        shell: bash
+        run: |
+          pnpm install --frozen-lockfile --filter "@indx-workspace/contracts..."
+          pnpm --filter @indx-workspace/contracts build
+
+      - name: Run the docs claims
+        shell: bash
+        timeout-minutes: 100
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          WORK: ${{ runner.temp }}/install-live
+          DOCS_CLAIMS_WORK_DIR: ${{ runner.temp }}/install-live
+          MACHINE: ${{ matrix.machine }}
+        run: |
+          read -r -a machine <<< "$MACHINE"
+          node tests/docs-claims/run.mjs --registry "$REGISTRY" --model live "${machine[@]}"
+
+      - name: Look for an API key in the evidence
+        id: scan
+        if: ${{ always() }}
+        env:
+          WORK: ${{ runner.temp }}/install-live
+        shell: bash
+        run: node tests/docs-claims/scan-secrets.mjs "$WORK/summary.md" "$WORK/results.json" "$WORK/logs"
+
+      - name: Keep the results
+        if: ${{ always() && steps.scan.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: install-live-claims-${{ matrix.lane }}
+          path: |
+            ${{ runner.temp }}/install-live/summary.md
+            ${{ runner.temp }}/install-live/results.json
+            ${{ runner.temp }}/install-live/logs
+          if-no-files-found: warn
+          retention-days: 90
+
+  use-cases:
+    name: the ten use cases
+    needs: resolve
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.resolve.outputs.ref }}
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install the harness
+        run: |
+          pnpm install --frozen-lockfile --filter "@indx-workspace/contracts..."
+          pnpm --filter @indx-workspace/contracts build
+
+      - name: Run the ten use cases
+        timeout-minutes: 130
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          WORK: ${{ runner.temp }}/install-live
+          DOCS_CLAIMS_WORK_DIR: ${{ runner.temp }}/install-live
+          VERSION: ${{ needs.resolve.outputs.version }}
+        run: node tests/docs-claims/use-cases.mjs --version "$VERSION" --registry "$REGISTRY"
+
+      - name: Look for an API key in the evidence
+        id: scan
+        if: ${{ always() }}
+        env:
+          WORK: ${{ runner.temp }}/install-live
+        run: node tests/docs-claims/scan-secrets.mjs "$WORK/summary.md" "$WORK/results.json" "$WORK/logs"
+
+      - name: Keep the results
+        if: ${{ always() && steps.scan.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: install-live-use-cases
+          path: |
+            ${{ runner.temp }}/install-live/summary.md
+            ${{ runner.temp }}/install-live/results.json
+            ${{ runner.temp }}/install-live/logs
+          if-no-files-found: warn
+          retention-days: 90
+
+  # The only job that may write issues. It runs no harness and holds no key.
+  report:
+    name: report
+    needs: [resolve, claims, use-cases]
+    if: ${{ always() && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      VERSION: ${{ needs.resolve.outputs.version }}
+      FORCE_FAILURE: ${{ inputs.force_failure }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+
+      - name: Download the results
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          pattern: install-live-*
+          path: results
+
+      - name: Table
+        id: table
+        run: |
+          node tests/docs-claims/install-live-report.mjs results claims-ubuntu claims-macos claims-windows-pwsh claims-windows-bash use-cases > install-live-summary.md
+          cat install-live-summary.md
+          {
+            echo "Packages: @indx-workspace/*@${VERSION:-unknown} from $REGISTRY"
+            echo
+            cat install-live-summary.md
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the table
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: install-live-summary
+          path: install-live-summary.md
+          retention-days: 90
+
+      # A failed run opens the issue or comments on the open one, unless the issue's latest body or
+      # comment already holds the same failure set (digest; known failures are left out of it). A
+      # run with nothing failed and nothing skipped closes it. A skipped-only run (no key) leaves it
+      # alone.
+      - name: Open, update or close the install-live issue
+        env:
+          OUTCOME: ${{ steps.table.outputs.outcome }}
+          DIGEST: ${{ steps.table.outputs.digest }}
+        run: |
+          set -euo pipefail
+          if [ "$FORCE_FAILURE" = true ]; then OUTCOME=fail; fi
+          number="$(gh issue list --label install-live --state open --limit 1 --json number --jq '.[0].number // empty' || true)"
+          marker="<!-- install-live-digest:${DIGEST} -->"
+          case "$OUTCOME" in
+            fail)
+              gh label create install-live --description 'Install live lane' --color B60205 --force
+              {
+                echo "install-live failed for @indx-workspace/*@${VERSION:-unknown}: ${RUN_URL}"
+                echo
+                if [ "$FORCE_FAILURE" = true ]; then echo 'This failure was forced (force_failure) to prove the issue path.'; echo; fi
+                cat install-live-summary.md
+                echo
+                echo "$marker"
+              } > body.md
+              if [ -n "$number" ]; then
+                latest="$(gh issue view "$number" --json body,comments --jq '[.body] + [.comments[].body] | last')"
+                if [ "$FORCE_FAILURE" != true ] && [[ "$latest" == *"$marker"* ]]; then
+                  echo "issue #$number already reports this failure set; not commenting again"
+                else
+                  gh issue comment "$number" --body-file body.md
+                fi
+              else
+                gh issue create --label install-live --title 'install-live is failing' --body-file body.md
+              fi
+              ;;
+            pass)
+              if [ -n "$number" ]; then
+                gh issue close "$number" --comment "install-live passes for @indx-workspace/*@${VERSION:-unknown}: ${RUN_URL}"
+              fi
+              ;;
+          esac
+
+      # Last, so the issue is written first: only a pass is green; a skipped lane is a gap, not a pass.
+      - name: Fail unless every claim ran and passed
+        env:
+          OUTCOME: ${{ steps.table.outputs.outcome }}
+        run: |
+          if [ "$OUTCOME" != pass ] || [ "$FORCE_FAILURE" = true ]; then
+            echo "::error title=install-live is $OUTCOME::see the table in the job summary"
+            exit 1
+          fi

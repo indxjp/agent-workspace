@@ -1,0 +1,11 @@
+{
+  // The type-checking view: the whole of `src`, tests included, emitting nothing. The adapter runs
+  // in the runner's Node process — it reads the filesystem for the grant guard and hands Mastra a
+  // local sandbox — and Mastra's own declarations name `NodeJS.*` types, so `node` types are wanted.
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "noEmit": true
+  },
+  "include": ["src"]
+}

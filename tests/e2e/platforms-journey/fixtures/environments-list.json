@@ -1,0 +1,20 @@
+{
+  "data": [
+    {
+      "type": "environment",
+      "id": "env_01R4SfGCPe82tf3qyYv8iLtT",
+      "name": "default",
+      "archived_at": null,
+      "created_at": "2026-10-12T15:00:00Z",
+      "updated_at": "2026-10-12T15:00:00Z"
+    },
+    {
+      "type": "environment",
+      "id": "env_01R4SfGCPe82tf3qyYv8iLtU",
+      "name": "old",
+      "archived_at": "2026-10-09T12:00:00Z",
+      "created_at": "2026-10-01T09:00:00Z",
+      "updated_at": "2026-10-09T12:00:00Z"
+    }
+  ]
+}

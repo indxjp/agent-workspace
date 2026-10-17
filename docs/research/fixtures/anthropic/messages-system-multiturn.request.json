@@ -1,0 +1,12 @@
+{
+  "model": "claude-opus-5",
+  "max_tokens": 1024,
+  "system": [
+    { "type": "text", "text": "You are a terse assistant.", "cache_control": { "type": "ephemeral" } }
+  ],
+  "messages": [
+    { "role": "user", "content": "Hello there." },
+    { "role": "assistant", "content": "Hi, I'm Claude. How can I help you?" },
+    { "role": "user", "content": "Can you explain LLMs in plain English?" }
+  ]
+}

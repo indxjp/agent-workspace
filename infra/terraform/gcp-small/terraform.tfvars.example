@@ -1,0 +1,38 @@
+project_id            = "replace-with-project-id"
+region                = "asia-northeast1"
+zone                  = "asia-northeast1-b"
+domain                = "agents.example.com"
+tls_email             = "ops@example.com"
+bootstrap_admin_email = "admin@example.com"
+operator_members      = ["group:agent-workspace-operators@example.com"]
+enable_iap_ssh        = true
+
+images = {
+  web      = "asia-northeast1-docker.pkg.dev/example/agent-workspace/web@sha256:REPLACE"
+  gateway  = "asia-northeast1-docker.pkg.dev/example/agent-workspace/gateway@sha256:REPLACE"
+  runner   = "asia-northeast1-docker.pkg.dev/example/agent-workspace/runner@sha256:REPLACE"
+  runtime  = "asia-northeast1-docker.pkg.dev/example/agent-workspace/runtime@sha256:REPLACE"
+  postgres = "docker.io/library/postgres@sha256:REPLACE"
+  proxy    = "docker.io/library/caddy@sha256:REPLACE"
+}
+
+# Upload values separately, then set their numbered versions here. Never use "latest".
+secret_versions = {
+  postgres_password        = "1"
+  session_secret           = "1"
+  master_encryption_key    = "1"
+  gateway_token_secret     = "1"
+  runner_manager_token     = "1"
+  bootstrap_admin_password = "1"
+}
+
+# Replace this fail-closed sentinel with reviewed provider:model rates before the first run.
+gateway_pricing_json = jsonencode({
+  version = "unconfigured"
+  models = {
+    "disabled:unconfigured" = {
+      inputUsdPerMillion  = "0"
+      outputUsdPerMillion = "0"
+    }
+  }
+})

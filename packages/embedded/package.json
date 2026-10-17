@@ -1,0 +1,166 @@
+{
+  "name": "@indx-workspace/embedded",
+  "version": "0.6.9",
+  "private": true,
+  "description": "The Agent Workspace local runtime: web, gateway and runner in one Node process over an embedded PostgreSQL. `aw dev` resolves and forks its `./launch` export.",
+  "license": "Apache-2.0",
+  "homepage": "https://docs.agentworkspace.indx.jp",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/indxjp/agent-workspace.git",
+    "directory": "packages/embedded"
+  },
+  "bugs": {
+    "url": "https://github.com/indxjp/agent-workspace/issues"
+  },
+  "keywords": [
+    "agent-workspace",
+    "claude",
+    "ai-agents",
+    "local-runtime"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "type": "module",
+  "exports": {
+    "./launch": "./dist/bin.js",
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "agent-workspace-embedded": "./dist/bin.js"
+  },
+  "scripts": {
+    "build": "node src/packaging/main.ts",
+    "build-contributor": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@agent-workspace/core": "workspace:*",
+    "@agent-workspace/engine": "workspace:*",
+    "@agent-workspace/engine-claude-agent-sdk": "workspace:*",
+    "@agent-workspace/engine-mastra": "workspace:*",
+    "@agent-workspace/engine-openai-agents": "workspace:*",
+    "@agent-workspace/engine-pi": "workspace:*",
+    "@agent-workspace/gateway": "workspace:*",
+    "@agent-workspace/runner": "workspace:*",
+    "@agent-workspace/runtime": "workspace:*",
+    "@agent-workspace/web": "workspace:*",
+    "@ai-sdk/anthropic": "4.0.78",
+    "@ai-sdk/openai": "4.0.91",
+    "@anthropic-ai/claude-agent-sdk": "0.3.296",
+    "@anthropic-ai/sdk": "0.133.0",
+    "@aws-sdk/client-kms": "3.1149.0",
+    "@aws-sdk/client-s3": "3.1149.0",
+    "@azure/identity": "4.13.3",
+    "@azure/keyvault-secrets": "4.11.2",
+    "@earendil-works/chord": "1.1.0",
+    "@earendil-works/pi-agent-core": "1.1.0",
+    "@earendil-works/pi-ai": "1.1.0",
+    "@earendil-works/pi-codemode": "1.1.0",
+    "@earendil-works/pi-coding-agent": "1.1.0",
+    "@earendil-works/pi-mcp": "1.1.0",
+    "@earendil-works/pi-telemetry": "1.1.0",
+    "@earendil-works/pi-tui": "1.1.0",
+    "@google-cloud/secret-manager": "7.1.1",
+    "@google-cloud/storage": "8.4.0",
+    "@indx-workspace/cli": "workspace:*",
+    "@indx-workspace/contracts": "workspace:*",
+    "@indx-workspace/sdk": "workspace:*",
+    "@kubernetes/client-node": "2.0.0",
+    "@mastra/core": "1.76.0",
+    "@mastra/mcp": "2.3.0",
+    "@mastra/memory": "1.37.0",
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "@openai/agents": "0.20.0",
+    "@openai/agents-extensions": "0.20.0",
+    "drizzle-orm": "0.45.4",
+    "embedded-postgres": "17.10.0-beta.17",
+    "google-auth-library": "11.2.0",
+    "next": "16.4.0",
+    "pg": "8.23.1",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "ws": "8.22.0",
+    "yaml": "2.9.1",
+    "zod": "4.6.6"
+  },
+  "devDependencies": {
+    "@typescript/native": "npm:typescript@7.0.2",
+    "@vercel/nft": "1.11.0",
+    "esbuild": "0.28.2",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
+    "vitest": "5.0.3"
+  },
+  "nx": {
+    "targets": {
+      "build": {
+        "//": "The webpack build of apps/web writes apps/web/.next-embedded and briefly rewrites apps/web/tsconfig.json and next-env.d.ts (restored in a finally). It runs after web:build so `next build` never reads the rewritten files, and web:typecheck and web:lint depend on this target (apps/web/package.json) so CI's `nx run-many -t build typecheck lint` never lints the half-written build. The edge points that way, not from here to web:lint, so a build-only run (`nx run-many -t build`, every journey and docs-claims job) does not have to run web's lint and typecheck first (~3 min on a cache miss). Ordering through Nx avoids adding a `.next-*` ignore to ESLint, jscpd or .gitignore. The repository's migrations/ is copied into dist/, so it is an input.",
+        "dependsOn": [
+          "^build",
+          {
+            "projects": [
+              "@agent-workspace/web"
+            ],
+            "target": "build"
+          }
+        ],
+        "inputs": [
+          "default",
+          "^default",
+          "{workspaceRoot}/migrations/**/*"
+        ],
+        "outputs": [
+          "{projectRoot}/dist/launch.js",
+          "{projectRoot}/dist/bin.js",
+          "{projectRoot}/dist/chunks",
+          "{projectRoot}/dist/node_modules",
+          "{projectRoot}/dist/web",
+          "{projectRoot}/dist/migrations",
+          "{projectRoot}/publish"
+        ]
+      },
+      "build-contributor": {
+        "cache": true,
+        "dependsOn": [
+          "^build"
+        ],
+        "inputs": [
+          "default",
+          "^default"
+        ],
+        "outputs": [
+          "{projectRoot}/dist/contributor"
+        ]
+      },
+      "typecheck": {
+        "dependsOn": [
+          "^build"
+        ]
+      },
+      "lint": {
+        "executor": "nx:run-commands",
+        "dependsOn": [
+          "^build"
+        ],
+        "options": {
+          "command": "eslint packages/embedded --max-warnings 0"
+        }
+      },
+      "test": {
+        "executor": "nx:run-commands",
+        "dependsOn": [
+          "build",
+          "^build"
+        ],
+        "options": {
+          "command": "vitest run --project @indx-workspace/embedded --reporter=default --reporter=json --outputFile={projectRoot}/.vitest-report.json",
+          "env": {
+            "NODE_OPTIONS": "--unhandled-rejections=strict",
+            "VITEST_MAX_WORKERS": "4"
+          }
+        }
+      }
+    }
+  }
+}

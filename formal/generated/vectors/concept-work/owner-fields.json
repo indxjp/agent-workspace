@@ -1,0 +1,21 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Meta.ConceptWork.runs_carry_no_owner_principal",
+    "AgentWorkspace.Theorems.Normative.ConceptWork.run_reaches_exactly_one_owner"],
+   "input": {"schema": "ProjectResourceSchema", "field": "ownerPrincipalId"},
+   "id": "owner-field/ProjectResourceSchema",
+   "expected": {"present": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Meta.ConceptWork.runs_carry_no_owner_principal",
+    "AgentWorkspace.Theorems.Normative.ConceptWork.run_reaches_exactly_one_owner"],
+   "input": {"schema": "SessionResourceSchema", "field": "ownerPrincipalId"},
+   "id": "owner-field/SessionResourceSchema",
+   "expected": {"present": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Meta.ConceptWork.runs_carry_no_owner_principal",
+    "AgentWorkspace.Theorems.Normative.ConceptWork.run_reaches_exactly_one_owner"],
+   "input": {"schema": "RunResourceSchema", "field": "ownerPrincipalId"},
+   "id": "owner-field/RunResourceSchema",
+   "expected": {"present": false}}],
+ "family": "concept-work",
+ "description": "Which resources carry ownerPrincipalId on the wire"}

@@ -1,0 +1,29 @@
+
+--- hung child (reads stdin, never answers) ---
+spawned pid=41236, alive right after start: true
+after a bare transport.close(): alive=false
+connect threw after 2018ms: McpError: MCP error -32001: Request timed out
+pid spawned by connect = 43204
+  t+0ms after the timeout returned: alive=true
+  t+500ms after the timeout returned: alive=false
+  t+2500ms after the timeout returned: alive=false
+  t+5000ms after the timeout returned: alive=false
+after an explicit client.close(): alive=false
+
+--- child that ignores stdin EOF ---
+spawned pid=54084, alive right after start: true
+after a bare transport.close(): alive=false
+connect threw after 2015ms: McpError: MCP error -32001: Request timed out
+pid spawned by connect = 41852
+  t+0ms after the timeout returned: alive=true
+  t+500ms after the timeout returned: alive=true
+  t+2500ms after the timeout returned: alive=false
+  t+5000ms after the timeout returned: alive=false
+after an explicit client.close(): alive=false
+
+--- grandchild reaping ---
+connect threw: MCP error -32001: Request timed out
+direct child 29580 alive: false
+grandchild  49832 alive: false
+
+done

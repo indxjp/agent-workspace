@@ -1,0 +1,22 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/copilot/plugin/v2.4/schema.json",
+  "schema_version": "v2.4",
+  "name_for_human": "aw-tools",
+  "namespace": "awtools",
+  "description_for_human": "Code tools of the support-triage agent.",
+  "description_for_model": "get_order: Look up an order by its id",
+  "functions": [],
+  "runtimes": [
+    {
+      "type": "RemoteMCPServer",
+      "auth": {
+        "type": "OAuthPluginVault",
+        "reference_id": "${{MCP_AW_TOOLS_AUTH_REFERENCE_ID}}"
+      },
+      "run_for_functions": ["*"],
+      "spec": {
+        "url": "https://aw.example.com/mcp/projects/acme-support"
+      }
+    }
+  ]
+}

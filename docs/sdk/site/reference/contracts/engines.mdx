@@ -1,0 +1,395 @@
+---
+title: "engines"
+description: "The @indx-workspace/contracts/engines exports, sorted alphabetically."
+---
+
+<Note>This page is generated from `packages/contracts/src/engine-catalogue.ts`, `packages/contracts/src/engines.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## DEFAULT_ENGINE_ID
+
+The engine an agent with no stored policy runs on (ADR-0065). The one spelling of the default.
+
+Value: `'claude-agent-sdk'`
+
+## ENGINE_BUDGET_ENFORCEMENTS
+
+- `'native'`
+- `'adapter'`
+- `'none'`
+
+## ENGINE_CAPABILITY_KEYS
+
+The capabilities an agent's *assignments* can demand of its engine, and therefore the values an
+`engine_capability_unsupported` refusal names.
+
+These are the keys of `EngineCapabilitiesSchema` that a saved agent can already be in
+breach of: a connector demands `mcp`, a skill demands `skills`, a subagent demands `subagents`.
+The rest of the capability set describes what a *run* may ask for (`resume`, `interrupt`, a turn
+cap …) and is not decided at save time, so naming it in this refusal would be a promise the
+save-time check does not keep.
+
+- `'mcp'`
+- `'skills'`
+- `'subagents'`
+
+## ENGINE_CATALOGUE
+
+The one place an engine is described (ADR-0136): its display name, capabilities, native
+settings, how it states narrowing, the tools each permission switch governs, how it shows the
+model an MCP tool and how its session-state stream keys are shaped. Keyed by `EngineId`, so
+an id without an entry is a type error.
+
+The SDK **version** is deliberately not here: it is a build fact of the adapter, and
+`apps/web/server/engines/registry.ts` keeps its restatement, checked against the manifests.
+
+Capabilities by engine:
+
+* `claude-agent-sdk` (as R-01 measured them): `fork` and `streamingText` are `false` because
+  neither is reachable through this platform today — the capability set states what a deployment
+  can be *asked* for, not what the third-party SDK could be configured to do. `maxTurns` and
+  `maxBudget` are `native`: the SDK enforces both itself. `wireProtocols` is Anthropic Messages
+  alone, the only ingress the gateway serves a Claude run over.
+* `openai-agents` (ADR-0074): `skills: false` is a refusal, not a gap: a skill on this engine is
+  refused by name. `maxBudget: 'adapter'` is **provisional** (ADR-0074 D7): the adapter prices
+  the usage the gateway reports back and stops the run `max_budget`, until #342 moves the cap
+  into the gateway. `wireProtocols` lists Responses first, so `resolveWireProtocol` picks it for
+  an OpenAI-family connection and Anthropic Messages for an Anthropic-family one.
+* `pi` (ADR-0081): `mcp: false` is a refusal, not a gap: pi has no MCP client, and an agent with
+  a connector is refused by name rather than bridged. `maxTurns` and `maxBudget` are `'adapter'`:
+  the adapter counts `turn_end` and prices each response with the port's provisional table
+  (ADR-0074 D7). `wireProtocols` is Anthropic Messages alone until the gateway serves OpenAI
+  dialects to pi.
+* `mastra` (ADR-0084): `fork: false` is a refusal, not a gap: a Mastra thread is continued, never
+  branched. `maxTurns` is `'native'` (Mastra's `maxSteps`); `maxBudget` is `'adapter'`, priced
+  with the port's provisional table (ADR-0074 D7). `wireProtocols` lists Anthropic Messages
+  first and both OpenAI dialects after it: Mastra takes an explicit AI SDK provider for each, so
+  every connection is reached in its own native dialect and the gateway never translates.
+
+| Key | Value |
+| --- | --- |
+| `'claude-agent-sdk'` | `{ displayName: 'Claude Agent SDK', capabilities: { mcp: true, skills: true, subagents: true, resume: true, fork: false, interrupt: true, streamingText: false, reasoning: true, maxTurns: 'native', maxBudget: 'native', wireProtocols: ['anthropic-messages'], }, settings: {}, narrowing: 'tool-rules', permissionTools: CLAUDE_PERMISSION_TOOL_DENIALS, mcpToolName: 'mcp__server__tool', sessionStreamKey: 'project-key-prefixed', }` |
+| `'openai-agents'` | ``{ displayName: 'OpenAI Agents SDK', capabilities: { mcp: true, skills: false, subagents: true, resume: true, fork: false, interrupt: true, streamingText: true, reasoning: true, maxTurns: 'native', maxBudget: 'adapter', wireProtocols: ['openai-responses', 'openai-chat-completions', 'anthropic-messages'], }, settings: { /** * Engine-native: the Responses API's `reasoning.effort`, as the OpenAI Agents SDK's * `modelSettings.reasoning.effort` takes it. Absent means the model's own default. */ reasoningEffort: z.enum(OPENAI_AGENTS_REASONING_EFFORTS).optional(), /** Engine-native: the SDK's `modelSettings.parallelToolCalls`. Absent means its default. */ parallelToolCalls: z.boolean().optional(), }, narrowing: 'withheld-permissions', permissionTools: permissionToolsOf(OPENAI_AGENTS_TOOL_PERMISSION), mcpToolName: 'tool', sessionStreamKey: 'opaque', }`` |
+| `pi` | ``{ displayName: 'pi coding agent', capabilities: { mcp: false, skills: true, subagents: false, resume: true, fork: true, interrupt: true, streamingText: true, reasoning: true, maxTurns: 'adapter', maxBudget: 'adapter', wireProtocols: ['anthropic-messages'], }, settings: { /** Engine-native: pi's `thinkingLevel`, clamped by pi to the model. Absent means `off`. */ thinkingLevel: z.enum(PI_THINKING_LEVELS).optional(), }, narrowing: 'withheld-permissions', permissionTools: permissionToolsOf(PI_TOOL_PERMISSION), mcpToolName: 'tool', sessionStreamKey: 'opaque', }`` |
+| `mastra` | ``{ displayName: 'Mastra', capabilities: { mcp: true, skills: true, subagents: true, resume: true, fork: false, interrupt: true, streamingText: true, reasoning: true, maxTurns: 'native', maxBudget: 'adapter', wireProtocols: ['anthropic-messages', 'openai-responses', 'openai-chat-completions'], }, settings: { /** * Engine-native: Mastra's `toolCallConcurrency`, the number of tool calls one step may run * at once. Absent means Mastra's own default. */ toolCallConcurrency: z.number().int().min(1).max(MASTRA_TOOL_CALL_CONCURRENCY_MAX).optional(), }, narrowing: 'withheld-permissions', permissionTools: permissionToolsOf(MASTRA_TOOL_PERMISSION), mcpToolName: 'server_tool', sessionStreamKey: 'opaque', }`` |
+
+## ENGINE_IDS
+
+The **engines** a deployment can run an agent on (ADR-0065). An engine is the harness that turns
+an agent definition and a prompt into model calls, tool calls and a stream of events.
+
+This is deliberately not the same word as a *model provider*. `runs.provider` and
+`MODEL_PROVIDERS` (`./runs.ts`) name who serves the model; the list here names what runs the
+agent loop. `AgentPolicy` is discriminated by `EngineIdSchema`, so a second engine is an
+added arm rather than a renamed field.
+
+`claude-agent-sdk`; since ENG-09 (#308, ADR-0074), `openai-agents`; since ENG-08 (#307,
+ADR-0081), `pi`; and since ENG-10 (#309, ADR-0084), `mastra`. Later units append — the order is the wire order and is not re-sorted, because `formal/AgentWorkspace/Contracts/Engines.lean`
+transcribes it position by position.
+
+- `'claude-agent-sdk'`
+- `'openai-agents'`
+- `'pi'`
+- `'mastra'`
+
+## ENGINE_LIMIT_ENFORCEMENTS
+
+Who enforces a limit: the engine itself (`native`) or the platform's adapter around it
+(`adapter`). `maxBudget` adds `none` because an engine may offer no place to enforce a budget at
+all, in which case the cap is a workspace-level refusal rather than a per-run one.
+
+- `'native'`
+- `'adapter'`
+
+## ENGINE_NARROWINGS
+
+How an arm states narrowing: Claude's tool grammar (`tools`) or `withheldPermissions`.
+
+- `'tool-rules'`
+- `'withheld-permissions'`
+
+## ENGINE_PROBLEM_CODES
+
+Problem codes the engine vocabulary owns, with the status each one travels under.
+
+`unsupported_engine` is a `400`, not a `404`: the caller named an engine in a body it wrote, and
+the fix is to name one this deployment registers. It replaces `unsupported_policy_provider`,
+which spoke of a "policy provider" — a phrase that no longer names anything.
+
+`session_engine_mismatch` and `engine_capability_unsupported` are ADR-0065 D8's session pinning
+and D3's "refuse, never ignore", each at the moment a request first meets it;
+`engine_catalogue_invalid` guards the catalogue `GET /api/engines` publishes.
+
+| Key | Value |
+| --- | --- |
+| `unsupported_engine` | `400` |
+| `session_engine_mismatch` | `409` |
+| `engine_capability_unsupported` | `422` |
+| `engine_model_protocol_unsupported` | `422` |
+| `engine_not_installed` | `422` |
+| `engine_catalogue_invalid` | `500` |
+
+## EngineBudgetEnforcement
+
+- `"native"`
+- `"adapter"`
+- `"none"`
+
+## EngineBudgetEnforcementSchema
+
+- `"native"`
+- `"adapter"`
+- `"none"`
+
+## EngineCapabilities
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `mcp` | `false \| true` | Yes | MCP connectors can be handed to the engine. |
+| `skills` | `false \| true` | Yes | `SKILL.md` skills can be materialised for the engine. |
+| `subagents` | `false \| true` | Yes | A subagent the agent names can be delegated to within the run. |
+| `resume` | `false \| true` | Yes | A session can be continued from a previously reported engine session id. |
+| `fork` | `false \| true` | Yes | A session can be branched from an earlier point rather than only continued. |
+| `interrupt` | `false \| true` | Yes | A turn in flight can be cancelled without losing the session. |
+| `streamingText` | `false \| true` | Yes | Assistant text arrives as deltas rather than only as whole messages. |
+| `reasoning` | `false \| true` | Yes | The engine reports the model's reasoning separately from its answer. |
+| `maxTurns` | `"native" \| "adapter"` | Yes |  |
+| `maxBudget` | `"native" \| "adapter" \| "none"` | Yes |  |
+| `wireProtocols` | `readonly ("anthropic-messages" \| "openai-responses" \| "openai-chat-completions")[]` | Yes |  |
+
+## EngineCapabilitiesSchema
+
+What one engine can honour of the platform's portable agent configuration (#299's "portable core
+vs engine-native" table).
+
+Every field answers a question the control plane must be able to ask *before* a run starts, so
+that an agent whose configuration an engine cannot honour is **refused, never silently
+narrowed**: an agent with connectors on an engine whose `mcp` is `false` is a typed refusal, not
+a run without its connectors. The refusal itself arrives in a later unit; this contract is the
+vocabulary it is stated in.
+
+`wireProtocols` is non-empty: an engine that can reach no gateway ingress cannot run anything,
+and `[]` would read as "any" to a careless consumer.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `mcp` | `false \| true` | Yes | MCP connectors can be handed to the engine. |
+| `skills` | `false \| true` | Yes | `SKILL.md` skills can be materialised for the engine. |
+| `subagents` | `false \| true` | Yes | A subagent the agent names can be delegated to within the run. |
+| `resume` | `false \| true` | Yes | A session can be continued from a previously reported engine session id. |
+| `fork` | `false \| true` | Yes | A session can be branched from an earlier point rather than only continued. |
+| `interrupt` | `false \| true` | Yes | A turn in flight can be cancelled without losing the session. |
+| `streamingText` | `false \| true` | Yes | Assistant text arrives as deltas rather than only as whole messages. |
+| `reasoning` | `false \| true` | Yes | The engine reports the model's reasoning separately from its answer. |
+| `maxTurns` | `"native" \| "adapter"` | Yes |  |
+| `maxBudget` | `"native" \| "adapter" \| "none"` | Yes |  |
+| `wireProtocols` | `readonly ("anthropic-messages" \| "openai-responses" \| "openai-chat-completions")[]` | Yes |  |
+
+## EngineCapabilityKey
+
+- `"skills"`
+- `"mcp"`
+- `"subagents"`
+
+## EngineCapabilityKeySchema
+
+- `"skills"`
+- `"mcp"`
+- `"subagents"`
+
+## EngineCatalogue
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `claude-agent-sdk` | `{ readonly displayName: "Claude Agent SDK"; readonly capabilities: { readonly mcp: true; readonly skills: true; readonly subagents: true; readonly resume: true; readonly fork: false; readonly interrupt: true; readonly streamingText: false; readonly reasoning: true; readonly maxTurns: "native"; readonly maxBudget: "native"; readonly wireProtocols: readonly ["anthropic-messages"]; }; readonly settings: {}; readonly narrowing: "tool-rules"; readonly permissionTools: Readonly<Record<"readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork", readonly string[]>>; readonly mcpToolName: "mcp__server__tool"; readonly sessionStreamKey: "project-key-prefixed"; }` | Yes |  |
+| `openai-agents` | `{ readonly displayName: "OpenAI Agents SDK"; readonly capabilities: { readonly mcp: true; readonly skills: false; readonly subagents: true; readonly resume: true; readonly fork: false; readonly interrupt: true; readonly streamingText: true; readonly reasoning: true; readonly maxTurns: "native"; readonly maxBudget: "adapter"; readonly wireProtocols: readonly ["openai-responses", "openai-chat-completions", "anthropic-messages"]; }; readonly settings: { readonly reasoningEffort: z.ZodOptional<z.ZodEnum<{ minimal: "minimal"; low: "low"; medium: "medium"; high: "high"; }>>; readonly parallelToolCalls: z.ZodOptional<z.ZodBoolean>; }; readonly narrowing: "withheld-permissions"; readonly permissionTools: Readonly<Record<"readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork", readonly string[]>>; readonly mcpToolName: "tool"; readonly sessionStreamKey: "opaque"; }` | Yes |  |
+| `pi` | `{ readonly displayName: "pi coding agent"; readonly capabilities: { readonly mcp: false; readonly skills: true; readonly subagents: false; readonly resume: true; readonly fork: true; readonly interrupt: true; readonly streamingText: true; readonly reasoning: true; readonly maxTurns: "adapter"; readonly maxBudget: "adapter"; readonly wireProtocols: readonly ["anthropic-messages"]; }; readonly settings: { readonly thinkingLevel: z.ZodOptional<z.ZodEnum<{ minimal: "minimal"; low: "low"; medium: "medium"; high: "high"; off: "off"; }>>; }; readonly narrowing: "withheld-permissions"; readonly permissionTools: Readonly<Record<"readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork", readonly string[]>>; readonly mcpToolName: "tool"; readonly sessionStreamKey: "opaque"; }` | Yes |  |
+| `mastra` | `{ readonly displayName: "Mastra"; readonly capabilities: { readonly mcp: true; readonly skills: true; readonly subagents: true; readonly resume: true; readonly fork: false; readonly interrupt: true; readonly streamingText: true; readonly reasoning: true; readonly maxTurns: "native"; readonly maxBudget: "adapter"; readonly wireProtocols: readonly ["anthropic-messages", "openai-responses", "openai-chat-completions"]; }; readonly settings: { readonly toolCallConcurrency: z.ZodOptional<z.ZodNumber>; }; readonly narrowing: "withheld-permissions"; readonly permissionTools: Readonly<Record<"readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork", readonly string[]>>; readonly mcpToolName: "server_tool"; readonly sessionStreamKey: "opaque"; }` | Yes |  |
+
+## EngineCatalogueEntry
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `displayName` | `string` | Yes | Shown by `GET /api/engines` and the UI. |
+| `capabilities` | `EngineCapabilities` | Yes | What the adapter honours. The adapter and the web registry both read this one copy. |
+| `settings` | `TSettings` | Yes | Engine-native settings an author chooses, in wire key order, every field `.optional()`. They are the `defineAgent({ engine: { id, ...settings } })` keys, the policy arm's native fields and the run-request arm the adapter parses. |
+| `narrowing` | `"tool-rules" \| "withheld-permissions"` | Yes |  |
+| `permissionTools` | `Readonly<Record<"readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork", readonly string[]>>` | Yes | Every tool this engine declares, grouped by the switch that governs it, in the engine's order. |
+| `mcpToolName` | `"mcp__server__tool" \| "server_tool" \| "tool"` | Yes |  |
+| `sessionStreamKey` | `"project-key-prefixed" \| "opaque"` | Yes |  |
+
+## EngineDescriptor
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
+| `displayName` | `string` | Yes |  |
+| `version` | `string` | Yes |  |
+| `capabilities` | `EngineCapabilities` | Yes |  |
+| `installed` | `false \| true` | Yes |  |
+
+## EngineDescriptorSchema
+
+One engine as a deployment offers it.
+
+`installed` is not decoration. A control plane knows the *catalogue* of engines the contracts
+describe, while a runtime image carries only the adapters it was built with, so a descriptor can
+legitimately be advertised as known-but-absent. `version` is the adapter's own version string,
+opaque to the platform and reported for support rather than compared.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
+| `displayName` | `string` | Yes |  |
+| `version` | `string` | Yes |  |
+| `capabilities` | `EngineCapabilities` | Yes |  |
+| `installed` | `false \| true` | Yes |  |
+
+## EngineId
+
+- `"claude-agent-sdk"`
+- `"openai-agents"`
+- `"pi"`
+- `"mastra"`
+
+## EngineIdSchema
+
+- `"claude-agent-sdk"`
+- `"openai-agents"`
+- `"pi"`
+- `"mastra"`
+
+## EngineLimitEnforcement
+
+- `"native"`
+- `"adapter"`
+
+## EngineLimitEnforcementSchema
+
+- `"native"`
+- `"adapter"`
+
+## EngineListResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `engines` | `readonly EngineDescriptor[]` | Yes |  |
+
+## EngineListResponseSchema
+
+The body of `GET /api/engines` (ENG-02c): every engine this deployment registers, in the
+catalogue's order.
+
+Enveloped rather than a bare array, as §4 of `docs/sdk/04-api-specification.md` requires of every
+list route, so a later release can add a sibling field without changing the body's JSON type.
+The SDK's `engines.list()` unwraps it, so a caller sees the array either way.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `engines` | `readonly EngineDescriptor[]` | Yes |  |
+
+## EngineNarrowing
+
+- `"tool-rules"`
+- `"withheld-permissions"`
+
+## EngineProblemCode
+
+- `"unsupported_engine"`
+- `"engine_capability_unsupported"`
+- `"session_engine_mismatch"`
+- `"engine_model_protocol_unsupported"`
+- `"engine_not_installed"`
+- `"engine_catalogue_invalid"`
+
+## engineSettingsSchema
+
+The strict object of one engine's settings: adapters parse their run-policy arm with it, and a
+portable agent's `extensions.engines[id]` is validated against it.
+
+```ts
+engineSettingsSchema(engine: E): z.ZodObject<EngineCatalogue[E]['settings'], z.core.$strict>
+```
+
+## isEngineId
+
+Whether `value` is an engine id the contracts publish.
+
+```ts
+isEngineId(value: string): value is EngineId
+```
+
+## isWithholdingEngine
+
+```ts
+isWithholdingEngine(id: EngineId): id is WithholdingEngineId
+```
+
+## MCP_TOOL_NAME_FORMS
+
+How an engine shows the model an MCP tool (S2-02f seam check 2).
+
+- `'mcp__server__tool'`
+- `'server_tool'`
+- `'tool'`
+
+## mcpToolName
+
+`mcp__<server>__<tool>`, `<server>_<tool>` or `<tool>`.
+
+```ts
+mcpToolName(form: McpToolNameForm, server: string, tool: string): string
+```
+
+## McpToolNameForm
+
+- `"mcp__server__tool"`
+- `"server_tool"`
+- `"tool"`
+
+## SESSION_STREAM_KEY_SCHEMES
+
+How an engine's session-state stream keys are shaped.
+
+- `'project-key-prefixed'`
+- `'opaque'`
+
+## SessionStreamKeyScheme
+
+- `"project-key-prefixed"`
+- `"opaque"`
+
+## ToolRulesEngineId
+
+The engines whose arm states narrowing in Claude's tool grammar.
+
+`"claude-agent-sdk"`
+
+## WIRE_PROTOCOLS
+
+The HTTP dialect an engine speaks to reach the gateway. Today every engine speaks
+`anthropic-messages`; the other two are the ingresses the gateway serves (#304) and exist here
+so a capability can name a protocol an engine cannot yet be asked for.
+
+- `'anthropic-messages'`
+- `'openai-responses'`
+- `'openai-chat-completions'`
+
+## WireProtocol
+
+- `"anthropic-messages"`
+- `"openai-responses"`
+- `"openai-chat-completions"`
+
+## WireProtocolSchema
+
+- `"anthropic-messages"`
+- `"openai-responses"`
+- `"openai-chat-completions"`
+
+## WithholdingEngineId
+
+The engines whose arm states narrowing as `withheldPermissions`.
+
+- `"openai-agents"`
+- `"pi"`
+- `"mastra"`

@@ -1,0 +1,213 @@
+name: Azure Container Apps preview
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/azure-preview.yml'
+      - 'apps/runner/src/manager*.ts'
+      - 'apps/web/instrumentation*.ts'
+      - 'apps/web/server/compose/runtime-manager-client*.ts'
+      - 'docs/deploy/azure-container-apps.md'
+      - 'infra/terraform/azure-container-apps/**'
+      - 'packages/runtime/src/aca-sessions*.ts'
+      - 'packages/runtime/src/azure-auth*.ts'
+      - 'playwright.azure-live.config.mjs'
+      - 'scripts/deploy/azure-container-apps.ps1'
+      - 'tests/browser/azure-preview-live.spec.mjs'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Apply or destroy the protected preview environment
+        required: true
+        default: apply
+        type: choice
+        options: [apply, destroy]
+      enable_dynamic_sessions:
+        description: Provision the billable custom-container sandbox pool
+        required: true
+        default: true
+        type: boolean
+      session_pool_generation:
+        description: Optional 1-8 lowercase alphanumeric token to blue/green replace the Dynamic Sessions pool
+        required: false
+        default: ''
+        type: string
+
+concurrency:
+  # This workflow owns one protected remote-state key. A constant deployment lock prevents two
+  # differently named dispatches from clobbering that singleton state.
+  group: azure-preview-environment
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.15.8
+      - name: Validate Terraform and deployment script
+        shell: pwsh
+        run: ./scripts/deploy/azure-container-apps.ps1 -Action Validate
+
+  deploy:
+    if: github.event_name == 'workflow_dispatch'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    environment: azure-preview
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      TF_IN_AUTOMATION: 'true'
+      TF_INPUT: 'false'
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      ARM_USE_OIDC: 'true'
+      ARM_USE_AZUREAD: 'true'
+      TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      TF_VAR_resource_group_name: ${{ vars.AZURE_RESOURCE_GROUP }}
+      TF_VAR_container_registry_name: ${{ vars.AZURE_ACR_NAME }}
+      TF_VAR_container_registry_resource_group_name: ${{ vars.AZURE_ACR_RESOURCE_GROUP }}
+      TF_VAR_bootstrap_admin_email: ${{ vars.AZURE_BOOTSTRAP_ADMIN_EMAIL }}
+      TF_VAR_name: agent-workspace
+      TF_VAR_enable_dynamic_sessions: ${{ inputs.enable_dynamic_sessions }}
+      TF_VAR_session_pool_generation: ${{ inputs.session_pool_generation }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.15.8
+
+      - name: Build four immutable images in ACR
+        if: inputs.action == 'apply'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = '${{ github.sha }}'.Substring(0, 12)
+          $loginServer = az acr show --name $env:TF_VAR_container_registry_name --query loginServer -o tsv
+          $components = @(
+            @{ name = 'web'; file = 'Dockerfile'; target = 'web' },
+            @{ name = 'gateway'; file = 'gateway.Dockerfile'; target = 'gateway' },
+            @{ name = 'runner'; file = 'Dockerfile'; target = 'runner' },
+            @{ name = 'runtime'; file = 'runtime.Dockerfile'; target = 'runtime' }
+          )
+          $images = @{}
+          foreach ($component in $components) {
+            $repository = "agent-workspace/$($component.name)"
+            az acr build --registry $env:TF_VAR_container_registry_name --platform linux/amd64 --file $component.file --target $component.target --image "${repository}:$tag" .
+            if ($LASTEXITCODE -ne 0) { throw "ACR build failed for $repository" }
+            $digest = az acr repository show --name $env:TF_VAR_container_registry_name --image "${repository}:$tag" --query digest -o tsv
+            if ($digest -notmatch '^sha256:[0-9a-f]{64}$') { throw "Invalid digest for $repository" }
+            $images[$component.name] = "$loginServer/$repository@$digest"
+          }
+          "TF_VAR_images=$($images | ConvertTo-Json -Compress)" >> $env:GITHUB_ENV
+
+      - name: Supply validation-only image values for destroy
+        if: inputs.action == 'destroy'
+        shell: pwsh
+        run: |
+          $loginServer = az acr show --name $env:TF_VAR_container_registry_name --query loginServer -o tsv
+          $digest = 'f' * 64
+          $images = @{}
+          foreach ($name in @('web', 'gateway', 'runner', 'runtime')) {
+            $images[$name] = "$loginServer/agent-workspace/$name@sha256:$digest"
+          }
+          "TF_VAR_images=$($images | ConvertTo-Json -Compress)" >> $env:GITHUB_ENV
+
+      - name: Initialize protected remote state
+        run: |
+          terraform -chdir=infra/terraform/azure-container-apps init -reconfigure \
+            -backend-config="resource_group_name=${{ vars.AZURE_STATE_RESOURCE_GROUP }}" \
+            -backend-config="storage_account_name=${{ vars.AZURE_STATE_ACCOUNT }}" \
+            -backend-config="container_name=${{ vars.AZURE_STATE_CONTAINER }}" \
+            -backend-config="key=azure-container-apps.tfstate" \
+            -backend-config="use_oidc=true" \
+            -backend-config="use_azuread_auth=true"
+
+      - name: Apply preview environment
+        if: inputs.action == 'apply'
+        run: terraform -chdir=infra/terraform/azure-container-apps apply -auto-approve
+
+      - name: Smoke public ingress
+        if: inputs.action == 'apply'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $webUrl = terraform -chdir=infra/terraform/azure-container-apps output -raw web_url
+          for ($attempt = 1; $attempt -le 60; $attempt += 1) {
+            curl --fail --silent --show-error --max-time 15 "$webUrl/" | Out-Null
+            if ($LASTEXITCODE -eq 0) { break }
+            if ($attempt -eq 60) { throw "Web did not wake: $webUrl" }
+            Start-Sleep -Seconds 10
+          }
+
+      - name: Load masked live-browser configuration
+        if: inputs.action == 'apply'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $webUrl = terraform -chdir=infra/terraform/azure-container-apps output -raw web_url
+          $vaultName = terraform -chdir=infra/terraform/azure-container-apps output -raw key_vault_name
+          $password = az keyvault secret show --vault-name $vaultName --name bootstrap-admin-password --query value --output tsv
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($password)) {
+            throw 'The deployed bootstrap password could not be read for browser validation.'
+          }
+          $escapedMask = $password.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+          Write-Host "::add-mask::$escapedMask"
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "AZURE_LIVE_BASE_URL=$webUrl"
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "AZURE_LIVE_BOOTSTRAP_EMAIL=$env:TF_VAR_bootstrap_admin_email"
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "AZURE_LIVE_BOOTSTRAP_PASSWORD=$password"
+
+      - name: Set up Node for live browser validation
+        if: inputs.action == 'apply'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+
+      - name: Set up pnpm for live browser validation
+        if: inputs.action == 'apply'
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Install live-browser test dependencies
+        if: inputs.action == 'apply'
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        if: inputs.action == 'apply'
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Validate authenticated Azure preview in Chromium
+        if: inputs.action == 'apply'
+        run: pnpm exec playwright test --config=playwright.azure-live.config.mjs
+
+      - name: Capture deployment evidence
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist/azure-preview | Out-Null
+          git rev-parse HEAD | Set-Content dist/azure-preview/commit-sha.txt
+          terraform -chdir=infra/terraform/azure-container-apps output -json | Set-Content dist/azure-preview/terraform-outputs.json
+          az containerapp list --resource-group $env:TF_VAR_resource_group_name --query "[].{name:name,fqdn:properties.configuration.ingress.fqdn,min:properties.template.scale.minReplicas,max:properties.template.scale.maxReplicas}" -o json | Set-Content dist/azure-preview/container-apps.json
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: azure-preview-${{ github.sha }}-${{ github.run_id }}
+          path: dist/azure-preview/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Destroy preview environment
+        if: inputs.action == 'destroy'
+        run: terraform -chdir=infra/terraform/azure-container-apps destroy -auto-approve

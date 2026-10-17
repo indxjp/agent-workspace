@@ -1,0 +1,47 @@
+---
+title: "ToolBundlesClient"
+description: "Every method of ToolBundlesClient, its parameters, return type, and route."
+---
+
+<Note>This page is generated from `packages/sdk/src/resources/toolBundles.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+`/api/tool-bundles/**` — issue #790 (ADR-0118 TS1). A code tool is one bundled ES module,
+content-addressed by the SHA-256 of its bytes: upload it once, pin the digest in an agent
+version's `toolBundles`, and the version save refuses (`422 tool_bundle_unknown`) a digest the
+workspace does not hold.
+
+## upload
+
+Store the bundle's bytes (base64 in `contentBase64`). The same bytes answer the same digest with `created: false` and
+write nothing. `400 invalid_tool_bundle`, `413 tool_bundle_too_large` (over 8 MiB),
+`503 tool_bundles_not_configured` when the deployment has no object store.
+
+```ts
+async upload(input: UploadToolBundleRequest, options?: RequestOptions): Promise<UploadToolBundleResponse>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `input` | `UploadToolBundleRequest` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<UploadToolBundleResponse>`
+
+**Route:** `POST /api/tool-bundles`
+
+## get
+
+`404 tool_bundle_not_found` for a digest the workspace does not hold, malformed or not.
+
+```ts
+async get(digest: string, options?: RequestOptions): Promise<ToolBundle>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `digest` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<ToolBundle>`
+
+**Route:** `GET /api/tool-bundles/:digest`

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/copilot/plugin/v2.4/schema.json",
+  "schema_version": "v2.4",
+  "name_for_human": "zendesk",
+  "namespace": "zendesk",
+  "description_for_human": "Tools from the zendesk MCP server.",
+  "functions": [],
+  "runtimes": [
+    {
+      "type": "RemoteMCPServer",
+      "auth": {
+        "type": "OAuthPluginVault",
+        "reference_id": "${{MCP_ZENDESK_AUTH_REFERENCE_ID}}"
+      },
+      "run_for_functions": ["*"],
+      "spec": {
+        "url": "https://mcp.example.com/zendesk"
+      }
+    }
+  ]
+}

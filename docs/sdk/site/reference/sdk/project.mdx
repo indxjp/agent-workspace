@@ -1,0 +1,522 @@
+---
+title: "Project"
+description: "The `@indx-workspace/sdk/project` exports: readProjectFileText, parseProjectFile, renderProjectFiles, renderProjectShell and projectNameFor — the one reader and the one renderer of agent-workspace.yaml and the project files."
+---
+
+<Note>This page is generated from `packages/sdk/src/project/index.ts`, `packages/sdk/src/project/reader.ts`, `packages/sdk/src/project/writer.ts`, `packages/sdk/src/project/parse.ts`, `packages/sdk/src/project/render.ts`, `packages/sdk/src/project/errors.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## appendEvalCase
+
+`text` (an `evals/<agent>.yaml`, or empty for a new file) with `added` appended to `cases`.
+Edited through the YAML document, so the file's comments and the order of its cases survive.
+The result is not validated: read it back with `readEvalCaseFile`.
+
+```ts
+appendEvalCase(text: string, added: ProjectFileMapping, label: string): string
+```
+
+## askSetupQuestions
+
+The one setup question loop `create` and `aw init` ask through (C20; issue #543). It is
+isomorphic: `prompt` shows one question and resolves with the typed line, and `say` shows one
+line of output; the caller owns the terminal.
+
+Asks each of `SETUP_QUESTIONS` that applies, in order; a question whose `when` the answers so
+far do not meet is skipped. An empty line takes the recommended answer — the chosen theme's,
+then the question's own; a multi answer is typed comma-separated. An answer
+`SetupAnswersSchema` refuses together with the earlier answers is passed to `say` with its
+grammar, and the same question is asked again. A question `preset` already answers (from a flag)
+is not asked.
+
+With `choose` (a terminal's arrow-key menu) every choice and multi question is a menu with the
+recommendation preselected, and a theme shows its one-line summary; without it the typed path
+above is used. Text questions are always typed.
+
+```ts
+async askSetupQuestions(prompt: (question: string) => Promise<string>, say: (line: string) => void, preset?: SetupAnswers, choose?: Choose): Promise<CompleteSetupAnswers>
+```
+
+## Choose
+
+Shows `spec` and resolves with the chosen value(s); rejects with `MenuCancelledError`.
+
+`Choose`
+
+## chooseFromMenu
+
+Runs `spec` as a raw-mode menu on `input`/`output`, restoring the terminal however it ends, and
+leaves one line behind: the question and the answer. `plain` drops colour (`NO_COLOR`); an aborted `signal` (SIGTERM) cancels the menu like Ctrl-C.
+
+```ts
+chooseFromMenu(spec: MenuSpec, input: MenuInput, output: MenuOutput, plain?: boolean, signal?: AbortSignal): Promise<readonly string[]>
+```
+
+## confirmMenu
+
+A Yes/No menu defaulting to Yes; `false` for No.
+
+```ts
+async confirmMenu(choose: Choose, title: string): Promise<boolean>
+```
+
+## ENGINE_PACKAGES
+
+The npm packages each engine's adapter loads, at the exact versions the runtime of this release
+was built and tested with. `@indx-workspace/embedded` declares them as optional peers, so a
+project installs only the engine it picks: `projectDependencies` adds the one set.
+
+The local runtime's build (`packages/embedded/src/packaging/main.ts`) derives these sets from the
+adapters it bundles and fails on any difference, printing the table to paste here.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `claude-agent-sdk` | `Readonly<Record<string, string>>` | Yes |  |
+| `openai-agents` | `Readonly<Record<string, string>>` | Yes |  |
+| `pi` | `Readonly<Record<string, string>>` | Yes |  |
+| `mastra` | `Readonly<Record<string, string>>` | Yes |  |
+
+## ExistingSkill
+
+A workspace skill's name and the same digest of its exported files.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `hash` | `string` | Yes |  |
+
+## InteractionFacts
+
+What decides whether a person can answer: the two streams and the environment.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `stdinIsTty` | `false \| true` | Yes |  |
+| `stdoutIsTty` | `false \| true` | Yes |  |
+| `env` | `Readonly<Record<string, string \| undefined>>` | Yes |  |
+
+## isInteractive
+
+The one rule for "may this command prompt": both streams are a terminal and `CI` is not set. A CI
+runner that allocates a pseudo-terminal is still not a person.
+
+```ts
+isInteractive({ stdinIsTty, stdoutIsTty, env }: InteractionFacts): boolean
+```
+
+## MenuCancelledError
+
+The person pressed Ctrl-C, Ctrl-D or Escape at a menu.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `message` | `string` | Yes |  |
+| `stack` | `undefined \| string` | No |  |
+| `cause` | `unknown` | No |  |
+
+## MenuOption
+
+One entry of a menu: the answer it stands for and, optionally, a one-line summary.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `value` | `string` | Yes |  |
+| `hint` | `undefined \| string` | No |  |
+
+## MenuSpec
+
+One question as a menu. `max` set makes it a multi-select of up to `max`; `initial` is preselected.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `title` | `string` | Yes |  |
+| `options` | `readonly MenuOption[]` | Yes |  |
+| `max` | `undefined \| number` | No |  |
+| `initial` | `readonly string[]` | Yes | The recommended answer(s): preselected, marked, and where the cursor starts. |
+
+## mergeSetupAnswers
+
+Flags laid over an answers file: a question answered by both keeps the flag's answer. The merged
+answers are validated together, so a conditional answer in one source is checked against the
+other's.
+
+```ts
+mergeSetupAnswers(file: SetupAnswers, flags: SetupAnswers): SetupAnswers
+```
+
+## parseProjectFile
+
+Reads `agent-workspace.yaml`'s text into a project: a v2 `Project` document as written, or a v1
+`Deployment` profile lifted into the project shape (`lifted: true`). The result and the project
+it holds are both frozen.
+
+```ts
+parseProjectFile(text: string): ProjectRead
+```
+
+## parseSetupAnswersFile
+
+Reads an answers file (YAML, or JSON, which is YAML): an object keyed by question id, each
+value what `SetupAnswersSchema` accepts for it. A refusal names `source`, the line and the key.
+
+```ts
+parseSetupAnswersFile(text: string, source: string): SetupAnswers
+```
+
+## parseSetupFlags
+
+Reads the answers given as flags (issue #689), `given` keyed by flag name, in question order. A
+refused value throws the interview's own message, prefixed with its flag.
+
+```ts
+parseSetupFlags(given: Readonly<Record<string, string | undefined>>): SetupAnswers
+```
+
+## PlannedTool
+
+One catalog tool to register, from `toolDefinitionsOf()`. An `openapi` tool also carries the
+document text the caller read from its `spec`, and `digest`, `sha256:<hex>` over that text's
+UTF-8 bytes, which the plan compares with the saved document's.
+
+- `{ readonly definition: OpenApiToolDefinition; readonly document: string; readonly digest: string; }`
+- `{ readonly definition: PostgresToolDefinition; }`
+
+## planProjectResources
+
+What `aw dev` creates, updates, refuses and reports to bring the workspace in step with the
+project file and its agents' tools (C10, C11, C15, SD16). Pure and synchronous: it reads nothing
+but its input, which is already schema-parsed, so it does not validate it again.
+
+- **No secret value.** An action names its secret; the caller reads the value, sends it, and
+  records its fingerprint. An unset secret is a notice, and its resource is skipped.
+- **Rotation.** A credential is sent again when the server has none or when its fingerprint
+  differs from the one recorded at the last send; no recorded one counts as different.
+- **Never deletes.** A resource the project does not declare is left alone.
+- **Models.** With `models`, each is created or its config and credential updated; a provider
+  cannot change, so a mismatch is a refusal. Without, a missing `default` is created from
+  `ANTHROPIC_API_KEY` (C6), and an existing one follows that key and `ANTHROPIC_BASE_URL` (#732).
+- **Connectors and tools** share one namespace (SD1): a name of another kind or transport is a
+  refusal. A tool is updated with its whole create body, credential included.
+
+- **Skills.** Each `skills/<name>/` folder is a `skills` entry: created, updated when its content
+  hash differs, else unchanged. A workspace skill with no folder is left alone.
+
+Actions come in the order declared: models, connectors, then tools.
+
+```ts
+planProjectResources(input: PlanProjectResourcesInput): ProjectResourcePlan
+```
+
+## PlanProjectResourcesInput
+
+What `planProjectResources` reads; every field is already schema-parsed.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `project` | `Readonly<{ apiVersion: "agentworkspace.dev/v2"; kind: "Project"; name: string; environments: Readonly<{ local: Readonly<{ cloud: "local"; identity: Readonly<{ bootstrapAdmin: string; oidc?: string \| undefined; }>; runtime?: Readonly<{ default: "sandbox-runtime" \| "local" \| "docker" \| "kubernetes" \| "aca-sessions" \| "cloud-run-service"; }> \| undefined; port?: number \| undefined; policy?: undefined; }>; production?: Readonly<{ target: "kubernetes" \| "single-vm" \| "gcp-cloudrun" \| "vercel"; url: string; }> \| undefined; }>; engine?: "claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra" \| undefined; models?: Readonly<Record<string, Readonly<{ provider: "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible"; credential: Readonly<{ secret: string; }>; baseUrl?: string \| undefined; deployment?: string \| undefined; apiVersion?: string \| undefined; model?: undefined; }>>> \| undefined; connectors?: Readonly<Record<string, Readonly<{ url: string; transport?: "http" \| "sse" \| undefined; auth?: Readonly<{ scheme: "api-key" \| "bearer"; credential: Readonly<{ secret: string; }>; }> \| undefined; }>>> \| undefined; policy?: Readonly<{ permissions?: Readonly<{ readFiles?: boolean \| undefined; writeFiles?: boolean \| undefined; runCommands?: boolean \| undefined; unrestrictedNetwork?: boolean \| undefined; }> \| undefined; limits?: Readonly<{ maxTurns?: number \| undefined; maxBudgetUsd?: number \| undefined; }> \| undefined; engines?: readonly ("claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra")[] \| undefined; models?: readonly string[] \| undefined; tools?: readonly string[] \| undefined; promotion?: Readonly<{ minEvalScore: number; }> \| undefined; maxCostPerDayUsd?: undefined; network?: undefined; approval?: undefined; }> \| undefined; platforms?: Readonly<{ 'claude-managed-agents'?: Readonly<{ enabled: boolean; options?: Readonly<Record<string, unknown>> \| undefined; environments?: Readonly<{ local?: Readonly<Record<string, unknown>> \| undefined; production?: Readonly<Record<string, unknown>> \| undefined; }> \| undefined; }> \| undefined; 'copilot-studio'?: Readonly<{ enabled: boolean; options?: Readonly<Record<string, unknown>> \| undefined; environments?: Readonly<{ local?: Readonly<Record<string, unknown>> \| undefined; production?: Readonly<Record<string, unknown>> \| undefined; }> \| undefined; }> \| undefined; 'm365-declarative-agent'?: Readonly<{ enabled: boolean; options?: Readonly<Record<string, unknown>> \| undefined; environments?: Readonly<{ local?: Readonly<Record<string, unknown>> \| undefined; production?: Readonly<Record<string, unknown>> \| undefined; }> \| undefined; }> \| undefined; 'microsoft-foundry'?: Readonly<{ enabled: boolean; options?: Readonly<Record<string, unknown>> \| undefined; environments?: Readonly<{ local?: Readonly<Record<string, unknown>> \| undefined; production?: Readonly<Record<string, unknown>> \| undefined; }> \| undefined; }> \| undefined; 'gemini-enterprise'?: Readonly<{ enabled: boolean; options?: Readonly<Record<string, unknown>> \| undefined; environments?: Readonly<{ local?: Readonly<Record<string, unknown>> \| undefined; production?: Readonly<Record<string, unknown>> \| undefined; }> \| undefined; }> \| undefined; 'aws-agentcore'?: Readonly<{ enabled: boolean; options?: Readonly<Record<string, unknown>> \| undefined; environments?: Readonly<{ local?: Readonly<Record<string, unknown>> \| undefined; production?: Readonly<Record<string, unknown>> \| undefined; }> \| undefined; }> \| undefined; 'eject-claude-agent-sdk'?: Readonly<{ enabled: boolean; options?: Readonly<Record<string, unknown>> \| undefined; environments?: Readonly<{ local?: Readonly<Record<string, unknown>> \| undefined; production?: Readonly<Record<string, unknown>> \| undefined; }> \| undefined; }> \| undefined; 'eject-mastra'?: Readonly<{ enabled: boolean; options?: Readonly<Record<string, unknown>> \| undefined; environments?: Readonly<{ local?: Readonly<Record<string, unknown>> \| undefined; production?: Readonly<Record<string, unknown>> \| undefined; }> \| undefined; }> \| undefined; 'eject-openai-agents'?: Readonly<{ enabled: boolean; options?: Readonly<Record<string, unknown>> \| undefined; environments?: Readonly<{ local?: Readonly<Record<string, unknown>> \| undefined; production?: Readonly<Record<string, unknown>> \| undefined; }> \| undefined; }> \| undefined; }> \| undefined; }>` | Yes | The v2 project file, as `parseProjectFile` returns it. |
+| `tools` | `readonly ({ readonly definition: OpenApiToolDefinition; readonly document: string; readonly digest: string; } \| { readonly definition: PostgresToolDefinition; })[]` | Yes | The catalog tools of the project's agents, each name once. |
+| `existing` | `{ readonly modelConnections: readonly ModelConnectionResource[]; readonly connectors: readonly ConnectorResource[]; readonly skills?: readonly ExistingSkill[]; }` | Yes | The workspace's connections and connectors, as the client lists them. |
+| `skills` | `undefined \| readonly ProjectSkill[]` | No | The project's `skills/<name>/` folders; left out, none. |
+| `secrets` | `ReadonlyMap<string, PlanSecret>` | Yes | Every secret whose variable is set, by name; a missing name is an unset variable. That is every secret the project or a tool declares, plus `ANTHROPIC_API_KEY` when the project has no `models` (C6). |
+| `anthropicBaseUrl` | `undefined \| string` | No | `ANTHROPIC_BASE_URL`, used only for the C6 `default` connection. |
+| `sentAnthropicBaseUrl` | `undefined \| null \| string` | No | The `ANTHROPIC_BASE_URL` recorded when the C6 `default` connection last took it (issue #732): `null` when it was unset then, absent when nothing was recorded. |
+
+## planProjectSkills
+
+Each skill folder is created, updated when its hash differs from the workspace's, or unchanged.
+
+```ts
+planProjectSkills(input: { readonly skills?: readonly ProjectSkill[] | undefined; readonly existing?: readonly ExistingSkill[] | undefined; }): readonly ProjectSkillAction[]
+```
+
+## PlanSecret
+
+What the caller knows of one secret (SD16): the fingerprint of its value now, and the one
+recorded when it was last sent, absent when none was recorded. Never the value.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `fingerprint` | `string` | Yes |  |
+| `sentFingerprint` | `undefined \| string` | No |  |
+
+## PROJECT_FILE_NAME
+
+The project file's name; the reader names it in its refusals unless the caller names another.
+
+`"agent-workspace.yaml"`
+
+## projectDependencies
+
+The `dependencies` of a project `aw dev` runs: `@indx-workspace/aw`, `embedded` and `sdk` at
+`version`, and the packages of the one engine it uses.
+
+```ts
+projectDependencies(version: string, engine: EngineId): Readonly<Record<string, string>>
+```
+
+## ProjectFile
+
+One file of a rendered project: its path relative to the project root, and its text.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | `string` | Yes |  |
+| `contents` | `string` | Yes |  |
+
+## ProjectFileError
+
+A refusal of `agent-workspace.yaml` (or of the file `label` names, such as `evals/<agent>.yaml`):
+by the reader, before any field has been looked at, or by a schema, at the field it refused. The
+message always begins `<label> line L, column C: `.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `"ProjectFileError"` | Yes |  |
+| `line` | `number` | Yes |  |
+| `column` | `number` | Yes |  |
+| `path` | `undefined \| string` | Yes | The dotted path of the refused field when a schema refused it; `undefined` for the reader. |
+| `message` | `string` | Yes |  |
+| `stack` | `undefined \| string` | No |  |
+| `cause` | `unknown` | No |  |
+
+## ProjectFileMapping
+
+What `writeProjectFileText` writes: a mapping of text, finite numbers, booleans, lists of
+those or of non-empty mappings, and further mappings (an empty one is written `{}` as a key's
+value), up to 32 levels deep. A list never holds a list. A list of mappings is an eval file's
+`cases:` (issue #620).
+
+`ProjectFileMapping`
+
+## ProjectFilePosition
+
+A one-based line and column in the file's text.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `line` | `number` | Yes |  |
+| `column` | `number` | Yes |  |
+
+## ProjectFileReading
+
+What `readProjectFileText` returns, before any schema sees the value.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `value` | `unknown` | Yes | The document's root, as plain objects, arrays and core-schema scalars. |
+| `locate` | `(path: readonly string[]) => ProjectFilePosition` | Yes | Where a dotted path's deepest existing key or sequence item is written, so a schema refusal can name its line. A path that leaves the document at its first segment resolves to the start of the document. |
+
+## projectNameFor
+
+The project name for a directory: lower-cased, every run of characters outside `[a-z0-9]`
+collapsed to one `-`, hyphens trimmed from both ends, cut to 64 characters and trimmed again;
+`agent-workspace` when nothing is left. `aw init` (the current directory's name) and
+`create <dir>` share it, so the same directory always gets the same name. The result always
+matches the name-key grammar.
+
+```ts
+projectNameFor(directoryName: string): string
+```
+
+## ProjectRenderError
+
+What the renderers and the writer of `@indx-workspace/sdk/project` throw when an input is
+refused: setup answers, a project name or version, or a value the project file cannot hold.
+Nothing has been written when it is thrown.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `"ProjectRenderError"` | Yes |  |
+| `issues` | `readonly ProjectRenderIssue[]` | Yes | Every reason the input was refused, at least one. |
+| `message` | `string` | Yes |  |
+| `stack` | `undefined \| string` | No |  |
+| `cause` | `unknown` | No |  |
+
+## ProjectRenderIssue
+
+One reason a project could not be rendered: where (dotted), and why.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | `string` | Yes |  |
+| `message` | `string` | Yes |  |
+
+## ProjectResourceCreate
+
+A resource to create. `secret` names the variable whose value the caller sends with it: as
+`apiKey` for a model connection, as `credential` for a connector.
+
+- `{ readonly kind: "model"; readonly path: string; readonly input: Omit<CreateModelConnectionInput, "apiKey">; readonly secret: string; }`
+- `{ readonly kind: "connector"; readonly path: string; readonly input: WithoutCredential<CreateConnectorInput | ToolConnectorBody>; readonly secret?: string; }`
+
+## ProjectResourceIssue
+
+A refusal or a notice, at a dotted project path. It names secrets, never their values.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | `string` | Yes |  |
+| `message` | `string` | Yes |  |
+
+## ProjectResourcePlan
+
+What `aw dev` does to make the workspace match the project: see `planProjectResources`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `skills` | `readonly ProjectSkillAction[]` | Yes | One entry per `skills/<name>/` folder, in the order given. |
+| `creates` | `readonly ({ readonly kind: "model"; readonly path: string; readonly input: Omit<CreateModelConnectionInput, "apiKey">; readonly secret: string; } \| { readonly kind: "connector"; readonly path: string; readonly input: WithoutCredential<CreateConnectorInput \| ToolConnectorBody>; readonly secret?: string; })[]` | Yes |  |
+| `updates` | `readonly ({ readonly kind: "model"; readonly path: string; readonly id: string; readonly patch: Omit<UpdateModelConnectionPatch, "apiKey">; readonly secret: string; } \| { readonly kind: "model-credential"; readonly path: string; readonly id: string; readonly secret: string; } \| { readonly kind: "connector"; readonly path: string; readonly id: string; readonly patch: WithoutCredential<UpdateConnectorInput \| ToolConnectorBody>; readonly secret?: string; } \| { readonly kind: "connector-credential"; readonly path: string; readonly id: string; readonly secret: string; })[]` | Yes |  |
+| `refusals` | `readonly ProjectResourceIssue[]` | Yes |  |
+| `notices` | `readonly ProjectResourceIssue[]` | Yes |  |
+
+## ProjectResourceUpdate
+
+A change to an existing resource, by id. `model-credential` and `connector-credential` rotate
+the credential alone from the named variable; a `connector` patch with `secret` sends that
+variable's value as its `credential`, and a `model` patch sends it as its `apiKey` (a new
+`baseUrl` needs the key in the same request). There is no delete.
+
+- `{ readonly kind: "model"; readonly path: string; readonly id: string; readonly patch: Omit<UpdateModelConnectionPatch, "apiKey">; readonly secret: string; }`
+- `{ readonly kind: "model-credential"; readonly path: string; readonly id: string; readonly secret: string; }`
+- `{ readonly kind: "connector"; readonly path: string; readonly id: string; readonly patch: WithoutCredential<UpdateConnectorInput | ToolConnectorBody>; readonly secret?: string; }`
+- `{ readonly kind: "connector-credential"; readonly path: string; readonly id: string; readonly secret: string; }`
+
+## ProjectSkill
+
+One `skills/<name>/` folder of the project, read by the caller (this module reads no file).
+`hash` is the caller's digest of the sorted file paths and bytes; the plan only compares it with
+the workspace skill's.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `files` | `readonly Readonly<{ path: string; contentBase64: string; }>[]` | Yes |  |
+| `hash` | `string` | Yes |  |
+
+## ProjectSkillAction
+
+What to do with one project skill folder: create the workspace skill, update it (the content
+hash differs), or leave it. Kept apart from `creates` and `updates`, whose consumers handle
+only connections and connectors.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `action` | `"create" \| "update" \| "unchanged"` | Yes |  |
+| `path` | `string` | Yes |  |
+| `name` | `string` | Yes |  |
+| `files` | `readonly Readonly<{ path: string; contentBase64: string; }>[]` | Yes |  |
+| `hash` | `string` | Yes |  |
+
+## readEvalCaseFile
+
+Reads an `evals/<agent>.yaml` file (issue #618) with the project file's reader rules, then the
+contract's `EvalCaseFileSchema`: 1 to 200 cases with unique names, each expecting some of
+`contains`, `notContains`, `tool` (with optional `toolInput`) and `judge`. `label` is the file the refusals name.
+
+```ts
+readEvalCaseFile(text: string, label: string): EvalCaseFile
+```
+
+## readProjectFileText
+
+Reads the file's text into the untrusted value a schema then validates. `label` is the file the
+refusals name: `agent-workspace.yaml` unless another file is read with the same rules.
+
+```ts
+readProjectFileText(text: string, label?: string): ProjectFileReading
+```
+
+## renderProjectFiles
+
+Renders the files a project's setup answers are written into, in `SETUP_FILE_PATHS` order:
+`agent-workspace.yaml`, `agents/<agentName>.ts`, `surfaces/main.ts`, then one `tools/<name>.ts`
+per internal tool, sorted by name (issue #543, SD9, SD12), then the theme's starter files
+(`starters/<theme>/`: `automation` adds tools, a fake API, a README and its eval file; `support`
+and `copilot` a README and eval file, `copilot` also a Vite page in `web/`; an internal tool that
+would write one of a starter's paths is refused). `aw init` refuses a directory where any of
+them exists, as it does for every rendered path, except an existing `README.md` or `AGENTS.md`,
+which it keeps. `AGENTS.md` tells a coding agent how to run the project without a terminal.
+
+- `agent-workspace.yaml` is a v2 `Project` with one `local` environment; it names a runtime only
+  when the sandbox answer is not `auto`, and no port or storage (`aw dev` provides both). A model
+  provider other than `anthropic` adds `models.default`: its credential is a secret reference,
+  and each required setting no question asks for is a `your-` placeholder the header names.
+- The agent carries the theme's instructions and any permissions the answers switch on, and
+  imports and lists each tool; the surface carries the theme's greeting and suggested prompts.
+  Theme `blank` renders the slice-1 files byte for byte.
+- A platform answer other than `none` adds a `platforms:` block to `agent-workspace.yaml` (in
+  `PLATFORM_IDS` order) and the `aw platforms` commands to `README.md` and `AGENTS.md`; `none`
+  changes no file.
+- An OpenAPI tool is named after its document's file name up to the first `.`, reads its token
+  from `<NAME>_TOKEN` and allows only `GET` and `HEAD`; the PostgreSQL tool reads its URL from
+  `POSTGRES_URL` and names one placeholder table.
+- Every definition is passed through its `define*` call before it is printed, so a file this
+  writes always loads.
+
+The result is frozen. `project.name` is the project's name key; `projectNameFor` derives one from
+a directory name.
+
+```ts
+renderProjectFiles(answers: CompleteSetupAnswers, project: { readonly name: string; readonly version?: string }): readonly ProjectFile[]
+```
+
+## renderProjectShell
+
+Renders the files that make a directory an installable project: `package.json` (exact pins of
+`@indx-workspace/aw`, `@indx-workspace/embedded` and `@indx-workspace/sdk` at `version` and of
+`engine`'s packages, nothing of the engines it does not use (`projectDependencies`), the
+dev dependency `@indx-workspace/cli` at `version` for `aw deploy`, and a `dev` script running
+`aw dev`), `pnpm-workspace.yaml` (the runtime's install-script answers,
+which pnpm 11 requires, and its security overrides) and `.gitignore`. The result is frozen.
+
+```ts
+renderProjectShell(project: { readonly name: string; readonly version: string; readonly engine: EngineId; }): readonly ProjectFile[]
+```
+
+## setupFlagsHelp
+
+One `--help` entry per setup flag: two lines, the flag, then the question and its default.
+
+```ts
+setupFlagsHelp(): readonly string[]
+```
+
+## setupSecretNames
+
+The environment variables a project rendered from `answers` reads its secrets from: the model
+key's, then each tool's credential's, in file order. `create` names them as the variables to
+export; only names are ever written, never a value.
+
+```ts
+setupSecretNames(answers: CompleteSetupAnswers): readonly string[]
+```
+
+## toolConnectorBody
+
+The connector create body of a planned tool, without its credential, which the caller adds from
+the secret the definition names. The same body `planProjectResources` puts in a tool's
+create or update.
+
+```ts
+toolConnectorBody(tool: PlannedTool): WithoutCredential<ToolConnectorBody>
+```
+
+## unansweredSetupRefusal
+
+What a run that takes recommended answers (`--yes`, no terminal, `CI`) says when a question has
+no usable default: the message and the one `fix:` line. `null` when every answer can be taken.
+Checked before anything is rendered or written.
+
+```ts
+unansweredSetupRefusal(answers: SetupAnswers): { readonly message: string; readonly fix: string } | null
+```
+
+## writeProjectFileText
+
+Writes a project file in the canonical form `readProjectFileText` reads back: each
+header line as a `#` comment, then the mapping in block style, two spaces per level.
+
+```ts
+writeProjectFileText(document: ProjectFileMapping | Readonly<Record<string, unknown>>, header?: readonly string[]): string
+```

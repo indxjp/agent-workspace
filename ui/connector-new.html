@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Add Connector — Agent Workspace</title>
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<script>window.PAGE = { nav: "connectors", crumbs: [["Connectors", "connectors.html"], ["Add Connector"]] };</script>
+
+<div class="app">
+  <div class="main">
+    <div class="page narrow">
+
+      <div class="page-head">
+        <div>
+          <h1>Add Connector</h1>
+          <div class="sub">Raw MCP JSON stays out of the way. Everything here is a plain field.</div>
+        </div>
+      </div>
+
+      <div class="card"><div class="card-body">
+
+        <div class="field">
+          <label>Name</label>
+          <input type="text" value="Internal Search" placeholder="How people will see it in the agent editor">
+        </div>
+
+        <div class="field">
+          <label>Type</label>
+          <div class="choices">
+            <div class="choice selected" data-reveal="remote">
+              <div class="mark"></div>
+              <div class="grow">
+                <div class="t">Remote URL <span class="badge info">Recommended</span></div>
+                <div class="d">An MCP server reachable over HTTP or SSE. Works on every runtime.</div>
+              </div>
+            </div>
+            <div class="choice" data-reveal="local">
+              <div class="mark"></div>
+              <div class="grow">
+                <div class="t">Local command</div>
+                <div class="d">A process started inside the sandbox. Needs a runtime that can run it.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div data-reveal-target="remote">
+          <div class="field">
+            <label>URL</label>
+            <input type="text" class="mono-input" value="https://mcp.meridian.internal/search">
+          </div>
+          <div class="field">
+            <label>Transport</label>
+            <select><option>HTTP (streamable)</option><option>SSE</option></select>
+            <div class="help">Both are supported by the Claude Agent SDK. Use HTTP unless the server only offers SSE.</div>
+          </div>
+        </div>
+
+        <div data-reveal-target="local" hidden>
+          <div class="field">
+            <label>Command</label>
+            <input type="text" class="mono-input" value="npx">
+          </div>
+          <div class="field">
+            <label>Arguments</label>
+            <input type="text" class="mono-input" value="-y @modelcontextprotocol/server-filesystem /workspace">
+          </div>
+          <div class="callout warn">
+            <span class="ico">⚠</span>
+            <div class="grow">A local command runs inside the sandbox and usually needs network access to
+              download its package. It will not start on a runtime with egress disabled.</div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Authentication</label>
+          <div class="choices">
+            <div class="choice"><div class="mark"></div><div class="grow"><div class="t">None</div></div></div>
+            <div class="choice"><div class="mark"></div><div class="grow"><div class="t">API Key</div><div class="d">Sent as a header you name</div></div></div>
+            <div class="choice selected"><div class="mark"></div><div class="grow"><div class="t">Bearer Token</div><div class="d">Authorization: Bearer …</div></div></div>
+            <div class="choice"><div class="mark"></div><div class="grow"><div class="t">OAuth</div><div class="d">The workspace completes the flow once and stores the refresh token</div></div></div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Token</label>
+          <input type="password" value="••••••••••••••••••••" class="mono-input">
+          <div class="help">Stored in the secrets layer as <span class="mono">INTERNAL_SEARCH_TOKEN</span>, encrypted with the
+            deployment master key, and injected into the sandbox at run time. It is never shown again and never
+            appears in an agent definition or an export.</div>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn" data-toast="Connected · 3 tools discovered · 210 ms">Test Connection</button>
+          <span class="badge ok">Connected · 3 tools · 210 ms</span>
+        </div>
+
+        <div class="card mt16"><div class="card-body">
+          <div class="label mb8">Tools discovered</div>
+          <div class="chip-row">
+            <span class="chip mono">search.query</span>
+            <span class="chip mono">search.documents</span>
+            <span class="chip mono">search.recent</span>
+          </div>
+        </div></div>
+
+        <details class="adv">
+          <summary>Advanced <span class="hint">raw MCP configuration, headers, allowlist</span></summary>
+          <div class="adv-body">
+            <div class="field">
+              <label>Additional headers</label>
+              <input type="text" class="mono-input" value="X-Tenant: meridian">
+            </div>
+            <div class="field">
+              <label>Tool filter</label>
+              <input type="text" class="mono-input" placeholder="Leave empty to expose every tool">
+              <div class="help">Restrict which of the server’s tools agents may call.</div>
+            </div>
+            <div class="label">Raw configuration</div>
+            <pre class="code">{
+  <span class="k">"internalSearch"</span>: {
+    <span class="k">"type"</span>: <span class="s">"http"</span>,
+    <span class="k">"url"</span>: <span class="s">"https://mcp.meridian.internal/search"</span>,
+    <span class="k">"headers"</span>: {
+      <span class="k">"Authorization"</span>: <span class="s">"Bearer ${INTERNAL_SEARCH_TOKEN}"</span>,
+      <span class="k">"X-Tenant"</span>: <span class="s">"meridian"</span>
+    }
+  }
+}</pre>
+            <p class="small muted mt8 mb0">The secret is a reference, never a value. This is exactly what the runner
+              passes to the Agent SDK.</p>
+          </div>
+        </details>
+
+      </div></div>
+
+      <div class="btn-row mt16" style="justify-content:flex-end">
+        <a class="btn" href="connectors.html">Cancel</a>
+        <a class="btn primary" href="connectors.html">Save</a>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

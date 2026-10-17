@@ -1,0 +1,67 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.provider_wires",
+    "AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.provider_check_is_the_provider_enum",
+    "AgentWorkspace.Theorems.Invariants.ConceptConfiguration.stored_provider_is_a_provider",
+    "AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.cluster_value_lists_pass_the_ddl_gate"],
+   "input": {"enum": "provider"},
+   "id": "enum/provider",
+   "expected":
+   {"values": ["anthropic", "anthropic-compatible", "openai", "azure-openai", "openai-compatible"],
+    "ddl": "('anthropic', 'anthropic-compatible', 'openai', 'azure-openai', 'openai-compatible')"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.config_field_wires",
+    "AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.cluster_value_lists_pass_the_ddl_gate"],
+   "input": {"enum": "config-field"},
+   "id": "enum/config-field",
+   "expected": {"values": ["baseUrl", "deployment", "apiVersion"], "ddl": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.driver_wires",
+    "AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.driver_check_is_the_driver_enum",
+    "AgentWorkspace.Theorems.Invariants.ConceptConfiguration.stored_driver_is_a_driver",
+    "AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.cluster_value_lists_pass_the_ddl_gate"],
+   "input": {"enum": "driver"},
+   "id": "enum/driver",
+   "expected":
+   {"values":
+    ["local",
+     "sandbox-runtime",
+     "docker",
+     "kubernetes",
+     "gke-agent-sandbox",
+     "aca-sessions",
+     "aws-agentcore",
+     "aws-ecs",
+     "cloud-run-sandbox",
+     "cloud-run-service",
+     "external",
+     "vercel-sandbox",
+     "cloudflare-sandbox"],
+    "ddl":
+    "('local', 'sandbox-runtime', 'docker', 'kubernetes', 'gke-agent-sandbox', 'aca-sessions', 'aws-agentcore', 'aws-ecs', 'cloud-run-sandbox', 'cloud-run-service', 'external', 'vercel-sandbox', 'cloudflare-sandbox')"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.network_policy_wires",
+    "AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.network_policy_check_is_the_network_policy_enum",
+    "AgentWorkspace.Theorems.Invariants.ConceptConfiguration.stored_network_policy_is_a_policy",
+    "AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.cluster_value_lists_pass_the_ddl_gate"],
+   "input": {"enum": "network-policy"},
+   "id": "enum/network-policy",
+   "expected": {"values": ["none", "restricted", "open"], "ddl": "('none', 'restricted', 'open')"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.filesystem_wires",
+    "AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.filesystem_check_is_the_filesystem_enum",
+    "AgentWorkspace.Theorems.Invariants.ConceptConfiguration.stored_filesystem_is_a_mode",
+    "AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.cluster_value_lists_pass_the_ddl_gate"],
+   "input": {"enum": "filesystem"},
+   "id": "enum/filesystem",
+   "expected": {"values": ["read-only", "read-write"], "ddl": "('read-only', 'read-write')"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.algorithm_wires",
+    "AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.algorithm_check_is_the_algorithm_enum",
+    "AgentWorkspace.Theorems.Invariants.ConceptConfiguration.stored_algorithm_is_aes_gcm",
+    "AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.cluster_value_lists_pass_the_ddl_gate"],
+   "input": {"enum": "algorithm"},
+   "id": "enum/algorithm",
+   "expected": {"values": ["aes-256-gcm"], "ddl": "('aes-256-gcm')"}}],
+ "family": "concept-configuration",
+ "description": "The closed sets: providers, config fields, drivers, network policies, filesystems, algorithms"}

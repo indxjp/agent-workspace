@@ -1,0 +1,85 @@
+{
+  "name": "@indx-workspace/create",
+  "version": "0.6.9",
+  "description": "npm create @indx-workspace <directory>: generate an Agent Workspace project (a v2 aw dev project by default, or a deployment project with --cloud) with @indx-workspace/cli's create-agent-workspace.",
+  "license": "Apache-2.0",
+  "homepage": "https://docs.agentworkspace.indx.jp",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/indxjp/agent-workspace.git",
+    "directory": "packages/create"
+  },
+  "bugs": {
+    "url": "https://github.com/indxjp/agent-workspace/issues"
+  },
+  "keywords": [
+    "agent-workspace",
+    "claude",
+    "ai-agents",
+    "create",
+    "scaffold"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "type": "module",
+  "main": "./dist/run.js",
+  "types": "./dist/run.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/run.ts",
+      "default": "./dist/run.js"
+    }
+  },
+  "bin": {
+    "create-indx-workspace": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.map",
+    "CHANGELOG.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "types": "./dist/run.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/run.d.ts",
+        "default": "./dist/run.js"
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@indx-workspace/cli": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "@typescript/native": "npm:typescript@7.0.2",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
+    "vitest": "5.0.3"
+  },
+  "nx": {
+    "targets": {
+      "lint": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "eslint packages/create --max-warnings 0"
+        }
+      },
+      "test": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "vitest run --project @indx-workspace/create --reporter=default --reporter=json --outputFile={projectRoot}/.vitest-report.json",
+          "env": {
+            "NODE_OPTIONS": "--unhandled-rejections=strict",
+            "VITEST_MAX_WORKERS": "4"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,69 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.decode_inverts_encode",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.decoded_driver_may_be_outside_the_catalogue"],
+   "input": "RUNTIME_CONNECTION__DOCKER__PRIMARY",
+   "id": "decode/RUNTIME_CONNECTION__DOCKER__PRIMARY",
+   "expected": {"known": true, "driver": "docker"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.decode_inverts_encode",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.decoded_driver_may_be_outside_the_catalogue"],
+   "input": "RUNTIME_CONNECTION__CLOUD_RUN_SANDBOX__X",
+   "id": "decode/RUNTIME_CONNECTION__CLOUD_RUN_SANDBOX__X",
+   "expected": {"known": true, "driver": "cloud-run-sandbox"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.decode_inverts_encode",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.decoded_driver_may_be_outside_the_catalogue"],
+   "input": "RUNTIME_CONNECTION__AWS_AGENTCORE__A__B",
+   "id": "decode/RUNTIME_CONNECTION__AWS_AGENTCORE__A__B",
+   "expected": {"known": true, "driver": "aws-agentcore"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.decode_inverts_encode",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.decoded_driver_may_be_outside_the_catalogue"],
+   "input": "RUNTIME_CONNECTION__FOO__X",
+   "id": "decode/RUNTIME_CONNECTION__FOO__X",
+   "expected": {"known": false, "driver": "foo"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.decode_inverts_encode",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.decoded_driver_may_be_outside_the_catalogue"],
+   "input": "RUNTIME_CONNECTION__DOCKER",
+   "id": "decode/RUNTIME_CONNECTION__DOCKER",
+   "expected": {"known": false, "driver": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.decode_inverts_encode",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.decoded_driver_may_be_outside_the_catalogue"],
+   "input": "RUNTIME_CONNECTION____X",
+   "id": "decode/RUNTIME_CONNECTION____X",
+   "expected": {"known": false, "driver": ""}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.decode_inverts_encode",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.decoded_driver_may_be_outside_the_catalogue"],
+   "input": "RUNTIME_CONNECTION_DOCKER__X",
+   "id": "decode/RUNTIME_CONNECTION_DOCKER__X",
+   "expected": {"known": false, "driver": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.decode_inverts_encode",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.decoded_driver_may_be_outside_the_catalogue"],
+   "input": "GITHUB_TOKEN",
+   "id": "decode/GITHUB_TOKEN",
+   "expected": {"known": false, "driver": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.decode_inverts_encode",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.decoded_driver_may_be_outside_the_catalogue"],
+   "input": "MODEL_CONNECTION_123E4567E89B12D3A456426614174000",
+   "id": "decode/MODEL_CONNECTION_123E4567E89B12D3A456426614174000",
+   "expected": {"known": false, "driver": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.decode_inverts_encode",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.decoded_driver_may_be_outside_the_catalogue"],
+   "input": "RUNTIME_CONNECTION__LOCAL__",
+   "id": "decode/RUNTIME_CONNECTION__LOCAL__",
+   "expected": {"known": true, "driver": "local"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.decode_inverts_encode",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.decoded_driver_may_be_outside_the_catalogue"],
+   "input": "RUNTIME_CONNECTION__GKE_AGENT_SANDBOX__POOL_1",
+   "id": "decode/RUNTIME_CONNECTION__GKE_AGENT_SANDBOX__POOL_1",
+   "expected": {"known": true, "driver": "gke-agent-sandbox"}}],
+ "family": "concept-configuration",
+ "description": "decodeDriver over encoded, forged and foreign names"}

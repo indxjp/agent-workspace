@@ -1,0 +1,74 @@
+[
+  {
+    "orderNo": "SO-2024-0412",
+    "partNo": "P-10231",
+    "partName": "モーター取付L形ブラケット",
+    "customer": "東和機工株式会社",
+    "material": "SS400",
+    "orderedOn": "2024-11-12",
+    "quantity": 50,
+    "unitPrice": 430,
+    "amount": 21500,
+    "note": "黒皮のまま。バリ取りのみ。"
+  },
+  {
+    "orderNo": "SO-2025-0108",
+    "partNo": "P-10231",
+    "partName": "モーター取付L形ブラケット",
+    "customer": "東和機工株式会社",
+    "material": "SS400",
+    "orderedOn": "2025-08-04",
+    "quantity": 40,
+    "unitPrice": 460,
+    "amount": 18400,
+    "note": "鋼材値上げ後の再見積で単価改定。"
+  },
+  {
+    "orderNo": "SO-2025-0377",
+    "partNo": "P-10388",
+    "partName": "センサー取付ブラケット",
+    "customer": "株式会社中央精工",
+    "material": "SS400",
+    "orderedOn": "2025-10-21",
+    "quantity": 100,
+    "unitPrice": 380,
+    "amount": 38000,
+    "note": "量産品。段取りを他品番と共用。"
+  },
+  {
+    "orderNo": "SO-2025-0219",
+    "partNo": "P-10502",
+    "partName": "架台ベースプレート",
+    "customer": "東和機工株式会社",
+    "material": "SS400",
+    "orderedOn": "2025-06-30",
+    "quantity": 10,
+    "unitPrice": 4200,
+    "amount": 42000,
+    "note": "t9 のためレーザー条件変更。"
+  },
+  {
+    "orderNo": "SO-2025-0533",
+    "partNo": "P-20114",
+    "partName": "制御盤点検カバー",
+    "customer": "北陸フードシステム株式会社",
+    "material": "SUS304",
+    "orderedOn": "2026-01-15",
+    "quantity": 30,
+    "unitPrice": 1480,
+    "amount": 44400,
+    "note": "#400 研磨仕上げは別途。"
+  },
+  {
+    "orderNo": "SO-2024-0920",
+    "partNo": "P-30071",
+    "partName": "放熱ブロック台座",
+    "customer": "株式会社中央精工",
+    "material": "A5052",
+    "orderedOn": "2024-12-02",
+    "quantity": 20,
+    "unitPrice": 2600,
+    "amount": 52000,
+    "note": "切削品。板金ではない。"
+  }
+]

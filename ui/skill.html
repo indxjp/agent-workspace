@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Invoice Review — Skills</title>
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<script>window.PAGE = { nav: "skills", crumbs: [["Skills", "skills.html"], ["Invoice Review"]] };</script>
+
+<div class="app">
+  <div class="main">
+    <div class="page">
+
+      <div class="page-head">
+        <div>
+          <h1>Invoice Review</h1>
+          <div class="sub mono">.claude/skills/invoice-review/</div>
+        </div>
+        <div class="actions">
+          <span class="badge ok">Enabled</span>
+          <span class="toggle on" title="Enable or disable this skill"></span>
+          <button class="btn" data-toast="Exported invoice-review.zip">Export</button>
+          <button class="btn primary" data-toast="Skill saved">Save</button>
+        </div>
+      </div>
+
+      <div class="split-wide">
+        <div>
+          <div class="card">
+            <div class="card-body">
+              <div class="field">
+                <label>Name</label>
+                <input type="text" value="Invoice Review">
+                <div class="help">Becomes the directory name <span class="mono">invoice-review</span> and the
+                  <span class="mono">name:</span> field in SKILL.md.</div>
+              </div>
+              <div class="field mb0">
+                <label>Description</label>
+                <input type="text" value="Checks invoice totals, tax treatment and PO matching before payment.">
+                <div class="help">Claude uses this to decide when to load the skill. Write it for the model, not for a menu.</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-head"><h2>Instructions</h2>
+            <div class="hint">The body of <span class="mono">SKILL.md</span></div>
+          </div>
+          <div class="card"><div class="card-body">
+            <textarea rows="16" class="mono-input">## When to use this skill
+
+Use this skill whenever the user asks about an invoice, a payment request, or a purchase order match.
+
+## Procedure
+
+1. Read the invoice and extract: supplier, invoice number, PO number, currency, net, tax, gross, due date.
+2. Compare the gross against `net + tax`. Report any difference above 1 JPY.
+3. Check the tax rate against `reference/tax-rates.md` for the supplier's country.
+4. Look up the PO number in the connected system. If it is missing, mark the invoice as an exception.
+5. Fill in `templates/invoice-review.md` and save it under `output/`.
+
+## Rules
+
+- Never approve an invoice. Produce a recommendation and the evidence for it.
+- If any figure is unreadable, say so explicitly rather than estimating.
+- Amounts are always reported in the invoice currency, never converted.</textarea>
+          </div></div>
+
+          <div class="section-head"><h2>Supporting files</h2>
+            <div class="actions"><button class="btn sm" data-toast="Upload dialog opened">Upload</button></div>
+          </div>
+          <div class="rows">
+            <div class="row"><div class="grow"><div class="title mono">SKILL.md</div><div class="meta">2.1 KB · the file above</div></div>
+              <div class="right"><span class="badge outline">Required</span></div></div>
+            <div class="row"><div class="grow"><div class="title mono">reference/tax-rates.md</div><div class="meta">8 KB · updated 3 weeks ago</div></div>
+              <div class="right"><button class="btn sm ghost" data-toast="Deleted">Delete</button></div></div>
+            <div class="row"><div class="grow"><div class="title mono">templates/invoice-review.md</div><div class="meta">1.4 KB</div></div>
+              <div class="right"><button class="btn sm ghost" data-toast="Deleted">Delete</button></div></div>
+            <div class="row"><div class="grow"><div class="title mono">examples/exception-example.md</div><div class="meta">3.2 KB</div></div>
+              <div class="right"><button class="btn sm ghost" data-toast="Deleted">Delete</button></div></div>
+          </div>
+
+          <details class="adv">
+            <summary>Advanced <span class="hint">raw SKILL.md front matter</span></summary>
+            <div class="adv-body">
+              <pre class="code">---
+<span class="k">name</span>: invoice-review
+<span class="k">description</span>: Checks invoice totals, tax treatment and PO matching before payment.
+<span class="k">allowed-tools</span>: Read, Grep, Glob, Bash
+---</pre>
+              <p class="small muted mt8 mb0">Edited here or in the fields above — the file is the source of truth either way.</p>
+            </div>
+          </details>
+        </div>
+
+        <aside>
+          <div class="card">
+            <div class="card-head"><h3>Allowed tools</h3></div>
+            <div class="card-body">
+              <div class="checks">
+                <label class="check on"><span class="box"></span><span class="grow"><span class="t">Read</span></span></label>
+                <label class="check on"><span class="box"></span><span class="grow"><span class="t">Grep</span></span></label>
+                <label class="check on"><span class="box"></span><span class="grow"><span class="t">Glob</span></span></label>
+                <label class="check on"><span class="box"></span><span class="grow"><span class="t">Bash</span></span></label>
+                <label class="check"><span class="box"></span><span class="grow"><span class="t">Write</span></span></label>
+              </div>
+              <p class="small muted mt16 mb0">A skill can only narrow what the agent already allows. Bash is
+                requested here but denied by two of the agents below.</p>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h3>Assigned agents</h3>
+              <div class="actions"><button class="btn sm" data-toast="Assignment dialog opened">Assign</button></div>
+            </div>
+            <div class="card-body">
+              <div class="rows" style="box-shadow:none">
+                <div class="row" style="padding:9px 0">
+                  <div class="grow"><div class="title">Invoice Triage</div><div class="meta">Bash allowed</div></div>
+                </div>
+                <div class="row" style="padding:9px 0">
+                  <div class="grow"><div class="title">Customer Support Agent</div>
+                    <div class="meta" style="color:var(--warn)">Bash denied — skill will load, tool refused</div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h3>Sharing</h3></div>
+            <div class="card-body">
+              <select><option>Only me</option><option selected>Everyone in Meridian Manufacturing</option><option>Anyone with the link</option></select>
+              <p class="small muted mt8 mb0">Sharing a skill shares its files. Do not put credentials or customer
+                data in a skill.</p>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

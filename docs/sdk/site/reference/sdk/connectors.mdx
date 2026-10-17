@@ -1,0 +1,193 @@
+---
+title: "ConnectorsClient"
+description: "Every method of ConnectorsClient, its parameters, return type, and route."
+---
+
+<Note>This page is generated from `packages/sdk/src/resources/connectors.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+`/api/connectors/**` — spec §5.8. A connector's credential is write-only: it travels in the
+create body and in a rotation, and every response is validated by a schema that has no field
+it could occupy. `update` changes fields; `rotateCredential` replaces only the credential.
+
+## list
+
+Every connector of the caller's workspace.
+
+```ts
+async list(options?: RequestOptions): Promise<readonly ConnectorResource[]>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<readonly ConnectorResource[]>`
+
+**Route:** `GET /api/connectors`
+
+## get
+
+`404 connector_not_found`, including for malformed and cross-workspace ids.
+
+```ts
+async get(connectorId: string, options?: RequestOptions): Promise<ConnectorResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `connectorId` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<ConnectorResource>`
+
+**Route:** `GET /api/connectors/:connectorId`
+
+## create
+
+Save a connector: an MCP one, or an `openapi` or `postgres` one when the body has `kind`
+(C15). `400 invalid_body` names each refused field in `details`;
+`409 connector_name_conflict` when the workspace already holds the name. The credential, when
+given, is sealed as a secret and never returned.
+
+```ts
+create(input: CreateConnectorInput | ToolConnectorBody, options?: RequestOptions): Promise<ConnectorResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `input` | `CreateConnectorInput \| ToolConnectorBody` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<ConnectorResource>`
+
+**Route:** `POST /api/connectors`
+
+## remove
+
+`404 connector_not_found` for an id the workspace does not hold; otherwise no body.
+
+```ts
+async remove(connectorId: string, options?: RequestOptions): Promise<void>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `connectorId` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<void>`
+
+**Route:** `DELETE /api/connectors/:connectorId`
+
+## rotateCredential
+
+Replace the saved credential in place; the connector's id and fields stay. `400
+invalid_credential` for a blank value, `409 credential_not_configured` when the connector's
+`authType` is `none`, `404 connector_not_found`.
+
+```ts
+async rotateCredential(connectorId: string, credential: string, options?: RequestOptions): Promise<ConnectorResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `connectorId` | `string` | Yes |
+| `credential` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<ConnectorResource>`
+
+**Route:** `PATCH /api/connectors/:connectorId`
+
+## update
+
+Change a connector's fields: `name`, `enabled`, `url` (remote) or `command`/`args` (stdio),
+`authType` with `credential`. The owner and the transport cannot change — a body naming them
+is `400 invalid_body`. A new `url`, `command` or `args` on a connector with a saved credential
+must carry a new `credential`: the saved one never follows the connector to a new destination.
+The answer says `hasCredential` and never carries the credential.
+`409 connector_name_conflict`, `409 credential_not_configured`,
+`409 credential_required_on_retarget`, `404 connector_not_found`.
+
+An `openapi` or `postgres` connector is updated with its whole create body, `kind` and
+credential included, which registers it again in place (C15); there is no partial patch and no
+credential-only rotation for those kinds.
+
+```ts
+async update(connectorId: string, patch: UpdateConnectorInput | ToolConnectorBody, options?: RequestOptions): Promise<ConnectorResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `connectorId` | `string` | Yes |
+| `patch` | `UpdateConnectorInput \| ToolConnectorBody` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<ConnectorResource>`
+
+**Route:** `PATCH /api/connectors/:connectorId`
+
+## test
+
+Run the MCP handshake against a saved connector with its stored credential. A failed probe
+is still a `200` whose `ok` is `false`; `404 connector_not_found` is the one refusal. A
+`stdio` connector answers `stdio-probe-unavailable` (ADR-0045), never a fake success.
+
+```ts
+async test(connectorId: string, options?: RequestOptions): Promise<TestConnectionOutcome>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `connectorId` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<TestConnectionOutcome>`
+
+**Route:** `POST /api/connectors/:connectorId/test-connection`
+
+## testDraft
+
+Test a connector before saving it: the create body with `dryRun: true`, which the route
+validates exactly as a create (`400 invalid_body`) and then probes without persisting
+anything. The credential is used for this one probe and discarded.
+
+```ts
+testDraft(input: CreateConnectorInput, options?: RequestOptions): Promise<TestConnectionOutcome>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `input` | `CreateConnectorInput` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<TestConnectionOutcome>`
+
+**Route:** `POST /api/connectors`
+
+## checkTool
+
+Check an `openapi` or `postgres` connector body without saving it (C15): the body with
+`dryRun: true`, sent as `POST /api/connectors`, or as `PATCH /api/connectors/:id` when
+`connectorId` names the connector it would replace. The server refuses it exactly as it would
+the save — `422 connector_spec_invalid` names a document problem in `details` — and otherwise
+answers a `TestConnectionOutcome` and writes nothing. The credential is checked and discarded.
+
+```ts
+checkTool(input: ToolConnectorBody, options?: RequestOptions & { readonly connectorId?: string | undefined }): Promise<TestConnectionOutcome>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `input` | `ToolConnectorBody` | Yes |
+| `options` | `RequestOptions & { readonly connectorId?: string \| undefined }` | No |
+
+**Returns:** `Promise<TestConnectionOutcome>`
+
+## ToolConnectorBody
+
+The body that creates, or re-registers, an `openapi` or `postgres` connector (C15): the
+contract's create body without `dryRun`.
+
+- `Omit<Readonly<{ kind: "openapi"; name: string; document: string; allow: readonly string[]; baseUrl?: string | undefined; auth?: "none" | "bearer" | Readonly<{ header: string; }> | undefined; credential?: string | undefined; dryRun?: true | undefined; }>, "dryRun">`
+- `Omit<Readonly<{ kind: "postgres"; name: string; credential: string; tables: readonly string[]; readOnly: boolean; maxRows?: number | undefined; dryRun?: true | undefined; }>, "dryRun">`

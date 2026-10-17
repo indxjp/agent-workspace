@@ -1,0 +1,202 @@
+name: Quality extensions
+
+# Runners: GitHub's ubuntu-latest, never a self-hosted runner — the rule ci.yml states in its
+# header and scripts/check-workflows.mjs enforces (docs/adr/0053, Amendment 2026-10-16). The three coverage
+# suites are independent Vitest configs, so each is a matrix leg on its own machine and the job
+# is as long as its slowest suite.
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  coverage:
+    name: Coverage floor · ${{ matrix.suite.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      # One suite's floor failing must not cancel the others: every floor's verdict belongs in
+      # a single run.
+      fail-fast: false
+      matrix:
+        suite:
+          - {
+              name: critical packages,
+              script: 'test:coverage',
+              summary: coverage/coverage-summary.json,
+            }
+          - {
+              name: apps,
+              script: 'test:coverage:apps',
+              summary: coverage/apps/coverage-summary.json,
+            }
+          - {
+              name: ui-cli,
+              script: 'test:coverage:ui-cli',
+              summary: coverage/ui-cli/coverage-summary.json,
+            }
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: agent_workspace_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d agent_workspace_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/agent_workspace_test
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Application tests import these workspace packages through their production exports,
+      # whose entry points intentionally live in dist. A clean Actions checkout has no dist
+      # tree, so build the runtime dependencies before Vitest resolves the web suites. The web
+      # contracts re-export `@indx-workspace/contracts`, and the run screen's SSE parser is
+      # `@indx-workspace/sdk/events`; both resolve to `dist/` from the application's suites.
+      # The home chat imports `@indx-workspace/react/run-model`, which resolves to `dist/` too.
+      # The runner engine registry imports `@agent-workspace/engine` and each adapter the same way.
+      # The platform routes and exports in apps/web import `@indx-workspace/platforms` the same way.
+      # Through Nx the builds run in dependency order (gateway after core, sdk after contracts)
+      # and are replayed from the task cache when their inputs have not changed.
+      - run: pnpm nx run-many -t build -p @agent-workspace/core @agent-workspace/runtime @agent-workspace/gateway @indx-workspace/contracts @indx-workspace/platforms @indx-workspace/sdk @indx-workspace/react @agent-workspace/engine @agent-workspace/engine-claude-agent-sdk @agent-workspace/engine-openai-agents @agent-workspace/engine-pi @agent-workspace/engine-mastra --output-style=static
+      - run: pnpm ${{ matrix.suite.script }}
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: coverage-summary-${{ strategy.job-index }}
+          path: ${{ matrix.suite.summary }}
+          if-no-files-found: error
+
+  browser:
+    name: Browser keyboard and accessibility smoke
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: agent_workspace_browser
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d agent_workspace_browser"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/agent_workspace_browser
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/agent_workspace_browser
+      MASTER_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      SESSION_SECRET: browser-check-session-secret-32-characters
+      AW_SESSION_MIRROR_TOKEN: browser-check-mirror-secret-32-characters
+      BOOTSTRAP_ADMIN: browser@example.invalid
+      BOOTSTRAP_ADMIN_PASSWORD: browser-check-password
+      AW_FILE_STORAGE_ROOT: /tmp/agent-workspace-browser/files
+      AW_SKILL_STORAGE_ROOT: /tmp/agent-workspace-browser/skills
+      AW_SESSION_TRANSCRIPT_ROOT: /tmp/agent-workspace-browser/sessions
+      RUNTIME_DRIVER: local
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # The Chromium binary is ~150 MB and changes only with the pinned @playwright/test
+      # version, so it is cached by lockfile hash; the OS libraries `--with-deps` installs are
+      # not cacheable and cost a few seconds of apt on every VM.
+      - name: Restore Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install-deps chromium
+      - if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm db:migrate
+      - run: pnpm db:seed
+      # Build through the workspace graph so the web package can resolve the generated gateway
+      # and runtime declarations exactly as it does in the release build.
+      - run: pnpm run build
+      - run: pnpm test:browser
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  helm:
+    name: Helm lint and render
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
+      - run: helm lint infra/helm/agent-workspace
+      - run: >-
+          helm template agent-workspace infra/helm/agent-workspace
+          --set-string images.web=registry.example/agent-workspace/web@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          --set-string images.gateway=registry.example/agent-workspace/gateway@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          --set-string images.runnerManager=registry.example/agent-workspace/runner@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          --set-string images.runtime=registry.example/agent-workspace/runtime@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          > rendered.yaml
+      - run: |
+          grep -q 'kind: PodDisruptionBudget' rendered.yaml
+          grep -q 'startupProbe:' rendered.yaml
+          grep -q 'readinessProbe:' rendered.yaml
+          grep -q 'livenessProbe:' rendered.yaml
+          grep -q 'kind: Job' rendered.yaml
+          grep -q 'helm.sh/hook: pre-install,pre-upgrade' rendered.yaml
+          grep -q 'name: agent-workspace-dns' rendered.yaml
+          grep -q 'name: agent-workspace-database' rendered.yaml
+          grep -q 'name: gateway-from-runner' rendered.yaml
+          if grep -q 'kind: Ingress' rendered.yaml; then echo 'default render must not contain an Ingress' >&2; exit 1; fi
+      - run: |
+          helm template agent-workspace infra/helm/agent-workspace \
+            --set autoscaling.enabled=true \
+            --set-string images.web=registry.example/agent-workspace/web@sha256:0000000000000000000000000000000000000000000000000000000000000000 \
+            --set-string images.gateway=registry.example/agent-workspace/gateway@sha256:0000000000000000000000000000000000000000000000000000000000000000 \
+            --set-string images.runnerManager=registry.example/agent-workspace/runner@sha256:0000000000000000000000000000000000000000000000000000000000000000 \
+            --set-string images.runtime=registry.example/agent-workspace/runtime@sha256:0000000000000000000000000000000000000000000000000000000000000000 \
+            > rendered-autoscaling.yaml
+          grep -q 'kind: HorizontalPodAutoscaler' rendered-autoscaling.yaml
+      - run: |
+          helm template agent-workspace infra/helm/agent-workspace \
+            --set database.cidr=10.0.0.0/8 \
+            --set ingress.enabled=true \
+            --set ingress.host=aw.example.com \
+            --set ingress.tls.clusterIssuer=letsencrypt \
+            --set-string deploymentPolicy=policy-json \
+            --set-string images.web=registry.example/agent-workspace/web@sha256:0000000000000000000000000000000000000000000000000000000000000000 \
+            --set-string images.gateway=registry.example/agent-workspace/gateway@sha256:0000000000000000000000000000000000000000000000000000000000000000 \
+            --set-string images.runnerManager=registry.example/agent-workspace/runner@sha256:0000000000000000000000000000000000000000000000000000000000000000 \
+            --set-string images.runtime=registry.example/agent-workspace/runtime@sha256:0000000000000000000000000000000000000000000000000000000000000000 \
+            > rendered-ingress.yaml
+          grep -q 'kind: Ingress' rendered-ingress.yaml
+          grep -q 'cert-manager.io/cluster-issuer: "letsencrypt"' rendered-ingress.yaml
+          grep -q 'cidr: 10.0.0.0/8' rendered-ingress.yaml
+          grep -q 'AW_DEPLOYMENT_POLICY' rendered-ingress.yaml

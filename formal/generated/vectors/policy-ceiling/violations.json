@@ -1,0 +1,286 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Normative.PolicyCeiling.policy_cannot_widen_iff_within",
+    "AgentWorkspace.Theorems.Normative.PolicyCeiling.violations_name_each_field_once_in_key_order",
+    "AgentWorkspace.Theorems.Refinement.PolicyCeiling.fixtures_agree"],
+   "input":
+   {"effective":
+    {"tools": [],
+     "permissions": {"writeFiles": true, "unrestrictedNetwork": true, "runCommands": true, "readFiles": true},
+     "model": "claude-sonnet-4-5",
+     "limits": {"maxTurns": null, "maxBudgetUsd": null},
+     "engine": "claude-agent-sdk"},
+    "ceiling": null},
+   "id": "no-ceiling",
+   "expected": {"widenings": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.PolicyCeiling.policy_cannot_widen_iff_within",
+    "AgentWorkspace.Theorems.Normative.PolicyCeiling.violations_name_each_field_once_in_key_order",
+    "AgentWorkspace.Theorems.Refinement.PolicyCeiling.fixtures_agree"],
+   "input":
+   {"effective":
+    {"tools": [],
+     "permissions": {"writeFiles": true, "unrestrictedNetwork": true, "runCommands": true, "readFiles": true},
+     "model": "claude-sonnet-4-5",
+     "limits": {"maxTurns": null, "maxBudgetUsd": null},
+     "engine": "claude-agent-sdk"},
+    "ceiling": {}},
+   "id": "no-key",
+   "expected": {"widenings": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.PolicyCeiling.policy_cannot_widen_iff_within",
+    "AgentWorkspace.Theorems.Normative.PolicyCeiling.violations_name_each_field_once_in_key_order",
+    "AgentWorkspace.Theorems.Refinement.PolicyCeiling.fixtures_agree"],
+   "input":
+   {"effective":
+    {"tools": [],
+     "permissions": {"writeFiles": true, "unrestrictedNetwork": true, "runCommands": true, "readFiles": true},
+     "model": "claude-sonnet-4-5",
+     "limits": {"maxTurns": null, "maxBudgetUsd": null},
+     "engine": "claude-agent-sdk"},
+    "ceiling": {"permissions": {"readFiles": false}}},
+   "id": "cap-readFiles",
+   "expected": {"widenings": ["permissions.readFiles"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.PolicyCeiling.policy_cannot_widen_iff_within",
+    "AgentWorkspace.Theorems.Normative.PolicyCeiling.violations_name_each_field_once_in_key_order",
+    "AgentWorkspace.Theorems.Refinement.PolicyCeiling.fixtures_agree"],
+   "input":
+   {"effective":
+    {"tools": [],
+     "permissions": {"writeFiles": true, "unrestrictedNetwork": true, "runCommands": true, "readFiles": true},
+     "model": "claude-sonnet-4-5",
+     "limits": {"maxTurns": null, "maxBudgetUsd": null},
+     "engine": "claude-agent-sdk"},
+    "ceiling": {"permissions": {"writeFiles": false}}},
+   "id": "cap-writeFiles",
+   "expected": {"widenings": ["permissions.writeFiles"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.PolicyCeiling.policy_cannot_widen_iff_within",
+    "AgentWorkspace.Theorems.Normative.PolicyCeiling.violations_name_each_field_once_in_key_order",
+    "AgentWorkspace.Theorems.Refinement.PolicyCeiling.fixtures_agree"],
+   "input":
+   {"effective":
+    {"tools": [],
+     "permissions": {"writeFiles": true, "unrestrictedNetwork": true, "runCommands": true, "readFiles": true},
+     "model": "claude-sonnet-4-5",
+     "limits": {"maxTurns": null, "maxBudgetUsd": null},
+     "engine": "claude-agent-sdk"},
+    "ceiling": {"permissions": {"runCommands": false}}},
+   "id": "cap-runCommands",
+   "expected": {"widenings": ["permissions.runCommands"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.PolicyCeiling.policy_cannot_widen_iff_within",
+    "AgentWorkspace.Theorems.Normative.PolicyCeiling.violations_name_each_field_once_in_key_order",
+    "AgentWorkspace.Theorems.Refinement.PolicyCeiling.fixtures_agree"],
+   "input":
+   {"effective":
+    {"tools": [],
+     "permissions": {"writeFiles": true, "unrestrictedNetwork": true, "runCommands": true, "readFiles": true},
+     "model": "claude-sonnet-4-5",
+     "limits": {"maxTurns": null, "maxBudgetUsd": null},
+     "engine": "claude-agent-sdk"},
+    "ceiling": {"permissions": {"unrestrictedNetwork": false}}},
+   "id": "cap-unrestrictedNetwork",
+   "expected": {"widenings": ["permissions.unrestrictedNetwork"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.PolicyCeiling.policy_cannot_widen_iff_within",
+    "AgentWorkspace.Theorems.Normative.PolicyCeiling.violations_name_each_field_once_in_key_order",
+    "AgentWorkspace.Theorems.Refinement.PolicyCeiling.fixtures_agree"],
+   "input":
+   {"effective":
+    {"tools": [],
+     "permissions": {"writeFiles": true, "unrestrictedNetwork": true, "runCommands": false, "readFiles": true},
+     "model": "claude-sonnet-4-5",
+     "limits": {"maxTurns": null, "maxBudgetUsd": null},
+     "engine": "claude-agent-sdk"},
+    "ceiling": {"permissions": {"runCommands": false}}},
+   "id": "cap-switch-already-off",
+   "expected": {"widenings": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.PolicyCeiling.policy_cannot_widen_iff_within",
+    "AgentWorkspace.Theorems.Normative.PolicyCeiling.violations_name_each_field_once_in_key_order",
+    "AgentWorkspace.Theorems.Refinement.PolicyCeiling.fixtures_agree",
+    "AgentWorkspace.Theorems.Refinement.PolicyCeiling.null_limit_never_widens"],
+   "input":
+   {"effective":
+    {"tools": [],
+     "permissions": {"writeFiles": true, "unrestrictedNetwork": true, "runCommands": true, "readFiles": true},
+     "model": "claude-sonnet-4-5",
+     "limits": {"maxTurns": null, "maxBudgetUsd": null},
+     "engine": "claude-agent-sdk"},
+    "ceiling": {"limits": {"maxTurns": 20, "maxBudgetUsd": 5}}},
+   "id": "null-limit",
+   "expected": {"widenings": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.PolicyCeiling.policy_cannot_widen_iff_within",
+    "AgentWorkspace.Theorems.Normative.PolicyCeiling.violations_name_each_field_once_in_key_order",
+    "AgentWorkspace.Theorems.Refinement.PolicyCeiling.fixtures_agree"],
+   "input":
+   {"effective":
+    {"tools": [],
+     "permissions": {"writeFiles": true, "unrestrictedNetwork": true, "runCommands": true, "readFiles": true},
+     "model": "claude-sonnet-4-5",
+     "limits": {"maxTurns": 50, "maxBudgetUsd": 10},
+     "engine": "claude-agent-sdk"},
+    "ceiling": {"limits": {"maxTurns": 20, "maxBudgetUsd": 5}}},
+   "id": "limit-above",
+   "expected": {"widenings": ["limits.maxTurns", "limits.maxBudgetUsd"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.PolicyCeiling.policy_cannot_widen_iff_within",
+    "AgentWorkspace.Theorems.Normative.PolicyCeiling.violations_name_each_field_once_in_key_order",
+    "AgentWorkspace.Theorems.Refinement.PolicyCeiling.fixtures_agree"],
+   "input":
+   {"effective":
+    {"tools": [],
+     "permissions": {"writeFiles": true, "unrestrictedNetwork": true, "runCommands": true, "readFiles": true},
+     "model": "claude-sonnet-4-5",
+     "limits": {"maxTurns": 20, "maxBudgetUsd": 5},
+     "engine": "claude-agent-sdk"},
+    "ceiling": {"limits": {"maxTurns": 20, "maxBudgetUsd": 5}}},
+   "id": "limit-at",
+   "expected": {"widenings": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.PolicyCeiling.policy_cannot_widen_iff_within",
+    "AgentWorkspace.Theorems.Normative.PolicyCeiling.violations_name_each_field_once_in_key_order",
+    "AgentWorkspace.Theorems.Refinement.PolicyCeiling.fixtures_agree"],
+   "input":
+   {"effective":
+    {"tools": [],
+     "permissions": {"writeFiles": true, "unrestrictedNetwork": true, "runCommands": true, "readFiles": true},
+     "model": "claude-sonnet-4-5",
+     "limits": {"maxTurns": 3, "maxBudgetUsd": 1},
+     "engine": "claude-agent-sdk"},
+    "ceiling": {"limits": {"maxTurns": 20, "maxBudgetUsd": 5}}},
+   "id": "limit-below",
+   "expected": {"widenings": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.PolicyCeiling.policy_cannot_widen_iff_within",
+    "AgentWorkspace.Theorems.Normative.PolicyCeiling.violations_name_each_field_once_in_key_order",
+    "AgentWorkspace.Theorems.Refinement.PolicyCeiling.fixtures_agree"],
+   "input":
+   {"effective":
+    {"tools": [],
+     "permissions": {"writeFiles": true, "unrestrictedNetwork": true, "runCommands": true, "readFiles": true},
+     "model": "claude-sonnet-4-5",
+     "limits": {"maxTurns": null, "maxBudgetUsd": null},
+     "engine": "pi"},
+    "ceiling": {"engines": ["claude-agent-sdk"]}},
+   "id": "engine-outside",
+   "expected": {"widenings": ["engine:pi"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.PolicyCeiling.policy_cannot_widen_iff_within",
+    "AgentWorkspace.Theorems.Normative.PolicyCeiling.violations_name_each_field_once_in_key_order",
+    "AgentWorkspace.Theorems.Refinement.PolicyCeiling.fixtures_agree"],
+   "input":
+   {"effective":
+    {"tools": [],
+     "permissions": {"writeFiles": true, "unrestrictedNetwork": true, "runCommands": true, "readFiles": true},
+     "model": "claude-sonnet-4-5",
+     "limits": {"maxTurns": null, "maxBudgetUsd": null},
+     "engine": "claude-agent-sdk"},
+    "ceiling": {"engines": ["openai-agents", "claude-agent-sdk"]}},
+   "id": "engine-inside",
+   "expected": {"widenings": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.PolicyCeiling.policy_cannot_widen_iff_within",
+    "AgentWorkspace.Theorems.Normative.PolicyCeiling.violations_name_each_field_once_in_key_order",
+    "AgentWorkspace.Theorems.Refinement.PolicyCeiling.fixtures_agree"],
+   "input":
+   {"effective":
+    {"tools": [],
+     "permissions": {"writeFiles": true, "unrestrictedNetwork": true, "runCommands": true, "readFiles": true},
+     "model": "gpt-5.1",
+     "limits": {"maxTurns": null, "maxBudgetUsd": null},
+     "engine": "claude-agent-sdk"},
+    "ceiling": {"models": ["claude-sonnet-4-5"]}},
+   "id": "model-outside",
+   "expected": {"widenings": ["model:gpt-5.1"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.PolicyCeiling.policy_cannot_widen_iff_within",
+    "AgentWorkspace.Theorems.Normative.PolicyCeiling.violations_name_each_field_once_in_key_order",
+    "AgentWorkspace.Theorems.Refinement.PolicyCeiling.fixtures_agree"],
+   "input":
+   {"effective":
+    {"tools": [],
+     "permissions": {"writeFiles": true, "unrestrictedNetwork": true, "runCommands": true, "readFiles": true},
+     "model": null,
+     "limits": {"maxTurns": null, "maxBudgetUsd": null},
+     "engine": "claude-agent-sdk"},
+    "ceiling": {"models": ["claude-sonnet-4-5"]}},
+   "id": "model-null",
+   "expected": {"widenings": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.PolicyCeiling.policy_cannot_widen_iff_within",
+    "AgentWorkspace.Theorems.Normative.PolicyCeiling.violations_name_each_field_once_in_key_order",
+    "AgentWorkspace.Theorems.Refinement.PolicyCeiling.fixtures_agree"],
+   "input":
+   {"effective":
+    {"tools": ["zeta", "alpha", "zeta", "beta"],
+     "permissions": {"writeFiles": true, "unrestrictedNetwork": true, "runCommands": true, "readFiles": true},
+     "model": "claude-sonnet-4-5",
+     "limits": {"maxTurns": null, "maxBudgetUsd": null},
+     "engine": "claude-agent-sdk"},
+    "ceiling": {"tools": ["beta"]}},
+   "id": "tools-duplicate-unsorted",
+   "expected": {"widenings": ["tool:alpha", "tool:zeta"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.PolicyCeiling.policy_cannot_widen_iff_within",
+    "AgentWorkspace.Theorems.Normative.PolicyCeiling.violations_name_each_field_once_in_key_order",
+    "AgentWorkspace.Theorems.Refinement.PolicyCeiling.fixtures_agree"],
+   "input":
+   {"effective":
+    {"tools": ["crm", "crm"],
+     "permissions": {"writeFiles": true, "unrestrictedNetwork": true, "runCommands": true, "readFiles": true},
+     "model": "claude-sonnet-4-5",
+     "limits": {"maxTurns": null, "maxBudgetUsd": null},
+     "engine": "claude-agent-sdk"},
+    "ceiling": {"tools": []}},
+   "id": "tools-empty-allowlist",
+   "expected": {"widenings": ["tool:crm"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.PolicyCeiling.policy_cannot_widen_iff_within",
+    "AgentWorkspace.Theorems.Normative.PolicyCeiling.violations_name_each_field_once_in_key_order",
+    "AgentWorkspace.Theorems.Refinement.PolicyCeiling.fixtures_agree"],
+   "input":
+   {"effective":
+    {"tools": ["crm"],
+     "permissions": {"writeFiles": true, "unrestrictedNetwork": true, "runCommands": true, "readFiles": true},
+     "model": "claude-sonnet-4-5",
+     "limits": {"maxTurns": null, "maxBudgetUsd": null},
+     "engine": "claude-agent-sdk"},
+    "ceiling": {}},
+   "id": "tools-absent-key",
+   "expected": {"widenings": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.PolicyCeiling.policy_cannot_widen_iff_within",
+    "AgentWorkspace.Theorems.Normative.PolicyCeiling.violations_name_each_field_once_in_key_order",
+    "AgentWorkspace.Theorems.Refinement.PolicyCeiling.fixtures_agree",
+    "AgentWorkspace.Theorems.Refinement.PolicyCeiling.all_fields_violations",
+    "AgentWorkspace.Theorems.Refinement.PolicyCeiling.all_fields_meet"],
+   "input":
+   {"effective":
+    {"tools": ["zeta", "alpha", "zeta", "beta"],
+     "permissions": {"writeFiles": true, "unrestrictedNetwork": false, "runCommands": true, "readFiles": true},
+     "model": "gpt-5.1",
+     "limits": {"maxTurns": 50, "maxBudgetUsd": 10},
+     "engine": "pi"},
+    "ceiling":
+    {"tools": ["beta"],
+     "permissions": {"writeFiles": false, "unrestrictedNetwork": false, "runCommands": false},
+     "models": ["claude-sonnet-4-5"],
+     "limits": {"maxTurns": 20, "maxBudgetUsd": 5},
+     "engines": ["claude-agent-sdk", "openai-agents"]}},
+   "id": "all-fields",
+   "expected":
+   {"widenings":
+    ["permissions.writeFiles",
+     "permissions.runCommands",
+     "limits.maxTurns",
+     "limits.maxBudgetUsd",
+     "engine:pi",
+     "model:gpt-5.1",
+     "tool:alpha",
+     "tool:zeta"]}}],
+ "family": "policy-ceiling",
+ "description": "policyWidenings: where a configuration asks for more than the ceiling"}

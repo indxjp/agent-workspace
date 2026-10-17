@@ -1,0 +1,95 @@
+{
+  "name": "@agent-workspace/core",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./db": {
+      "types": "./src/db/index.ts",
+      "default": "./dist/db/index.js"
+    },
+    "./db/unscoped": {
+      "types": "./src/db/repositories/unscoped.ts",
+      "default": "./dist/db/repositories/unscoped.js"
+    },
+    "./auth": {
+      "types": "./src/auth/index.ts",
+      "default": "./dist/auth/index.js"
+    },
+    "./audit": {
+      "types": "./src/audit/index.ts",
+      "default": "./dist/audit/index.js"
+    },
+    "./telemetry": {
+      "types": "./src/telemetry/index.ts",
+      "default": "./dist/telemetry/index.js"
+    },
+    "./secrets": {
+      "types": "./src/secrets/index.ts",
+      "default": "./dist/secrets/index.js"
+    },
+    "./storage": {
+      "types": "./src/storage/index.ts",
+      "default": "./dist/storage/index.js"
+    },
+    "./posture": {
+      "types": "./src/posture.ts",
+      "default": "./dist/posture.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "db:generate": "pnpm --filter @indx-workspace/contracts run build && drizzle-kit generate --config src/db/drizzle.config.ts",
+    "db:migrate": "pnpm --filter \"@agent-workspace/core...\" run build && node dist/db/migrate.js",
+    "db:seed": "pnpm --filter \"@agent-workspace/core...\" run build && node dist/db/seed.js"
+  },
+  "dependencies": {
+    "@agent-workspace/engine": "workspace:*",
+    "@aws-sdk/client-kms": "3.1149.0",
+    "@aws-sdk/client-s3": "3.1149.0",
+    "@azure/identity": "4.13.3",
+    "@azure/keyvault-secrets": "4.11.2",
+    "@azure/storage-blob": "12.34.0",
+    "@google-cloud/secret-manager": "7.1.1",
+    "@google-cloud/storage": "8.4.0",
+    "@indx-workspace/contracts": "workspace:*",
+    "drizzle-orm": "0.45.4",
+    "pg": "8.23.1",
+    "zod": "4.6.6"
+  },
+  "devDependencies": {
+    "@types/pg": "8.23.1",
+    "@typescript/native": "npm:typescript@7.0.2",
+    "drizzle-kit": "0.31.11",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
+    "vitest": "5.0.3"
+  },
+  "nx": {
+    "targets": {
+      "lint": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "eslint packages/core --max-warnings 0"
+        }
+      },
+      "test": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "vitest run --project @agent-workspace/core --reporter=default --reporter=json --outputFile={projectRoot}/.vitest-report.json",
+          "env": {
+            "NODE_OPTIONS": "--unhandled-rejections=strict",
+            "VITEST_MAX_WORKERS": "4"
+          }
+        }
+      }
+    }
+  }
+}

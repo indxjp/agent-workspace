@@ -1,0 +1,183 @@
+---
+title: "Timeouts and cancellation"
+description: "timeoutMs covers response headers only; a caller's own AbortSignal is the only way to end a call or a stream at any later point."
+---
+
+<Info>
+
+- **Read this when:** a call hangs, you want a deadline on a request, or you need to stop a `follow`
+  loop from outside.
+- **You will learn:** what `timeoutMs` covers (headers only), how to put a deadline on a whole call
+  with your own signal, and why `follow` reconnects after a timeout but stops on your abort.
+- **Used in:** [Chapter 4: Put it in your product](/path/embed).
+
+</Info>
+
+Put a deadline on any call, or stop a stream from outside. The one thing to know: the client's
+`timeoutMs` only bounds how long the server takes to _start_ answering; your own `{ signal }` is
+what ends a call or a stream at any later point.
+
+**What you can do**
+
+- [Fail fast when the server never answers](#timeoutms-covers-response-headers-only)
+- [Put a deadline on a whole call](#put-a-deadline-on-a-whole-call)
+- [Stop a follow loop from outside](#stop-a-follow-loop-from-outside)
+- [Tell a timeout from a cancellation](#a-timeout-surfaces-as-transporterror)
+
+## `timeoutMs` covers response headers only
+
+Set `timeoutMs` once on the client. It bounds the wait for response **headers**, nothing more:
+
+```ts title="illustrative" claim="illustrative"
+const aw = createClient({ baseUrl, auth: { kind: 'api-key', apiKey }, timeoutMs: 15_000 });
+```
+
+<Warning>
+  If you want a deadline on the whole call — headers *and* body — `timeoutMs` is the wrong tool.
+  Pass `{ signal: AbortSignal.timeout(ms) }` per call instead (see below). `timeoutMs` is a
+  connection-establishment guard, not a request deadline.
+</Warning>
+
+It **does not** bound how long a response body takes, and **does not** bound how long an open event
+stream (`runs.events` / `runs.follow`) stays connected: the deadline is disarmed the moment `fetch`
+resolves, which is as soon as headers arrive.
+
+## Put a deadline on a whole call
+
+`AbortSignal.timeout(ms)` aborts at `ms` whether or not headers have arrived:
+
+```ts title="illustrative" claim="illustrative"
+try {
+  const run = await aw.runs.get(runId, { signal: AbortSignal.timeout(10_000) });
+} catch (error) {
+  if (error instanceof TransportError && error.aborted)
+    console.error('the whole call did not finish within 10s');
+}
+```
+
+The two compose: whichever fires first ends the request. To also stop on app shutdown, merge your
+signals with `AbortSignal.any([AbortSignal.timeout(10_000), shutdown.signal])`.
+
+## Stop a follow loop from outside
+
+A signal you pass is not disarmed once headers arrive, so it ends a stream at any point of its
+(potentially very long) lifetime:
+
+```ts title="illustrative" claim="illustrative"
+const controller = new AbortController();
+document.querySelector('#stop')?.addEventListener('click', () => controller.abort());
+
+for await (const frame of aw.runs.follow(run.id, { signal: controller.signal })) {
+  render(frame);
+}
+```
+
+The loop then throws a `TransportError` with `aborted: true`. This is the only reliable way to stop
+a `follow` loop for good; closing the tab or navigating away also works, since it drops the
+connection outside the SDK entirely.
+
+## `follow()` reconnects after a timeout; only your own signal ends it
+
+A `timeoutMs` deadline expiring mid-follow (most likely on a **reconnect** attempt, since the
+initial connection's headers usually arrive quickly) produces exactly the same `TransportError`
+shape as a network drop, and `follow` treats it the same way: as a dropped connection to reconnect
+from with `Last-Event-ID`, up to `maxReconnects` (default 5) with `reconnectDelayMs` (default 3000)
+between attempts. The only thing that stops `follow` for good is **your own** `options.signal`
+having aborted. `follow` checks `options.signal?.aborted !== true`, not the failure's `aborted`
+field, specifically so a `timeoutMs`-driven drop is retried like any other:
+
+```ts title="illustrative" claim="illustrative"
+const dropped = error instanceof TransportError && options.signal?.aborted !== true;
+if (!dropped || reconnects >= maxReconnects) throw error;
+```
+
+See [Streaming](/guides/streaming) for the full reconnect contract.
+
+## A timeout surfaces as `TransportError`
+
+A `timeoutMs` expiry and your own abort both arrive as a `TransportError` with `aborted: true`. To
+tell them apart, look at `cause`: for the headers deadline it is a `DOMException` named
+`TimeoutError`; for your own abort it is whatever you passed to `AbortController.abort(reason)`.
+Most code does not need to. See
+[TransportError: no response arrived](/guides/errors#transporterror-no-response-arrived) for the
+general shape of `TransportError`.
+
+<AccordionGroup>
+
+<Accordion title="How timeoutMs is implemented: headersDeadline">
+
+`HttpClient.send` (`packages/sdk/src/http.ts`) builds the deadline with `headersDeadline`:
+
+```ts title="illustrative" claim="illustrative"
+function headersDeadline(timeoutMs: number) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => {
+    controller.abort(
+      new DOMException(`no response headers within ${timeoutMs} ms`, 'TimeoutError'),
+    );
+  }, timeoutMs);
+  return { signal: controller.signal, disarm: () => clearTimeout(timer) };
+}
+```
+
+`send` arms this controller **before** calling `fetch`, and calls `disarm()` **the moment `fetch`
+resolves**, in a `finally` block:
+
+```ts title="illustrative" claim="illustrative"
+try {
+  response = await this.#fetch(url, init);
+} catch (cause) {
+  throw new TransportError({ operation: spec.operation, aborted: /* … */, cause });
+} finally {
+  deadline?.disarm();
+}
+```
+
+`AbortSignal.timeout()` can't be used here directly, because a signal handed to `fetch` stays live
+for the whole request: aborting it after headers arrive would error the body, severing every event
+stream at the `timeoutMs` mark regardless of how the run is going. A controller whose own timer is
+cleared once `fetch` resolves covers headers only, by construction.
+
+When the deadline fires first, `fetch` rejects with the `AbortError`/`TimeoutError` its own
+implementation raises for an aborted signal, and `send` wraps it:
+
+```ts title="illustrative" claim="illustrative"
+throw new TransportError({
+  operation: spec.operation,
+  aborted: spec.signal?.aborted === true || (signal?.aborted ?? false),
+  cause,
+});
+```
+
+</Accordion>
+
+<Accordion title="combinedSignal: your signal and the deadline, merged">
+
+Every request may have up to two signals in play, the caller's own `options.signal` and the
+internal headers deadline, and `fetch` takes exactly one. `http.ts`'s `combinedSignal` merges them
+with the standard `AbortSignal.any`:
+
+```ts title="illustrative" claim="illustrative"
+function combinedSignal(
+  callerSignal: AbortSignal | undefined,
+  deadline: AbortSignal | undefined,
+): AbortSignal | undefined {
+  const signals = [callerSignal, deadline].filter((one): one is AbortSignal => one !== undefined);
+  if (signals.length === 0) return undefined;
+  return signals.length === 1 ? signals[0] : AbortSignal.any(signals);
+}
+```
+
+Whichever fires first wins, and its reason becomes `TransportError.cause`. Using `AbortSignal.any`
+yourself to merge two of your own signals is the same idea one level up.
+
+</Accordion>
+
+</AccordionGroup>
+
+## See also
+
+- [Errors](/guides/errors): the full shape of `TransportError` and the other typed failures.
+- [Streaming](/guides/streaming): `events` vs `follow`, the reconnect contract, and resuming with
+  `after`/`Last-Event-ID`.
+- [Client](/reference/sdk/client): `ClientOptions.timeoutMs`, `RequestOptions.signal`.

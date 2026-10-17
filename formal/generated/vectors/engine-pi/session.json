@@ -1,0 +1,88 @@
+{"vectors":
+ [{"witnesses": ["AgentWorkspace.Theorems.Invariants.Pi.the_session_tree_round_trips"],
+   "input":
+   {"sessionId": "s1",
+    "second": [],
+    "first":
+    [{"type": "session", "parentId": null, "id": "s1"},
+     {"type": "model_change", "parentId": null, "id": "a"},
+     {"type": "message", "parentId": "a", "id": "b"},
+     {"type": "message", "parentId": "a", "id": "c"}]},
+   "id": "round-trip",
+   "expected":
+   {"stream":
+    [{"type": "session", "parentId": null, "id": "s1"},
+     {"type": "model_change", "parentId": null, "id": "a"},
+     {"type": "message", "parentId": "a", "id": "b"},
+     {"type": "message", "parentId": "a", "id": "c"}],
+    "read":
+    [{"type": "session", "parentId": null, "id": "s1"},
+     {"type": "model_change", "parentId": null, "id": "a"},
+     {"type": "message", "parentId": "a", "id": "b"},
+     {"type": "message", "parentId": "a", "id": "c"}]}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.Pi.the_session_tree_round_trips"],
+   "input":
+   {"sessionId": "s1",
+    "second":
+    [{"type": "session", "parentId": null, "id": "s1"},
+     {"type": "model_change", "parentId": null, "id": "a"},
+     {"type": "message", "parentId": "a", "id": "b"},
+     {"type": "message", "parentId": "a", "id": "c"},
+     {"type": "message", "parentId": "c", "id": "d"}],
+    "first":
+    [{"type": "session", "parentId": null, "id": "s1"},
+     {"type": "model_change", "parentId": null, "id": "a"},
+     {"type": "message", "parentId": "a", "id": "b"}]},
+   "id": "grown-file-appends-only-new-lines",
+   "expected":
+   {"stream":
+    [{"type": "session", "parentId": null, "id": "s1"},
+     {"type": "model_change", "parentId": null, "id": "a"},
+     {"type": "message", "parentId": "a", "id": "b"},
+     {"type": "message", "parentId": "a", "id": "c"},
+     {"type": "message", "parentId": "c", "id": "d"}],
+    "read":
+    [{"type": "session", "parentId": null, "id": "s1"},
+     {"type": "model_change", "parentId": null, "id": "a"},
+     {"type": "message", "parentId": "a", "id": "b"},
+     {"type": "message", "parentId": "a", "id": "c"},
+     {"type": "message", "parentId": "c", "id": "d"}]}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.Pi.the_session_tree_round_trips"],
+   "input":
+   {"sessionId": "s2",
+    "second": [],
+    "first":
+    [{"type": "session", "parentId": null, "id": "s1"}, {"type": "model_change", "parentId": null, "id": "a"}]},
+   "id": "another-session",
+   "expected":
+   {"stream":
+    [{"type": "session", "parentId": null, "id": "s1"}, {"type": "model_change", "parentId": null, "id": "a"}],
+    "read": null}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.Pi.the_session_tree_round_trips"],
+   "input":
+   {"sessionId": "s1",
+    "second": [],
+    "first":
+    [{"type": "session", "parentId": null, "id": "s1"}, {"type": "message", "parentId": "nowhere", "id": "z"}]},
+   "id": "dangling-parent",
+   "expected":
+   {"stream":
+    [{"type": "session", "parentId": null, "id": "s1"}, {"type": "message", "parentId": "nowhere", "id": "z"}],
+    "read": null}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.Pi.the_session_tree_round_trips"],
+   "input":
+   {"sessionId": "s1",
+    "second": [],
+    "first":
+    [{"type": "session", "parentId": null, "id": "s1"},
+     {"type": "model_change", "parentId": null, "id": "a"},
+     {"type": "label", "parentId": "a", "id": "a"}]},
+   "id": "repeated-id",
+   "expected":
+   {"stream":
+    [{"type": "session", "parentId": null, "id": "s1"},
+     {"type": "model_change", "parentId": null, "id": "a"},
+     {"type": "label", "parentId": "a", "id": "a"}],
+    "read": null}}],
+ "family": "engine-pi",
+ "description": "PiSessionMirror and readPiStream: pi's JSONL tree over the engine-scoped store"}

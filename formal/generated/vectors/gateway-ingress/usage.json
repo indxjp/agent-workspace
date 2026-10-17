@@ -1,0 +1,217 @@
+{"vectors":
+ [{"witnesses": ["AgentWorkspace.Theorems.Refinement.GatewayIngress.anthropic_metering_is_unchanged"],
+   "input":
+   {"protocol": "anthropic-messages",
+    "frames":
+    [{"outputTokens": 0, "kind": "usage", "inputTokens": 12, "cacheReadInputTokens": 4, "cacheCreationInputTokens": 2},
+     {"kind": "toolBlockStart"},
+     {"outputTokens": 7, "kind": "usage", "inputTokens": 12, "cacheReadInputTokens": 4, "cacheCreationInputTokens": 2},
+     {"kind": "stop"}]},
+   "id": "anthropic-complete",
+   "expected":
+   {"settlement": "recorded",
+    "metered": true,
+    "counters":
+    {"toolCalls": 1, "outputTokens": 7, "inputTokens": 12, "cacheReadInputTokens": 4, "cacheCreationInputTokens": 2},
+    "completed": true}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.GatewayIngress.anthropic_extraction_is_prefix_monotone"],
+   "input":
+   {"protocol": "anthropic-messages",
+    "frames":
+    [{"outputTokens": 0,
+      "kind": "usage",
+      "inputTokens": 12,
+      "cacheReadInputTokens": 4,
+      "cacheCreationInputTokens": 2}]},
+   "id": "anthropic-truncated",
+   "expected":
+   {"settlement": "recorded",
+    "metered": true,
+    "counters":
+    {"toolCalls": 0, "outputTokens": 0, "inputTokens": 12, "cacheReadInputTokens": 4, "cacheCreationInputTokens": 2},
+    "completed": false}},
+  {"witnesses": ["AgentWorkspace.Theorems.Refinement.GatewayIngress.an_anthropic_response_without_usage_still_fails"],
+   "input": {"protocol": "anthropic-messages", "frames": [{"kind": "toolBlockStart"}]},
+   "id": "anthropic-no-usage",
+   "expected":
+   {"settlement": "failed",
+    "metered": false,
+    "counters":
+    {"toolCalls": 1, "outputTokens": 0, "inputTokens": 0, "cacheReadInputTokens": 0, "cacheCreationInputTokens": 0},
+    "completed": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Refinement.GatewayIngress.an_anthropic_response_without_usage_still_fails",
+    "AgentWorkspace.Theorems.Normative.GatewayIngress.anthropic_never_settles_unmetered_as_unavailable",
+    "AgentWorkspace.Theorems.Normative.GatewayIngress.the_unavailable_outcome_belongs_to_the_relayed_dialects"],
+   "input": {"protocol": "anthropic-messages", "frames": [{"kind": "toolBlockStart"}, {"kind": "stop"}]},
+   "id": "anthropic-stopped-without-usage",
+   "expected":
+   {"settlement": "failed",
+    "metered": false,
+    "counters":
+    {"toolCalls": 1, "outputTokens": 0, "inputTokens": 0, "cacheReadInputTokens": 0, "cacheCreationInputTokens": 0},
+    "completed": true}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.GatewayIngress.empty_frames_measure_zero"],
+   "input": {"protocol": "anthropic-messages", "frames": []},
+   "id": "anthropic-empty",
+   "expected":
+   {"settlement": "failed",
+    "metered": false,
+    "counters":
+    {"toolCalls": 0, "outputTokens": 0, "inputTokens": 0, "cacheReadInputTokens": 0, "cacheCreationInputTokens": 0},
+    "completed": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.GatewayIngress.responses_settlement_has_a_measured_witness",
+    "AgentWorkspace.Theorems.Invariants.GatewayIngress.responses_cached_prefix_is_charged_once"],
+   "input":
+   {"protocol": "openai-responses",
+    "frames":
+    [{"kind": "created"},
+     {"kind": "functionCallDone", "itemId": "fc_1"},
+     {"outputTokens": 40, "kind": "terminal", "items": ["fc_1"], "inputTokens": 100, "cachedTokens": 30}]},
+   "id": "responses-complete",
+   "expected":
+   {"settlement": "recorded",
+    "metered": true,
+    "counters":
+    {"toolCalls": 1, "outputTokens": 40, "inputTokens": 70, "cacheReadInputTokens": 30, "cacheCreationInputTokens": 0},
+    "completed": true}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.GatewayIngress.a_repeated_function_call_is_counted_once"],
+   "input":
+   {"protocol": "openai-responses",
+    "frames":
+    [{"kind": "functionCallDone", "itemId": "fc_1"},
+     {"kind": "functionCallDone", "itemId": "fc_1"},
+     {"outputTokens": 5, "kind": "terminal", "items": ["fc_1"], "inputTokens": 10, "cachedTokens": 0}]},
+   "id": "responses-repeated-item",
+   "expected":
+   {"settlement": "recorded",
+    "metered": true,
+    "counters":
+    {"toolCalls": 1, "outputTokens": 5, "inputTokens": 10, "cacheReadInputTokens": 0, "cacheCreationInputTokens": 0},
+    "completed": true}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.GatewayIngress.a_repeated_function_call_is_counted_once"],
+   "input":
+   {"protocol": "openai-responses",
+    "frames":
+    [{"kind": "functionCallDone", "itemId": "fc_1"},
+     {"kind": "functionCallDone", "itemId": "fc_2"},
+     {"outputTokens": 5, "kind": "terminal", "items": ["fc_1", "fc_2"], "inputTokens": 10, "cachedTokens": 0}]},
+   "id": "responses-two-items",
+   "expected":
+   {"settlement": "recorded",
+    "metered": true,
+    "counters":
+    {"toolCalls": 2, "outputTokens": 5, "inputTokens": 10, "cacheReadInputTokens": 0, "cacheCreationInputTokens": 0},
+    "completed": true}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.GatewayIngress.responses_cached_prefix_is_charged_once"],
+   "input":
+   {"protocol": "openai-responses",
+    "frames": [{"outputTokens": 5, "kind": "terminal", "items": [], "inputTokens": 40, "cachedTokens": 40}]},
+   "id": "responses-all-cached",
+   "expected":
+   {"settlement": "recorded",
+    "metered": true,
+    "counters":
+    {"toolCalls": 0, "outputTokens": 5, "inputTokens": 0, "cacheReadInputTokens": 40, "cacheCreationInputTokens": 0},
+    "completed": true}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.GatewayIngress.responses_settlement_has_a_measured_witness"],
+   "input":
+   {"protocol": "openai-responses",
+    "frames":
+    [{"kind": "created"}, {"outputTokens": 3, "kind": "terminal", "items": [], "inputTokens": 9, "cachedTokens": 0}]},
+   "id": "responses-incomplete-terminal",
+   "expected":
+   {"settlement": "recorded",
+    "metered": true,
+    "counters":
+    {"toolCalls": 0, "outputTokens": 3, "inputTokens": 9, "cacheReadInputTokens": 0, "cacheCreationInputTokens": 0},
+    "completed": true}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.GatewayIngress.responses_without_a_terminal_frame_is_a_failure"],
+   "input":
+   {"protocol": "openai-responses", "frames": [{"kind": "created"}, {"kind": "functionCallDone", "itemId": "fc_1"}]},
+   "id": "responses-truncated",
+   "expected":
+   {"settlement": "failed",
+    "metered": false,
+    "counters":
+    {"toolCalls": 1, "outputTokens": 0, "inputTokens": 0, "cacheReadInputTokens": 0, "cacheCreationInputTokens": 0},
+    "completed": false}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.GatewayIngress.empty_frames_measure_zero"],
+   "input": {"protocol": "openai-responses", "frames": []},
+   "id": "responses-empty",
+   "expected":
+   {"settlement": "failed",
+    "metered": false,
+    "counters":
+    {"toolCalls": 0, "outputTokens": 0, "inputTokens": 0, "cacheReadInputTokens": 0, "cacheCreationInputTokens": 0},
+    "completed": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.GatewayIngress.a_fragmented_tool_call_is_counted_once",
+    "AgentWorkspace.Theorems.Invariants.GatewayIngress.chat_cached_prefix_is_charged_once"],
+   "input":
+   {"protocol": "openai-chat-completions",
+    "frames":
+    [{"kind": "toolCallDelta", "choiceIndex": 0, "callIndex": 0},
+     {"kind": "toolCallDelta", "choiceIndex": 0, "callIndex": 0},
+     {"kind": "finish"},
+     {"promptTokens": 100, "kind": "usage", "completionTokens": 40, "cachedTokens": 30}]},
+   "id": "chat-complete",
+   "expected":
+   {"settlement": "recorded",
+    "metered": true,
+    "counters":
+    {"toolCalls": 1, "outputTokens": 40, "inputTokens": 70, "cacheReadInputTokens": 30, "cacheCreationInputTokens": 0},
+    "completed": true}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.GatewayIngress.a_fragmented_tool_call_is_counted_once"],
+   "input":
+   {"protocol": "openai-chat-completions",
+    "frames":
+    [{"kind": "toolCallDelta", "choiceIndex": 0, "callIndex": 0},
+     {"kind": "toolCallDelta", "choiceIndex": 0, "callIndex": 1},
+     {"kind": "toolCallDelta", "choiceIndex": 1, "callIndex": 0},
+     {"kind": "finish"},
+     {"promptTokens": 10, "kind": "usage", "completionTokens": 5, "cachedTokens": 0}]},
+   "id": "chat-three-calls",
+   "expected":
+   {"settlement": "recorded",
+    "metered": true,
+    "counters":
+    {"toolCalls": 3, "outputTokens": 5, "inputTokens": 10, "cacheReadInputTokens": 0, "cacheCreationInputTokens": 0},
+    "completed": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.GatewayIngress.chat_unmetered_settlement_has_a_witness",
+    "AgentWorkspace.Theorems.Invariants.GatewayIngress.chat_without_a_usage_chunk_measures_no_tokens"],
+   "input":
+   {"protocol": "openai-chat-completions",
+    "frames": [{"kind": "toolCallDelta", "choiceIndex": 0, "callIndex": 0}, {"kind": "finish"}]},
+   "id": "chat-finished-without-usage",
+   "expected":
+   {"settlement": "unmetered",
+    "metered": false,
+    "counters":
+    {"toolCalls": 1, "outputTokens": 0, "inputTokens": 0, "cacheReadInputTokens": 0, "cacheCreationInputTokens": 0},
+    "completed": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.GatewayIngress.chat_extraction_is_prefix_monotone",
+    "AgentWorkspace.Theorems.Invariants.GatewayIngress.chat_without_a_usage_chunk_measures_no_tokens"],
+   "input":
+   {"protocol": "openai-chat-completions", "frames": [{"kind": "toolCallDelta", "choiceIndex": 0, "callIndex": 0}]},
+   "id": "chat-truncated",
+   "expected":
+   {"settlement": "failed",
+    "metered": false,
+    "counters":
+    {"toolCalls": 1, "outputTokens": 0, "inputTokens": 0, "cacheReadInputTokens": 0, "cacheCreationInputTokens": 0},
+    "completed": false}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.GatewayIngress.empty_frames_measure_zero"],
+   "input": {"protocol": "openai-chat-completions", "frames": []},
+   "id": "chat-empty",
+   "expected":
+   {"settlement": "failed",
+    "metered": false,
+    "counters":
+    {"toolCalls": 0, "outputTokens": 0, "inputTokens": 0, "cacheReadInputTokens": 0, "cacheCreationInputTokens": 0},
+    "completed": false}}],
+ "family": "gateway-ingress",
+ "description": "Per-protocol usage extraction and settlement over a recorded frame sequence"}

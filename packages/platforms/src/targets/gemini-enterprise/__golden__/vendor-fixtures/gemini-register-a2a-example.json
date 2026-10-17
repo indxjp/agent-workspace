@@ -1,0 +1,11 @@
+{
+  "name": "AGENT_NAME",
+  "displayName": "AGENT_DISPLAY_NAME",
+  "description": "AGENT_DESCRIPTION",
+  "a2aAgentDefinition": {
+    "jsonAgentCard": "{\"protocolVersion\":\"PROTOCOLVERSION\",\"name\":\"AGENT_NAME\",\"description\":\"AGENT_DESCRIPTION\",\"url\":\"AGENT_URL\",\"version\":\"AGENT_VERSION\",\"defaultInputModes\":[\"INPUT_MODE\"],\"defaultOutputModes\":[\"OUTPUT_MODE\"],\"capabilities\":{ CAPABILITIES },\"skills\":[SKILLS]}"
+  },
+  "authorizationConfig": {
+    "agentAuthorization": "projects/PROJECT_ID/locations/LOCATION/authorizations/AUTH_ID"
+  }
+}

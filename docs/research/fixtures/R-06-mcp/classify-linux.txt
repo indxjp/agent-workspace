@@ -1,0 +1,68 @@
+http · correct url + correct token                OK  ok                             pass
+                                                      "Connected. The server answered and accepted the credential."
+http · correct url + WRONG token                  --  credential-rejected            pass
+                                                      "The server was reached, but it rejected the credential. The address or command is correct — check the token, API key or environment variable."
+http · correct url + NO credential                --  auth-required                  pass
+                                                      "The server is reachable but requires authentication. Choose an authentication method and supply a credential."
+http · NO credential but one non-auth header      --  auth-required                  pass
+                                                      "The server is reachable but requires authentication. Choose an authentication method and supply a credential."
+http · credential in a caller-declared header     --  credential-rejected            pass
+                                                      "The server was reached, but it rejected the credential. The address or command is correct — check the token, API key or environment variable."
+http · valid token, forbidden (403)               --  credential-insufficient-scope  pass
+                                                      "The server is reachable and the credential is valid, but it is not permitted to use this server. Ask for wider scope."
+http · WRONG path on a live host                  --  endpoint-not-mcp               pass
+                                                      "http://127.0.0.1:8981/nope answered, but not as an MCP server (HTTP 404). Check the URL — and whether this server uses the HTTP or the SSE transport."
+http · WRONG port (nothing listening)             --  unreachable                    pass
+                                                      "Could not reach the server at http://127.0.0.1:8999/mcp. Check the address and that it is reachable from this deployment."
+http · WRONG host (no such name)                  --  unreachable                    pass
+                                                      "Could not reach the server at https://r06-probe-does-not-exist.invalid/mcp. Check the address and that it is reachable from this deployment."
+http · https:// against a plain http port         --  tls-error                      pass
+                                                      "Could not establish a secure connection to https://127.0.0.1:8981/mcp. The TLS certificate or protocol was rejected."
+http · server accepts and never answers           --  timeout                        pass
+                                                      "No answer within 4 seconds. The server may be starting slowly, or unreachable behind a firewall that drops rather than refuses."
+http · server returns a 500 html page             --  server-error                   pass
+                                                      "http://127.0.0.1:8981/500 returned HTTP 500. The server is reachable but failing."
+http · url is really an SSE endpoint              --  endpoint-not-mcp               pass
+                                                      "http://127.0.0.1:8982/sse answered, but not as an MCP server (HTTP 404). Check the URL — and whether this server uses the HTTP or the SSE transport."
+http · server answers an older supported version  OK  ok                             pass
+                                                      "Connected. The server answered and accepted the credential."
+sse  · correct url + correct token                OK  ok                             pass
+                                                      "Connected. The server answered and accepted the credential."
+sse  · correct url + WRONG token                  --  credential-rejected            pass
+                                                      "The server was reached, but it rejected the credential. The address or command is correct — check the token, API key or environment variable."
+sse  · correct url + NO credential                --  auth-required                  pass
+                                                      "The server is reachable but requires authentication. Choose an authentication method and supply a credential."
+sse  · WRONG path on a live host                  --  endpoint-not-mcp               pass
+                                                      "http://127.0.0.1:8982/nope answered, but not as an MCP server (HTTP 404). Check the URL — and whether this server uses the HTTP or the SSE transport."
+sse  · WRONG port (nothing listening)             --  unreachable                    pass
+                                                      "Could not reach the server at http://127.0.0.1:8999/sse. Check the address and that it is reachable from this deployment."
+sse  · url is really a streamable-http endpoint   --  endpoint-not-mcp               pass
+                                                      "http://127.0.0.1:8981/mcp answered, but not as an MCP server (HTTP 405). Check the URL — and whether this server uses the HTTP or the SSE transport."
+sse  · server accepts and never writes            --  timeout                        pass
+                                                      "No answer within 4 seconds. The server may be starting slowly, or unreachable behind a firewall that drops rather than refuses."
+sse  · stream opens, no endpoint event            --  timeout                        pass
+                                                      "No answer within 4 seconds. The server may be starting slowly, or unreachable behind a firewall that drops rather than refuses."
+stdio· correct command, no credential needed      OK  ok                             pass
+                                                      "Connected. The server answered and accepted the credential."
+stdio· correct command + correct env credential   OK  ok                             pass
+                                                      "Connected. The server answered and accepted the credential."
+stdio· correct command + WRONG env credential     --  credential-rejected            pass
+                                                      "The server was reached, but it rejected the credential. The address or command is correct — check the token, API key or environment variable."
+stdio· refused, env present but no credential     --  server-refused                 pass
+                                                      "The server refused the connection: MCP error -32001: Unauthorized: environment variable MCP_TOKEN is not set."
+stdio· command does not exist                     --  command-not-found              pass
+                                                      "The command "r06-no-such-binary" could not be run. Check that it is installed and on the PATH of the runner."
+stdio· command exits immediately with a message   --  process-died                   pass
+                                                      "The command "/usr/local/bin/node" started but stopped before answering. It said: r06-probe-stdio: fatal: MCP_TOKEN is not set"
+stdio· command starts and never answers           --  timeout                        pass
+                                                      "No answer within 4 seconds. The server may be starting slowly, or unreachable behind a firewall that drops rather than refuses."
+stdio· answers JSON-RPC but is not an MCP server  --  endpoint-not-mcp               pass
+                                                      ""/usr/local/bin/node" answered, but not as an MCP server — it did not implement the MCP handshake."
+stdio· server speaks an unknown protocol version  --  protocol-version-unsupported   pass
+                                                      "The server speaks MCP protocol version 1999-01-01, which this deployment does not support."
+stdio· server speaks an older supported version   OK  ok                             pass
+                                                      "Connected. The server answered and accepted the credential."
+stdio· server speaks the previous revision        OK  ok                             pass
+                                                      "Connected. The server answered and accepted the credential."
+
+33/33 cases produced their expected tag, honoured the 4000 ms budget, and returned inside the 12000 ms ceiling.

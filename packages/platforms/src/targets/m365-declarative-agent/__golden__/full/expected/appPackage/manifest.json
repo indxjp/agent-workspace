@@ -1,0 +1,33 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.24/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.24",
+  "version": "1.0.0",
+  "id": "${{TEAMS_APP_ID}}",
+  "developer": {
+    "name": "${{DEVELOPER_NAME}}",
+    "websiteUrl": "${{DEVELOPER_WEBSITE_URL}}",
+    "privacyUrl": "${{DEVELOPER_PRIVACY_URL}}",
+    "termsOfUseUrl": "${{DEVELOPER_TERMS_OF_USE_URL}}"
+  },
+  "name": {
+    "short": "support-triage",
+    "full": "support-triage"
+  },
+  "description": {
+    "short": "Triages customer support tickets and drafts replies.",
+    "full": "Triages customer support tickets and drafts replies."
+  },
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  },
+  "accentColor": "#5B5FC7",
+  "copilotAgents": {
+    "declarativeAgents": [
+      {
+        "id": "declarativeAgent",
+        "file": "declarativeAgent.json"
+      }
+    ]
+  }
+}

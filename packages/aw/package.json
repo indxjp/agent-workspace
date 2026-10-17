@@ -1,0 +1,106 @@
+{
+  "name": "@indx-workspace/aw",
+  "version": "0.6.9",
+  "description": "aw, the command line for the Agent Workspace API: one command per SDK method, with JSON output and stable exit codes.",
+  "license": "Apache-2.0",
+  "homepage": "https://docs.agentworkspace.indx.jp",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/indxjp/agent-workspace.git",
+    "directory": "packages/aw"
+  },
+  "bugs": {
+    "url": "https://github.com/indxjp/agent-workspace/issues"
+  },
+  "keywords": [
+    "agent-workspace",
+    "claude",
+    "ai-agents",
+    "cli"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./tools/host": {
+      "types": "./src/tools/host.ts",
+      "default": "./dist/tools/host.js"
+    }
+  },
+  "bin": {
+    "aw": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.map",
+    "CHANGELOG.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./tools/host": {
+        "types": "./dist/tools/host.d.ts",
+        "default": "./dist/tools/host.js"
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@indx-workspace/contracts": "workspace:*",
+    "@indx-workspace/platforms": "workspace:*",
+    "@indx-workspace/sdk": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "esbuild": "0.28.2",
+    "zod": "4.6.6"
+  },
+  "peerDependencies": {
+    "@indx-workspace/cli": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "@indx-workspace/cli": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@indx-workspace/cli": "workspace:*",
+    "@types/node": "26.6.5",
+    "@typescript/native": "npm:typescript@7.0.2",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
+    "vitest": "5.0.3"
+  },
+  "nx": {
+    "targets": {
+      "lint": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "eslint packages/aw --max-warnings 0"
+        }
+      },
+      "test": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "vitest run --project @indx-workspace/aw --reporter=default --reporter=json --outputFile={projectRoot}/.vitest-report.json",
+          "env": {
+            "NODE_OPTIONS": "--unhandled-rejections=strict",
+            "VITEST_MAX_WORKERS": "4"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,38 @@
+services:
+  otel-collector:
+    image: ${OTEL_COLLECTOR_IMAGE:?pin OTEL_COLLECTOR_IMAGE by sha256 digest}
+    command: [--config=/etc/otelcol/config.yaml]
+    restart: unless-stopped
+    read_only: true
+    user: "1000:1000"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    volumes:
+      - ./otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=32m
+    networks: [control, provider-egress]
+
+  web:
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_SERVICE_NAME: agent-workspace-web
+    depends_on:
+      otel-collector:
+        condition: service_started
+
+  gateway:
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_SERVICE_NAME: agent-workspace-gateway
+    depends_on:
+      otel-collector:
+        condition: service_started
+
+  runner:
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_SERVICE_NAME: agent-workspace-runner
+    depends_on:
+      otel-collector:
+        condition: service_started

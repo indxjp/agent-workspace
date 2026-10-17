@@ -1,0 +1,60 @@
+packages:
+  - apps/*
+  - packages/*
+
+# `@agent-workspace/contracts` declares zod as a peer (one instance for a published consumer) and
+# pins it only as a devDependency. A workspace package is linked, not injected, so its peer is
+# never linked into its own node_modules, and the `--prod` install every runtime Dockerfile runs
+# drops the devDependency: `contracts/dist` then fails with ERR_MODULE_NOT_FOUND for zod.
+# Hoisting zod to the root node_modules gives it the one copy every importer already pins.
+publicHoistPattern:
+  - zod
+
+# Dependency install scripts, decided explicitly rather than left for pnpm to prompt about.
+# pnpm 11 treats an unanswered install script as an error (ERR_PNPM_IGNORED_BUILDS, exit 1), so
+# `pnpm install --frozen-lockfile` — CI's first step — fails until every package that ships one
+# has an answer here. The `pnpm` field in package.json is no longer read (pnpm 11 warns and
+# ignores it), so this file is the only place the answer can live.
+#
+# esbuild: false — DENIED, and the deny is the tested configuration, not a guess. esbuild
+# arrives only as drizzle-kit's bundler, drizzle-kit is a devDependency that never enters a
+# runtime image (R-15 §3), and its install script is not needed: `pnpm db:generate` produces
+# the migration correctly with the script denied. Denying it keeps a build-time-only package
+# from executing arbitrary code at install. Reasoning and the reversal path:
+# docs/adr/W1-DB-01-schema-conventions.md.
+allowBuilds:
+  # embedded-postgres ships PostgreSQL as files in the package; these scripts restore symlinks
+  # represented by metadata files after npm unpacks each platform archive.
+  '@embedded-postgres/darwin-arm64': true
+  '@embedded-postgres/darwin-x64': true
+  '@embedded-postgres/linux-arm': true
+  '@embedded-postgres/linux-arm64': true
+  '@embedded-postgres/linux-ia32': true
+  '@embedded-postgres/linux-ppc64': true
+  '@embedded-postgres/linux-x64': true
+  '@embedded-postgres/windows-x64': true
+  esbuild: false
+  # Transitive dependency of @earendil-works/pi-coding-agent (pi-ai's Google provider, which the pi
+  # adapter never selects: it reaches its model only through the gateway). Its only install script
+  # is `preinstall: echo 'preinstall: no-op'`, so denying it loses nothing.
+  '@google/genai': false
+  # nx's postinstall only pre-computes the project graph as a warm-up for the daemon; the graph is
+  # rebuilt on first use anyway, so nothing is lost by denying it, and denying keeps another
+  # build-time-only tool from executing code at install (same reasoning as esbuild above).
+  nx: false
+  # Transitive dependency of @kubernetes/client-node. Its postinstall only prints the
+  # upstream donation message; generated runtime code is already present in the package.
+  protobufjs: false
+
+# Version overrides, decided explicitly for the same reason the build-script answers above are.
+#
+# undici: nx@23.3.0 pins 7.29.0, inside GHSA-rfgv-xxqx-mfg5 and GHSA-w293-vg96-wgc3 (high, patched in
+# >=7.29.1), which fail `pnpm audit --audit-level high`. nx is build-time only and never enters a
+# runtime image; the selector keeps the major. Remove it once `pnpm why undici` shows nx resolving
+# >=7.29.1 on its own.
+#
+# Every override here that reaches the runtime tree is also generated into a new project, since
+# only the installing project's root can override (`RUNTIME_OVERRIDES` in
+# packages/sdk/src/project/render.ts; install-scripts.test.ts fails when one is missing).
+overrides:
+  'undici@>=7.0.0 <7.29.1': '^7.29.1'

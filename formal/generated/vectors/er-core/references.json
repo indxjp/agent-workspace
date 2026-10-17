@@ -1,0 +1,19 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ErCore.every_id_column_is_a_reference_or_declared",
+    "AgentWorkspace.Theorems.WellFormed.ErCore.uncovered_id_columns",
+    "AgentWorkspace.Theorems.WellFormed.ErCore.declared_reference_column_is_refused",
+    "AgentWorkspace.Theorems.Adversarial.ErCore.deleted_reference_is_caught"],
+   "input": {},
+   "id": "references/non-reference-id-columns",
+   "expected":
+   {"nonReferenceIdColumns":
+    [{"type": "text", "table": "run_usage_records", "column": "provider_response_id"},
+     {"type": "text", "table": "audit_events", "column": "subject_id"},
+     {"type": "text", "table": "secrets", "column": "master_key_id"},
+     {"type": "text", "table": "sessions", "column": "engine_session_id"},
+     {"type": "text", "table": "runtime_verifications", "column": "driver_id"},
+     {"type": "uuid", "table": "oauth_tokens", "column": "family_id"},
+     {"type": "text", "table": "shares", "column": "subject_id"}]}}],
+ "family": "er-core",
+ "description": "The *_id columns that are declared non-references (tenancy.test.ts rule 3)"}

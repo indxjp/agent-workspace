@@ -1,0 +1,463 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.AgentFrames.never_drops_an_engine_message",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.unmapped_message_is_carried_natively",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.tool_frames_follow_the_turn_that_can_carry_them",
+    "AgentWorkspace.Theorems.WellFormed.AgentFrames.every_frame_of_a_message_carries_its_raw",
+    "AgentWorkspace.Theorems.WellFormed.AgentFrames.result_without_a_readable_subtype_never_claims_success"],
+   "input": {"type": "system", "subtype": "init", "session_id": "sess_1", "model": "claude-opus-5"},
+   "id": "system-init",
+   "expected":
+   {"paired": true,
+    "names": ["agent.session"],
+    "frames":
+    [{"raw": {"type": "system", "subtype": "init", "session_id": "sess_1", "model": "claude-opus-5"},
+      "model": "claude-opus-5",
+      "frame": "agent.session",
+      "engineSessionId": "sess_1",
+      "engine": "claude-agent-sdk"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.AgentFrames.never_drops_an_engine_message",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.unmapped_message_is_carried_natively",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.tool_frames_follow_the_turn_that_can_carry_them",
+    "AgentWorkspace.Theorems.WellFormed.AgentFrames.every_frame_of_a_message_carries_its_raw",
+    "AgentWorkspace.Theorems.WellFormed.AgentFrames.result_without_a_readable_subtype_never_claims_success"],
+   "input": {"type": "system", "subtype": "init"},
+   "id": "system-init-without-session",
+   "expected":
+   {"paired": true,
+    "names": ["agent.native"],
+    "frames":
+    [{"type": "system/init",
+      "raw": {"type": "system", "subtype": "init"},
+      "payload": {"type": "system", "subtype": "init"},
+      "frame": "agent.native",
+      "engine": "claude-agent-sdk"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.AgentFrames.never_drops_an_engine_message",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.unmapped_message_is_carried_natively",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.tool_frames_follow_the_turn_that_can_carry_them",
+    "AgentWorkspace.Theorems.WellFormed.AgentFrames.every_frame_of_a_message_carries_its_raw",
+    "AgentWorkspace.Theorems.WellFormed.AgentFrames.result_without_a_readable_subtype_never_claims_success"],
+   "input": {"type": "system", "subtype": "status"},
+   "id": "system-status",
+   "expected":
+   {"paired": true,
+    "names": ["agent.native"],
+    "frames":
+    [{"type": "system/status",
+      "raw": {"type": "system", "subtype": "status"},
+      "payload": {"type": "system", "subtype": "status"},
+      "frame": "agent.native",
+      "engine": "claude-agent-sdk"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.AgentFrames.never_drops_an_engine_message",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.unmapped_message_is_carried_natively",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.tool_frames_follow_the_turn_that_can_carry_them",
+    "AgentWorkspace.Theorems.WellFormed.AgentFrames.every_frame_of_a_message_carries_its_raw",
+    "AgentWorkspace.Theorems.WellFormed.AgentFrames.result_without_a_readable_subtype_never_claims_success"],
+   "input": {"type": "system", "subtype": "from_the_future"},
+   "id": "system-unknown-subtype",
+   "expected":
+   {"paired": true,
+    "names": ["agent.native"],
+    "frames":
+    [{"type": "system/from_the_future",
+      "raw": {"type": "system", "subtype": "from_the_future"},
+      "payload": {"type": "system", "subtype": "from_the_future"},
+      "frame": "agent.native",
+      "engine": "claude-agent-sdk"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.AgentFrames.never_drops_an_engine_message",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.unmapped_message_is_carried_natively",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.tool_frames_follow_the_turn_that_can_carry_them",
+    "AgentWorkspace.Theorems.WellFormed.AgentFrames.every_frame_of_a_message_carries_its_raw",
+    "AgentWorkspace.Theorems.WellFormed.AgentFrames.result_without_a_readable_subtype_never_claims_success"],
+   "input":
+   {"type": "assistant",
+    "message":
+    {"id": "msg_1",
+     "content":
+     [{"type": "thinking", "thinking": "let me look"},
+      {"type": "text", "text": "Reading the file."},
+      {"type": "tool_use", "name": "Read", "input": {"path": "/etc/hosts"}, "id": "tool_1"},
+      {"type": "tool_use", "name": "mcp__github__issues", "input": {}, "id": "tool_2"}]}},
+   "id": "assistant-with-tools",
+   "expected":
+   {"paired": true,
+    "names": ["agent.message", "agent.tool.call", "agent.tool.call"],
+    "frames":
+    [{"role": "assistant",
+      "raw":
+      {"type": "assistant",
+       "message":
+       {"id": "msg_1",
+        "content":
+        [{"type": "thinking", "thinking": "let me look"},
+         {"type": "text", "text": "Reading the file."},
+         {"type": "tool_use", "name": "Read", "input": {"path": "/etc/hosts"}, "id": "tool_1"},
+         {"type": "tool_use", "name": "mcp__github__issues", "input": {}, "id": "tool_2"}]}},
+      "messageId": "msg_1",
+      "frame": "agent.message",
+      "engine": "claude-agent-sdk",
+      "blocks": [{"type": "reasoning", "text": "let me look"}, {"type": "text", "text": "Reading the file."}]},
+     {"toolCallId": "tool_1",
+      "raw":
+      {"type": "assistant",
+       "message":
+       {"id": "msg_1",
+        "content":
+        [{"type": "thinking", "thinking": "let me look"},
+         {"type": "text", "text": "Reading the file."},
+         {"type": "tool_use", "name": "Read", "input": {"path": "/etc/hosts"}, "id": "tool_1"},
+         {"type": "tool_use", "name": "mcp__github__issues", "input": {}, "id": "tool_2"}]}},
+      "name": "Read",
+      "kind": "read",
+      "input": {"path": "/etc/hosts"},
+      "frame": "agent.tool.call",
+      "engine": "claude-agent-sdk"},
+     {"toolCallId": "tool_2",
+      "raw":
+      {"type": "assistant",
+       "message":
+       {"id": "msg_1",
+        "content":
+        [{"type": "thinking", "thinking": "let me look"},
+         {"type": "text", "text": "Reading the file."},
+         {"type": "tool_use", "name": "Read", "input": {"path": "/etc/hosts"}, "id": "tool_1"},
+         {"type": "tool_use", "name": "mcp__github__issues", "input": {}, "id": "tool_2"}]}},
+      "name": "mcp__github__issues",
+      "kind": "mcp",
+      "input": {},
+      "frame": "agent.tool.call",
+      "engine": "claude-agent-sdk"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.AgentFrames.never_drops_an_engine_message",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.unmapped_message_is_carried_natively",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.tool_frames_follow_the_turn_that_can_carry_them",
+    "AgentWorkspace.Theorems.WellFormed.AgentFrames.every_frame_of_a_message_carries_its_raw",
+    "AgentWorkspace.Theorems.WellFormed.AgentFrames.result_without_a_readable_subtype_never_claims_success"],
+   "input":
+   {"uuid": "u-1",
+    "type": "user",
+    "message":
+    {"content":
+     [{"type": "tool_result", "tool_use_id": "tool_1", "content": [{"type": "text", "text": "127.0.0.1"}]}]}},
+   "id": "user-tool-result",
+   "expected":
+   {"paired": false,
+    "names": ["agent.tool.result"],
+    "frames":
+    [{"toolCallId": "tool_1",
+      "status": "completed",
+      "raw":
+      {"uuid": "u-1",
+       "type": "user",
+       "message":
+       {"content":
+        [{"type": "tool_result", "tool_use_id": "tool_1", "content": [{"type": "text", "text": "127.0.0.1"}]}]}},
+      "output": "127.0.0.1",
+      "isError": false,
+      "frame": "agent.tool.result",
+      "engine": "claude-agent-sdk"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.AgentFrames.never_drops_an_engine_message",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.unmapped_message_is_carried_natively",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.tool_frames_follow_the_turn_that_can_carry_them",
+    "AgentWorkspace.Theorems.WellFormed.AgentFrames.every_frame_of_a_message_carries_its_raw",
+    "AgentWorkspace.Theorems.WellFormed.AgentFrames.result_without_a_readable_subtype_never_claims_success"],
+   "input": {"type": "user", "message": {"content": [{"type": "image"}]}},
+   "id": "user-image-only",
+   "expected":
+   {"paired": true,
+    "names": ["agent.native"],
+    "frames":
+    [{"type": "user",
+      "raw": {"type": "user", "message": {"content": [{"type": "image"}]}},
+      "payload": {"type": "user", "message": {"content": [{"type": "image"}]}},
+      "frame": "agent.native",
+      "engine": "claude-agent-sdk"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.AgentFrames.never_drops_an_engine_message",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.unmapped_message_is_carried_natively",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.tool_frames_follow_the_turn_that_can_carry_them",
+    "AgentWorkspace.Theorems.WellFormed.AgentFrames.every_frame_of_a_message_carries_its_raw",
+    "AgentWorkspace.Theorems.WellFormed.AgentFrames.result_without_a_readable_subtype_never_claims_success"],
+   "input":
+   {"type": "result",
+    "total_cost_usd": 0.0125,
+    "subtype": "success",
+    "num_turns": 3,
+    "modelUsage":
+    {"claude-opus-5":
+     {"thinkingTokens": 8,
+      "outputTokens": 40,
+      "inputTokens": 10,
+      "cacheReadInputTokens": 5,
+      "cacheCreationInputTokens": 2},
+     "claude-haiku-4-5": {"outputTokens": 2, "inputTokens": 1}}},
+   "id": "result-with-usage",
+   "expected":
+   {"paired": true,
+    "names": ["agent.usage", "agent.result"],
+    "frames":
+    [{"reasoningTokens": 8,
+      "raw":
+      {"type": "result",
+       "total_cost_usd": 0.0125,
+       "subtype": "success",
+       "num_turns": 3,
+       "modelUsage":
+       {"claude-opus-5":
+        {"thinkingTokens": 8,
+         "outputTokens": 40,
+         "inputTokens": 10,
+         "cacheReadInputTokens": 5,
+         "cacheCreationInputTokens": 2},
+        "claude-haiku-4-5": {"outputTokens": 2, "inputTokens": 1}}},
+      "outputTokens": 42,
+      "inputTokens": 11,
+      "frame": "agent.usage",
+      "engine": "claude-agent-sdk",
+      "cacheReadInputTokens": 5,
+      "cacheCreationInputTokens": 2},
+     {"turns": 3,
+      "stopReason": "end_turn",
+      "raw":
+      {"type": "result",
+       "total_cost_usd": 0.0125,
+       "subtype": "success",
+       "num_turns": 3,
+       "modelUsage":
+       {"claude-opus-5":
+        {"thinkingTokens": 8,
+         "outputTokens": 40,
+         "inputTokens": 10,
+         "cacheReadInputTokens": 5,
+         "cacheCreationInputTokens": 2},
+        "claude-haiku-4-5": {"outputTokens": 2, "inputTokens": 1}}},
+      "frame": "agent.result",
+      "engineCostUsd": 0.0125,
+      "engine": "claude-agent-sdk"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.AgentFrames.never_drops_an_engine_message",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.unmapped_message_is_carried_natively",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.tool_frames_follow_the_turn_that_can_carry_them",
+    "AgentWorkspace.Theorems.WellFormed.AgentFrames.every_frame_of_a_message_carries_its_raw",
+    "AgentWorkspace.Theorems.WellFormed.AgentFrames.result_without_a_readable_subtype_never_claims_success"],
+   "input": {"type": "result", "subtype": "error_max_turns"},
+   "id": "result-without-usage",
+   "expected":
+   {"paired": true,
+    "names": ["agent.result"],
+    "frames":
+    [{"turns": null,
+      "stopReason": "max_turns",
+      "raw": {"type": "result", "subtype": "error_max_turns"},
+      "frame": "agent.result",
+      "engineCostUsd": null,
+      "engine": "claude-agent-sdk"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.AgentFrames.never_drops_an_engine_message",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.unmapped_message_is_carried_natively",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.tool_frames_follow_the_turn_that_can_carry_them",
+    "AgentWorkspace.Theorems.WellFormed.AgentFrames.every_frame_of_a_message_carries_its_raw",
+    "AgentWorkspace.Theorems.WellFormed.AgentFrames.result_without_a_readable_subtype_never_claims_success"],
+   "input": {"type": "telepathy"},
+   "id": "unknown-type",
+   "expected":
+   {"paired": true,
+    "names": ["agent.native"],
+    "frames":
+    [{"type": "telepathy",
+      "raw": {"type": "telepathy"},
+      "payload": {"type": "telepathy"},
+      "frame": "agent.native",
+      "engine": "claude-agent-sdk"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.AgentFrames.never_drops_an_engine_message",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.unmapped_message_is_carried_natively",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.tool_frames_follow_the_turn_that_can_carry_them",
+    "AgentWorkspace.Theorems.WellFormed.AgentFrames.every_frame_of_a_message_carries_its_raw",
+    "AgentWorkspace.Theorems.WellFormed.AgentFrames.result_without_a_readable_subtype_never_claims_success"],
+   "input": {"type": "stream_event"},
+   "id": "stream-event",
+   "expected":
+   {"paired": true,
+    "names": ["agent.native"],
+    "frames":
+    [{"type": "stream_event",
+      "raw": {"type": "stream_event"},
+      "payload": {"type": "stream_event"},
+      "frame": "agent.native",
+      "engine": "claude-agent-sdk"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.AgentFrames.never_drops_an_engine_message",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.unmapped_message_is_carried_natively",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.tool_frames_follow_the_turn_that_can_carry_them",
+    "AgentWorkspace.Theorems.WellFormed.AgentFrames.every_frame_of_a_message_carries_its_raw",
+    "AgentWorkspace.Theorems.WellFormed.AgentFrames.result_without_a_readable_subtype_never_claims_success"],
+   "input": "not an object",
+   "id": "not-an-object",
+   "expected":
+   {"paired": true,
+    "names": ["agent.malformed"],
+    "frames":
+    [{"reason": "an SDK event must be an object; got the string \"not an object\"",
+      "raw": "not an object",
+      "frame": "agent.malformed",
+      "engine": "claude-agent-sdk"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.AgentFrames.never_drops_an_engine_message",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.unmapped_message_is_carried_natively",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.tool_frames_follow_the_turn_that_can_carry_them",
+    "AgentWorkspace.Theorems.WellFormed.AgentFrames.every_frame_of_a_message_carries_its_raw",
+    "AgentWorkspace.Theorems.WellFormed.AgentFrames.result_without_a_readable_subtype_never_claims_success"],
+   "input": {"subtype": "init"},
+   "id": "no-type",
+   "expected":
+   {"paired": true,
+    "names": ["agent.malformed"],
+    "frames":
+    [{"reason": "an SDK event must carry a string 'type'; got a value of type undefined",
+      "raw": {"subtype": "init"},
+      "frame": "agent.malformed",
+      "engine": "claude-agent-sdk"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.AgentFrames.never_drops_an_engine_message",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.unmapped_message_is_carried_natively",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.tool_frames_follow_the_turn_that_can_carry_them",
+    "AgentWorkspace.Theorems.WellFormed.AgentFrames.every_frame_of_a_message_carries_its_raw",
+    "AgentWorkspace.Theorems.WellFormed.AgentFrames.result_without_a_readable_subtype_never_claims_success"],
+   "input": {"type": ""},
+   "id": "empty-type",
+   "expected":
+   {"paired": true,
+    "names": ["agent.malformed"],
+    "frames":
+    [{"reason": "an SDK event must carry a non-empty 'type'; got the string \"\"",
+      "raw": {"type": ""},
+      "frame": "agent.malformed",
+      "engine": "claude-agent-sdk"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.AgentFrames.never_drops_an_engine_message",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.unmapped_message_is_carried_natively",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.tool_frames_follow_the_turn_that_can_carry_them",
+    "AgentWorkspace.Theorems.WellFormed.AgentFrames.every_frame_of_a_message_carries_its_raw",
+    "AgentWorkspace.Theorems.WellFormed.AgentFrames.result_without_a_readable_subtype_never_claims_success"],
+   "input": {"type": "result", "subtype": 7},
+   "id": "result-subtype-not-a-string",
+   "expected":
+   {"paired": true,
+    "names": ["agent.malformed"],
+    "frames":
+    [{"reason": "a 'result' event must carry a string 'subtype'; got the number 7",
+      "raw": {"type": "result", "subtype": 7},
+      "frame": "agent.malformed",
+      "engine": "claude-agent-sdk"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.AgentFrames.never_drops_an_engine_message",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.unmapped_message_is_carried_natively",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.tool_frames_follow_the_turn_that_can_carry_them",
+    "AgentWorkspace.Theorems.WellFormed.AgentFrames.every_frame_of_a_message_carries_its_raw",
+    "AgentWorkspace.Theorems.WellFormed.AgentFrames.result_without_a_readable_subtype_never_claims_success"],
+   "input": 0.0125,
+   "id": "a-number",
+   "expected":
+   {"paired": true,
+    "names": ["agent.malformed"],
+    "frames":
+    [{"reason": "an SDK event must be an object; got the number 0.0125",
+      "raw": 0.0125,
+      "frame": "agent.malformed",
+      "engine": "claude-agent-sdk"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.AgentFrames.never_drops_an_engine_message",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.unmapped_message_is_carried_natively",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.tool_frames_follow_the_turn_that_can_carry_them",
+    "AgentWorkspace.Theorems.WellFormed.AgentFrames.every_frame_of_a_message_carries_its_raw",
+    "AgentWorkspace.Theorems.WellFormed.AgentFrames.result_without_a_readable_subtype_never_claims_success"],
+   "input": {"type": "result", "total_cost_usd": -0.5, "subtype": "success"},
+   "id": "result-negative-cost",
+   "expected":
+   {"paired": true,
+    "names": ["agent.result"],
+    "frames":
+    [{"turns": null,
+      "stopReason": "end_turn",
+      "raw": {"type": "result", "total_cost_usd": -0.5, "subtype": "success"},
+      "frame": "agent.result",
+      "engineCostUsd": null,
+      "engine": "claude-agent-sdk"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.AgentFrames.never_drops_an_engine_message",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.unmapped_message_is_carried_natively",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.tool_frames_follow_the_turn_that_can_carry_them",
+    "AgentWorkspace.Theorems.WellFormed.AgentFrames.every_frame_of_a_message_carries_its_raw",
+    "AgentWorkspace.Theorems.WellFormed.AgentFrames.result_without_a_readable_subtype_never_claims_success"],
+   "input": {"type": "result", "total_cost_usd": "0.01", "subtype": "success"},
+   "id": "result-string-cost",
+   "expected":
+   {"paired": true,
+    "names": ["agent.result"],
+    "frames":
+    [{"turns": null,
+      "stopReason": "end_turn",
+      "raw": {"type": "result", "total_cost_usd": "0.01", "subtype": "success"},
+      "frame": "agent.result",
+      "engineCostUsd": null,
+      "engine": "claude-agent-sdk"}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.AgentFrames.never_drops_an_engine_message",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.unmapped_message_is_carried_natively",
+    "AgentWorkspace.Theorems.Invariants.AgentFrames.tool_frames_follow_the_turn_that_can_carry_them",
+    "AgentWorkspace.Theorems.WellFormed.AgentFrames.every_frame_of_a_message_carries_its_raw",
+    "AgentWorkspace.Theorems.WellFormed.AgentFrames.result_without_a_readable_subtype_never_claims_success"],
+   "input":
+   {"type": "assistant", "message": {"id": "msg_2", "content": [{"type": "tool_use", "name": "Grep", "id": "tool_3"}]}},
+   "id": "tool-use-without-input",
+   "expected":
+   {"paired": true,
+    "names": ["agent.tool.call"],
+    "frames":
+    [{"toolCallId": "tool_3",
+      "raw":
+      {"type": "assistant",
+       "message": {"id": "msg_2", "content": [{"type": "tool_use", "name": "Grep", "id": "tool_3"}]}},
+      "name": "Grep",
+      "kind": "search",
+      "input": null,
+      "frame": "agent.tool.call",
+      "engine": "claude-agent-sdk"}]}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.AgentFrames.tool_frames_follow_the_turn_that_can_carry_them"],
+   "input":
+   [{"type": "assistant",
+     "message":
+     {"id": "msg_1",
+      "content":
+      [{"type": "thinking", "thinking": "let me look"},
+       {"type": "text", "text": "Reading the file."},
+       {"type": "tool_use", "name": "Read", "input": {"path": "/etc/hosts"}, "id": "tool_1"},
+       {"type": "tool_use", "name": "mcp__github__issues", "input": {}, "id": "tool_2"}]}},
+    {"uuid": "u-1",
+     "type": "user",
+     "message":
+     {"content":
+      [{"type": "tool_result", "tool_use_id": "tool_1", "content": [{"type": "text", "text": "127.0.0.1"}]}]}}],
+   "id": "assistant-then-user",
+   "expected":
+   {"resultIds": ["tool_1"],
+    "paired": true,
+    "names": ["agent.message", "agent.tool.call", "agent.tool.call", "agent.tool.result"],
+    "callIds": ["tool_1", "tool_2"]}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.AgentFrames.tool_frames_follow_the_turn_that_can_carry_them"],
+   "input":
+   [{"uuid": "u-1",
+     "type": "user",
+     "message":
+     {"content":
+      [{"type": "tool_result", "tool_use_id": "tool_1", "content": [{"type": "text", "text": "127.0.0.1"}]}]}}],
+   "id": "orphan-result",
+   "expected": {"resultIds": ["tool_1"], "paired": false, "names": ["agent.tool.result"], "callIds": []}}],
+ "family": "agent-frames",
+ "description": "The Claude adapter's mapping, message by message"}

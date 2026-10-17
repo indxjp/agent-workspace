@@ -1,0 +1,61 @@
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+  hostmetrics:
+    collection_interval: 60s
+    scrapers:
+      cpu: {}
+      disk: {}
+      filesystem:
+        exclude_mount_points:
+          mount_points: [/dev/*, /proc/*, /sys/*, /run/docker/*]
+          match_type: regexp
+      load: {}
+      memory: {}
+      network: {}
+
+processors:
+  memory_limiter:
+    check_interval: 5s
+    limit_mib: 384
+    spike_limit_mib: 96
+  batch:
+    send_batch_size: 1024
+    timeout: 10s
+  resource:
+    attributes:
+      - key: service.namespace
+        value: agent-workspace
+        action: upsert
+
+exporters:
+  googlecloud:
+    log:
+      default_log_name: opentelemetry.io/collector-exported-log
+
+service:
+  extensions: [health_check]
+  telemetry:
+    logs:
+      level: info
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [googlecloud]
+    metrics:
+      receivers: [otlp, hostmetrics]
+      processors: [memory_limiter, resource, batch]
+      exporters: [googlecloud]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [googlecloud]

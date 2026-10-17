@@ -1,0 +1,126 @@
+---
+title: "Which surface for which job"
+description: "A decision table from what you want to build to the surface you use for it — the SDK, the API's resources, the platform's extension points — and the page that shows how."
+---
+
+<Info>
+**Chapter 4 · Put it in your product — step 1 of 8** · [the chapter map](/path/embed)
+
+- **You will:** find what you want your product to do with the agent and the page that shows how.
+- **You will learn:** the four surfaces (consume, configure, extend, internal) and which rows put an agent in front of your users.
+- **You need:** an agent from [Chapter 2: Build your agent](/path/build).
+
+</Info>
+
+Find what you want to do, then follow the link: each row names the page that shows how.
+
+**What you can do**
+
+- [Use agents from your product, backend or terminal](#i-want-to-build-something-that-uses-agents).
+- [Change what an agent does](#i-want-to-change-what-an-agent-does): skills, tools, files, model, sandbox.
+- [Run a workspace](#i-want-to-administer-a-workspace): deploy, people, sharing, cost.
+- [Ask for something the platform does not do yet](#i-want-to-teach-the-platform-something-new).
+
+Each row also names its surface, as described in [Public surface and
+stability](/concepts/public-surface): you **consume** the packages, you **configure** resources
+as data through the API, you **extend** the platform with code in its source, or you are looking
+at something **internal** that is not yours to touch.
+
+## I want to build something that uses agents
+
+| I want to…                                                                                                  | Surface             | How                                                                                                                                            | Page                                                                                                |
+| ----------------------------------------------------------------------------------------------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Put an agent inside my own product — a chat panel, a canvas, a copilot with agent switching                 | Consume             | your backend on the SDK relays the run's event stream; your frontend reduces it                                                                | [Embed an agent in your product](/building/embedding)                                               |
+| Start runs from a service, a worker, or a cron job and act on the outcome                                   | Consume             | `createClient` with an API key; `runs.start` then `waitForOutcome` or `follow`                                                                 | [Integrate a backend](/building/backend)                                                            |
+| Stand up a complete agent from one script — a document, a skill, a tool server, a sandbox, the agent, a run | Consume + Configure | `files.upload`, `skills.import`, `connectors.create`, `runtimes.profiles.create`, `agents.create`, `replaceResourceAssignments`, `runs.start`  | [Time to first agent: one script](/concepts/what-is-agent-workspace#time-to-first-agent-one-script) |
+| Show the surface's chat on my own React page, even on another origin                                        | Consume             | `<Chat/>` or the headless `useConversation()` from `@indx-workspace/react`, with the origin in the surface's `allowedOrigins`                  | [Build a frontend](/building/frontend#chat-component-react)                                         |
+| Render a live run in a browser — a store, a hook, the failure modes of a live view                          | Consume             | `readSseFrames` and the neutral `AgentEvent` view over the relayed stream; `runs.follow` directly only on the control plane's own origin today | [Build a frontend](/building/frontend)                                                              |
+| Write agents as code and run them on my machine — no Docker                                                 | Consume             | `npm create @indx-workspace@latest <dir> -- --yes`, then `npm run dev` (`aw dev`); `aw check` and `aw push`                                    | [Quickstart](/getting-started/quickstart), [Agents as code](/guides/agents-as-code)                 |
+| Script the platform from a terminal or CI without writing code                                              | Consume             | the `aw` command line with `--json`                                                                                                            | [CLI overview](/cli/overview), [CLI vs SDK](/cli/cli-vs-sdk)                                        |
+| Validate the platform's responses in a language or framework of my own                                      | Consume             | `@indx-workspace/contracts` alone — the schemas need no client                                                                                 | [Contracts reference](/reference/contracts/index)                                                   |
+| Test my integration without a control plane                                                                 | Consume             | inject `fetch` through `ClientOptions.fetch`                                                                                                   | [Testing](/guides/testing)                                                                          |
+| Call the API from Python, Go, or a shell — no SDK                                                           | Consume             | `Authorization: Bearer` on `/api/**`; the contracts are the schema                                                                             | [Call the API without the SDK](/building/http-api)                                                  |
+| Be told when a run finishes instead of polling                                                              | Consume             | today: `follow` or poll `runs.get`; target: signed webhooks                                                                                    | [Integrate a backend](/building/backend), [N-3](/concepts/roadmap#n-3-webhooks-for-run-outcomes)    |
+
+## I want to change what an agent does
+
+| I want to…                                                                  | Surface   | How                                                                                                                            | Page                                                                      |
+| --------------------------------------------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| Define a new agent: instructions, model, runtime, permissions               | Configure | `aw.agents.create`                                                                                                             | [Design an agent](/building/agents)                                       |
+| Restrict what an agent may do (files, commands, network)                    | Configure | the four permission booleans on the agent; the runtime profile's network and filesystem policy                                 | [Design an agent](/building/agents)                                       |
+| Give an agent reusable instructions and helper files                        | Configure | author a `SKILL.md` directory, `aw.skills.import`, assign by `skillIds`                                                        | [Author a skill](/building/skills)                                        |
+| Let an agent call an external tool or service                               | Configure | register the MCP server as a connector, assign by `connectorIds`                                                               | [Connect an MCP server](/building/mcp-servers)                            |
+| Give an agent documents to read or write                                    | Configure | `aw.files.upload`, assign with `read` or `read-write` access                                                                   | [Files](/resources/files), [Design an agent](/building/agents)            |
+| Use a different model, provider, or credential                              | Configure | a model connection; the agent's `modelConnectionId` and `model`; a per-run override                                            | [Choose models and runtimes](/building/models-and-runtimes)               |
+| Run agents on my own infrastructure or with different limits                | Configure | a runtime profile (driver, sizing, network policy, filesystem) and, for remote drivers, a runtime connection                   | [Choose models and runtimes](/building/models-and-runtimes)               |
+| Store a value an agent's runtime needs without it ever being readable again | Configure | `aw.secrets.create`; the value is write-only and reaches the runtime as environment, never a response                          | [Secrets](/resources/secrets)                                             |
+| Group work with a default agent, model and files                            | Configure | a project; start sessions inside it                                                                                            | [Projects](/resources/projects)                                           |
+| Continue a conversation across runs                                         | Configure | a session; `runs.start(agentId, { prompt, sessionId })`                                                                        | [Sessions](/resources/sessions), [Run lifecycle](/concepts/run-lifecycle) |
+| Move an agent between workspaces or environments                            | Configure | `aw.agents.export(id)` in the source, `aw.agents.import(definition)` in the destination; skills and connectors resolve by name | [Move an agent between workspaces](/building/moving-agents)               |
+
+## I want to administer a workspace
+
+| I want to…                                                                            | Surface                       | How                                                                                                                                                                | Page                                                                                                                            |
+| ------------------------------------------------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| Stand the platform up — on a laptop, a VM, or a cluster                               | Internal, operated as shipped | `docker compose up -d` from a clone, or the Helm chart; then the setup wizard                                                                                      | [Self-host Agent Workspace](/building/self-hosting)                                                                             |
+| Point the deployment at my cloud's database, object store and secret service          | Internal, operated            | one `agent-workspace.yaml`, written by `create-agent-workspace <dir> --cloud …`; the installer renders `.env`, Compose, Helm values or Terraform variables from it | [The deployment profile](/concepts/data-plane#the-deployment-profile)                                                           |
+| Switch an agent to another model, another sandbox, or another provider                | Configure                     | `aw.agents.update` with a new `modelConnectionId`, `model` or `runtimeProfileId`; audited, no redeploy                                                             | [Choose models and runtimes](/building/models-and-runtimes)                                                                     |
+| Add people, set roles, invite, mint machine credentials                               | Configure                     | `aw.team.members`, `users`, `invitations`, `apiKeys` (invitations need session auth)                                                                               | [Team](/resources/team), [Workspaces and principals](/concepts/workspaces-and-principals)                                       |
+| Decide who may edit, assign and run a resource                                        | Configure                     | roles and grants: `owner`/`admin`/`builder`/`viewer`, an agent's `agent_grants`                                                                                    | [Ownership and sharing](/concepts/ownership-and-sharing)                                                                        |
+| Share a skill with another workspace                                                  | Configure                     | today: import it again in the second workspace; target: the organisation catalog                                                                                   | [Ownership and sharing](/concepts/ownership-and-sharing), [N-2](/concepts/roadmap#n-2-an-organisation-catalog-above-workspaces) |
+| Publish a session's transcript, an agent, a project, or a skill outside the workspace | Configure                     | `aw.shares` and the sharing policy                                                                                                                                 | [Shares](/resources/shares)                                                                                                     |
+| See what ran, what it cost, and who did what                                          | Configure                     | `aw.observability.metrics.recentRuns`, `audit.list`                                                                                                                | [Observability](/resources/observability)                                                                                       |
+| Create or rename a workspace                                                          | Configure                     | `aw.workspaces` — session auth only; an API key is refused                                                                                                         | [Workspaces](/resources/workspaces)                                                                                             |
+
+## I want to teach the platform something new
+
+None of these can be done through the SDK. They are changes INDX makes to the platform, described on
+[Extend the platform](/building/extending-the-platform).
+
+| I want to…                                                    | Surface | How                                                                                                          |
+| ------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------ |
+| Run agents on infrastructure no existing driver supports      | Extend  | a runtime driver added to the platform by INDX; see [Extend the platform](/building/extending-the-platform)  |
+| Route model calls to a provider the gateway does not know     | Extend  | a provider adapter added to the gateway by INDX; see [Extend the platform](/building/extending-the-platform) |
+| Execute agents with an engine other than the Claude Agent SDK | Extend  | the four steps of API specification §6.4: a provider id, a policy schema, an event mapping, a runner         |
+| Expose a capability the API does not have                     | Extend  | contract → conformance test → SDK method → CLI command → `pnpm docs:generate`                                |
+
+## I am looking at something that is not a surface
+
+| If you find yourself wanting to…                                                                        | It is              | Do this instead                                                                                                                                      |
+| ------------------------------------------------------------------------------------------------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Import a type from `packages/core` (a repository, `RunRequest`, `RuntimeProfile` as the runner sees it) | Internal           | Use the contract type of the same resource from `@indx-workspace/contracts`; if none exists, that is a gap to report                                 |
+| Call the runner's `/run` endpoint or forge a gateway token                                              | Internal           | Start a run through `aw.runs.start`; the platform allocates the runtime and the token                                                                |
+| Read a credential back                                                                                  | Internal by design | Rotate it; a credential is write-only on every resource                                                                                              |
+| Depend on a screen of the control plane's own UI                                                        | Internal           | Build your own screen on the SDK; the product's screens are a consumer like yours                                                                    |
+| Change the database schema or a route handler                                                           | Internal           | Not available to you; ask INDX through [indx.jp/en/contact](https://indx.jp/en/contact). See [Extend the platform](/building/extending-the-platform) |
+
+## Reading a page on this site
+
+Each page that documents a surface uses the same three signals:
+
+- The **surface** it belongs to is named the first time a thing is introduced — "you do this
+  as data through `aw.connectors` (Configure)".
+- A **Today / Target** callout marks a place where what exists today differs from the target
+  architecture, and links to the [roadmap](/concepts/roadmap) entry that tracks the gap.
+- A **Do / How** table near the end of every building guide lists exactly what is possible
+  today, so that the absence of a row is as informative as its presence.
+- The three values and eight design principles behind every row in the tables above are stated
+  once, in full, on [Design principles](/concepts/design-principles).
+
+<CardGroup cols={2}>
+  <Card title="Public surface and stability" icon="shield-check" href="/concepts/public-surface">
+    The four surfaces and the promise each one carries.
+  </Card>
+  <Card title="Target architecture" icon="compass-drafting" href="/concepts/target-architecture">
+    What we are building: the time budgets and the developer experience at the destination.
+  </Card>
+  <Card title="Design principles" icon="compass" href="/concepts/design-principles">
+    The three values and eight principles this whole site is written to.
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/getting-started/quickstart">
+    Install, authenticate, and make the first call end to end.
+  </Card>
+  <Card title="Design an agent" icon="robot" href="/building/agents">
+    The most common job: an agent, its permissions, its skills and tools.
+  </Card>
+</CardGroup>

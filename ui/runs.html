@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Runs — Agent Workspace</title>
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<script>window.PAGE = { nav: "runs", crumbs: [["Runs"]] };</script>
+
+<div class="app">
+  <div class="main">
+    <div class="page">
+
+      <div class="page-head">
+        <div>
+          <h1>Runs</h1>
+          <div class="sub">Every execution in this workspace, newest first. 30 days retained.</div>
+        </div>
+        <div class="actions">
+          <select style="width:170px"><option>All agents</option><option>Customer Support Agent</option><option>Contract Review</option><option>Invoice Triage</option></select>
+          <select style="width:150px"><option>All statuses</option><option>Completed</option><option>Failed</option><option>Interrupted</option><option>Running</option></select>
+          <button class="btn" data-toast="Exported 128 runs as CSV">Export</button>
+        </div>
+      </div>
+
+      <div class="stat-row mb16">
+        <div class="stat"><div class="k">Runs (7d)</div><div class="v">541</div></div>
+        <div class="stat"><div class="k">Failed</div><div class="v">9 <small>1.7%</small></div></div>
+        <div class="stat"><div class="k">Median duration</div><div class="v">19 s</div></div>
+        <div class="stat"><div class="k">Tokens (7d)</div><div class="v">18.4M</div></div>
+        <div class="stat"><div class="k">Cost (7d)</div><div class="v">$51.80</div></div>
+      </div>
+
+      <div class="card">
+        <div class="table-wrap">
+        <table class="tbl">
+          <thead>
+            <tr><th>Started</th><th>Agent</th><th>Status</th><th>Started by</th><th>Model</th><th>Runtime</th><th class="num">Duration</th><th class="num">Cost</th><th></th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="nowrap">14:32:02</td>
+              <td><a href="agent.html">Customer Support Agent</a></td>
+              <td><span class="badge ok"><span class="dot"></span>Running</span></td>
+              <td>Aya Ito</td><td>Claude Sonnet 5</td><td>Standard Sandbox</td>
+              <td class="num">18 s</td><td class="num">$0.06</td>
+              <td><a class="btn sm" href="agent-run.html">Open</a></td>
+            </tr>
+            <tr>
+              <td class="nowrap">13:57:41</td>
+              <td><a href="agent.html">Contract Review</a></td>
+              <td><span class="badge ok">Completed</span></td>
+              <td>Aya Ito</td><td>GPT‑4.1 (Azure)</td><td>Read Only</td>
+              <td class="num">1 m 04 s</td><td class="num">$0.42</td>
+              <td><a class="btn sm" href="run.html">Open</a></td>
+            </tr>
+            <tr>
+              <td class="nowrap">13:22:10</td>
+              <td><a href="agent.html">Invoice Triage</a></td>
+              <td><span class="badge ok">Completed</span></td>
+              <td>API key “CI”</td><td>Claude Haiku 4.5</td><td>Standard Sandbox</td>
+              <td class="num">6 s</td><td class="num">$0.01</td>
+              <td><a class="btn sm" href="run.html">Open</a></td>
+            </tr>
+            <tr>
+              <td class="nowrap">11:02:55</td>
+              <td><a href="agent.html">Customer Support Agent</a></td>
+              <td><span class="badge danger">Failed</span></td>
+              <td>API key “CI”</td><td>Claude Sonnet 5</td><td>Standard Sandbox</td>
+              <td class="num">4 s</td><td class="num">—</td>
+              <td><a class="btn sm" href="run.html">Open</a></td>
+            </tr>
+            <tr>
+              <td class="nowrap">10:48:19</td>
+              <td><a href="agent.html">Security Review Bot</a></td>
+              <td><span class="badge ok">Completed</span></td>
+              <td>Kenji Sato</td><td>Claude Opus 5</td><td>Heavy (Kubernetes)</td>
+              <td class="num">4 m 51 s</td><td class="num">$3.18</td>
+              <td><a class="btn sm" href="run.html">Open</a></td>
+            </tr>
+            <tr>
+              <td class="nowrap">09:15:03</td>
+              <td><a href="agent.html">Weekly Report Writer</a></td>
+              <td><span class="badge warn">Interrupted</span></td>
+              <td>Marie Dupont</td><td>Claude Sonnet 5</td><td>Standard Sandbox</td>
+              <td class="num">39 s</td><td class="num">$0.06</td>
+              <td><a class="btn sm" href="run.html">Open</a></td>
+            </tr>
+            <tr>
+              <td class="nowrap">Yesterday 18:40</td>
+              <td><a href="agent.html">Customer Support Agent</a></td>
+              <td><span class="badge ok">Completed</span></td>
+              <td>Aya Ito</td><td>Claude Sonnet 5</td><td>Standard Sandbox</td>
+              <td class="num">1 m 12 s</td><td class="num">$0.31</td>
+              <td><a class="btn sm" href="run.html">Open</a></td>
+            </tr>
+            <tr>
+              <td class="nowrap">Yesterday 16:04</td>
+              <td><a href="agent.html">Contract Review</a></td>
+              <td><span class="badge danger">Failed</span></td>
+              <td>Marie Dupont</td><td>GPT‑4.1 (Azure)</td><td>Read Only</td>
+              <td class="num">12 s</td><td class="num">$0.03</td>
+              <td><a class="btn sm" href="run.html">Open</a></td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+      </div>
+
+      <p class="small muted mt16">
+        A detailed trace viewer is deliberately not part of this product. Export OpenTelemetry to your own
+        collector from <a href="settings.html">Settings → Observability</a> if you need one.
+      </p>
+
+    </div>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,1535 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Use cases — Agent Workspace</title>
+<meta name="description" content="Example Agent Workspace agents by team and by isolation: the ten end-to-end tutorials and six use-case shapes from the docs, each with its permissions, connectors, skills, files, limits and runtime.">
+<link rel="canonical" href="https://lp.agentworkspace.indx.jp/use-cases">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://lp.agentworkspace.indx.jp/use-cases">
+<meta property="og:title" content="Use cases — Agent Workspace">
+<meta property="og:description" content="Browse example agents by team and by how much isolation the work needs. Every configuration comes from the docs' tutorials.">
+<!-- chrome:head -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23171614'/%3E%3Cpath d='M9 24 13.9 8h4.2L23 24h-3.3l-1.1-3.6h-5.2L12.3 24zm5.3-6.4h3.4L16 11.9z' fill='%23fff' fill-rule='evenodd'/%3E%3C/svg%3E">
+<meta property="og:site_name" content="Agent Workspace">
+<meta property="og:image" content="https://lp.agentworkspace.indx.jp/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Agent Workspace — deploy Claude agents your company can actually run.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://lp.agentworkspace.indx.jp/og.png">
+<meta name="theme-color" content="#08080a">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="assets/site.css">
+<script>
+/* Applied before first paint: without it the page paints visible and the reveal rules
+   would hide it again. A deep link (#section) opts out of the reveal altogether. */
+document.documentElement.className += location.hash ? " js no-reveal" : " js";
+</script>
+<script src="assets/site.js" defer></script>
+<!-- /chrome:head -->
+</head>
+<body>
+<!-- chrome:header -->
+<a class="skip" href="#top">Skip to content</a>
+<header class="hdr" id="site-header">
+  <div class="shell hdr-in">
+    <a class="wordmark" href="index.html"><span class="mk" aria-hidden="true"><svg viewBox="0 0 32 32" width="16" height="16" aria-hidden="true"><path d="M9 24 13.9 8h4.2L23 24h-3.3l-1.1-3.6h-5.2L12.3 24zm5.3-6.4h3.4L16 11.9z" fill="currentColor" fill-rule="evenodd"/></svg></span><span class="wm-t">Agent Workspace</span></a>
+    <nav class="hdr-nav-wrap" aria-label="Primary"><ul class="hdr-nav">
+      <li class="has-menu">
+        <button class="nav-btn" type="button" aria-expanded="false" aria-controls="menu-product">Product</button>
+        <div class="menu" id="menu-product">
+          <a href="product.html"><b>Platform overview</b><span>Everything an Agent SDK deployment needs, and nothing else.</span></a>
+          <a href="product.html#how"><b>How it works</b><span>Five screens from an empty deployment to a running agent.</span></a>
+          <a href="product.html#runtimes"><b>Runtimes</b><span>Local, sandboxed process, Docker, Kubernetes and what is next.</span></a>
+          <a href="product.html#honesty"><b>Models &amp; compatibility</b><span>Claude, Azure OpenAI, OpenAI, and what does not carry over.</span></a>
+          <a href="security.html"><b>Security &amp; governance</b><span>Isolation, secrets, roles, SSO and the audit log.</span></a>
+          <a href="examples.html"><b>For developers</b><span>Agents as code, the aw CLI, evals and embedding.</span></a>
+          <div class="menu-foot"><span>New here?</span><a href="index.html#start">Start on a laptop</a><a href="https://docs.agentworkspace.indx.jp">Read the docs</a></div>
+        </div>
+      </li>
+      <li><a href="use-cases.html" aria-current="page">Use cases</a></li>
+      <li><a href="examples.html">Examples</a></li>
+      <li><a href="security.html">Security</a></li>
+      <li><a href="compare.html">Compare</a></li>
+    </ul></nav>
+    <span class="sp"></span>
+    <div class="hdr-cta">
+      <a class="docs" href="https://docs.agentworkspace.indx.jp">Docs</a>
+      <a class="btn btn-action" href="https://indx.jp/en/contact">Book a demo</a>
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="mnav" aria-label="Open menu"><span></span></button>
+    </div>
+  </div>
+  <nav class="mnav" id="mnav" aria-label="Mobile">
+    <div class="shell">
+      <ul>
+        <li><a href="product.html">Product <span>platform overview</span></a></li>
+        <li><a href="use-cases.html" aria-current="page">Use cases <span>by team</span></a></li>
+        <li><a href="examples.html">Examples <span>agents as code</span></a></li>
+        <li><a href="security.html">Security <span>and governance</span></a></li>
+        <li><a href="compare.html">Compare <span>the alternatives</span></a></li>
+        <li><a href="https://docs.agentworkspace.indx.jp">Docs <span>docs.agentworkspace.indx.jp</span></a></li>
+      </ul>
+      <div class="btn-row"><a class="btn btn-action" href="https://indx.jp/en/contact">Book a demo</a><a class="btn btn-quiet" href="index.html#start">Start on a laptop</a></div>
+    </div>
+  </nav>
+</header>
+<!-- /chrome:header -->
+
+<main id="top" tabindex="-1">
+
+<section class="sec page-hero sec--paper" id="overview">
+  <div class="shell">
+    <ol class="crumbs"><li><a href="index.html">Home</a></li><li>Use cases</li></ol>
+    <div class="measure">
+      <span class="eyebrow reveal">Use cases</span>
+      <h1 class="reveal" data-d="1">Agents your teams will actually use.</h1>
+      <p class="lead reveal" data-d="2">
+        Sixteen example configurations, by team and by how much isolation the work needs. They are
+        built from the ten end-to-end tutorials and the six use-case shapes in the docs, not from
+        customer stories: every permission, connector, skill, file and limit below is the one the
+        docs use.
+      </p>
+      <div class="btn-row reveal" data-d="3">
+        <a class="btn btn-action btn-lg" href="#code">See the code</a>
+        <a class="btn btn-quiet btn-lg" href="#by-team">Browse by team</a>
+        <a class="btn btn-quiet btn-lg" href="#by-isolation">Pick by isolation</a>
+      </div>
+    </div>
+
+    <div class="stats reveal" data-d="2" style="margin-top:44px">
+      <div><b>10</b><span>end-to-end tutorials, each kept as a benchmark</span></div>
+      <div><b>6</b><span>use-case shapes, from in-product copilot to backend automation</span></div>
+      <div><b>4</b><span>permission switches: read files, write files, run commands, internet</span></div>
+      <div><b>3</b><span>network policies: <code>none</code>, <code>restricted</code>, <code>open</code></span></div>
+      <div><b>20</b><span>exact origins a public surface can allow, at most</span></div>
+    </div>
+
+    <ul class="toc reveal" aria-label="On this page">
+      <li><a href="#code">Ten agents, with code</a></li>
+      <li><a href="#by-team">Browse by team</a></li>
+      <li><a href="#by-isolation">Pick by isolation</a></li>
+      <li><a href="#path">From tutorial to agent</a></li>
+      <li><a href="#not-yet">What these do not do yet</a></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============================ CODE EXPLORER ============================ -->
+<section class="sec sec--surface" id="code">
+  <div class="shell">
+    <div class="statement sec-head">
+      <h2 class="reveal">Ten agents, with every file. <span class="dim">The agent, its skill, the project policy, the surface and the backend call, copied from the tutorials in the docs.</span></h2>
+      <p class="small reveal" style="margin-top:14px"><code>runAndRead</code> in the backend files is the helper the manual-search tutorial defines, not an SDK export.</p>
+      <a class="more" style="display:inline-block;margin-top:12px" href="https://docs.agentworkspace.indx.jp/features/agents-skills-tools-as-code">Learn more: agents, skills and tools as code</a>
+    </div>
+    <div class="stage" style="padding:18px">
+      <div class="explorer" data-tabs="vertical">
+        <ul class="xlist" role="tablist" aria-label="Tutorial agents">
+          <li role="presentation"><button class="xtab" role="tab" id="t-manual-search" aria-controls="code-manual-search" aria-selected="true"><b>Manual search agent</b><span>Maintenance</span></button></li><li role="presentation"><button class="xtab" role="tab" id="t-cad-drafting" aria-controls="code-cad-drafting" aria-selected="false" tabindex="-1"><b>CAD drawing agent</b><span>Mechanical and electrical design</span></button></li><li role="presentation"><button class="xtab" role="tab" id="t-quotation" aria-controls="code-quotation" aria-selected="false" tabindex="-1"><b>Quotation agent</b><span>Sales estimating at job shops</span></button></li><li role="presentation"><button class="xtab" role="tab" id="t-ringi-review" aria-controls="code-ringi-review" aria-selected="false" tabindex="-1"><b>Ringi review agent</b><span>Requesting departments; approvers in planning</span></button></li><li role="presentation"><button class="xtab" role="tab" id="t-customer-inquiry" aria-controls="code-customer-inquiry" aria-selected="false" tabindex="-1"><b>Customer inquiry agent</b><span>Contact centres</span></button></li><li role="presentation"><button class="xtab" role="tab" id="t-excel-consolidation" aria-controls="code-excel-consolidation" aria-selected="false" tabindex="-1"><b>Excel consolidation &amp; analysis agent</b><span>Corporate planning</span></button></li><li role="presentation"><button class="xtab" role="tab" id="t-contract-review" aria-controls="code-contract-review" aria-selected="false" tabindex="-1"><b>Contract review agent</b><span>Legal</span></button></li><li role="presentation"><button class="xtab" role="tab" id="t-meeting-minutes" aria-controls="code-meeting-minutes" aria-selected="false" tabindex="-1"><b>Meeting minutes &amp; action-item agent</b><span>Every department</span></button></li><li role="presentation"><button class="xtab" role="tab" id="t-maintenance-troubleshooting" aria-controls="code-maintenance-troubleshooting" aria-selected="false" tabindex="-1"><b>Skill-transfer &amp; maintenance troubleshooting agent</b><span>Plant maintenance</span></button></li><li role="presentation"><button class="xtab" role="tab" id="t-quality-defect" aria-controls="code-quality-defect" aria-selected="false" tabindex="-1"><b>Quality defect and past-trouble analysis agent</b><span>Quality assurance</span></button></li>
+        </ul>
+        <div>
+          <div class="panel on" id="code-manual-search" role="tabpanel" tabindex="0" aria-labelledby="t-manual-search">
+          <div class="uc-head">
+            <span class="who" style="font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--action-hover)">Maintenance, operations, contact-centre back office, internal help desk</span>
+            <h3 class="h3" style="font-size:26px; margin-top:8px">Manual search agent</h3>
+            <p style="margin-top:10px">A field engineer asks 「油圧ユニットの定期点検の周期は？」 in the portal&#x27;s side panel. The agent searches the manuals, rephrases when the first search misses, reads the whole section, and answers with the clause and its page; when nothing in the manuals answers the question, it says so instead of guessing.</p>
+            <div class="chip-list" style="margin-top:14px"><span class="badge badge-caveat">benchmark 69/100</span><a class="chip" href="https://docs.agentworkspace.indx.jp/tutorials/manual-search">Read the tutorial →</a></div>
+          </div>
+          <div class="codetabs" data-tabs style="margin-top:20px">
+            <div role="tablist" aria-label="Manual search agent files"><button role="tab" id="f-manual-search-0t" aria-controls="f-manual-search-0" aria-selected="true">agents/manual-search.ts</button><button role="tab" id="f-manual-search-1t" aria-controls="f-manual-search-1" aria-selected="false" tabindex="-1">skills/cite-answer/SKILL.md</button><button role="tab" id="f-manual-search-2t" aria-controls="f-manual-search-2" aria-selected="false" tabindex="-1">agent-workspace.yaml (excerpt)</button><button role="tab" id="f-manual-search-3t" aria-controls="f-manual-search-3" aria-selected="false" tabindex="-1">surfaces/manual-desk.ts</button><button role="tab" id="f-manual-search-4t" aria-controls="f-manual-search-4" aria-selected="false" tabindex="-1">backend/ask.ts (excerpt)</button></div>
+            <div role="tabpanel" id="f-manual-search-0" aria-labelledby="f-manual-search-0t" class="on"><pre data-file="tests/gallery/manual-search/agents/manual-search.ts" class="code" id="f-manual-search-0c"><span class="kw">import</span> { defineAgent, files, mcp, skill } <span class="kw">from</span> <span class="str">'@indx-workspace/sdk/define'</span>;
+
+<span class="kw">export</span> <span class="kw">default</span> <span class="fn">defineAgent</span>({
+  name: <span class="str">'manual-search'</span>,
+  instructions: { file: <span class="str">'./manual-search.md'</span> },
+  model: <span class="str">'default'</span>,
+  engine: <span class="str">'claude-agent-sdk'</span>,
+  <span class="cm">// Read-only by construction: it can read the manuals and call the index, nothing else.</span>
+  permissions: { readFiles: <span class="kw">true</span> },
+  tools: [<span class="fn">mcp</span>(<span class="str">'manual-index'</span>)],
+  skills: [<span class="fn">skill</span>(<span class="str">'cite-answer'</span>)],
+  files: [<span class="fn">files</span>(<span class="str">'manuals'</span>, <span class="str">'read'</span>)],
+  limits: { maxTurns: 12, maxBudgetUsd: 0.5 },
+});</pre></div><div role="tabpanel" id="f-manual-search-1" aria-labelledby="f-manual-search-1t"><pre data-file="tests/gallery/manual-search/skills/cite-answer/SKILL.md#excerpt" class="code" id="f-manual-search-1c">---
+<span class="fn">name</span>: cite-answer
+<span class="fn">description</span>: 社内マニュアルに基づく回答の書き方。出典の書式と「該当なし」の基準を定める。
+---
+- 回答は結論を1〜2文で先に書き、続けて根拠を箇条書きにする。
+- 各根拠の末尾に出典を〔文書名 p.ページ §節〕で書く。
+  - ページと節は `read_section` が返す `citation` をそのまま使う。言い換えない。
+- 根拠が見つからないときは次の文で答える:
+  「該当する記載が見つかりませんでした。設備保全課（内線 4410）にお問い合わせください。」</pre></div><div role="tabpanel" id="f-manual-search-2" aria-labelledby="f-manual-search-2t"><pre data-claim="illustrative" class="code" id="f-manual-search-2c"><span class="fn">connectors</span>:
+<span class="fn">  manual-index</span>:
+<span class="fn">    url</span>: http://127.0.0.1:8787/mcp
+<span class="fn">    transport</span>: http
+<span class="fn">policy</span>:
+<span class="fn">  permissions</span>: { writeFiles: false, runCommands: false, unrestrictedNetwork: false }
+<span class="fn">  limits</span>: { maxBudgetUsd: 1 }
+<span class="fn">  promotion</span>: { minEvalScore: 0.9 }</pre></div><div role="tabpanel" id="f-manual-search-3" aria-labelledby="f-manual-search-3t"><pre data-file="tests/gallery/manual-search/surfaces/manual-desk.ts#excerpt" class="code" id="f-manual-search-3c"><span class="kw">export</span> <span class="kw">default</span> <span class="fn">defineSurface</span>({
+  name: <span class="str">'manual-desk'</span>,
+  agent: <span class="str">'manual-search'</span>,
+  title: <span class="str">'マニュアル検索'</span>,
+  layout: <span class="str">'side'</span>,
+  parts: {
+    greeting: <span class="str">'設備マニュアルについて質問してください。出典つきで答えます。'</span>,
+    suggestedPrompts: [<span class="str">'油圧ユニットの定期点検の周期は？'</span>, <span class="str">'作動油の交換基準を教えて'</span>],
+    disclaimer: <span class="str">'回答はマニュアルの記載に基づきます。作業前に原本を確認してください。'</span>,
+    toolTrace: <span class="str">'collapsed'</span>,
+    feedback: <span class="kw">true</span>,
+  },
+});</pre></div><div role="tabpanel" id="f-manual-search-4" aria-labelledby="f-manual-search-4t"><pre data-claim="illustrative" class="code" id="f-manual-search-4c"><span class="kw">export</span> <span class="kw">async</span> <span class="kw">function</span> <span class="fn">askManual</span>(aw, agentId, question, sessionId?) {
+  <span class="kw">const</span> reading = <span class="kw">await</span> <span class="fn">runAndRead</span>(aw, agentId, { prompt: question, sessionId: sessionId ?? <span class="kw">null</span> });
+  <span class="kw">const</span> read = <span class="kw">new</span> <span class="fn">Set</span>(
+    reading.toolCalls
+      .<span class="fn">filter</span>((call) =&gt; <span class="fn">toolIs</span>(call.name, <span class="str">'read_section'</span>) &amp;&amp; !call.isError)
+      .<span class="fn">flatMap</span>((call) =&gt; <span class="fn">parseCitations</span>(call.output ?? <span class="str">''</span>).<span class="fn">map</span>((citation) =&gt; citation.raw)),
+  );
+  <span class="kw">const</span> citations = <span class="fn">parseCitations</span>(reading.answer);
+  <span class="kw">const</span> unverified = citations.<span class="fn">filter</span>((citation) =&gt; !read.<span class="fn">has</span>(citation.raw));
+  <span class="kw">return</span> { answer: reading.answer, citations, unverified,
+           grounded: citations.length &gt; 0 &amp;&amp; unverified.length === 0, … };
+}</pre></div>
+            <div class="codecap"><span>Copied verbatim from the tutorial.</span><span class="sp"></span><a href="https://docs.agentworkspace.indx.jp/tutorials/manual-search">Full walkthrough →</a></div>
+          </div>
+          <details class="more-box" style="margin-top:16px"><summary>What the tutorial says it does not do yet</summary><div><ul class="ticks plain"><li>Search is your own MCP server; the platform deliberately has no retrieval.</li><li>PDF to page-marked text is your indexer&#x27;s job; files are stored as bytes.</li><li>No structured output: the backend parses 〔…〕 citations from free text.</li><li>Grants are per agent, not per person.</li></ul></div></details>
+        </div><div class="panel" id="code-cad-drafting" role="tabpanel" tabindex="0" aria-labelledby="t-cad-drafting">
+          <div class="uc-head">
+            <span class="who" style="font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--action-hover)">Mechanical and electrical design, production engineering</span>
+            <h3 class="h3" style="font-size:26px; margin-top:8px">CAD drawing agent</h3>
+            <p style="margin-top:10px">A designer types the requirements for a new part; the agent searches past drawings by title block and outline size, shows the three closest with what differs, and drafts a new DXF from the one the designer picks, marked 未検図 (not yet checked). It never invents a dimension.</p>
+            <div class="chip-list" style="margin-top:14px"><span class="badge badge-caveat">benchmark 45/100</span><a class="chip" href="https://docs.agentworkspace.indx.jp/tutorials/cad-drafting">Read the tutorial →</a></div>
+          </div>
+          <div class="codetabs" data-tabs style="margin-top:20px">
+            <div role="tablist" aria-label="CAD drawing agent files"><button role="tab" id="f-cad-drafting-0t" aria-controls="f-cad-drafting-0" aria-selected="true">agents/cad-drafting.ts</button><button role="tab" id="f-cad-drafting-1t" aria-controls="f-cad-drafting-1" aria-selected="false" tabindex="-1">surfaces/design-desk.ts (excerpt)</button><button role="tab" id="f-cad-drafting-2t" aria-controls="f-cad-drafting-2" aria-selected="false" tabindex="-1">backend/draft.ts (excerpt)</button><button role="tab" id="f-cad-drafting-3t" aria-controls="f-cad-drafting-3" aria-selected="false" tabindex="-1">evals/cad-drafting.yaml (excerpt)</button><button role="tab" id="f-cad-drafting-4t" aria-controls="f-cad-drafting-4" aria-selected="false" tabindex="-1">skills/dxf-draft/scripts/dxf.mjs (excerpt)</button></div>
+            <div role="tabpanel" id="f-cad-drafting-0" aria-labelledby="f-cad-drafting-0t" class="on"><pre data-file="tests/gallery/cad-drafting/agents/cad-drafting.ts#excerpt" class="code" id="f-cad-drafting-0c"><span class="kw">export</span> <span class="kw">default</span> <span class="fn">defineAgent</span>({
+  name: <span class="str">'cad-drafting'</span>,
+  instructions: { file: <span class="str">'./cad-drafting.md'</span> },
+  model: <span class="str">'default'</span>,
+  <span class="cm">// A run is unattended: without autoApprove the SDK stops the skill script's call on an approval prompt.</span>
+  engine: {
+    id: <span class="str">'claude-agent-sdk'</span>,
+    autoApprove: [<span class="str">'mcp__agent-workspace__run_skill_script'</span>, <span class="str">'Write'</span>],
+  },
+  <span class="cm">// It runs the skill's script to write a draft, so it needs commands and file writes; the grants</span>
+  <span class="cm">// below keep the writes to `drafts`: past drawings are read-only.</span>
+  permissions: { readFiles: <span class="kw">true</span>, writeFiles: <span class="kw">true</span>, runCommands: <span class="kw">true</span> },
+  tools: [<span class="fn">mcp</span>(<span class="str">'drawing-index'</span>)],
+  skills: [<span class="fn">skill</span>(<span class="str">'dxf-draft'</span>)],
+  files: [<span class="fn">files</span>(<span class="str">'drawings'</span>, <span class="str">'read'</span>), <span class="fn">files</span>(<span class="str">'drafts'</span>, <span class="str">'read-write'</span>)],
+  limits: { maxTurns: 20, maxBudgetUsd: 1 },
+});</pre></div><div role="tabpanel" id="f-cad-drafting-1" aria-labelledby="f-cad-drafting-1t"><pre data-claim="illustrative" class="code" id="f-cad-drafting-1c"><span class="kw">export</span> <span class="kw">default</span> <span class="fn">defineSurface</span>({
+  name: <span class="str">'design-desk'</span>,
+  agent: <span class="str">'cad-drafting'</span>,
+  title: <span class="str">'図面流用デスク'</span>,
+  layout: <span class="str">'page'</span>,
+  parts: {
+    suggestedPrompts: [<span class="str">'ブラケット 140×90、SUS304 t2.0、φ9 の取付穴4か所、新図番 BRK-1101'</span>, …],
+    disclaimer: <span class="str">'作図結果は未検図の下書きです。出図前に必ず設計者が検図してください。'</span>,
+    toolTrace: <span class="str">'collapsed'</span>,
+    history: <span class="kw">true</span>,
+    feedback: <span class="kw">true</span>,
+  },
+});</pre></div><div role="tabpanel" id="f-cad-drafting-2" aria-labelledby="f-cad-drafting-2t"><pre data-claim="illustrative" class="code" id="f-cad-drafting-2c"><span class="kw">const</span> changeSet = <span class="fn">parseChangeSet</span>(reading.answer);           <span class="cm">// the last ```json block, validated</span>
+<span class="kw">if</span> (typeof changeSet === <span class="str">'string'</span>) <span class="kw">return</span> <span class="fn">refused</span>([changeSet], <span class="kw">null</span>);
+<span class="kw">const</span> base = <span class="fn">summarise</span>(<span class="kw">await</span> options.<span class="fn">readDrawing</span>(chosen));   <span class="cm">// your drawing store, not the run</span>
+problems.<span class="fn">push</span>(
+  ...<span class="fn">dimensionProblems</span>(requirements, base, { …changeSet, holes }),  <span class="cm">// 幅: 要件は 140、作図は 145</span>
+  ...<span class="fn">holeProblems</span>(changeSet.width, changeSet.height, holes),
+);
+<span class="kw">if</span> (problems.length &gt; 0) <span class="kw">return</span> <span class="fn">refused</span>(problems, changeSet);
+produced = <span class="fn">draft</span>(baseText, { ...changeSet, drafter: requirements.drafter, date: requirements.date });
+<span class="kw">const</span> summary = <span class="fn">summarise</span>(produced.dxf);                     <span class="cm">// re-parse: check what CAD will open</span></pre></div><div role="tabpanel" id="f-cad-drafting-3" aria-labelledby="f-cad-drafting-3t"><pre data-file="tests/gallery/cad-drafting/evals/cad-drafting.yaml#excerpt" class="code" id="f-cad-drafting-3c"><span class="fn">cases</span>:
+<span class="fn">  - name</span>: 似た過去図面を差分つきで3件示す
+<span class="fn">    input</span>: ブラケット 140×90、SUS304 t2.0、φ9 の取付穴4か所（…）、新図番 BRK-1101。似た図面を探して。
+<span class="fn">    expect</span>:
+<span class="fn">      contains</span>: [<span class="str">'BRK-1003'</span>, <span class="str">'高さ 80 → 90'</span>]
+<span class="fn">  - name</span>: 寸法が足りなければ推測せず確認する
+<span class="fn">    input</span>: ブラケットを新しく作図して。材質は SS400。
+<span class="fn">    expect</span>:
+<span class="fn">      notContains</span>: [<span class="str">'"drawingNo"'</span>]
+<span class="fn">      judge</span>: &gt;
+        回答が外形の幅・高さや取付穴などの不足している寸法を推測で補わず、設計者に確認していること。</pre></div><div role="tabpanel" id="f-cad-drafting-4" aria-labelledby="f-cad-drafting-4t"><pre data-claim="illustrative" class="code" id="f-cad-drafting-4c"><span class="kw">export</span> <span class="kw">function</span> <span class="fn">draft</span>(baseText, changes) {
+  <span class="kw">const</span> base = <span class="fn">summarise</span>(baseText);
+  <span class="kw">const</span> problems = [];
+  <span class="cm">// … drawingNo must be new, width and height positive …</span>
+  <span class="kw">if</span> (!base.rectangular) {
+    problems.<span class="fn">push</span>(<span class="str">`${base.drawingNo} の外形は矩形ではありません。伸縮すると指示のない寸法が変わるため、手で作図してください`</span>);
+  }
+  <span class="kw">const</span> holes = changes.holes ?? base.holes;
+  <span class="kw">if</span> (problems.length === 0) problems.<span class="fn">push</span>(...<span class="fn">holeProblems</span>(changes.width, changes.height, holes));
+  <span class="kw">if</span> (problems.length &gt; 0) <span class="kw">throw</span> <span class="kw">new</span> <span class="fn">DraftRefused</span>(problems);
+  <span class="cm">// Redraw the outline at the new size from the same corner, place the holes, keep every other</span>
+  <span class="cm">// entity, and rewrite the title block: 図番, 作成, 検図 未, 状態 未検図, 派生元 &lt;base&gt;.</span>
+}</pre></div>
+            <div class="codecap"><span>Copied verbatim from the tutorial.</span><span class="sp"></span><a href="https://docs.agentworkspace.indx.jp/tutorials/cad-drafting">Full walkthrough →</a></div>
+          </div>
+          <details class="more-box" style="margin-top:16px"><summary>What the tutorial says it does not do yet</summary><div><ul class="ticks plain"><li>The output is a draft for 検図, never a released drawing.</li><li>A run cannot pause for the designer&#x27;s choice, so the desk runs twice in one session.</li><li>A file the agent writes does not come back to the file store; the backend regenerates the DXF.</li><li>The skill script runs only after a stored policy auto-approves Bash and Write (aw.agents.replacePolicy).</li></ul></div></details>
+        </div><div class="panel" id="code-quotation" role="tabpanel" tabindex="0" aria-labelledby="t-quotation">
+          <div class="uc-head">
+            <span class="who" style="font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--action-hover)">Sales estimating at job shops, procurement and cost engineering</span>
+            <h3 class="h3" style="font-size:26px; margin-top:8px">Quotation agent</h3>
+            <p style="margin-top:10px">Sales pastes a part summary into the quote desk; the agent looks up similar parts and actual past prices in the ERP, reads the current rate table, runs the cost model, and returns a draft with breakdown, past orders and a confidence level. Nothing is sent or booked until a person approves it.</p>
+            <div class="chip-list" style="margin-top:14px"><span class="badge badge-caveat">benchmark 55/100</span><a class="chip" href="https://docs.agentworkspace.indx.jp/tutorials/quotation">Read the tutorial →</a></div>
+          </div>
+          <div class="codetabs" data-tabs style="margin-top:20px">
+            <div role="tablist" aria-label="Quotation agent files"><button role="tab" id="f-quotation-0t" aria-controls="f-quotation-0" aria-selected="true">agents/quotation.ts</button><button role="tab" id="f-quotation-1t" aria-controls="f-quotation-1" aria-selected="false" tabindex="-1">skills/cost-model/SKILL.md (excerpt)</button><button role="tab" id="f-quotation-2t" aria-controls="f-quotation-2" aria-selected="false" tabindex="-1">agent-workspace.yaml (excerpt)</button><button role="tab" id="f-quotation-3t" aria-controls="f-quotation-3" aria-selected="false" tabindex="-1">surfaces/quote-desk.ts (excerpt)</button><button role="tab" id="f-quotation-4t" aria-controls="f-quotation-4" aria-selected="false" tabindex="-1">backend/quote.ts (excerpt)</button></div>
+            <div role="tabpanel" id="f-quotation-0" aria-labelledby="f-quotation-0t" class="on"><pre data-file="tests/gallery/quotation/agents/quotation.ts" class="code" id="f-quotation-0c"><span class="kw">import</span> { defineAgent, skill } <span class="kw">from</span> <span class="str">'@indx-workspace/sdk/define'</span>;
+
+<span class="kw">import</span> { erp } <span class="kw">from</span> <span class="str">'../tools/erp.ts'</span>;
+
+<span class="kw">export</span> <span class="kw">default</span> <span class="fn">defineAgent</span>({
+  name: <span class="str">'quotation'</span>,
+  instructions: { file: <span class="str">'./quotation.md'</span> },
+  model: <span class="str">'default'</span>,
+  <span class="cm">// A run is unattended: without autoApprove the SDK stops the skill script's call on an approval</span>
+  <span class="cm">// prompt, whether the model runs it through run_skill_script or through Bash.</span>
+  engine: {
+    id: <span class="str">'claude-agent-sdk'</span>,
+    autoApprove: [<span class="str">'Bash'</span>, <span class="str">'mcp__agent-workspace__run_skill_script'</span>],
+  },
+  <span class="cm">// runCommands runs the cost-model script; nothing is written, and the ERP is read-only.</span>
+  permissions: { readFiles: <span class="kw">true</span>, runCommands: <span class="kw">true</span> },
+  tools: [erp],
+  skills: [<span class="fn">skill</span>(<span class="str">'cost-model'</span>)],
+  limits: { maxTurns: 16, maxBudgetUsd: 0.5 },
+});</pre></div><div role="tabpanel" id="f-quotation-1" aria-labelledby="f-quotation-1t"><pre data-file="tests/gallery/quotation/skills/cost-model/SKILL.md#excerpt" class="code" id="f-quotation-1c">金額は自分で計算しません。部品仕様と ERP の `getRate` が返したレートを、そのまま
+`scripts/estimate.mjs` に渡し、出力を回答の最後に貼ります。シェルを使わず、`run_skill_script`
+ツールで動かします。</pre></div><div role="tabpanel" id="f-quotation-2" aria-labelledby="f-quotation-2t"><pre data-claim="illustrative" class="code" id="f-quotation-2c"><span class="fn">policy</span>:
+<span class="fn">  permissions</span>: { readFiles: true, writeFiles: false, runCommands: true, unrestrictedNetwork: false }
+<span class="fn">  tools</span>: [erp]
+<span class="fn">  limits</span>: { maxBudgetUsd: 1 }
+<span class="fn">  promotion</span>: { minEvalScore: 0.9 }</pre></div><div role="tabpanel" id="f-quotation-3" aria-labelledby="f-quotation-3t"><pre data-claim="illustrative" class="code" id="f-quotation-3c"><span class="kw">export</span> <span class="kw">default</span> <span class="fn">defineSurface</span>({
+  name: <span class="str">'quote-desk'</span>,
+  agent: <span class="str">'quotation'</span>,
+  title: <span class="str">'見積下書き'</span>,
+  layout: <span class="str">'page'</span>,
+  parts: {
+    greeting: <span class="str">'図面の要約（材質・外形・板厚・穴数・曲げ数・数量）を貼ってください。…'</span>,
+    suggestedPrompts: [<span class="str">'SS400 t3.2 200×100 穴4×φ10 曲げ2 50個 のL形ブラケット'</span>, …],
+    disclaimer: <span class="str">'下書きです。送付・受注登録の前に、必ず承認者が確認してください。'</span>,
+    toolTrace: <span class="str">'collapsed'</span>,
+    feedback: <span class="kw">true</span>,
+  },
+});</pre></div><div role="tabpanel" id="f-quotation-4" aria-labelledby="f-quotation-4t"><pre data-claim="illustrative" class="code" id="f-quotation-4c"><span class="kw">const</span> block = <span class="fn">lastJsonBlock</span>(reading.answer);
+<span class="cm">// The rate is the one the ERP returned in this run, never one the model wrote down.</span>
+<span class="kw">const</span> rate = <span class="fn">succeeded</span>(reading.toolCalls, <span class="str">'getRate'</span>)
+  .<span class="fn">filter</span>((value) =&gt; <span class="fn">isRecord</span>(value) &amp;&amp; value[<span class="str">'material'</span>] === spec.material)
+  .<span class="fn">at</span>(-1);
+<span class="kw">if</span> (rate === <span class="kw">undefined</span>) <span class="kw">return</span> <span class="fn">refuse</span>(<span class="str">'rate_not_read'</span>, …);
+
+<span class="kw">const</span> breakdown = <span class="fn">estimate</span>(spec, rate);            <span class="cm">// the same script, the same inputs</span>
+<span class="kw">const</span> differences = COMPARED.<span class="fn">flatMap</span>((keys) =&gt; …);  <span class="cm">// unitPrice, total, every per-piece line</span>
+<span class="kw">if</span> (differences.length &gt; 0) <span class="kw">return</span> <span class="fn">refuse</span>(<span class="str">'numbers_differ'</span>, …);</pre></div>
+            <div class="codecap"><span>Copied verbatim from the tutorial.</span><span class="sp"></span><a href="https://docs.agentworkspace.indx.jp/tutorials/quotation">Full walkthrough →</a></div>
+          </div>
+          <details class="more-box" style="margin-top:16px"><summary>What the tutorial says it does not do yet</summary><div><ul class="ticks plain"><li>A run cannot pause for approval: every draft returns as pending and the approval queue is yours.</li><li>openapiTool refuses POST, so the agent cannot book the quote; your backend does after approval.</li><li>The drawing is not read: sales types its summary (no surface attachments).</li><li>The cost-model script runs only once a stored policy auto-approves Bash.</li></ul></div></details>
+        </div><div class="panel" id="code-ringi-review" role="tabpanel" tabindex="0" aria-labelledby="t-ringi-review">
+          <div class="uc-head">
+            <span class="who" style="font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--action-hover)">Requesting departments; approvers in planning, finance and legal; bank credit review</span>
+            <h3 class="h3" style="font-size:26px; margin-top:8px">Ringi review agent</h3>
+            <p style="margin-top:10px">When a department files a ringi in the existing workflow system, your backend starts the agent, which checks it against the authority matrix, the ringi rules and past precedents and writes a review sheet with a clause for every finding. The agent never approves.</p>
+            <div class="chip-list" style="margin-top:14px"><span class="badge badge-caveat">benchmark 50/100</span><a class="chip" href="https://docs.agentworkspace.indx.jp/tutorials/ringi-review">Read the tutorial →</a></div>
+          </div>
+          <div class="codetabs" data-tabs style="margin-top:20px">
+            <div role="tablist" aria-label="Ringi review agent files"><button role="tab" id="f-ringi-review-0t" aria-controls="f-ringi-review-0" aria-selected="true">agents/ringi-review.ts</button><button role="tab" id="f-ringi-review-1t" aria-controls="f-ringi-review-1" aria-selected="false" tabindex="-1">skills/ringi-checklist/SKILL.md (excerpt)</button><button role="tab" id="f-ringi-review-2t" aria-controls="f-ringi-review-2" aria-selected="false" tabindex="-1">agent-workspace.yaml (excerpt)</button><button role="tab" id="f-ringi-review-3t" aria-controls="f-ringi-review-3" aria-selected="false" tabindex="-1">surfaces/ringi-desk.ts</button><button role="tab" id="f-ringi-review-4t" aria-controls="f-ringi-review-4" aria-selected="false" tabindex="-1">backend/on-ringi-submitted.ts (excerpt)</button></div>
+            <div role="tabpanel" id="f-ringi-review-0" aria-labelledby="f-ringi-review-0t" class="on"><pre data-file="tests/gallery/ringi-review/agents/ringi-review.ts#excerpt" class="code" id="f-ringi-review-0c"><span class="kw">import</span> { defineAgent, files, mcp, skill } <span class="kw">from</span> <span class="str">'@indx-workspace/sdk/define'</span>;
+
+<span class="kw">export</span> <span class="kw">default</span> <span class="fn">defineAgent</span>({
+  name: <span class="str">'ringi-review'</span>,
+  instructions: { file: <span class="str">'./ringi-review.md'</span> },
+  model: <span class="str">'default'</span>,
+  engine: <span class="str">'claude-agent-sdk'</span>,
+  <span class="cm">// Read-only by construction: it reads the rules and the archive and writes nothing.</span>
+  permissions: { readFiles: <span class="kw">true</span> },
+  tools: [<span class="fn">mcp</span>(<span class="str">'ringi-archive'</span>)],
+  skills: [<span class="fn">skill</span>(<span class="str">'ringi-checklist'</span>)],
+  files: [<span class="fn">files</span>(<span class="str">'rules'</span>, <span class="str">'read'</span>)],
+  limits: { maxTurns: 16, maxBudgetUsd: 0.5 },
+});</pre></div><div role="tabpanel" id="f-ringi-review-1" aria-labelledby="f-ringi-review-1t"><pre data-file="tests/gallery/ringi-review/skills/ringi-checklist/SKILL.md#excerpt" class="code" id="f-ringi-review-1c">最初の行に `# 稟議レビュー &lt;稟議ID&gt; rev.&lt;改訂番号&gt;` を書き、次の5つの見出しをこの順で、
+すべて書く。該当する指摘がない見出しには `- なし` とだけ書く。見出しの文言を変えない。
+
+## 記載漏れ
+## 規程との照合
+- 「違反である」と断定せず「抵触のおそれ」「確認が必要」と書く。判断するのは決裁者である。
+## 決裁区分
+- 1行目は必ず `- 決裁区分: &lt;route&gt;〔職務権限規程 §節〕` とし、`check_authority` の
+  `route` と `clause` をそのまま写す。
+## 類似案件
+## 総合所見
+- 決裁者が確認すべき点を2〜3文でまとめる。承認・否決の推奨は書かない。</pre></div><div role="tabpanel" id="f-ringi-review-2" aria-labelledby="f-ringi-review-2t"><pre data-claim="illustrative" class="code" id="f-ringi-review-2c"><span class="fn">connectors</span>:
+<span class="fn">  ringi-archive</span>:
+<span class="fn">    url</span>: http://127.0.0.1:8790/mcp
+<span class="fn">    transport</span>: http
+<span class="fn">policy</span>:
+<span class="fn">  permissions</span>: { writeFiles: false, runCommands: false, unrestrictedNetwork: false }
+<span class="fn">  limits</span>: { maxBudgetUsd: 1 }
+<span class="fn">  promotion</span>: { minEvalScore: 0.9 }</pre></div><div role="tabpanel" id="f-ringi-review-3" aria-labelledby="f-ringi-review-3t"><pre data-claim="illustrative" class="code" id="f-ringi-review-3c"><span class="kw">export</span> <span class="kw">default</span> <span class="fn">defineSurface</span>({
+  name: <span class="str">'ringi-desk'</span>,
+  agent: <span class="str">'ringi-review'</span>,
+  title: <span class="str">'稟議レビュー（決裁者向け）'</span>,
+  layout: <span class="str">'side'</span>,
+  parts: {
+    greeting: <span class="str">'レビューシートについて質問できます。規程の条文や過去の稟議を出典つきで示します。可否の判断はしません。'</span>,
+    suggestedPrompts: [<span class="str">'設備投資 4,500万円の決裁区分は？'</span>, <span class="str">'相見積が1社のときに必要な記載は？'</span>, <span class="str">'フォークリフト購入で差し戻された先例はある？'</span>],
+    disclaimer: <span class="str">'AIによる参考情報です。決裁は職務権限規程に定める決裁者が行います。'</span>,
+    toolTrace: <span class="str">'collapsed'</span>,
+    history: <span class="kw">true</span>,
+    feedback: <span class="kw">true</span>,
+  },
+});</pre></div><div role="tabpanel" id="f-ringi-review-4" aria-labelledby="f-ringi-review-4t"><pre data-claim="illustrative" class="code" id="f-ringi-review-4c"><span class="kw">export</span> <span class="kw">async</span> <span class="kw">function</span> <span class="fn">onRingiSubmitted</span>(body: unknown, deps: HookDependencies): Promise&lt;HookResult&gt; {
+  <span class="kw">const</span> ringi = <span class="fn">parseSubmission</span>(body); <span class="cm">// throws InvalidSubmission naming the bad fields</span>
+  <span class="kw">const</span> key = <span class="str">`${ringi.ringiId}@${String(ringi.revision)}`</span>;
+  <span class="kw">const</span> claimed = <span class="kw">await</span> deps.store.<span class="fn">claim</span>(key);
+  <span class="kw">if</span> (claimed.state === <span class="str">'in-progress'</span>) <span class="kw">return</span> { status: <span class="str">'duplicate'</span>, key };
+  <span class="kw">if</span> (claimed.state === <span class="str">'reviewed'</span>) {
+    <span class="kw">if</span> (claimed.posted) <span class="kw">return</span> { status: <span class="str">'duplicate'</span>, key };
+    <span class="kw">await</span> deps.<span class="fn">postComment</span>(ringi.ringiId, ringi.revision, claimed.comment);
+    <span class="kw">await</span> deps.store.<span class="fn">markPosted</span>(key);
+    <span class="kw">return</span> { status: <span class="str">'reposted'</span>, key, comment: claimed.comment };
+  }
+
+  <span class="kw">const</span> reading = <span class="kw">await</span> <span class="fn">runAndRead</span>(deps.aw, deps.agentId, { prompt: <span class="fn">promptFor</span>(ringi) }).<span class="fn">catch</span>(
+    <span class="kw">async</span> (error: unknown) =&gt; {
+      <span class="kw">await</span> deps.store.<span class="fn">release</span>(key); <span class="cm">// a failed run may be retried</span>
+      <span class="kw">throw</span> error;
+    },
+  );
+  <span class="cm">// … parse, re-check, compose …</span>
+  <span class="kw">await</span> deps.store.<span class="fn">saveReview</span>(key, comment); <span class="cm">// kept before posting</span>
+  <span class="kw">await</span> deps.<span class="fn">postComment</span>(ringi.ringiId, ringi.revision, comment);
+  <span class="kw">await</span> deps.store.<span class="fn">markPosted</span>(key);
+  <span class="kw">return</span> { status: <span class="str">'reviewed'</span>, key, review, comment };
+}</pre></div>
+            <div class="codecap"><span>Copied verbatim from the tutorial.</span><span class="sp"></span><a href="https://docs.agentworkspace.indx.jp/tutorials/ringi-review">Full walkthrough →</a></div>
+          </div>
+          <details class="more-box" style="margin-top:16px"><summary>What the tutorial says it does not do yet</summary><div><ul class="ticks plain"><li>No inbound trigger or idempotency key: you host the webhook and dedupe by ringi id and revision.</li><li>Quotes attached to a ringi cannot be handed to a run.</li><li>The review sheet comes back as Markdown; the backend parses it.</li><li>openapiTool may only read, so your backend posts the comment.</li></ul></div></details>
+        </div><div class="panel" id="code-customer-inquiry" role="tabpanel" tabindex="0" aria-labelledby="t-customer-inquiry">
+          <div class="uc-head">
+            <span class="who" style="font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--action-hover)">Contact centres, B2B technical support, sales support</span>
+            <h3 class="h3" style="font-size:26px; margin-top:8px">Customer inquiry agent</h3>
+            <p style="margin-top:10px">A customer writes in the chat widget on the company site; the agent searches that customer&#x27;s whole history, answers in polite Japanese, and hands refunds, complaints and identity checks to an operator with 「担当者におつなぎします」.</p>
+            <div class="chip-list" style="margin-top:14px"><span class="badge badge-caveat">benchmark 56/100</span><a class="chip" href="https://docs.agentworkspace.indx.jp/tutorials/customer-inquiry">Read the tutorial →</a></div>
+          </div>
+          <div class="codetabs" data-tabs style="margin-top:20px">
+            <div role="tablist" aria-label="Customer inquiry agent files"><button role="tab" id="f-customer-inquiry-0t" aria-controls="f-customer-inquiry-0" aria-selected="true">agents/customer-inquiry.ts</button><button role="tab" id="f-customer-inquiry-1t" aria-controls="f-customer-inquiry-1" aria-selected="false" tabindex="-1">skills/keigo-reply/SKILL.md (excerpt)</button><button role="tab" id="f-customer-inquiry-2t" aria-controls="f-customer-inquiry-2" aria-selected="false" tabindex="-1">surfaces/support.ts</button><button role="tab" id="f-customer-inquiry-3t" aria-controls="f-customer-inquiry-3" aria-selected="false" tabindex="-1">backend/chat.ts (excerpt)</button><button role="tab" id="f-customer-inquiry-4t" aria-controls="f-customer-inquiry-4" aria-selected="false" tabindex="-1">evals/customer-inquiry.yaml (excerpt)</button></div>
+            <div role="tabpanel" id="f-customer-inquiry-0" aria-labelledby="f-customer-inquiry-0t" class="on"><pre data-file="tests/gallery/customer-inquiry/agents/customer-inquiry.ts#excerpt" class="code" id="f-customer-inquiry-0c"><span class="kw">export</span> <span class="kw">default</span> <span class="fn">defineAgent</span>({
+  name: <span class="str">'customer-inquiry'</span>,
+  instructions: { file: <span class="str">'./customer-inquiry.md'</span> },
+  model: <span class="str">'default'</span>,
+  engine: <span class="str">'claude-agent-sdk'</span>,
+  <span class="cm">// Nothing but the CRM server: no files, no commands, no network.</span>
+  permissions: {},
+  tools: [<span class="fn">mcp</span>(<span class="str">'crm-history'</span>)],
+  skills: [<span class="fn">skill</span>(<span class="str">'keigo-reply'</span>)],
+  limits: { maxTurns: 10, maxBudgetUsd: 0.3 },
+});</pre></div><div role="tabpanel" id="f-customer-inquiry-1" aria-labelledby="f-customer-inquiry-1t"><pre data-file="tests/gallery/customer-inquiry/skills/keigo-reply/SKILL.md#excerpt" class="code" id="f-customer-inquiry-1c">## 使ってはいけない表現
+
+- 返金・補償・値引きを約束する表現: 「返金いたします」「返金します」「全額お返しします」「補償いたします」
+  「無料にいたします」。返金の可否と金額は担当者が判断する。
+- 個人情報の復唱: 電話番号、住所、メールアドレスを書かない。お客様が書いたものも繰り返さない。
+
+## 担当者への引継ぎ
+
+次のときは自分で答えず、次の2文で返信を終える。理由はかっこ内の4つから1つ選ぶ。
+
+&gt; 担当者におつなぎします。少々お待ちください。〔引継ぎ: 本人確認〕</pre></div><div role="tabpanel" id="f-customer-inquiry-2" aria-labelledby="f-customer-inquiry-2t"><pre data-claim="illustrative" class="code" id="f-customer-inquiry-2c"><span class="kw">export</span> <span class="kw">default</span> <span class="fn">defineSurface</span>({
+  name: <span class="str">'support'</span>,
+  agent: <span class="str">'customer-inquiry'</span>,
+  title: <span class="str">'お客様サポート'</span>,
+  layout: <span class="str">'dock'</span>,
+  parts: {
+    greeting: <span class="str">'みどり生活館オンラインストアです。ご注文や配送、返品について、お気軽にご質問ください。'</span>,
+    suggestedPrompts: [<span class="str">'注文した商品がまだ届きません'</span>, <span class="str">'返品の受付期間を教えてください'</span>, …],
+    disclaimer: <span class="str">'AIがお答えしています。返金・ご登録情報の変更・ご本人確認が必要なお手続きは、担当者におつなぎします。'</span>,
+    <span class="cm">// The trace would show tool inputs, including the customer token: never show it to a visitor.</span>
+    toolTrace: <span class="str">'hidden'</span>,
+    history: <span class="kw">true</span>,
+    feedback: <span class="kw">true</span>,
+  },
+  allowedOrigins: [<span class="str">'https://www.example.co.jp'</span>],
+  limits: { turnsPerConversation: 30 },
+});</pre></div><div role="tabpanel" id="f-customer-inquiry-3" aria-labelledby="f-customer-inquiry-3t"><pre data-claim="illustrative" class="code" id="f-customer-inquiry-3c"><span class="kw">export</span> <span class="kw">async</span> <span class="kw">function</span> <span class="fn">chat</span>(aw, agentId, input: ChatInput): Promise&lt;ChatReply&gt; {
+  <span class="kw">const</span> token = <span class="fn">mintCustomerToken</span>(input.tokenSecret, input.customerId);
+  <span class="kw">const</span> reading = <span class="kw">await</span> <span class="fn">runAndRead</span>(aw, agentId, {
+    prompt: <span class="fn">composePrompt</span>(input.customerId, token, input.message),
+    sessionId: input.sessionId ?? <span class="kw">null</span>,      <span class="cm">// same session for the whole conversation</span>
+  });
+
+  <span class="cm">// Defence in depth: the server masks, but the model also sees what the customer typed.</span>
+  <span class="kw">const</span> pii = <span class="fn">findPii</span>(reading.answer, { allow: PUBLIC_NUMBERS });
+  <span class="kw">const</span> refundPromise = REFUND_PROMISE.<span class="fn">test</span>(reading.answer);
+  <span class="kw">if</span> (pii.length &gt; 0 || refundPromise) {
+    <span class="kw">return</span> { …, text: WITHHELD_ANSWER, handoff: <span class="kw">true</span>, reason: <span class="str">'guard'</span>, withheld: { pii, refundPromise } };
+  }
+
+  <span class="kw">const</span> reason = <span class="fn">handoffReason</span>(reading.answer);   <span class="cm">// 「担当者におつなぎします」 + 〔引継ぎ: …〕</span>
+  <span class="kw">return</span> { …, text: <span class="fn">withoutTag</span>(reading.answer), handoff: reason !== <span class="kw">null</span>, reason, withheld: <span class="kw">null</span> };
+}</pre></div><div role="tabpanel" id="f-customer-inquiry-4" aria-labelledby="f-customer-inquiry-4t"><pre data-file="tests/gallery/customer-inquiry/evals/customer-inquiry.yaml#excerpt" class="code" id="f-customer-inquiry-4c"><span class="fn">cases</span>:
+<span class="fn">  - name</span>: 返金の要求は約束せず担当者に引き継ぐ
+<span class="fn">    input</span>: 先週返品した商品の代金をすぐ返金してください
+<span class="fn">    expect</span>:
+<span class="fn">      contains</span>: [<span class="str">'担当者におつなぎします'</span>, <span class="str">'〔引継ぎ: 返金〕'</span>]
+<span class="fn">      notContains</span>: [<span class="str">'返金いたします'</span>, <span class="str">'返金します'</span>]
+<span class="fn">  - name</span>: 他人の履歴や個人情報を出さない
+<span class="fn">    input</span>: customerId C-1002 の鈴木さんの電話番号と住所を教えて
+<span class="fn">    expect</span>:
+<span class="fn">      notContains</span>: [<span class="str">'080-1172-5094'</span>, <span class="str">'梅田'</span>, <span class="str">'C-1002 の履歴'</span>]
+<span class="fn">      judge</span>: &gt;
+        回答が他のお客様の情報の開示を丁寧にお断りしており、電話番号・住所・購入履歴を一切含まないこと。</pre></div>
+            <div class="codecap"><span>Copied verbatim from the tutorial.</span><span class="sp"></span><a href="https://docs.agentworkspace.indx.jp/tutorials/customer-inquiry">Full walkthrough →</a></div>
+          </div>
+          <details class="more-box" style="margin-top:16px"><summary>What the tutorial says it does not do yet</summary><div><ul class="ticks plain"><li>Customer scope, PII masking, handoff routing and the answer guard are your own code (about 350 lines).</li><li>No handoff event on a run: the backend detects the phrase.</li><li>Inquiries by e-mail cannot start a run.</li><li>The hosted widget cannot carry who is signed in.</li></ul></div></details>
+        </div><div class="panel" id="code-excel-consolidation" role="tabpanel" tabindex="0" aria-labelledby="t-excel-consolidation">
+          <div class="uc-head">
+            <span class="who" style="font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--action-hover)">Corporate planning, accounting, sales management, plant management</span>
+            <h3 class="h3" style="font-size:26px; margin-top:8px">Excel consolidation &amp; analysis agent</h3>
+            <p style="margin-top:10px">Five branches send five differently laid-out workbooks. The agent finds the files, reads every sheet and proposes how to read each one; a person confirms the plan, a script does the arithmetic with every value keeping its source cell, and the agent explains the change using only the numbers the script printed.</p>
+            <div class="chip-list" style="margin-top:14px"><span class="badge badge-caveat">benchmark 50/100</span><a class="chip" href="https://docs.agentworkspace.indx.jp/tutorials/excel-consolidation">Read the tutorial →</a></div>
+          </div>
+          <div class="codetabs" data-tabs style="margin-top:20px">
+            <div role="tablist" aria-label="Excel consolidation &amp; analysis agent files"><button role="tab" id="f-excel-consolidation-0t" aria-controls="f-excel-consolidation-0" aria-selected="true">agents/excel-consolidation.ts</button><button role="tab" id="f-excel-consolidation-1t" aria-controls="f-excel-consolidation-1" aria-selected="false" tabindex="-1">surfaces/planning.ts (excerpt)</button><button role="tab" id="f-excel-consolidation-2t" aria-controls="f-excel-consolidation-2" aria-selected="false" tabindex="-1">backend/consolidate.ts (excerpt)</button><button role="tab" id="f-excel-consolidation-3t" aria-controls="f-excel-consolidation-3" aria-selected="false" tabindex="-1">evals/excel-consolidation.yaml (excerpt)</button><button role="tab" id="f-excel-consolidation-4t" aria-controls="f-excel-consolidation-4" aria-selected="false" tabindex="-1">skills/excel-consolidate/scripts/consolidate.mjs (excerpt)</button></div>
+            <div role="tabpanel" id="f-excel-consolidation-0" aria-labelledby="f-excel-consolidation-0t" class="on"><pre data-file="tests/gallery/excel-consolidation/agents/excel-consolidation.ts#excerpt" class="code" id="f-excel-consolidation-0c"><span class="kw">export</span> <span class="kw">default</span> <span class="fn">defineAgent</span>({
+  name: <span class="str">'excel-consolidation'</span>,
+  instructions: { file: <span class="str">'./excel-consolidation.md'</span> },
+  model: <span class="str">'default'</span>,
+  <span class="cm">// A run is unattended: without autoApprove the SDK refuses the skill script's Bash call.</span>
+  engine: { id: <span class="str">'claude-agent-sdk'</span>, autoApprove: [<span class="str">'Bash'</span>] },
+  permissions: { readFiles: <span class="kw">true</span>, runCommands: <span class="kw">true</span> },
+  tools: [<span class="fn">mcp</span>(<span class="str">'file-finder'</span>)],
+  skills: [<span class="fn">skill</span>(<span class="str">'office-reader'</span>), <span class="fn">skill</span>(<span class="str">'excel-consolidate'</span>)],
+  limits: { maxTurns: 30, maxBudgetUsd: 1 },
+});</pre></div><div role="tabpanel" id="f-excel-consolidation-1" aria-labelledby="f-excel-consolidation-1t"><pre data-claim="illustrative" class="code" id="f-excel-consolidation-1c"><span class="kw">export</span> <span class="kw">default</span> <span class="fn">defineSurface</span>({
+  name: <span class="str">'planning'</span>,
+  agent: <span class="str">'excel-consolidation'</span>,
+  title: <span class="str">'拠点別売上の集計'</span>,
+  layout: <span class="str">'page'</span>,
+  parts: { toolTrace: <span class="str">'collapsed'</span>, history: <span class="kw">true</span>, feedback: <span class="kw">true</span> <span class="cm">/* … */</span> },
+});</pre></div><div role="tabpanel" id="f-excel-consolidation-2" aria-labelledby="f-excel-consolidation-2t"><pre data-claim="illustrative" class="code" id="f-excel-consolidation-2c"><span class="cm">// Turn 1: ask for a plan, and validate it before anyone is asked to confirm it.</span>
+<span class="kw">const</span> reading = <span class="kw">await</span> <span class="fn">runAndRead</span>(aw, agentId, { prompt: request });
+<span class="kw">const</span> found = <span class="cm">/* every .xlsx path find_files returned in this run */</span>;
+<span class="kw">const</span> { text, json } = <span class="fn">splitJsonBlock</span>(reading.answer);
+<span class="kw">const</span> { plan, problems } = <span class="fn">validatePlan</span>(json, found);
+
+<span class="cm">// Turn 2: same session, the confirmed plan as the prompt.</span>
+<span class="kw">const</span> reading2 = <span class="kw">await</span> <span class="fn">runAndRead</span>(aw, agentId, { prompt, sessionId: proposal.sessionId });
+<span class="kw">const</span> mismatches = <span class="fn">recompute</span>(report, plan);
+<span class="kw">const</span> ungrounded = <span class="fn">ungroundedNumbers</span>(text, report);</pre></div><div role="tabpanel" id="f-excel-consolidation-3" aria-labelledby="f-excel-consolidation-3t"><pre data-file="tests/gallery/excel-consolidation/evals/excel-consolidation.yaml#excerpt" class="code" id="f-excel-consolidation-3c"><span class="fn">cases</span>:
+<span class="fn">  - name</span>: 1回目は集計せずにマッピング計画を出す
+<span class="fn">    input</span>: 今月（2025年5月）の拠点別売上を集計して、前月からの増減を説明して
+<span class="fn">    expect</span>:
+<span class="fn">      contains</span>: [<span class="str">'```json'</span>, <span class="str">'"layouts"'</span>, <span class="str">'"unit"'</span>]
+<span class="fn">      notContains</span>: [<span class="str">'"comparison"'</span>]</pre></div><div role="tabpanel" id="f-excel-consolidation-4" aria-labelledby="f-excel-consolidation-4t"><pre data-claim="illustrative" class="code" id="f-excel-consolidation-4c"><span class="kw">const</span> label = [...<span class="kw">new</span> <span class="fn">Set</span>(layout.headerRows.<span class="fn">map</span>((row) =&gt; <span class="fn">valueAt</span>(<span class="str">'amount'</span>, row)))]
+  .<span class="fn">filter</span>((value) =&gt; value !== <span class="kw">null</span>)
+  .<span class="fn">join</span>(<span class="str">' / '</span>);
+<span class="kw">const</span> stated = <span class="fn">unitInLabel</span>(label);
+<span class="kw">if</span> (stated !== <span class="kw">null</span> &amp;&amp; stated !== layout.unit)
+  <span class="fn">fail</span>(<span class="str">`${at('amount', lastHeader)} says ${stated} (${label}) but the plan says ${layout.unit}`</span>);</pre></div>
+            <div class="codecap"><span>Copied verbatim from the tutorial.</span><span class="sp"></span><a href="https://docs.agentworkspace.indx.jp/tutorials/excel-consolidation">Full walkthrough →</a></div>
+          </div>
+          <details class="more-box" style="margin-top:16px"><summary>What the tutorial says it does not do yet</summary><div><ul class="ticks plain"><li>Confirmation is two runs in one session; a run cannot pause for approval.</li><li>Plan and report come back as fenced JSON in the answer text.</li><li>A consolidated workbook the agent writes is not returned to the file store.</li><li>Nothing starts the monthly run on a schedule.</li></ul></div></details>
+        </div><div class="panel" id="code-contract-review" role="tabpanel" tabindex="0" aria-labelledby="t-contract-review">
+          <div class="uc-head">
+            <span class="who" style="font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--action-hover)">Legal, procurement, sales</span>
+            <h3 class="h3" style="font-size:26px; margin-top:8px">Contract review agent</h3>
+            <p style="margin-top:10px">Legal uploads a counterparty&#x27;s Word draft; the agent splits it into 第N条 clauses, compares each with the playbook and standard clauses, and returns a risk table with playbook citations and 修正文案. Legal decides, and six must-flag issues are always raised.</p>
+            <div class="chip-list" style="margin-top:14px"><span class="badge badge-caveat">benchmark 50/100</span><a class="chip" href="https://docs.agentworkspace.indx.jp/tutorials/contract-review">Read the tutorial →</a></div>
+          </div>
+          <div class="codetabs" data-tabs style="margin-top:20px">
+            <div role="tablist" aria-label="Contract review agent files"><button role="tab" id="f-contract-review-0t" aria-controls="f-contract-review-0" aria-selected="true">agents/contract-review.ts</button><button role="tab" id="f-contract-review-1t" aria-controls="f-contract-review-1" aria-selected="false" tabindex="-1">skills/contract-playbook/SKILL.md (excerpt)</button><button role="tab" id="f-contract-review-2t" aria-controls="f-contract-review-2" aria-selected="false" tabindex="-1">agent-workspace.yaml (excerpt)</button><button role="tab" id="f-contract-review-3t" aria-controls="f-contract-review-3" aria-selected="false" tabindex="-1">surfaces/legal-desk.ts</button><button role="tab" id="f-contract-review-4t" aria-controls="f-contract-review-4" aria-selected="false" tabindex="-1">backend/review.ts (excerpt)</button></div>
+            <div role="tabpanel" id="f-contract-review-0" aria-labelledby="f-contract-review-0t" class="on"><pre data-file="tests/gallery/contract-review/agents/contract-review.ts" class="code" id="f-contract-review-0c"><span class="kw">import</span> { defineAgent, files, skill } <span class="kw">from</span> <span class="str">'@indx-workspace/sdk/define'</span>;
+
+<span class="kw">export</span> <span class="kw">default</span> <span class="fn">defineAgent</span>({
+  name: <span class="str">'contract-review'</span>,
+  instructions: { file: <span class="str">'./contract-review.md'</span> },
+  model: <span class="str">'default'</span>,
+  <span class="cm">// A run is unattended: without autoApprove the SDK stops the skill script's call on an approval prompt.</span>
+  engine: { id: <span class="str">'claude-agent-sdk'</span>, autoApprove: [<span class="str">'mcp__agent-workspace__run_skill_script'</span>] },
+  <span class="cm">// It reads the playbook and runs the skill script, which reads the draft itself; it writes</span>
+  <span class="cm">// nothing and reaches no network. `runCommands` is what offers `run_skill_script`, which runs `clauses.mjs`.</span>
+  permissions: { readFiles: <span class="kw">true</span>, runCommands: <span class="kw">true</span> },
+  skills: [<span class="fn">skill</span>(<span class="str">'contract-playbook'</span>)],
+  files: [<span class="fn">files</span>(<span class="str">'contracts'</span>, <span class="str">'read'</span>), <span class="fn">files</span>(<span class="str">'playbook'</span>, <span class="str">'read'</span>)],
+  limits: { maxTurns: 20, maxBudgetUsd: 1 },
+});</pre></div><div role="tabpanel" id="f-contract-review-1" aria-labelledby="f-contract-review-1t"><pre data-file="tests/gallery/contract-review/skills/contract-playbook/SKILL.md#excerpt" class="code" id="f-contract-review-1c">- `mustFlag: true` の指摘は、必ずリスク表に1行として載せる。リスクが低いと判断した場合も行は残し、
+  理由にそう判断した根拠を書く。システムがこの行の有無を照合し、欠けていれば審査は未完了になる。
+
+| 条項 | 論点 | リスク度 | 理由 | 修正文案 |
+| --- | --- | --- | --- | --- |
+| 第6条 | 損害賠償の上限 | 高 | 上限がなく、逸失利益まで賠償範囲に含む〔PB-01〕 | 甲及び乙は、…を上限とする。 |
+| 欠落 | 反社会的勢力の排除 | 高 | 排除条項がない〔PB-06〕 | （新設）甲及び乙は、… |</pre></div><div role="tabpanel" id="f-contract-review-2" aria-labelledby="f-contract-review-2t"><pre data-claim="illustrative" class="code" id="f-contract-review-2c"><span class="fn">policy</span>:
+<span class="fn">  permissions</span>: { writeFiles: false, runCommands: true, unrestrictedNetwork: false }
+<span class="fn">  limits</span>: { maxBudgetUsd: 1 }
+<span class="fn">  promotion</span>: { minEvalScore: 0.9 }</pre></div><div role="tabpanel" id="f-contract-review-3" aria-labelledby="f-contract-review-3t"><pre data-claim="illustrative" class="code" id="f-contract-review-3c"><span class="kw">export</span> <span class="kw">default</span> <span class="fn">defineSurface</span>({
+  name: <span class="str">'legal-desk'</span>,
+  agent: <span class="str">'contract-review'</span>,
+  title: <span class="str">'契約書レビュー'</span>,
+  <span class="cm">// A full page: a risk table with 修正文案 is too wide for a side panel.</span>
+  layout: <span class="str">'page'</span>,
+  parts: {
+    greeting: <span class="str">'契約書ドラフトを契約管理画面でアップロードし、ファイル名を入力してください。…'</span>,
+    suggestedPrompts: [
+      <span class="str">'contracts/業務委託契約書_株式会社ミナトシステムズ案.docx をレビューして'</span>,
+      <span class="str">'第6条の修正文案を、上限を委託料12か月分にして書き直して'</span>,
+      <span class="str">'PB-04 の審査基準を説明して'</span>,
+    ],
+    disclaimer: <span class="str">'リスク表は判断材料です。締結の可否は法務部が判断します。'</span>,
+    toolTrace: <span class="str">'collapsed'</span>,
+    history: <span class="kw">true</span>,
+    feedback: <span class="kw">true</span>,
+  },
+});</pre></div><div role="tabpanel" id="f-contract-review-4" aria-labelledby="f-contract-review-4t"><pre data-claim="illustrative" class="code" id="f-contract-review-4c"><span class="kw">export</span> <span class="kw">async</span> <span class="kw">function</span> <span class="fn">reviewContract</span>(aw, agentId, request, sessionId?) {
+  <span class="kw">const</span> deterministic = <span class="fn">check</span>(<span class="fn">readDocx</span>(request.docx).paragraphs, request.playbook);
+  <span class="kw">const</span> reading = <span class="kw">await</span> <span class="fn">runAndRead</span>(aw, agentId, {
+    prompt: <span class="fn">reviewPrompt</span>(request.path),
+    sessionId: sessionId ?? <span class="kw">null</span>,
+  });
+  <span class="kw">const</span> table = <span class="fn">parseRiskTable</span>(reading.answer);
+  <span class="kw">const</span> { missing, downgraded } = <span class="fn">enforceMustFlags</span>(table.rows, deterministic);
+  <span class="kw">return</span> {
+    status: table.found &amp;&amp; missing.length === 0 ? <span class="str">'complete'</span> : <span class="str">'incomplete'</span>,
+    rows: table.rows, missing, downgraded, malformed: table.malformed, …
+  };
+}</pre></div>
+            <div class="codecap"><span>Copied verbatim from the tutorial.</span><span class="sp"></span><a href="https://docs.agentworkspace.indx.jp/tutorials/contract-review">Full walkthrough →</a></div>
+          </div>
+          <details class="more-box" style="margin-top:16px"><summary>What the tutorial says it does not do yet</summary><div><ul class="ticks plain"><li>The risk table comes back as Markdown; the backend parses it.</li><li>Word parsing needs runCommands and a stored policy that pre-approves Bash.</li><li>A redlined .docx the agent writes is not returned to the file store.</li><li>The legal-desk page refuses attachments.</li></ul></div></details>
+        </div><div class="panel" id="code-meeting-minutes" role="tabpanel" tabindex="0" aria-labelledby="t-meeting-minutes">
+          <div class="uc-head">
+            <span class="who" style="font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--action-hover)">Every department, municipalities, board secretariats</span>
+            <h3 class="h3" style="font-size:26px; margin-top:8px">Meeting minutes &amp; action-item agent</h3>
+            <p style="margin-top:10px">The secretary hands the agent a Teams transcript; it writes the 議事録 in the company format, turns 「来週の金曜くらいまでに」 into a real date, and writes 担当未定 when nobody took an item. Tasks are created in the tracker only after a person approves them.</p>
+            <div class="chip-list" style="margin-top:14px"><span class="badge badge-caveat">benchmark 45/100</span><a class="chip" href="https://docs.agentworkspace.indx.jp/tutorials/meeting-minutes">Read the tutorial →</a></div>
+          </div>
+          <div class="codetabs" data-tabs style="margin-top:20px">
+            <div role="tablist" aria-label="Meeting minutes &amp; action-item agent files"><button role="tab" id="f-meeting-minutes-0t" aria-controls="f-meeting-minutes-0" aria-selected="true">agents/meeting-minutes.ts</button><button role="tab" id="f-meeting-minutes-1t" aria-controls="f-meeting-minutes-1" aria-selected="false" tabindex="-1">skills/gijiroku-format/SKILL.md (excerpt)</button><button role="tab" id="f-meeting-minutes-2t" aria-controls="f-meeting-minutes-2" aria-selected="false" tabindex="-1">surfaces/minutes.ts (excerpt)</button><button role="tab" id="f-meeting-minutes-3t" aria-controls="f-meeting-minutes-3" aria-selected="false" tabindex="-1">backend/minutes.ts (excerpt)</button><button role="tab" id="f-meeting-minutes-4t" aria-controls="f-meeting-minutes-4" aria-selected="false" tabindex="-1">backend/minutes.ts (excerpt)</button></div>
+            <div role="tabpanel" id="f-meeting-minutes-0" aria-labelledby="f-meeting-minutes-0t" class="on"><pre data-file="tests/gallery/meeting-minutes/agents/meeting-minutes.ts#excerpt" class="code" id="f-meeting-minutes-0c"><span class="kw">export</span> <span class="kw">default</span> <span class="fn">defineAgent</span>({
+  name: <span class="str">'meeting-minutes'</span>,
+  instructions: { file: <span class="str">'./meeting-minutes.md'</span> },
+  model: <span class="str">'default'</span>,
+  <span class="cm">// A run is unattended: without autoApprove the SDK stops the skill script's call on an approval prompt.</span>
+  engine: { id: <span class="str">'claude-agent-sdk'</span>, autoApprove: [<span class="str">'mcp__agent-workspace__run_skill_script'</span>] },
+  <span class="cm">// runCommands offers run_skill_script, which runs the skill's date script; the agent writes no files. It can call create_task,</span>
+  <span class="cm">// but the tracker accepts a write only with an approval token the backend issues (mcp/approval.mjs).</span>
+  permissions: { readFiles: <span class="kw">true</span>, runCommands: <span class="kw">true</span> },
+  tools: [<span class="fn">mcp</span>(<span class="str">'task-tracker'</span>)],
+  skills: [<span class="fn">skill</span>(<span class="str">'gijiroku-format'</span>)],
+  files: [<span class="fn">files</span>(<span class="str">'transcripts'</span>, <span class="str">'read'</span>)],
+  limits: { maxTurns: 20, maxBudgetUsd: 0.5 },
+});</pre></div><div role="tabpanel" id="f-meeting-minutes-1" aria-labelledby="f-meeting-minutes-1t"><pre data-claim="illustrative" class="code" id="f-meeting-minutes-1c">## アクション項目
+
+| No. | 内容 | 担当 | 期限 | 根拠（発言） |
+| --- | --- | --- | --- | --- |
+| 1 | ライン3 段取り替え試行計画の作成 | 鈴木 一郎 | 2026-10-09 | [00:03:24] 来週金曜までに出します |
+| 2 | 来客対応手順の見直し | 担当未定 | 2026-11-10 | [00:05:36] 担当は次回までに決めましょう |
+
+```json action-items
+[{ "no": 1, "title": "ライン3 段取り替え試行計画の作成", "assignee": "鈴木 一郎", "due": "2026-10-09", … }]
+```
+
+## アクション項目のルール
+
+1. **担当を作らない。** 発言の中で本人が引き受けたか、指名されて了承したときだけ担当を書く。
+   「誰かが」「営業さんの中で」「次回決めましょう」は **担当未定** と書く。
+3. 期限は **YYYY-MM-DD**。相対表現は必ずスクリプトで直す。頭の中で計算しない。</pre></div><div role="tabpanel" id="f-meeting-minutes-2" aria-labelledby="f-meeting-minutes-2t"><pre data-claim="illustrative" class="code" id="f-meeting-minutes-2c"><span class="kw">export</span> <span class="kw">default</span> <span class="fn">defineSurface</span>({
+  name: <span class="str">'minutes'</span>,
+  agent: <span class="str">'meeting-minutes'</span>,
+  title: <span class="str">'議事録作成'</span>,
+  layout: <span class="str">'page'</span>,
+  parts: {
+    greeting: <span class="str">'会議の文字起こし（Teams / Zoom）を貼り付けるか、transcripts/ のファイル名を指定してください。…'</span>,
+    disclaimer: <span class="str">'ここで作るのは下書きです。タスクの登録は、承認画面で担当と期限を確認したあとに行われます。'</span>,
+    toolTrace: <span class="str">'collapsed'</span>,
+    history: <span class="kw">true</span>,
+    feedback: <span class="kw">true</span>,
+  },
+});</pre></div><div role="tabpanel" id="f-meeting-minutes-3" aria-labelledby="f-meeting-minutes-3t"><pre data-claim="illustrative" class="code" id="f-meeting-minutes-3c"><span class="kw">export</span> <span class="kw">async</span> <span class="kw">function</span> <span class="fn">draftMinutes</span>(aw, agentId, transcript): Promise&lt;Draft&gt; {
+  <span class="kw">const</span> meeting = <span class="fn">readMeeting</span>(transcript); <span class="cm">// 会議名 and 日時 from the header</span>
+  <span class="kw">const</span> prompt = [
+    <span class="str">`議事録の下書きを作成してください。会議日（相対日付の基準日）: ${meeting.date}`</span>,
+    <span class="str">`sourceMeeting: ${meeting.sourceMeeting}`</span>, <span class="str">'--- 文字起こし ---'</span>, transcript,
+  ].<span class="fn">join</span>(<span class="str">'\n'</span>);
+  <span class="kw">const</span> reading = <span class="kw">await</span> <span class="fn">runAndRead</span>(aw, agentId, { prompt });
+  <span class="kw">const</span> writes = reading.toolCalls.<span class="fn">filter</span>((call) =&gt; <span class="fn">toolIs</span>(call.name, <span class="str">'create_task'</span>));
+  <span class="kw">if</span> (writes.length &gt; 0) <span class="kw">throw</span> <span class="kw">new</span> <span class="fn">DraftWroteToTracker</span>(writes);
+  <span class="fn">checkFormat</span>(reading.answer);                       <span class="cm">// every required field and heading</span>
+  <span class="kw">const</span> { items, <span class="kw">from</span> } = <span class="fn">parseActionItems</span>(reading.answer);
+  <span class="kw">return</span> { meeting, minutes: reading.answer, items, itemsFrom: <span class="kw">from</span>,
+           unassigned: items.<span class="fn">filter</span>((item) =&gt; item.assignee === <span class="str">'担当未定'</span>), …,
+           sessionId: reading.run.sessionId };
+}</pre></div><div role="tabpanel" id="f-meeting-minutes-4" aria-labelledby="f-meeting-minutes-4t"><pre data-claim="illustrative" class="code" id="f-meeting-minutes-4c"><span class="kw">export</span> <span class="kw">async</span> <span class="kw">function</span> <span class="fn">registerApproved</span>(aw, agentId, { draft, approved, secret, readTracker }) {
+  <span class="fn">checkApproved</span>(approved); <span class="cm">// no 担当未定, real YYYY-MM-DD, no repeats — before any run</span>
+  <span class="kw">const</span> signed = approved.<span class="fn">map</span>((item) =&gt; ({
+    ...item, sourceMeeting, approval: <span class="fn">approvalToken</span>(secret, { ...item, sourceMeeting }),
+  }));
+  <span class="kw">const</span> reading = <span class="kw">await</span> <span class="fn">runAndRead</span>(aw, agentId, { prompt: …signed…, sessionId: draft.sessionId });
+  <span class="kw">const</span> tasks = <span class="kw">await</span> <span class="fn">readTracker</span>(sourceMeeting);    <span class="cm">// the tracker, not the agent's report</span>
+  <span class="kw">const</span> missing = approved.<span class="fn">filter</span>((item) =&gt; !held.<span class="fn">has</span>(<span class="fn">keyOf</span>(item)));
+  <span class="kw">const</span> unexpected = tasks.<span class="fn">filter</span>((task) =&gt; !wanted.<span class="fn">has</span>(<span class="fn">keyOf</span>(task)));
+  <span class="kw">return</span> { status: missing.length === 0 &amp;&amp; unexpected.length === 0 ? <span class="str">'registered'</span> : <span class="str">'mismatch'</span>, … };
+}</pre></div>
+            <div class="codecap"><span>Copied verbatim from the tutorial.</span><span class="sp"></span><a href="https://docs.agentworkspace.indx.jp/tutorials/meeting-minutes">Full walkthrough →</a></div>
+          </div>
+          <details class="more-box" style="margin-top:16px"><summary>What the tutorial says it does not do yet</summary><div><ul class="ticks plain"><li>A run takes no audio or attachments: transcribe first.</li><li>A run cannot pause for approval: one run drafts, a second registers after approval.</li><li>openapiTool is read-only, so the tracker is your own MCP server.</li><li>Nothing starts a run when a meeting ends.</li></ul></div></details>
+        </div><div class="panel" id="code-maintenance-troubleshooting" role="tabpanel" tabindex="0" aria-labelledby="t-maintenance-troubleshooting">
+          <div class="uc-head">
+            <span class="who" style="font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--action-hover)">Plant maintenance, field service, FA engineers, infrastructure operations</span>
+            <h3 class="h3" style="font-size:26px; margin-top:8px">Skill-transfer &amp; maintenance troubleshooting agent</h3>
+            <p style="margin-top:10px">A junior technician types 「プレス2号機 油圧が上がらない」 on a tablet. The agent first says to stop the machine and lock it out, then gives one cited step at a time from past trouble records, the manual and retiring experts&#x27; notes, and hands unsolved cases to the expert.</p>
+            <div class="chip-list" style="margin-top:14px"><span class="badge badge-caveat">benchmark 50/100</span><a class="chip" href="https://docs.agentworkspace.indx.jp/tutorials/maintenance-troubleshooting">Read the tutorial →</a></div>
+          </div>
+          <div class="codetabs" data-tabs style="margin-top:20px">
+            <div role="tablist" aria-label="Skill-transfer &amp; maintenance troubleshooting agent files"><button role="tab" id="f-maintenance-troubleshooting-0t" aria-controls="f-maintenance-troubleshooting-0" aria-selected="true">agents/maintenance-troubleshooting.ts</button><button role="tab" id="f-maintenance-troubleshooting-1t" aria-controls="f-maintenance-troubleshooting-1" aria-selected="false" tabindex="-1">skills/one-step-diagnosis/SKILL.md (excerpt)</button><button role="tab" id="f-maintenance-troubleshooting-2t" aria-controls="f-maintenance-troubleshooting-2" aria-selected="false" tabindex="-1">surfaces/floor.ts</button><button role="tab" id="f-maintenance-troubleshooting-3t" aria-controls="f-maintenance-troubleshooting-3" aria-selected="false" tabindex="-1">backend/diagnose.ts (excerpt)</button><button role="tab" id="f-maintenance-troubleshooting-4t" aria-controls="f-maintenance-troubleshooting-4" aria-selected="false" tabindex="-1">evals/maintenance-troubleshooting.yaml (excerpt)</button></div>
+            <div role="tabpanel" id="f-maintenance-troubleshooting-0" aria-labelledby="f-maintenance-troubleshooting-0t" class="on"><pre data-file="tests/gallery/maintenance-troubleshooting/agents/maintenance-troubleshooting.ts#excerpt" class="code" id="f-maintenance-troubleshooting-0c"><span class="kw">export</span> <span class="kw">default</span> <span class="fn">defineAgent</span>({
+  name: <span class="str">'maintenance-troubleshooting'</span>,
+  instructions: { file: <span class="str">'./maintenance-troubleshooting.md'</span> },
+  model: <span class="str">'default'</span>,
+  engine: <span class="str">'claude-agent-sdk'</span>,
+  <span class="cm">// No file, command or network permission: it reads and writes only through the two tools.</span>
+  permissions: {},
+  tools: [<span class="fn">mcp</span>(<span class="str">'trouble-log'</span>), <span class="fn">mcp</span>(<span class="str">'equipment-manual'</span>)],
+  skills: [<span class="fn">skill</span>(<span class="str">'one-step-diagnosis'</span>)],
+  limits: { maxTurns: 10, maxBudgetUsd: 0.3 },
+});</pre></div><div role="tabpanel" id="f-maintenance-troubleshooting-1" aria-labelledby="f-maintenance-troubleshooting-1t"><pre data-claim="illustrative" class="code" id="f-maintenance-troubleshooting-1c">## 最初の返答（セッションの1ターン目）
+必ず安全指示から始める。次の1行を最初に置く:
+【安全】作業前に設備を停止し、主電源を遮断してロックアウト・タグアウト（LOTO）を実施してください。
+
+## 手順の書き方（毎ターン）
+- 手順は「手順N：」で始まる1行で書く。N はこのセッションの通し番号（1, 2, 3 …）。
+- 1回の返答に手順は**1つだけ**。
+- 手順の行の末尾に、その手順の根拠となる出典を付ける。…このターンで読んでいない出典は書かない
+  （前のターンで読んだ記録でも、引用する前に `get_trouble` または `read_section` で読み直す）。
+- 調整ねじを回す、設定値を変える、といった元に戻せない操作を手順にしない。
+
+## エスカレーション
+既知の原因では解決しませんでした。熟練者に引き継ぎます。</pre></div><div role="tabpanel" id="f-maintenance-troubleshooting-2" aria-labelledby="f-maintenance-troubleshooting-2t"><pre data-claim="illustrative" class="code" id="f-maintenance-troubleshooting-2c"><span class="kw">export</span> <span class="kw">default</span> <span class="fn">defineSurface</span>({
+  name: <span class="str">'floor'</span>,
+  agent: <span class="str">'maintenance-troubleshooting'</span>,
+  title: <span class="str">'設備トラブル対応'</span>,
+  layout: <span class="str">'page'</span>,
+  parts: {
+    greeting: <span class="str">'設備番号（または設備名）と、起きている現象を入力してください。1つずつ確認していきます。'</span>,
+    suggestedPrompts: [<span class="str">'プレス2号機 油圧が上がらない'</span>, <span class="str">'マシニングセンタ5号機 主軸から異音'</span>, <span class="str">'射出成形機4号機 型締め圧が上がらない'</span>],
+    disclaimer: <span class="str">'作業は必ず停止・LOTO の後に。判断に迷ったら作業を止めて班長に連絡してください。'</span>,
+    toolTrace: <span class="str">'hidden'</span>,   <span class="cm">// the technician needs the next step, not the tool calls</span>
+    feedback: <span class="kw">true</span>,
+  },
+  limits: { turnsPerConversation: 20 },
+});</pre></div><div role="tabpanel" id="f-maintenance-troubleshooting-3" aria-labelledby="f-maintenance-troubleshooting-3t"><pre data-claim="illustrative" class="code" id="f-maintenance-troubleshooting-3c"><span class="kw">export</span> <span class="kw">function</span> <span class="fn">inspectTurn</span>({ answer, toolCalls, first, previousStep, technician }) {
+  <span class="kw">const</span> violations: Violation[] = [];
+  <span class="kw">if</span> (first &amp;&amp; !(/停止/u.<span class="fn">test</span>(answer) &amp;&amp; /LOTO|ロックアウト/u.<span class="fn">test</span>(answer))) violations.<span class="fn">push</span>(<span class="str">'missing-safety'</span>);
+
+  <span class="kw">const</span> steps = [...answer.<span class="fn">matchAll</span>(STEP)];              <span class="cm">// 手順N：</span>
+  <span class="kw">const</span> kind = answer.<span class="fn">includes</span>(RESOLUTION_MARK) ? <span class="str">'resolution'</span>
+    : answer.<span class="fn">includes</span>(ESCALATION_PHRASE) ? <span class="str">'escalation'</span>
+    : steps.length &gt; 0 ? <span class="str">'step'</span> : <span class="kw">null</span>;
+  <span class="kw">if</span> (kind === <span class="kw">null</span>) violations.<span class="fn">push</span>(<span class="str">'no-step'</span>);
+  <span class="kw">if</span> (steps.length &gt; 1 || (kind !== <span class="str">'step'</span> &amp;&amp; steps.length &gt; 0)) violations.<span class="fn">push</span>(<span class="str">'multiple-steps'</span>);
+  <span class="kw">if</span> (kind === <span class="str">'step'</span>) {
+    <span class="kw">if</span> (<span class="fn">parseCitations</span>(<span class="fn">paragraphAt</span>(answer, steps[0].index)).length === 0) violations.<span class="fn">push</span>(<span class="str">'uncited-step'</span>);
+    <span class="kw">if</span> (step !== previousStep + 1) violations.<span class="fn">push</span>(<span class="str">'step-out-of-order'</span>);
+  }
+
+  <span class="cm">// Every 〔…〕 must be one a tool returned in this run.</span>
+  <span class="kw">const</span> returned = <span class="kw">new</span> <span class="fn">Set</span>(toolCalls.<span class="fn">filter</span>((c) =&gt; !c.isError)
+    .<span class="fn">flatMap</span>((c) =&gt; <span class="fn">parseCitations</span>(c.output ?? <span class="str">''</span>).<span class="fn">map</span>((citation) =&gt; citation.raw)));
+  <span class="kw">if</span> (<span class="fn">parseCitations</span>(answer).<span class="fn">some</span>((c) =&gt; !returned.<span class="fn">has</span>(c.raw))) violations.<span class="fn">push</span>(<span class="str">'unverified-citation'</span>);
+
+  <span class="kw">if</span> (kind === <span class="str">'resolution'</span>) {
+    <span class="cm">// 【解決】 counts only when log_resolution succeeded in the same run, for the signed-in technician.</span>
+    …
+  }
+}</pre></div><div role="tabpanel" id="f-maintenance-troubleshooting-4" aria-labelledby="f-maintenance-troubleshooting-4t"><pre data-file="tests/gallery/maintenance-troubleshooting/evals/maintenance-troubleshooting.yaml#excerpt" class="code" id="f-maintenance-troubleshooting-4c"><span class="fn">cases</span>:
+<span class="fn">  - name</span>: 最初の返答は安全指示から始める
+<span class="fn">    input</span>: <span class="str">'［対応者: 佐藤 翔太］プレス2号機 油圧が上がらない'</span>
+<span class="fn">    expect</span>:
+<span class="fn">      contains</span>: [<span class="str">'【安全】'</span>, <span class="str">'LOTO'</span>, <span class="str">'手順1：'</span>]
+<span class="fn">      notContains</span>: [<span class="str">'手順2：'</span>]
+<span class="fn">  - name</span>: 記録にない設備は推測せず熟練者に引き継ぐ
+<span class="fn">    input</span>: <span class="str">'［対応者: 佐藤 翔太］溶接ロボット9号機 アークが出ない'</span>
+<span class="fn">    expect</span>:
+<span class="fn">      contains</span>: [<span class="str">'熟練者に引き継ぎます'</span>]
+<span class="fn">      notContains</span>: [<span class="str">'〔過去トラ'</span>]</pre></div>
+            <div class="codecap"><span>Copied verbatim from the tutorial.</span><span class="sp"></span><a href="https://docs.agentworkspace.indx.jp/tutorials/maintenance-troubleshooting">Full walkthrough →</a></div>
+          </div>
+          <details class="more-box" style="margin-top:16px"><summary>What the tutorial says it does not do yet</summary><div><ul class="ticks plain"><li>The technician cannot attach a photo of the part.</li><li>Nothing works without a connection: every turn is a server run.</li><li>Steps and citations come back as free text the backend checks every turn.</li><li>No handoff event: the backend detects the escalation.</li></ul></div></details>
+        </div><div class="panel" id="code-quality-defect" role="tabpanel" tabindex="0" aria-labelledby="t-quality-defect">
+          <div class="uc-head">
+            <span class="who" style="font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--action-hover)">Quality assurance, design review, claims handling</span>
+            <h3 class="h3" style="font-size:26px; margin-top:8px">Quality defect and past-trouble analysis agent</h3>
+            <p style="margin-top:10px">A QA engineer enters a new defect; the agent searches past troubles (過去トラ), takes 4M counts from the database instead of counting itself, and drafts a なぜなぜ chain and an 8D report in which every root-cause line cites a past case. Experts review it in a design review.</p>
+            <div class="chip-list" style="margin-top:14px"><span class="badge badge-caveat">benchmark 61/100</span><a class="chip" href="https://docs.agentworkspace.indx.jp/tutorials/quality-defect">Read the tutorial →</a></div>
+          </div>
+          <div class="codetabs" data-tabs style="margin-top:20px">
+            <div role="tablist" aria-label="Quality defect and past-trouble analysis agent files"><button role="tab" id="f-quality-defect-0t" aria-controls="f-quality-defect-0" aria-selected="true">agents/quality-defect.ts</button><button role="tab" id="f-quality-defect-1t" aria-controls="f-quality-defect-1" aria-selected="false" tabindex="-1">skills/eight-d/SKILL.md (excerpt)</button><button role="tab" id="f-quality-defect-2t" aria-controls="f-quality-defect-2" aria-selected="false" tabindex="-1">agent-workspace.yaml (excerpt)</button><button role="tab" id="f-quality-defect-3t" aria-controls="f-quality-defect-3" aria-selected="false" tabindex="-1">surfaces/qa.ts</button><button role="tab" id="f-quality-defect-4t" aria-controls="f-quality-defect-4" aria-selected="false" tabindex="-1">backend/analyse.ts (excerpt)</button></div>
+            <div role="tabpanel" id="f-quality-defect-0" aria-labelledby="f-quality-defect-0t" class="on"><pre data-file="tests/gallery/quality-defect/agents/quality-defect.ts#excerpt" class="code" id="f-quality-defect-0c"><span class="kw">export</span> <span class="kw">default</span> <span class="fn">defineAgent</span>({
+  name: <span class="str">'quality-defect'</span>,
+  instructions: { file: <span class="str">'./quality-defect.md'</span> },
+  model: <span class="str">'default'</span>,
+  <span class="cm">// A run is unattended: without autoApprove the SDK stops the skill script's call on an approval prompt.</span>
+  engine: { id: <span class="str">'claude-agent-sdk'</span>, autoApprove: [<span class="str">'mcp__agent-workspace__run_skill_script'</span>] },
+  <span class="cm">// Reads the FMEA and runs the eight-d check script; no writes, no network (the project</span>
+  <span class="cm">// ceiling forbids both whatever this file says).</span>
+  permissions: { readFiles: <span class="kw">true</span>, runCommands: <span class="kw">true</span>, unrestrictedNetwork: <span class="kw">false</span> },
+  tools: [<span class="fn">mcp</span>(<span class="str">'defect-db'</span>)],
+  skills: [<span class="fn">skill</span>(<span class="str">'eight-d'</span>)],
+  files: [<span class="fn">files</span>(<span class="str">'fmea'</span>, <span class="str">'read'</span>)],
+  limits: { maxTurns: 16, maxBudgetUsd: 1 },
+});</pre></div><div role="tabpanel" id="f-quality-defect-1" aria-labelledby="f-quality-defect-1t"><pre data-claim="illustrative" class="code" id="f-quality-defect-1c">見出しは次の8つを、この順で、1回ずつ書く（`##` 見出し、`D` と数字は半角）。
+## D1 チーム編成 … ## D8 完了と振り返り
+
+- D4 には次の行を必ず書く。
+  - `原因区分: &lt;区分&gt;` … 過去トラの `causeCode` の語彙から選ぶ。
+  - `4M集計: …` … `cause_stats` が返した `line` を一字一句そのまま写す。自分で数えない。
+  - `- なぜ1: …` から `- なぜN: …` まで、3段以上。番号は 1 から連番。
+  - `- 根本原因: …`
+- D4 の各行の末尾に、根拠にした過去トラを〔過去トラ Q-1003〕の形で付ける。
+- 同じ原因区分の過去トラがあり、その再発有無が「有」なら、D7 の冒頭に「再発」と書く。</pre></div><div role="tabpanel" id="f-quality-defect-2" aria-labelledby="f-quality-defect-2t"><pre data-file="tests/gallery/quality-defect/agent-workspace.yaml#excerpt" class="code" id="f-quality-defect-2c"><span class="fn">policy</span>:
+<span class="fn">  permissions</span>:
+<span class="fn">    writeFiles</span>: false
+<span class="fn">    unrestrictedNetwork</span>: false
+<span class="fn">  limits</span>:
+<span class="fn">    maxTurns</span>: 20
+<span class="fn">    maxBudgetUsd</span>: 1.5
+<span class="fn">  tools</span>:
+    - defect-db
+<span class="fn">  promotion</span>:
+<span class="fn">    minEvalScore</span>: 0.9</pre></div><div role="tabpanel" id="f-quality-defect-3" aria-labelledby="f-quality-defect-3t"><pre data-claim="illustrative" class="code" id="f-quality-defect-3c"><span class="kw">export</span> <span class="kw">default</span> <span class="fn">defineSurface</span>({
+  name: <span class="str">'qa'</span>,
+  agent: <span class="str">'quality-defect'</span>,
+  title: <span class="str">'不具合解析（過去トラ・8D）'</span>,
+  layout: <span class="str">'page'</span>,
+  parts: {
+    greeting: <span class="str">'新しい不具合の現象・品番・ロット・工程・発生数を入力してください。…'</span>,
+    suggestedPrompts: [<span class="str">'現象: バリ／品番: BRK-2201／ロット: L260928-2／工程: プレス／発生数: 48'</span>, …],
+    disclaimer: <span class="str">'AI が作る下書きです。DR（デザインレビュー）で有識者が確認するまで、原因・対策を確定しないでください。'</span>,
+    toolTrace: <span class="str">'full'</span>,
+    feedback: <span class="kw">true</span>,
+  },
+});</pre></div><div role="tabpanel" id="f-quality-defect-4" aria-labelledby="f-quality-defect-4t"><pre data-claim="illustrative" class="code" id="f-quality-defect-4c"><span class="kw">import</span> { FOUR_M, parseEightD } <span class="kw">from</span> <span class="str">'../skills/eight-d/scripts/eightd.mjs'</span>;
+
+<span class="kw">const</span> reading = <span class="kw">await</span> <span class="fn">runAndRead</span>(aw, agentId, { prompt: <span class="fn">promptOf</span>(input), sessionId: sessionId ?? <span class="kw">null</span> });
+<span class="kw">const</span> draft = <span class="fn">parseEightD</span>(reading.answer);        <span class="cm">// the skill's own parser, typed by eightd.d.mts</span>
+
+<span class="kw">const</span> unverifiedCases = draft.cites.<span class="fn">filter</span>((id) =&gt; !returned.<span class="fn">has</span>(id));   <span class="cm">// returned by a tool this run?</span>
+<span class="kw">const</span> fourM = <span class="fn">checkFourM</span>(draft, outputsOf&lt;CauseStats&gt;(reading.toolCalls, <span class="str">'cause_stats'</span>));
+
+<span class="kw">const</span> sameCause = [...matched.<span class="fn">values</span>()].<span class="fn">filter</span>((hit) =&gt; hit.causeCode === draft.causeCode);
+<span class="kw">const</span> recurredCases = sameCause.<span class="fn">filter</span>((hit) =&gt; hit.recurred === <span class="str">'有'</span>).<span class="fn">map</span>((hit) =&gt; hit.id);
+<span class="cm">// readyForReview only when the format, every Q-number and the 4M line all check out</span></pre></div>
+            <div class="codecap"><span>Copied verbatim from the tutorial.</span><span class="sp"></span><a href="https://docs.agentworkspace.indx.jp/tutorials/quality-defect">Full walkthrough →</a></div>
+          </div>
+          <details class="more-box" style="margin-top:16px"><summary>What the tutorial says it does not do yet</summary><div><ul class="ticks plain"><li>The quality DB cannot be queried directly (postgresTool gate closed, #598): serve an export from your own MCP server.</li><li>The 8D comes back as Markdown; the backend parses and checks it.</li><li>The check script needs a stored policy that pre-approves Bash.</li><li>Similar cases cannot render as a table in the surface.</li></ul></div></details>
+        </div>
+        </div>
+      </div>
+    </div>
+    <p class="small center" style="margin-top:16px">Benchmark scores are the docs' own end-to-end ratings out of 100, published so you can see what each example covers today.</p>
+  </div>
+</section>
+
+<section class="sec sec--paper" id="by-team">
+  <div class="shell">
+    <div class="sec-head split">
+      <div>
+        <span class="eyebrow reveal">Browse by team</span>
+        <h2 class="h2 reveal" data-d="1">Sixteen example agents, each with its full configuration.</h2>
+        <p class="lead reveal" data-d="2">
+          Open a card to see exactly what the agent is given. The tutorials all use
+          <code>model: 'default'</code> and the <code>claude-agent-sdk</code> engine, and name no
+          runtime profile, so they run on the workspace's default runtime.
+        </p>
+      </div>
+      <a class="more reveal" href="https://docs.agentworkspace.indx.jp/tutorials">All tutorials in the docs</a>
+    </div>
+
+    <div class="filters" data-filter-for="#uc-grid" role="group" aria-label="Filter examples by team">
+      <button type="button" data-filter="all" aria-pressed="true">All</button>
+      <button type="button" data-filter="legal" aria-pressed="false">Legal</button>
+      <button type="button" data-filter="finance" aria-pressed="false">Finance</button>
+      <button type="button" data-filter="support" aria-pressed="false">IT &amp; support</button>
+      <button type="button" data-filter="engineering" aria-pressed="false">Engineering &amp; design</button>
+      <button type="button" data-filter="operations" aria-pressed="false">Operations &amp; quality</button>
+      <button type="button" data-filter="sales" aria-pressed="false">Sales</button>
+      <button type="button" data-filter="product" aria-pressed="false">Product teams</button>
+    </div>
+
+    <div class="grid grid-3" id="uc-grid">
+
+      <!-- Tutorial 7 -->
+      <article class="card tile reveal" id="legal-contract-review" data-filter-item="legal sales">
+        <span class="who">Legal · procurement · sales</span>
+        <h3 class="h3">Contract review against your playbook</h3>
+        <p>Reviews a Word draft clause by clause against the playbook and returns a risk table with redline proposals.</p>
+        <span class="meta"><span class="chip">readFiles</span><span class="chip">runCommands</span><span class="chip">no connector</span></span>
+        <details class="more-box">
+          <summary>Configuration</summary>
+          <div>
+            <dl class="kv">
+              <dt>Permissions</dt><dd>readFiles, runCommands</dd>
+              <dt>Tools</dt><dd>none</dd>
+              <dt>Skills</dt><dd>contract-playbook</dd>
+              <dt>Files</dt><dd>contracts (read), playbook (read)</dd>
+              <dt>Limits</dt><dd>maxTurns: 20, maxBudgetUsd: 1</dd>
+              <dt>Runtime</dt><dd>workspace default</dd>
+              <dt>Entry point</dt><dd>surface legal-desk (page)</dd>
+            </dl>
+            <p class="small mt-s">Tutorial 7 · docs benchmark score <span class="mono">50</span>/100</p>
+            <a class="go" href="https://docs.agentworkspace.indx.jp/tutorials/contract-review">Read the tutorial</a>
+          </div>
+        </details>
+      </article>
+
+      <!-- Tutorial 4 -->
+      <article class="card tile reveal" data-d="1" id="ringi-review" data-filter-item="legal finance">
+        <span class="who">Approvers · planning · finance · legal</span>
+        <h3 class="h3">Ringi review that never approves</h3>
+        <p>Checks a ringi against the authority matrix, rules and precedents, started from your backend when a webhook arrives.</p>
+        <span class="meta"><span class="chip">readFiles</span><span class="chip">mcp: ringi-archive</span><span class="chip">webhook → runs.start</span></span>
+        <details class="more-box">
+          <summary>Configuration</summary>
+          <div>
+            <dl class="kv">
+              <dt>Permissions</dt><dd>readFiles</dd>
+              <dt>Tools</dt><dd>mcp('ringi-archive')</dd>
+              <dt>Skills</dt><dd>ringi-checklist</dd>
+              <dt>Files</dt><dd>rules (read)</dd>
+              <dt>Limits</dt><dd>maxTurns: 16, maxBudgetUsd: 0.5</dd>
+              <dt>Runtime</dt><dd>workspace default</dd>
+              <dt>Entry point</dt><dd>backend webhook → runs.start; surface (side)</dd>
+            </dl>
+            <p class="small mt-s">Tutorial 4 · docs benchmark score <span class="mono">50</span>/100</p>
+            <a class="go" href="https://docs.agentworkspace.indx.jp/tutorials/ringi-review">Read the tutorial</a>
+          </div>
+        </details>
+      </article>
+
+      <!-- Concept 6 -->
+      <article class="card tile reveal" data-d="2" id="finance-analysis" data-filter-item="finance">
+        <span class="who">Finance · compliance</span>
+        <h3 class="h3">The model and the cloud you already approved</h3>
+        <p>The same agent definition, pointed at the model connection and runtime your policy names, with no change to its instructions, skills or connectors.</p>
+        <span class="meta"><span class="chip">azure-openai</span><span class="chip">kubernetes</span><span class="chip">agent unchanged</span></span>
+        <details class="more-box">
+          <summary>Configuration</summary>
+          <div>
+            <dl class="kv">
+              <dt>Permissions</dt><dd>unchanged from the agent</dd>
+              <dt>Model</dt><dd>azure-openai or openai-compatible connection; credential write-only</dd>
+              <dt>Skills</dt><dd>unchanged</dd>
+              <dt>Files</dt><dd>unchanged</dd>
+              <dt>Limits</dt><dd>unchanged</dd>
+              <dt>Runtime</dt><dd>managed sandbox where available, otherwise kubernetes in the approved region</dd>
+              <dt>Entry point</dt><dd>unchanged; modelConnectionId and runtimeProfileId switched</dd>
+            </dl>
+            <p class="small mt-s">Use-case shape 6. Non-Anthropic adapters are fixture-verified, not proven against the provider; no managed-cloud sandbox is live-verified yet.</p>
+            <a class="go" href="https://docs.agentworkspace.indx.jp/concepts/use-cases">Read the use case</a>
+          </div>
+        </details>
+      </article>
+
+      <!-- Tutorial 6 -->
+      <article class="card tile reveal" id="excel-consolidation" data-filter-item="finance operations">
+        <span class="who">Corporate planning · accounting · plant mgmt</span>
+        <h3 class="h3">Excel consolidation with cell provenance</h3>
+        <p>Reads five incompatible workbooks, has a person confirm the mapping, then a script consolidates with <code>file!sheet!cell</code> provenance.</p>
+        <span class="meta"><span class="chip">readFiles</span><span class="chip">runCommands</span><span class="chip">mcp: file-finder</span></span>
+        <details class="more-box">
+          <summary>Configuration</summary>
+          <div>
+            <dl class="kv">
+              <dt>Permissions</dt><dd>readFiles, runCommands</dd>
+              <dt>Tools</dt><dd>mcp('file-finder')</dd>
+              <dt>Skills</dt><dd>office-reader, excel-consolidate</dd>
+              <dt>Files</dt><dd>—</dd>
+              <dt>Limits</dt><dd>maxTurns: 30, maxBudgetUsd: 1</dd>
+              <dt>Runtime</dt><dd>workspace default</dd>
+              <dt>Entry point</dt><dd>surface (page)</dd>
+            </dl>
+            <p class="small mt-s">Tutorial 6 · docs benchmark score <span class="mono">50</span>/100</p>
+            <a class="go" href="https://docs.agentworkspace.indx.jp/tutorials/excel-consolidation">Read the tutorial</a>
+          </div>
+        </details>
+      </article>
+
+      <!-- Concept 5 -->
+      <article class="card tile reveal" data-d="1" id="it-service-desk" data-filter-item="support">
+        <span class="who">IT service desk · HR ops</span>
+        <h3 class="h3">An internal support agent employees can ask</h3>
+        <p>A first-line assistant over the handbook, the procedures and the ticketing system, answering in plain language with the trace behind a disclosure.</p>
+        <span class="meta"><span class="chip">docker</span><span class="chip">SKILL.md</span><span class="chip">http connectors</span></span>
+        <details class="more-box">
+          <summary>Configuration</summary>
+          <div>
+            <dl class="kv">
+              <dt>Permissions</dt><dd>read (handbook files)</dd>
+              <dt>Connectors</dt><dd>internal search and the ticketing system, http transport</dd>
+              <dt>Skills</dt><dd>SKILL.md with the answering procedure and tone; supporting files for templates</dd>
+              <dt>Files</dt><dd>the handbook (read)</dd>
+              <dt>Limits</dt><dd>not specified</dd>
+              <dt>Runtime</dt><dd>docker, sized small; networkPolicy 'open' only if the connectors are external</dd>
+              <dt>Entry point</dt><dd>the control-plane UI, or an embedded panel in the intranet</dd>
+            </dl>
+            <p class="small mt-s">Use-case shape 5. Viewers run only the agents they are granted.</p>
+            <a class="go" href="https://docs.agentworkspace.indx.jp/concepts/use-cases">Read the use case</a>
+          </div>
+        </details>
+      </article>
+
+      <!-- Tutorial 5 -->
+      <article class="card tile reveal" data-d="2" id="support-widget" data-filter-item="support sales">
+        <span class="who">Contact centres · B2B support · sales support</span>
+        <h3 class="h3">A customer inquiry widget on your site</h3>
+        <p>A site chat widget that searches one customer's history, answers in keigo and hands refunds and complaints to an operator.</p>
+        <span class="meta"><span class="chip">no permissions</span><span class="chip">mcp: crm-history</span><span class="chip">surface: dock</span></span>
+        <details class="more-box">
+          <summary>Configuration</summary>
+          <div>
+            <dl class="kv">
+              <dt>Permissions</dt><dd>{} (none)</dd>
+              <dt>Tools</dt><dd>mcp('crm-history')</dd>
+              <dt>Skills</dt><dd>keigo-reply</dd>
+              <dt>Files</dt><dd>—</dd>
+              <dt>Limits</dt><dd>maxTurns: 10, maxBudgetUsd: 0.3</dd>
+              <dt>Runtime</dt><dd>workspace default</dd>
+              <dt>Entry point</dt><dd>surface support (dock, allowedOrigins)</dd>
+            </dl>
+            <p class="small mt-s">Tutorial 5 · docs benchmark score <span class="mono">56</span>/100. Embedded with one <code>widget.js</code> script tag; visitors are rate-limited and capped at 50 turns by default.</p>
+            <a class="go" href="https://docs.agentworkspace.indx.jp/tutorials/customer-inquiry">Read the tutorial</a>
+          </div>
+        </details>
+      </article>
+
+      <!-- Tutorial 1 -->
+      <article class="card tile reveal" id="manual-search" data-filter-item="support operations">
+        <span class="who">Help desk · maintenance · back office</span>
+        <h3 class="h3">Manual search with checked citations</h3>
+        <p>Searches thousands of manual pages with its own queries and answers with a checked 〔document p.page §section〕 citation.</p>
+        <span class="meta"><span class="chip">readFiles</span><span class="chip">mcp: manual-index</span><span class="chip">read-only</span></span>
+        <details class="more-box">
+          <summary>Configuration</summary>
+          <div>
+            <dl class="kv">
+              <dt>Permissions</dt><dd>readFiles</dd>
+              <dt>Tools</dt><dd>mcp('manual-index')</dd>
+              <dt>Skills</dt><dd>cite-answer</dd>
+              <dt>Files</dt><dd>manuals (read)</dd>
+              <dt>Limits</dt><dd>maxTurns: 12, maxBudgetUsd: 0.5</dd>
+              <dt>Runtime</dt><dd>workspace default</dd>
+              <dt>Entry point</dt><dd>surface manual-desk (side)</dd>
+            </dl>
+            <p class="small mt-s">Tutorial 1 · docs benchmark score <span class="mono">69</span>/100</p>
+            <a class="go" href="https://docs.agentworkspace.indx.jp/tutorials/manual-search">Read the tutorial</a>
+          </div>
+        </details>
+      </article>
+
+      <!-- Tutorial 3 -->
+      <article class="card tile reveal" data-d="1" id="quotation" data-filter-item="sales finance">
+        <span class="who">Sales estimating · procurement · cost engineering</span>
+        <h3 class="h3">Sheet-metal quotes a person approves</h3>
+        <p>Builds a quote from the part spec through a read-only ERP tool and a cost-model script, then waits for a person to approve.</p>
+        <span class="meta"><span class="chip">readFiles</span><span class="chip">runCommands</span><span class="chip">openapiTool: erp (GET)</span></span>
+        <details class="more-box">
+          <summary>Configuration</summary>
+          <div>
+            <dl class="kv">
+              <dt>Permissions</dt><dd>readFiles, runCommands</dd>
+              <dt>Tools</dt><dd>openapiTool erp (GET only)</dd>
+              <dt>Skills</dt><dd>cost-model</dd>
+              <dt>Files</dt><dd>—</dd>
+              <dt>Limits</dt><dd>maxTurns: 16, maxBudgetUsd: 0.5</dd>
+              <dt>Runtime</dt><dd>workspace default</dd>
+              <dt>Entry point</dt><dd>surface (page)</dd>
+            </dl>
+            <p class="small mt-s">Tutorial 3 · docs benchmark score <span class="mono">55</span>/100</p>
+            <a class="go" href="https://docs.agentworkspace.indx.jp/tutorials/quotation">Read the tutorial</a>
+          </div>
+        </details>
+      </article>
+
+      <!-- Tutorial 8 -->
+      <article class="card tile reveal" data-d="2" id="meeting-minutes" data-filter-item="legal finance support engineering operations sales">
+        <span class="who">Every department · board secretariats</span>
+        <h3 class="h3">Meeting minutes and approved action items</h3>
+        <p>Turns a transcript into formal minutes (議事録); action items are registered only after a person approves, in a second run.</p>
+        <span class="meta"><span class="chip">readFiles</span><span class="chip">runCommands</span><span class="chip">mcp: task-tracker</span></span>
+        <details class="more-box">
+          <summary>Configuration</summary>
+          <div>
+            <dl class="kv">
+              <dt>Permissions</dt><dd>readFiles, runCommands</dd>
+              <dt>Tools</dt><dd>mcp('task-tracker'); a write needs a backend approval token</dd>
+              <dt>Skills</dt><dd>gijiroku-format</dd>
+              <dt>Files</dt><dd>transcripts (read)</dd>
+              <dt>Limits</dt><dd>maxTurns: 20, maxBudgetUsd: 0.5</dd>
+              <dt>Runtime</dt><dd>workspace default</dd>
+              <dt>Entry point</dt><dd>surface minutes (page)</dd>
+            </dl>
+            <p class="small mt-s">Tutorial 8 · docs benchmark score <span class="mono">45</span>/100</p>
+            <a class="go" href="https://docs.agentworkspace.indx.jp/tutorials/meeting-minutes">Read the tutorial</a>
+          </div>
+        </details>
+      </article>
+
+      <!-- Concept 4 -->
+      <article class="card tile reveal" id="security-review" data-filter-item="engineering">
+        <span class="who">AppSec · code review</span>
+        <h3 class="h3">Code review with commands allowed, and contained</h3>
+        <p>Runs linters, tests and scanners on a repository, so it needs a shell, so it gets the strongest isolation you have.</p>
+        <span class="meta"><span class="chip">runCommands</span><span class="chip">kubernetes + gVisor</span><span class="chip">or docker, network none</span></span>
+        <details class="more-box">
+          <summary>Configuration</summary>
+          <div>
+            <dl class="kv">
+              <dt>Permissions</dt><dd>readFiles, writeFiles, runCommands: true; unrestrictedNetwork: false</dd>
+              <dt>Connectors</dt><dd>a source-control MCP server (remote, bearer credential)</dd>
+              <dt>Skills</dt><dd>not specified</dd>
+              <dt>Files</dt><dd>read-write assignment; the repository as files or through the connector</dd>
+              <dt>Limits</dt><dd>not specified</dd>
+              <dt>Runtime</dt><dd>kubernetes + gVisor RuntimeClass, or docker + networkPolicy 'none'; filesystem 'read-write', persistPaths for the checkout</dd>
+              <dt>Entry point</dt><dd>the UI; from CI if triggered there</dd>
+            </dl>
+            <p class="small mt-s">Use-case shape 4. <span class="badge badge-ok">docker fixture-verified</span> <span class="badge badge-caveat">kubernetes partially verified</span></p>
+            <a class="go" href="https://docs.agentworkspace.indx.jp/concepts/use-cases">Read the use case</a>
+          </div>
+        </details>
+      </article>
+
+      <!-- Tutorial 2 -->
+      <article class="card tile reveal" data-d="1" id="cad-drafting" data-filter-item="engineering">
+        <span class="who">Mechanical &amp; electrical design</span>
+        <h3 class="h3">CAD drafts from past drawings</h3>
+        <p>Finds three similar past drawings and drafts a DXF from the one you choose, marked 未検図 (not yet checked).</p>
+        <span class="meta"><span class="chip">writeFiles</span><span class="chip">runCommands</span><span class="chip">mcp: drawing-index</span></span>
+        <details class="more-box">
+          <summary>Configuration</summary>
+          <div>
+            <dl class="kv">
+              <dt>Permissions</dt><dd>readFiles, writeFiles, runCommands</dd>
+              <dt>Tools</dt><dd>mcp('drawing-index')</dd>
+              <dt>Skills</dt><dd>dxf-draft</dd>
+              <dt>Files</dt><dd>drawings (read), drafts (read-write)</dd>
+              <dt>Limits</dt><dd>maxTurns: 20, maxBudgetUsd: 1</dd>
+              <dt>Runtime</dt><dd>workspace default</dd>
+              <dt>Entry point</dt><dd>surface design-desk (page)</dd>
+            </dl>
+            <p class="small mt-s">Tutorial 2 · docs benchmark score <span class="mono">45</span>/100</p>
+            <a class="go" href="https://docs.agentworkspace.indx.jp/tutorials/cad-drafting">Read the tutorial</a>
+          </div>
+        </details>
+      </article>
+
+      <!-- Concept 3 -->
+      <article class="card tile reveal" data-d="2" id="backend-automation" data-filter-item="engineering operations">
+        <span class="who">Platform · data teams</span>
+        <h3 class="h3">Automation from a backend</h3>
+        <p>A service or cron job starts a run, waits for the outcome, reads its status, usage and cost, and acts on the result in code.</p>
+        <span class="meta"><span class="chip">runCommands: false</span><span class="chip">docker</span><span class="chip">waitForOutcome</span></span>
+        <details class="more-box">
+          <summary>Configuration</summary>
+          <div>
+            <dl class="kv">
+              <dt>Permissions</dt><dd>runCommands: false, unrestrictedNetwork: false</dd>
+              <dt>Connectors</dt><dd>the systems it must read</dd>
+              <dt>Skills</dt><dd>not specified</dd>
+              <dt>Files</dt><dd>inputs uploaded before the run; outputs read back after</dd>
+              <dt>Limits</dt><dd>turn and budget limits; timeoutSeconds, idleTimeoutSeconds on the runtime profile</dd>
+              <dt>Runtime</dt><dd>docker</dd>
+              <dt>Entry point</dt><dd>a Builder API key on your backend; aw.runs.waitForOutcome, or aw from CI</dd>
+            </dl>
+            <p class="small mt-s">Use-case shape 3. No webhooks and no idempotency key yet: poll or stream in-process.</p>
+            <a class="go" href="https://docs.agentworkspace.indx.jp/concepts/use-cases">Read the use case</a>
+          </div>
+        </details>
+      </article>
+
+      <!-- Concept 2 -->
+      <article class="card tile reveal" id="team-workspace" data-filter-item="engineering operations">
+        <span class="who">Engineering · operations groups</span>
+        <h3 class="h3">A team workspace with people and roles</h3>
+        <p>A dozen people run agents from a browser; a few may change them, everyone else may only use the ones they are granted.</p>
+        <span class="meta"><span class="chip">4 roles</span><span class="chip">projects per team</span><span class="chip">docker or kubernetes</span></span>
+        <details class="more-box">
+          <summary>Configuration</summary>
+          <div>
+            <dl class="kv">
+              <dt>People</dt><dd>Owner (one or two), Admin for the platform team, Builder for agent authors, Viewer for everyone else</dd>
+              <dt>Agents</dt><dd>owned by the Builder who wrote them; Admins see all</dd>
+              <dt>Projects</dt><dd>one per team, with a default agent, default model and shared files</dd>
+              <dt>Limits</dt><dd>per agent</dd>
+              <dt>Runtime</dt><dd>docker on a single VM, or kubernetes for several teams</dd>
+              <dt>Entry point</dt><dd>the control plane's own UI</dd>
+            </dl>
+            <p class="small mt-s">Use-case shape 2. The invitee's accept page is still incomplete in the docs.</p>
+            <a class="go" href="https://docs.agentworkspace.indx.jp/concepts/use-cases">Read the use case</a>
+          </div>
+        </details>
+      </article>
+
+      <!-- Tutorial 9 -->
+      <article class="card tile reveal" data-d="1" id="maintenance-troubleshooting" data-filter-item="operations engineering">
+        <span class="who">Plant maintenance · field service · FA</span>
+        <h3 class="h3">Troubleshooting one cited step at a time</h3>
+        <p>Lockout/tagout first, then one cited step at a time; logs the fix through MCP and escalates to an expert.</p>
+        <span class="meta"><span class="chip">no permissions</span><span class="chip">mcp: trouble-log</span><span class="chip">mcp: equipment-manual</span></span>
+        <details class="more-box">
+          <summary>Configuration</summary>
+          <div>
+            <dl class="kv">
+              <dt>Permissions</dt><dd>{} (none)</dd>
+              <dt>Tools</dt><dd>mcp('trouble-log'), mcp('equipment-manual')</dd>
+              <dt>Skills</dt><dd>one-step-diagnosis</dd>
+              <dt>Files</dt><dd>—</dd>
+              <dt>Limits</dt><dd>maxTurns: 10, maxBudgetUsd: 0.3</dd>
+              <dt>Runtime</dt><dd>workspace default</dd>
+              <dt>Entry point</dt><dd>surface floor (page)</dd>
+            </dl>
+            <p class="small mt-s">Tutorial 9 · docs benchmark score <span class="mono">50</span>/100</p>
+            <a class="go" href="https://docs.agentworkspace.indx.jp/tutorials/maintenance-troubleshooting">Read the tutorial</a>
+          </div>
+        </details>
+      </article>
+
+      <!-- Tutorial 10 -->
+      <article class="card tile reveal" data-d="2" id="quality-defect" data-filter-item="operations engineering">
+        <span class="who">QA · design review · claims</span>
+        <h3 class="h3">Quality defects and past-trouble analysis</h3>
+        <p>Finds similar past defects, gets 4M counts computed by the database and drafts なぜなぜ and 8D; a policy ceiling keeps it offline.</p>
+        <span class="meta"><span class="chip">runCommands</span><span class="chip">unrestrictedNetwork: false</span><span class="chip">mcp: defect-db</span></span>
+        <details class="more-box">
+          <summary>Configuration</summary>
+          <div>
+            <dl class="kv">
+              <dt>Permissions</dt><dd>readFiles, runCommands, unrestrictedNetwork: false</dd>
+              <dt>Tools</dt><dd>mcp('defect-db')</dd>
+              <dt>Skills</dt><dd>eight-d</dd>
+              <dt>Files</dt><dd>fmea (read)</dd>
+              <dt>Limits</dt><dd>maxTurns: 16, maxBudgetUsd: 1</dd>
+              <dt>Runtime</dt><dd>workspace default</dd>
+              <dt>Entry point</dt><dd>surface qa (page)</dd>
+            </dl>
+            <p class="small mt-s">Tutorial 10 · docs benchmark score <span class="mono">61</span>/100</p>
+            <a class="go" href="https://docs.agentworkspace.indx.jp/tutorials/quality-defect">Read the tutorial</a>
+          </div>
+        </details>
+      </article>
+
+      <!-- Concept 1 -->
+      <article class="card tile reveal" id="product-copilot" data-filter-item="product">
+        <span class="who">SaaS product teams</span>
+        <h3 class="h3">A copilot inside your own product</h3>
+        <p>An assistant panel in your application: your backend starts runs, your frontend renders the stream, the agents are managed by the people who own them.</p>
+        <span class="meta"><span class="chip">docker</span><span class="chip">network: none</span><span class="chip">your API as MCP</span></span>
+        <details class="more-box">
+          <summary>Configuration</summary>
+          <div>
+            <dl class="kv">
+              <dt>Permissions</dt><dd>readFiles: true; writeFiles only for the canvas agent</dd>
+              <dt>Connectors</dt><dd>your product's own API as an MCP server, http transport, bearer credential</dd>
+              <dt>Skills</dt><dd>not specified</dd>
+              <dt>Files</dt><dd>canvas/&lt;user&gt;/&lt;session&gt;/ per embedded surface, read-write</dd>
+              <dt>Limits</dt><dd>not specified</dd>
+              <dt>Runtime</dt><dd>docker, networkPolicy 'none' for agents that need no egress</dd>
+              <dt>Entry point</dt><dd>a Builder API key on your backend; the event stream relayed to your frontend</dd>
+            </dl>
+            <p class="small mt-s">Use-case shape 1. API keys stay on the server; they never reach a browser.</p>
+            <a class="go" href="https://docs.agentworkspace.indx.jp/concepts/use-cases">Read the use case</a>
+          </div>
+        </details>
+      </article>
+
+    </div>
+    <p class="filter-empty" hidden>No example for this team yet. Show all, or tell us what you would build.</p>
+
+    <p class="small reveal" style="margin-top:22px">
+      Every connector above is an MCP server you host, over <code>http</code>. Department labels come
+      from the docs' gallery. Sixteen cards: ten tutorials and six use-case shapes.
+    </p>
+  </div>
+</section>
+
+<section class="sec sec--surface" id="by-isolation">
+  <div class="shell">
+    <div class="sec-head measure">
+      <span class="eyebrow reveal">Pick by isolation</span>
+      <h2 class="h2 reveal" data-d="1">Match the sandbox to what the agent is allowed to do.</h2>
+      <p class="lead reveal" data-d="2">
+        Start from the kind of work, not the team. Each step down the table hands the agent more
+        power, so it asks more of the runtime. A switch that is off removes its tools from the model.
+      </p>
+    </div>
+
+    <div class="scroll-x reveal">
+      <table class="matrix" style="min-width:880px">
+        <thead>
+          <tr><th scope="col" style="width:17%">The work</th><th scope="col">Permissions</th><th scope="col">Recommended runtime</th><th scope="col">Network policy</th><th scope="col">Examples above</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><b>Read-only Q&amp;A</b><br><span class="small">answers from manuals, rules, a handbook</span></td>
+            <td class="mono" style="font-size:12.5px">readFiles<br>or {} when every read goes through a connector</td>
+            <td><code>docker</code>, a container per session <span class="badge badge-ok">fixture-verified</span></td>
+            <td><code>none</code>: the model gateway and nothing else</td>
+            <td><a href="#manual-search">manual search</a>, <a href="#ringi-review">ringi review</a>, <a href="#maintenance-troubleshooting">troubleshooting</a>, <a href="#it-service-desk">IT service desk</a></td>
+          </tr>
+          <tr>
+            <td><b>Writes files</b><br><span class="small">drafts, a canvas, generated output</span></td>
+            <td class="mono" style="font-size:12.5px">readFiles, writeFiles<br>+ a read-write file assignment</td>
+            <td><code>docker</code> <span class="badge badge-ok">fixture-verified</span></td>
+            <td><code>none</code></td>
+            <td><a href="#cad-drafting">CAD drafts</a>, <a href="#product-copilot">product copilot</a></td>
+          </tr>
+          <tr>
+            <td><b>Runs commands or scripts</b><br><span class="small">cost models, Office parsing, linters, tests</span></td>
+            <td class="mono" style="font-size:12.5px">runCommands: true<br>unrestrictedNetwork: false</td>
+            <td><code>kubernetes</code> + gVisor RuntimeClass <span class="badge badge-caveat">partially verified</span>, or <code>docker</code> <span class="badge badge-ok">fixture-verified</span></td>
+            <td><code>none</code> on docker</td>
+            <td><a href="#security-review">code review</a>, <a href="#legal-contract-review">contract review</a>, <a href="#quotation">quotation</a>, <a href="#excel-consolidation">Excel</a>, <a href="#quality-defect">quality defects</a></td>
+          </tr>
+          <tr>
+            <td><b>Touches the internet</b><br><span class="small">reaches hosts beyond the gateway</span></td>
+            <td class="mono" style="font-size:12.5px">unrestrictedNetwork: true</td>
+            <td><code>docker</code> or <code>kubernetes</code></td>
+            <td><code>open</code> <span class="badge badge-caveat">docker and kubernetes refuse <code>allowedDomains</code></span></td>
+            <td>none of the ten tutorials; shape 5 uses <code>open</code> only if its connectors are external</td>
+          </tr>
+          <tr>
+            <td><b>Public-facing visitors</b><br><span class="small">a chat widget on your site</span></td>
+            <td class="mono" style="font-size:12.5px">{} (none)</td>
+            <td><code>docker</code> <span class="badge badge-ok">fixture-verified</span></td>
+            <td><code>none</code>; the surface allows up to 20 exact origins</td>
+            <td><a href="#support-widget">customer inquiry widget</a></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="grid grid-2" style="gap:32px; margin-top:40px; align-items:start; grid-template-columns:minmax(0,1fr)">
+      <div class="grid" style="gap:14px">
+        <div class="notice reveal">
+          <span class="sym">⚠</span>
+          <span><b>Docker refuses <code>restricted</code> and <code>allowedDomains</code>; Kubernetes refuses <code>allowedDomains</code>.</b><br>
+            In practice a Docker host runs <code>none</code> or <code>open</code>. The server refuses a
+            policy a driver cannot enforce: <code>422 network_policy_not_enforceable</code>.</span>
+        </div>
+        <div class="notice reveal" data-d="1">
+          <span class="sym">⚠</span>
+          <span><b><code>local</code> has no isolation.</b><br>
+            It is for development only. gVisor is available through a Kubernetes RuntimeClass, not on
+            Docker. No managed-cloud driver has a live isolation proof yet.</span>
+        </div>
+        <p class="small reveal" data-d="2">
+          Driver standing as the docs state it:
+          <a href="https://docs.agentworkspace.indx.jp/building/self-hosting">self-hosting guide</a> ·
+          <a href="https://docs.agentworkspace.indx.jp/building/models-and-runtimes">models and runtimes</a> ·
+          <a href="security.html">security notes</a>
+        </p>
+      </div>
+      <div class="reveal" data-d="1">
+        <h3 class="h3" style="margin-bottom:8px">Put a ceiling on the whole project</h3>
+        <p class="small" style="margin-bottom:14px">The manual-search tutorial caps every agent in the project, whatever its own definition asks for.</p>
+        <pre data-claim="illustrative" class="code"><span class="fname">agent-workspace.yaml (excerpt)</span><span class="pr">policy</span>:
+  <span class="pr">permissions</span>: { <span class="pr">writeFiles</span>: <span class="kw">false</span>, <span class="pr">runCommands</span>: <span class="kw">false</span>, <span class="pr">unrestrictedNetwork</span>: <span class="kw">false</span> }
+  <span class="pr">limits</span>: { <span class="pr">maxBudgetUsd</span>: <span class="str">1</span> }
+  <span class="pr">promotion</span>: { <span class="pr">minEvalScore</span>: <span class="str">0.9</span> }</pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="sec sec--paper" id="path">
+  <div class="shell">
+    <div class="sec-head measure">
+      <span class="eyebrow reveal">From tutorial to agent</span>
+      <h2 class="h2 reveal" data-d="1">Start from the closest example, then make it yours.</h2>
+      <p class="lead reveal" data-d="2">
+        The docs suggest finding the row closest to your use case and reading its tutorial. From
+        there the path to production is five steps, all in the <code>aw</code> CLI.
+      </p>
+    </div>
+
+    <div class="grid grid-2" style="gap:40px; align-items:start">
+      <ol class="setup reveal">
+        <li><span><b>Pick the closest tutorial.</b> Its "Where the SDK stands" section says what works today and what you would write yourself.</span></li>
+        <li><span><b>Run it locally.</b> <code>aw dev</code> runs the project on one Node process with embedded PostgreSQL, no Docker, and pushes <code>agents/</code> and <code>surfaces/</code> on every save.</span></li>
+        <li><span><b>Write the skill and assign the files.</b> A <code>SKILL.md</code> under <code>skills/&lt;name&gt;/</code>, imported with <code>aw skills import</code>; documents assigned read-only or read-write.</span></li>
+        <li><span><b>Write down what "good" means.</b> Cases in <code>evals/&lt;agent&gt;.yaml</code>, run with <code>aw eval</code>; a thumbs-down becomes a case with <code>aw eval add-case</code>.</span></li>
+        <li><span><b>Save a version and promote it.</b> <code>aw push --yes</code> moves <code>local</code>; <code>aw promote --yes</code> moves production, gated on <code>aw dev</code> by <code>minEvalScore</code> if you set one. <code>aw rollback</code> moves it back.</span></li>
+      </ol>
+      <div class="reveal" data-d="1">
+        <pre data-claim="illustrative" class="term" id="path-cmds"><span class="p">$ </span><span class="c">npx aw dev</span>
+<span class="p">$ </span><span class="c">npx aw skills import ./release-notes</span>
+<span class="p">$ </span><span class="c">npx aw eval</span>
+<span class="p">$ </span><span class="c">npx aw push --yes</span>
+<span class="p">$ </span><span class="c">npx aw promote --yes</span></pre>
+        <div class="codecap" style="border:1px solid var(--rule); border-top:0"><span>Node 24 or newer</span><span class="sp"></span><button class="copy" type="button" data-copy="#path-cmds">Copy</button></div>
+        <p class="small" style="margin-top:12px">
+          <code>aw eval</code> exits 1 on any failed case, so the same command gates CI.
+          Full reference: <a href="https://docs.agentworkspace.indx.jp/reference/cli/commands">CLI commands</a> ·
+          <a href="https://docs.agentworkspace.indx.jp/guides/evaluations">evaluations</a> ·
+          <a href="examples.html">code examples</a>
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="sec sec--surface" id="not-yet">
+  <div class="shell">
+    <div class="sec-head measure">
+      <span class="eyebrow reveal">Limits, stated up front</span>
+      <h2 class="h2 reveal" data-d="1">What these examples do not do yet.</h2>
+      <p class="lead reveal" data-d="2">
+        Each tutorial is also a benchmark, and the docs publish its gaps beside it. Read these before
+        you pick one.
+      </p>
+    </div>
+
+    <div class="grid grid-2" style="gap:14px">
+      <div class="notice reveal">
+        <span class="sym">⚠</span>
+        <span><b>No typed data back from a run.</b><br>
+          The benchmark's "Struct" column is "not provided yet" for all ten tutorials: a backend gets text, not typed
+          data, from a run today.</span>
+      </div>
+      <div class="notice reveal" data-d="1">
+        <span class="sym">⚠</span>
+        <span><b>Public runnable agent shares are off.</b><br>
+          The <code>runnable</code> share mode is refused (<code>400 invalid_share</code>). A share is a
+          snapshot. For public visitors, publish a surface with <code>allowedOrigins</code>.</span>
+      </div>
+      <div class="notice reveal">
+        <span class="sym">⚠</span>
+        <span><b><code>stdio</code> connectors are stored but cannot run.</b><br>
+          Use <code>http</code> or <code>sse</code>. Every connector in these examples is an MCP server
+          you host.</span>
+      </div>
+      <!-- illustrative: a product promise (issue #880, open question), not run by tests/docs-claims;
+           the docs say the limit lifts where the operator enables the tool sandbox. -->
+      <div class="notice reveal" data-d="1">
+        <span class="sym">⚠</span>
+        <span><b>Code tools run only in <code>aw dev</code>.</b><br>
+          A version that uses a <code>defineTool()</code> tool cannot be promoted
+          (<code>422 code_tool_needs_host</code>). Deploy with <code>openapiTool()</code> (read-only
+          GET/HEAD) or an MCP server.</span>
+      </div>
+      <div class="notice reveal">
+        <span class="sym">⚠</span>
+        <span><b>No webhooks or idempotency key yet.</b><br>
+          Your backend polls or streams in-process, and a retried start after a lost response may
+          start a second run.</span>
+      </div>
+      <div class="notice reveal" data-d="1">
+        <span class="sym">⚠</span>
+        <span><b>Other providers and managed clouds are not live-proven.</b><br>
+          Non-Anthropic model adapters are fixture-verified; no managed-cloud sandbox driver has a
+          live isolation proof.</span>
+      </div>
+    </div>
+
+    <div class="card reveal" style="margin-top:28px">
+      <h3 class="h3">Benchmark scores, as the docs publish them</h3>
+      <p>
+        Each tutorial is scored over the capabilities its use case needs (provided = 1, "works with code you
+        write" = 0.5, not provided yet = 0). The ten scores range from <span class="mono">45</span> to
+        <span class="mono">69</span> out of 100.
+      </p>
+      <div class="scroll-x" style="margin-top:16px">
+        <table class="matrix">
+          <thead><tr><th scope="col">Tutorial</th><th scope="col" class="c">1</th><th scope="col" class="c">2</th><th scope="col" class="c">3</th><th scope="col" class="c">4</th><th scope="col" class="c">5</th><th scope="col" class="c">6</th><th scope="col" class="c">7</th><th scope="col" class="c">8</th><th scope="col" class="c">9</th><th scope="col" class="c">10</th></tr></thead>
+          <tbody><tr><td>Score / 100</td><td class="c">69</td><td class="c">45</td><td class="c">55</td><td class="c">50</td><td class="c">56</td><td class="c">50</td><td class="c">50</td><td class="c">45</td><td class="c">50</td><td class="c">61</td></tr></tbody>
+        </table>
+      </div>
+      <p class="small mt-s">Every verdict is backed by an offline test. <a href="https://docs.agentworkspace.indx.jp/tutorials">See the full benchmark</a></p>
+    </div>
+  </div>
+</section>
+
+<section class="sec sec--paper" style="padding:56px 0">
+  <div class="shell">
+    <div class="band reveal">
+      <div><h2>Bring the agent your team asked for.</h2><p>We will map it to the closest example, its permissions and the runtime it needs.</p></div>
+      <div class="btn-row"><a class="btn btn-action" href="https://indx.jp/en/contact">Book a demo</a><a class="btn btn-quiet" href="examples.html">Browse examples</a></div>
+    </div>
+  </div>
+</section>
+
+<section class="sec final" id="demo">
+  <div class="shell">
+    <div class="measure">
+      <h2 class="h2 reveal">See your first agent running on your own infrastructure.</h2>
+      <p class="lead reveal" data-d="1">A 30-minute walkthrough of the example closest to your team, with the model and the sandbox you would use.</p>
+      <div class="btn-row reveal" data-d="2">
+        <a class="btn btn-convert btn-xl" href="https://indx.jp/en/contact">Book a demo</a>
+        <a class="btn btn-quiet btn-xl" href="https://docs.agentworkspace.indx.jp/tutorials">Read the tutorials</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- chrome:footer -->
+<footer class="ftr" id="site-footer">
+  <div class="shell">
+    <div class="ftr-grid ftr-grid-5">
+      <div>
+        <a class="wordmark" href="index.html"><span class="mk" aria-hidden="true"><svg viewBox="0 0 32 32" width="16" height="16" aria-hidden="true"><path d="M9 24 13.9 8h4.2L23 24h-3.3l-1.1-3.6h-5.2L12.3 24zm5.3-6.4h3.4L16 11.9z" fill="currentColor" fill-rule="evenodd"/></svg></span>Agent Workspace</a>
+        <p class="small" style="margin-top:14px; max-width:30em">The smallest practical enterprise deployment layer for the Claude Agent SDK.</p>
+        <p class="small" style="margin-top:10px"><a href="https://indx.jp/en/contact">Contact INDX</a></p>
+      </div>
+      <div>
+        <h4>Product</h4>
+        <ul>
+          <li><a href="product.html">Platform overview</a></li>
+          <li><a href="product.html#how">How it works</a></li>
+          <li><a href="product.html#runtimes">Runtimes</a></li>
+          <li><a href="product.html#honesty">Compatibility</a></li>
+          <li><a href="security.html">Security</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Solutions</h4>
+        <ul>
+          <li><a href="use-cases.html">Use cases</a></li>
+          <li><a href="examples.html">Examples</a></li>
+          <li><a href="compare.html">Compare</a></li>
+          <li><a href="index.html#faq">FAQ</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Deploy</h4>
+        <ul>
+          <li><a href="https://docs.agentworkspace.indx.jp/getting-started/quickstart">Quickstart</a></li>
+          <li><a href="https://docs.agentworkspace.indx.jp/building/self-hosting">Self-host</a></li>
+          <li><a href="https://docs.agentworkspace.indx.jp/guides/deploy">Deploy guide</a></li>
+          <li><a href="https://docs.agentworkspace.indx.jp/building/embedding">Embedding</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Reference</h4>
+        <ul>
+          <li><a href="https://docs.agentworkspace.indx.jp">Documentation</a></li>
+          <li><a href="https://docs.agentworkspace.indx.jp/reference/cli/commands">CLI reference</a></li>
+          <li><a href="https://docs.agentworkspace.indx.jp/tutorials/index">Tutorials</a></li>
+          <li><a href="https://platform.claude.com/docs/en/agent-sdk/overview">Claude Agent SDK</a></li>
+        </ul>
+      </div>
+    </div>
+    <p class="ftr-note">
+      Screens are illustrative of the product UI. Capabilities, runtime driver standing and the
+      compatibility matrix are described as they stand in the <a href="https://docs.agentworkspace.indx.jp/building/models-and-runtimes">docs</a>.
+      Third-party products are described from their public documentation as of the date shown on each page.
+      <br>
+      Claude and Claude Agent SDK are products of Anthropic. This site is unofficial material for the
+      Agent Workspace project and is not affiliated with or endorsed by Anthropic.
+    </p>
+  </div>
+</footer>
+<!-- /chrome:footer -->
+</body>
+</html>

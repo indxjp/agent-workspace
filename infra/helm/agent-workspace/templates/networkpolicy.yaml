@@ -1,0 +1,184 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: agent-workspace-default-deny }
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress: []
+---
+# The policies below only add allowances under the default deny, each selected by the pod's
+# `app.kubernetes.io/name` label. Egress and ingress are paired: a connection needs both ends open.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: runner-to-gateway }
+spec:
+  podSelector: { matchLabels: { app.kubernetes.io/name: agent-workspace-runner-manager } }
+  policyTypes: [Egress]
+  egress:
+    - to: [{ podSelector: { matchLabels: { app.kubernetes.io/name: agent-workspace-gateway } } }]
+      ports: [{ protocol: TCP, port: 4000 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: gateway-from-runner }
+spec:
+  podSelector: { matchLabels: { app.kubernetes.io/name: agent-workspace-gateway } }
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{ podSelector: { matchLabels: { app.kubernetes.io/name: agent-workspace-runner-manager } } }]
+      ports: [{ protocol: TCP, port: 4000 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: web-to-runner-manager }
+spec:
+  podSelector: { matchLabels: { app.kubernetes.io/name: agent-workspace-web } }
+  policyTypes: [Egress]
+  egress:
+    - to: [{ podSelector: { matchLabels: { app.kubernetes.io/name: agent-workspace-runner-manager } } }]
+      ports: [{ protocol: TCP, port: 8080 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: runner-manager-from-web }
+spec:
+  podSelector: { matchLabels: { app.kubernetes.io/name: agent-workspace-runner-manager } }
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{ podSelector: { matchLabels: { app.kubernetes.io/name: agent-workspace-web } } }]
+      ports: [{ protocol: TCP, port: 8080 }]
+---
+# Every pod resolves names, so every pod may reach the cluster DNS and nothing else on port 53.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: agent-workspace-dns }
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values: [agent-workspace-web, agent-workspace-gateway, agent-workspace-runner-manager, agent-workspace-migrate]
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: {{ .Values.dns.namespace | quote }} } }
+          podSelector: { matchLabels: {{ toJson .Values.dns.podSelector }} }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+---
+# PostgreSQL is reached by web (which migrates as it starts), the migrate Job, the runner manager
+# and the gateway (which opens the database as it starts). `database.cidr` and `database.podSelector`
+# narrow the destination (`database.namespace` puts the podSelector in another namespace); with
+# neither set the rule still opens only `database.port`.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: agent-workspace-database }
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values: [agent-workspace-web, agent-workspace-gateway, agent-workspace-runner-manager, agent-workspace-migrate]
+  policyTypes: [Egress]
+  egress:
+    - ports: [{ protocol: TCP, port: {{ .Values.database.port }} }]
+      {{- with include "agent-workspace.egressTo" .Values.database }}
+      {{- . | nindent 6 }}
+      {{- end }}
+---
+# Web reads and writes files in the object store. The rule opens only `objectStore.port` unless
+# `objectStore.cidr` or `objectStore.podSelector` (with `objectStore.namespace`) says where.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: web-to-object-store }
+spec:
+  podSelector: { matchLabels: { app.kubernetes.io/name: agent-workspace-web } }
+  policyTypes: [Egress]
+  egress:
+    - ports: [{ protocol: TCP, port: {{ .Values.objectStore.port }} }]
+      {{- with include "agent-workspace.egressTo" .Values.objectStore }}
+      {{- . | nindent 6 }}
+      {{- end }}
+---
+# Web (setup and model discovery) and the gateway (every model call) reach the model providers. The
+# default is the public internet on `providers.port`, minus the private ranges.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: agent-workspace-providers }
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values: [agent-workspace-web, agent-workspace-gateway]
+  policyTypes: [Egress]
+  egress:
+    - ports: [{ protocol: TCP, port: {{ .Values.providers.port }} }]
+      {{- with include "agent-workspace.egressTo" .Values.providers }}
+      {{- . | nindent 6 }}
+      {{- end }}
+{{- if eq .Values.runtime.driver "kubernetes" }}
+---
+# The runner manager creates and deletes sandbox Pods with its ServiceAccount token, so it dials the
+# API server. `kubernetesApi.cidr` narrows where; the API server is addressed on 443 or 6443.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: runner-manager-to-kubernetes-api }
+spec:
+  podSelector: { matchLabels: { app.kubernetes.io/name: agent-workspace-runner-manager } }
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        {{- range .Values.kubernetesApi.ports }}
+        - { protocol: TCP, port: {{ . }} }
+        {{- end }}
+      {{- with .Values.kubernetesApi.cidr }}
+      to: [{ ipBlock: { cidr: {{ . | quote }} } }]
+      {{- end }}
+---
+# The runner manager proxies the runtime contract to a sandbox Pod, which accepts nothing else. The
+# driver adds each sandbox's own egress policy (gateway, and the egress proxy when configured).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: runner-manager-to-agent-runtime }
+spec:
+  podSelector: { matchLabels: { app.kubernetes.io/name: agent-workspace-runner-manager } }
+  policyTypes: [Egress]
+  egress:
+    - to: [{ podSelector: { matchLabels: { app.kubernetes.io/name: agent-runtime } } }]
+      ports: [{ protocol: TCP, port: 8080 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: agent-runtime-from-runner-manager }
+spec:
+  podSelector: { matchLabels: { app.kubernetes.io/name: agent-runtime } }
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{ podSelector: { matchLabels: { app.kubernetes.io/name: agent-workspace-runner-manager } } }]
+      ports: [{ protocol: TCP, port: 8080 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: gateway-from-agent-runtime }
+spec:
+  podSelector: { matchLabels: { app.kubernetes.io/name: agent-workspace-gateway } }
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{ podSelector: { matchLabels: { app.kubernetes.io/name: agent-runtime } } }]
+      ports: [{ protocol: TCP, port: 4000 }]
+{{- end }}
+{{- if .Values.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: web-from-ingress-controller }
+spec:
+  podSelector: { matchLabels: { app.kubernetes.io/name: agent-workspace-web } }
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{ namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: {{ .Values.ingress.controllerNamespace | quote }} } } }]
+      ports: [{ protocol: TCP, port: 3000 }]
+{{- end }}

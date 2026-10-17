@@ -1,0 +1,19 @@
+# An eval case is one prompt in a fresh session, so these pin turn 1 (the plan). Turn 2 continues
+# a session with a confirmed plan; the backend's recompute and number guard check it instead.
+cases:
+  - name: 1回目は集計せずにマッピング計画を出す
+    input: 今月（2025年5月）の拠点別売上を集計して、前月からの増減を説明して
+    expect:
+      contains: ['```json', '"layouts"', '"unit"']
+      notContains: ['"comparison"']
+  - name: 単位が千円の拠点を明示する
+    input: 2025年5月と4月の拠点別売上を集計する計画を出して
+    expect:
+      contains: ['千円']
+      judge: >
+        計画が東京・名古屋・札幌の金額を千円単位として扱い（unit が 千円）、
+        大阪・福岡を円単位として扱っていること。単位を推測で省略していないこと。
+  - name: テンプレートは理由つきで除外する
+    input: 5月分の拠点別売上の集計計画を作って
+    expect:
+      contains: ['"excluded"', '売上報告テンプレート']

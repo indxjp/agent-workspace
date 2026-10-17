@@ -1,0 +1,158 @@
+name: agent-workspace
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  init: true
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  proxy:
+    <<: *service-defaults
+    image: ${PROXY_IMAGE:?digest-pinned PROXY_IMAGE is required}
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    ports:
+      - 80:80
+      - 443:443
+      - 443:443/udp
+    volumes:
+      - /etc/agent-workspace/Caddyfile:/etc/caddy/Caddyfile:ro
+      - /var/lib/agent-workspace/caddy/data:/data
+      - /var/lib/agent-workspace/caddy/config:/config
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m
+    depends_on:
+      web:
+        condition: service_healthy
+    networks: [edge]
+
+  web:
+    <<: *service-defaults
+    image: ${WEB_IMAGE:?digest-pinned WEB_IMAGE is required}
+    read_only: true
+    cap_drop: [ALL]
+    env_file: [/run/agent-workspace/secrets/web.env]
+    environment:
+      PORT: '3000'
+      HOSTNAME: 0.0.0.0
+      MODEL_GATEWAY_URL: http://gateway:4000
+      RUNNER_URL: http://runner:8080
+      RUNNER_MANAGER_URL: http://runner:8090
+      RUNTIME_DRIVER: docker
+      AGENT_WORKSPACE_RUNTIME_IMAGE_CLAUDE_AGENT_SDK: ${RUNTIME_IMAGE:?digest-pinned RUNTIME_IMAGE is required}
+      # The image the Runtimes page's Test Runtime approval is keyed to; unset, the web process
+      # falls back to a development tag this VM never runs.
+      RUNTIME_IMAGE: ${RUNTIME_IMAGE:?digest-pinned RUNTIME_IMAGE is required}
+      AW_FILE_STORAGE_ROOT: /var/lib/agent-workspace/files
+      AW_SKILL_STORAGE_ROOT: /var/lib/agent-workspace/skills
+      AW_SESSION_TRANSCRIPT_ROOT: /var/lib/agent-workspace/sessions
+      AW_RUNTIME_VERIFICATION_FILE: /var/lib/agent-workspace/runtime-verifications.json
+      AW_SESSION_TRANSCRIPT_RETENTION_DAYS: '30'
+      AW_SESSION_RETENTION_DRY_RUN: 'false'
+    volumes:
+      - /var/lib/agent-workspace/workspace:/var/lib/agent-workspace
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+      - /srv/apps/web/.next/cache:rw,nosuid,nodev,size=128m
+    depends_on:
+      postgres:
+        condition: service_healthy
+      gateway:
+        condition: service_healthy
+      runner:
+        condition: service_healthy
+    networks: [edge, control]
+
+  gateway:
+    <<: *service-defaults
+    image: ${GATEWAY_IMAGE:?digest-pinned GATEWAY_IMAGE is required}
+    read_only: true
+    cap_drop: [ALL]
+    env_file: [/run/agent-workspace/secrets/gateway.env]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=32m
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+    networks: [control, provider-egress, runtime-control]
+
+  runner:
+    <<: *service-defaults
+    image: ${RUNNER_IMAGE:?digest-pinned RUNNER_IMAGE is required}
+    read_only: true
+    cap_drop: [ALL]
+    group_add: ['${DOCKER_GID:?DOCKER_GID is required}']
+    env_file: [/run/agent-workspace/secrets/runner.env]
+    environment:
+      HOST: 0.0.0.0
+      PORT: '8090'
+      RUNNER_MANAGER_TOKEN: ${RUNNER_MANAGER_TOKEN:?RUNNER_MANAGER_TOKEN is required}
+      RUNTIME_DRIVER: docker
+      AGENT_WORKSPACE_RUNTIME_IMAGE_CLAUDE_AGENT_SDK: ${RUNTIME_IMAGE:?digest-pinned RUNTIME_IMAGE is required}
+      RUNTIME_NETWORK: agent-workspace-runtime-control
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/lib/agent-workspace/runtime-workspaces:/workspace
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:8090/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [control, runtime-control]
+
+  postgres:
+    image: ${POSTGRES_IMAGE:?digest-pinned POSTGRES_IMAGE is required}
+    restart: unless-stopped
+    shm_size: 256mb
+    env_file: [/run/agent-workspace/secrets/postgres.env]
+    volumes:
+      - /var/lib/agent-workspace/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    networks: [control]
+
+networks:
+  edge:
+    internal: false
+  control:
+    internal: true
+  provider-egress:
+    name: agent-workspace-provider-egress
+    internal: false
+    attachable: true
+  # The runtime driver attaches every sandbox to this network by name, and refuses one that is not
+  # internal or lacks the agent-workspace.runtime=docker-network label (packages/runtime). The
+  # fixed names are safe here: this VM runs one project, `agent-workspace`, and nothing else.
+  runtime-control:
+    name: agent-workspace-runtime-control
+    internal: true
+    attachable: true
+    labels:
+      agent-workspace.runtime: docker-network

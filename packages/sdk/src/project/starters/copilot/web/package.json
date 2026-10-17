@@ -1,0 +1,18 @@
+{
+  "name": "{{agentName}}-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@indx-workspace/react": "{{version}}",
+    "@indx-workspace/sdk": "{{version}}",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "vite": "^7.0.0"
+  }
+}

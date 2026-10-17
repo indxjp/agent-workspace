@@ -1,0 +1,155 @@
+---
+title: "projects"
+description: "The @indx-workspace/contracts/projects exports, sorted alphabetically."
+---
+
+<Note>This page is generated from `packages/contracts/src/projects.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## PROJECT_LIST_FILTERS
+
+The `?archived=` filter of `GET /api/projects`; the default is `active`.
+
+- `'active'`
+- `'archived'`
+- `'all'`
+
+## PROJECT_VISIBILITIES
+
+- `'private'`
+- `'workspace'`
+- `'public'`
+
+## ProjectCreateInput
+
+Normalized body accepted by `POST /api/projects`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `instructions` | `undefined \| string` | No |  |
+| `defaultAgentId` | `undefined \| null \| string` | No |  |
+| `visibility` | `"workspace" \| "private" \| "public"` | Yes |  |
+| `fileIds` | `readonly string[]` | Yes |  |
+| `mcpServerIds` | `readonly string[]` | Yes |  |
+
+## ProjectListFilter
+
+- `"all"`
+- `"active"`
+- `"archived"`
+
+## ProjectListResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `projects` | `ProjectResource[]` | Yes |  |
+
+## ProjectListResponseSchema
+
+The body of `GET /api/projects`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `projects` | `ProjectResource[]` | Yes |  |
+
+## ProjectPatchInput
+
+Normalized body accepted by `PATCH /api/projects/:id`; omitted fields remain unchanged.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `undefined \| string` | No |  |
+| `instructions` | `undefined \| null \| string` | No |  |
+| `defaultAgentId` | `undefined \| null \| string` | No |  |
+| `defaultModelConnectionId` | `undefined \| null \| string` | No |  |
+| `defaultModel` | `undefined \| null \| string` | No |  |
+| `visibility` | `undefined \| "workspace" \| "private" \| "public"` | No |  |
+| `fileIds` | `undefined \| readonly string[]` | No |  |
+| `mcpServerIds` | `undefined \| readonly string[]` | No |  |
+
+## ProjectResource
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `workspaceId` | `string` | Yes |  |
+| `name` | `string` | Yes |  |
+| `instructions` | `null \| string` | Yes |  |
+| `defaultAgentId` | `null \| string` | Yes |  |
+| `defaultModelConnectionId` | `null \| string` | Yes |  |
+| `defaultModel` | `null \| string` | Yes |  |
+| `visibility` | `"workspace" \| "private" \| "public"` | Yes |  |
+| `createdBy` | `null \| string` | Yes |  |
+| `ownerPrincipalId` | `string` | Yes |  |
+| `archivedAt` | `null \| string` | Yes | When the project was archived, or `null` while it is active. Published because the archive route answers with this same resource: without it an archived project and an active one are byte-identical over HTTP. |
+| `createdAt` | `string` | Yes |  |
+| `updatedAt` | `string` | Yes |  |
+| `fileIds` | `string[]` | Yes |  |
+| `mcpServerIds` | `string[]` | Yes |  |
+
+## ProjectResourceSchema
+
+One project as `GET /api/projects/:id`, the `201` of `POST /api/projects`, the `200` of
+`PATCH /api/projects/:id`, `POST /api/projects/:id/archive|restore`, and every list item
+render it.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `workspaceId` | `string` | Yes |  |
+| `name` | `string` | Yes |  |
+| `instructions` | `null \| string` | Yes |  |
+| `defaultAgentId` | `null \| string` | Yes |  |
+| `defaultModelConnectionId` | `null \| string` | Yes |  |
+| `defaultModel` | `null \| string` | Yes |  |
+| `visibility` | `"workspace" \| "private" \| "public"` | Yes |  |
+| `createdBy` | `null \| string` | Yes |  |
+| `ownerPrincipalId` | `string` | Yes |  |
+| `archivedAt` | `null \| string` | Yes | When the project was archived, or `null` while it is active. Published because the archive route answers with this same resource: without it an archived project and an active one are byte-identical over HTTP. |
+| `createdAt` | `string` | Yes |  |
+| `updatedAt` | `string` | Yes |  |
+| `fileIds` | `string[]` | Yes |  |
+| `mcpServerIds` | `string[]` | Yes |  |
+
+## ProjectSessionMoveResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `projectId` | `string` | Yes |  |
+| `sessionId` | `string` | Yes |  |
+
+## ProjectSessionMoveResponseSchema
+
+The `200` body of `POST /api/projects/:id/sessions` when the body names a `sessionId`: the
+session now belongs to the project. The route refuses the move once the session has any run
+(`409 project_session_has_runs`), so a run's project attribution is never rewritten.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `projectId` | `string` | Yes |  |
+| `sessionId` | `string` | Yes |  |
+
+## ProjectSessionResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `projectId` | `string` | Yes |  |
+| `agentId` | `string` | Yes |  |
+
+## ProjectSessionResponseSchema
+
+The `201` (created) or `200` (already existed) body of `POST /api/projects/:id/sessions` when
+it starts a session, so a first run can be attributed to the project before it happens.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `projectId` | `string` | Yes |  |
+| `agentId` | `string` | Yes |  |
+
+## ProjectVisibility
+
+- `"workspace"`
+- `"private"`
+- `"public"`

@@ -1,0 +1,136 @@
+---
+title: "Chapter 4: Put it in your product"
+sidebarTitle: "Overview"
+description: "Let your users talk to the agent inside your own site or app, or have your backend call it, without a workspace API key ever reaching a browser."
+---
+
+**Where you are:** after [Chapter 3: Test and improve it](/path/test), before
+[Chapter 5: Ship it to your servers](/path/ship).
+
+## What you will have at the end
+
+Customers on your website ask the support agent `assistant` about a refund, through the `main`
+surface's chat: a one-tag widget, or `<Chat/>` in your React app. Your backend can also start a
+run of the same agent from its own code with an API key, wait for the answer or relay its live
+stream, and map failures onto your own API's errors.
+
+## Where will users talk to the agent?
+
+```mermaid
+flowchart TD
+  Q{"Where will users talk to the agent?"}
+  Q -->|"a page of its own"| P["Hosted chat page: /p/s/main"]
+  Q -->|"on my website, any stack"| W["Site widget: one script tag"]
+  Q -->|"in my React app"| R["React: Chat or useConversation"]
+  Q -->|"my server decides"| B["Your backend via the SDK"]
+  Q -->|"not TypeScript"| H["Plain HTTP: /api/**"]
+  B --> U{"Your own UI?"}
+  U -->|"yes"| RL["Relay the run stream to your frontend"]
+  U -->|"no"| WT["Wait for the outcome"]
+```
+
+The first three need no code on your server: the surface opens each visitor's session itself. The
+last two put the API key on your server, and your frontend, if any, talks only to your server.
+
+## Who holds which credential
+
+```mermaid
+sequenceDiagram
+  participant V as Browser
+  participant S as Your backend
+  participant A as Agent Workspace
+  Note over V,A: Widget, hosted page or React Chat
+  V->>A: POST /p/s/main/sessions, no credential, origin checked
+  A-->>V: session-scoped browser token awt_live_..., valid one hour
+  V->>A: start a run and follow its events, Bearer awt_live_...
+  Note over V,A: Your own backend
+  V->>S: your own request, your own sign-in
+  S->>A: runs.start with the API key ak_live_..., kept server-side
+  A-->>S: run events
+  S-->>V: the same frames relayed as SSE
+  Note over S,A: Optional, instead of relaying
+  S->>A: tokens.mint for one run or session
+  S-->>V: short-lived awt_live_ token, 60 to 3600 seconds
+```
+
+A workspace API key (`ak_live_…`) never reaches a browser: it is long-lived and carries a whole
+role. What a browser holds is always a short-lived token scoped to one run or one session. Details
+and limits: [Authentication](/getting-started/authentication).
+
+## The map
+
+```mermaid
+flowchart TD
+  A["Pick the surface"] --> B["Pick the credential"]
+  B --> C{"Who draws the chat?"}
+  C -->|"the surface"| D["Frontend and embedding"]
+  D --> E["Your own React"]
+  C -->|"your server"| F["Integrate a backend"]
+  F --> G["Plain HTTP"]
+  E --> H["Streaming in depth"]
+  G --> H
+```
+
+<Steps>
+  <Step title="Pick how users reach the agent">
+    You find your job in a decision table and the page that shows it. You learn the four ways your
+    code touches the platform: what you consume, configure, extend, or leave alone. [Which surface
+    for which job](/building/overview)
+  </Step>
+  <Step title="Choose the credential">
+    You mint an API key for a server, or a browser token for one run or session. You learn what each
+    credential may reach and why a key never goes to a browser.
+    [Authentication](/getting-started/authentication)
+  </Step>
+  <Step title="Build a frontend">
+    You show the surface's chat or render a live run in your own page. You learn which credential a
+    page can use and the failure modes of a live view. [Build a frontend](/building/frontend)
+  </Step>
+  <Step title="Embed the agent in your product">
+    You paste the widget tag, or build a relay, a chat panel and a canvas. You learn the frames a UI
+    reduces and how to switch agents. [Embed an agent in your product](/building/embedding)
+  </Step>
+  <Step title="Make the chat your own in React">
+    You render `<Chat />
+    `, replace its composer, or draw everything with `useConversation()`. You learn the parts you
+    can swap and how a deployed page is admitted. [Your own React](/building/react)
+  </Step>
+  <Step title="Call the agent from your backend">
+    You start a run with an API key and wait for it or stream it. You learn which role to mint, how
+    to stop a run, and how to map SDK errors. [Integrate a backend](/building/backend)
+  </Step>
+  <Step title="Call the API without the SDK">
+    You call `/api/**` from Python, Go or a shell with one header. You learn the response and error
+    shapes and how to generate a client from OpenAPI. [Call the API without the
+    SDK](/building/http-api)
+  </Step>
+  <Step title="Stream a run in depth">
+    You follow a run, survive a dropped connection and resume from a cursor. You learn the wire
+    format and the neutral `agent.*` events. [Streaming](/guides/streaming)
+  </Step>
+</Steps>
+
+## Choose quickly
+
+| If you want…                                                 | Read                                                                                       |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| The chat on any web page, with no build step                 | [Embed an agent: one tag](/building/embedding#show-the-chat-with-one-tag-or-one-component) |
+| The chat inside a React app, styled or rebuilt by you        | [Your own React](/building/react)                                                          |
+| A chat panel, canvas or agent switcher you draw yourself     | [Embed an agent: the relay](/building/embedding#stream-an-agent-run-into-your-own-ui)      |
+| A job, a worker or CI to run the agent and act on the answer | [Integrate a backend](/building/backend)                                                   |
+| A backend in Python, Go or a shell                           | [Call the API without the SDK](/building/http-api)                                         |
+
+## What is not there yet
+
+- A customer's own frontend on another origin cannot call the rest of the API directly; only a
+  surface's chat is admitted cross-origin ([Build a frontend](/building/frontend#pick-the-credential-your-page-can-use)).
+- No webhook tells your backend a run finished; follow the stream or poll `runs.get`
+  ([N-3](/concepts/roadmap#n-3-webhooks-for-run-outcomes)).
+- `runs.start` is not idempotent and takes no `Idempotency-Key`
+  ([S-6](/concepts/roadmap#s-6-idempotency-keys)).
+- File bytes for a canvas pass through your backend; no presigned URLs
+  ([N-4](/concepts/roadmap#n-4-presigned-file-transfer-for-browsers)).
+
+<Card title="Chapter 5: Ship it to your servers" href="/path/ship">
+  Run the agent in production on your own VM, Cloud Run or Kubernetes.
+</Card>

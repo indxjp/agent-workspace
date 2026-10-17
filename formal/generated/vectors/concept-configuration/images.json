@@ -1,0 +1,1927 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.local_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"kind": "absent"}, "driver": "local"},
+   "id": "image/local/absent",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.local_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"kind": "non-text"}, "driver": "local"},
+   "id": "image/local/non-text",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.local_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image":
+    {"value": "ghcr.io/acme/agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "kind": "text"},
+    "driver": "local"},
+   "id": "image/local/pinned",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.local_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "local"},
+   "id": "image/local/pinned-minimal",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.local_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "r/x@sha256:0123456789abcdef000000000000000000000000000000000000000000000000", "kind": "text"},
+    "driver": "local"},
+   "id": "image/local/pinned-hex-mixed",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.local_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image":
+    {"value": "x@sha256:0@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "local"},
+   "id": "image/local/pinned-double-at",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.local_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"value": "ghcr.io/acme/agent:1.0", "kind": "text"}, "driver": "local"},
+   "id": "image/local/tag",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.local_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"value": "", "kind": "text"}, "driver": "local"},
+   "id": "image/local/empty",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.local_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "local"},
+   "id": "image/local/no-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.local_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "kind": "text"},
+    "driver": "local"},
+   "id": "image/local/upper-hex",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.local_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "local"},
+   "id": "image/local/short-digest",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.local_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "local"},
+   "id": "image/local/long-digest",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.local_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a\nb@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "local"},
+   "id": "image/local/newline-in-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.local_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a b@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "local"},
+   "id": "image/local/line-separator-in-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.local_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n", "kind": "text"},
+    "driver": "local"},
+   "id": "image/local/trailing-newline",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.local_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha512:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "local"},
+   "id": "image/local/sha512",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.local_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg", "kind": "text"},
+    "driver": "local"},
+   "id": "image/local/non-hex",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.sandbox_runtime_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"kind": "absent"}, "driver": "sandbox-runtime"},
+   "id": "image/sandbox-runtime/absent",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.sandbox_runtime_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"kind": "non-text"}, "driver": "sandbox-runtime"},
+   "id": "image/sandbox-runtime/non-text",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.sandbox_runtime_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image":
+    {"value": "ghcr.io/acme/agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "kind": "text"},
+    "driver": "sandbox-runtime"},
+   "id": "image/sandbox-runtime/pinned",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.sandbox_runtime_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "sandbox-runtime"},
+   "id": "image/sandbox-runtime/pinned-minimal",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.sandbox_runtime_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "r/x@sha256:0123456789abcdef000000000000000000000000000000000000000000000000", "kind": "text"},
+    "driver": "sandbox-runtime"},
+   "id": "image/sandbox-runtime/pinned-hex-mixed",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.sandbox_runtime_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image":
+    {"value": "x@sha256:0@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "sandbox-runtime"},
+   "id": "image/sandbox-runtime/pinned-double-at",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.sandbox_runtime_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"value": "ghcr.io/acme/agent:1.0", "kind": "text"}, "driver": "sandbox-runtime"},
+   "id": "image/sandbox-runtime/tag",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.sandbox_runtime_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"value": "", "kind": "text"}, "driver": "sandbox-runtime"},
+   "id": "image/sandbox-runtime/empty",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.sandbox_runtime_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "sandbox-runtime"},
+   "id": "image/sandbox-runtime/no-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.sandbox_runtime_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "kind": "text"},
+    "driver": "sandbox-runtime"},
+   "id": "image/sandbox-runtime/upper-hex",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.sandbox_runtime_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "sandbox-runtime"},
+   "id": "image/sandbox-runtime/short-digest",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.sandbox_runtime_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "sandbox-runtime"},
+   "id": "image/sandbox-runtime/long-digest",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.sandbox_runtime_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a\nb@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "sandbox-runtime"},
+   "id": "image/sandbox-runtime/newline-in-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.sandbox_runtime_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a b@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "sandbox-runtime"},
+   "id": "image/sandbox-runtime/line-separator-in-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.sandbox_runtime_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n", "kind": "text"},
+    "driver": "sandbox-runtime"},
+   "id": "image/sandbox-runtime/trailing-newline",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.sandbox_runtime_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha512:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "sandbox-runtime"},
+   "id": "image/sandbox-runtime/sha512",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.sandbox_runtime_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg", "kind": "text"},
+    "driver": "sandbox-runtime"},
+   "id": "image/sandbox-runtime/non-hex",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.docker_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"kind": "absent"}, "driver": "docker"},
+   "id": "image/docker/absent",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.docker_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"kind": "non-text"}, "driver": "docker"},
+   "id": "image/docker/non-text",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.docker_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image":
+    {"value": "ghcr.io/acme/agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "kind": "text"},
+    "driver": "docker"},
+   "id": "image/docker/pinned",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.docker_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "docker"},
+   "id": "image/docker/pinned-minimal",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.docker_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "r/x@sha256:0123456789abcdef000000000000000000000000000000000000000000000000", "kind": "text"},
+    "driver": "docker"},
+   "id": "image/docker/pinned-hex-mixed",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.docker_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image":
+    {"value": "x@sha256:0@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "docker"},
+   "id": "image/docker/pinned-double-at",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.docker_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"value": "ghcr.io/acme/agent:1.0", "kind": "text"}, "driver": "docker"},
+   "id": "image/docker/tag",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.docker_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"value": "", "kind": "text"}, "driver": "docker"},
+   "id": "image/docker/empty",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.docker_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "docker"},
+   "id": "image/docker/no-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.docker_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "kind": "text"},
+    "driver": "docker"},
+   "id": "image/docker/upper-hex",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.docker_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "docker"},
+   "id": "image/docker/short-digest",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.docker_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "docker"},
+   "id": "image/docker/long-digest",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.docker_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a\nb@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "docker"},
+   "id": "image/docker/newline-in-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.docker_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a b@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "docker"},
+   "id": "image/docker/line-separator-in-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.docker_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n", "kind": "text"},
+    "driver": "docker"},
+   "id": "image/docker/trailing-newline",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.docker_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha512:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "docker"},
+   "id": "image/docker/sha512",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.docker_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg", "kind": "text"},
+    "driver": "docker"},
+   "id": "image/docker/non-hex",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.kubernetes_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"kind": "absent"}, "driver": "kubernetes"},
+   "id": "image/kubernetes/absent",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.kubernetes_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"kind": "non-text"}, "driver": "kubernetes"},
+   "id": "image/kubernetes/non-text",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.kubernetes_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image":
+    {"value": "ghcr.io/acme/agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "kind": "text"},
+    "driver": "kubernetes"},
+   "id": "image/kubernetes/pinned",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.kubernetes_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "kubernetes"},
+   "id": "image/kubernetes/pinned-minimal",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.kubernetes_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "r/x@sha256:0123456789abcdef000000000000000000000000000000000000000000000000", "kind": "text"},
+    "driver": "kubernetes"},
+   "id": "image/kubernetes/pinned-hex-mixed",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.kubernetes_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image":
+    {"value": "x@sha256:0@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "kubernetes"},
+   "id": "image/kubernetes/pinned-double-at",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.kubernetes_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"value": "ghcr.io/acme/agent:1.0", "kind": "text"}, "driver": "kubernetes"},
+   "id": "image/kubernetes/tag",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.kubernetes_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"value": "", "kind": "text"}, "driver": "kubernetes"},
+   "id": "image/kubernetes/empty",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.kubernetes_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "kubernetes"},
+   "id": "image/kubernetes/no-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.kubernetes_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "kind": "text"},
+    "driver": "kubernetes"},
+   "id": "image/kubernetes/upper-hex",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.kubernetes_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "kubernetes"},
+   "id": "image/kubernetes/short-digest",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.kubernetes_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "kubernetes"},
+   "id": "image/kubernetes/long-digest",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.kubernetes_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a\nb@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "kubernetes"},
+   "id": "image/kubernetes/newline-in-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.kubernetes_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a b@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "kubernetes"},
+   "id": "image/kubernetes/line-separator-in-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.kubernetes_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n", "kind": "text"},
+    "driver": "kubernetes"},
+   "id": "image/kubernetes/trailing-newline",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.kubernetes_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha512:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "kubernetes"},
+   "id": "image/kubernetes/sha512",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.kubernetes_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg", "kind": "text"},
+    "driver": "kubernetes"},
+   "id": "image/kubernetes/non-hex",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.gke_agent_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"kind": "absent"}, "driver": "gke-agent-sandbox"},
+   "id": "image/gke-agent-sandbox/absent",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.gke_agent_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"kind": "non-text"}, "driver": "gke-agent-sandbox"},
+   "id": "image/gke-agent-sandbox/non-text",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.gke_agent_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image":
+    {"value": "ghcr.io/acme/agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "kind": "text"},
+    "driver": "gke-agent-sandbox"},
+   "id": "image/gke-agent-sandbox/pinned",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.gke_agent_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "gke-agent-sandbox"},
+   "id": "image/gke-agent-sandbox/pinned-minimal",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.gke_agent_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "r/x@sha256:0123456789abcdef000000000000000000000000000000000000000000000000", "kind": "text"},
+    "driver": "gke-agent-sandbox"},
+   "id": "image/gke-agent-sandbox/pinned-hex-mixed",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.gke_agent_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image":
+    {"value": "x@sha256:0@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "gke-agent-sandbox"},
+   "id": "image/gke-agent-sandbox/pinned-double-at",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.gke_agent_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"value": "ghcr.io/acme/agent:1.0", "kind": "text"}, "driver": "gke-agent-sandbox"},
+   "id": "image/gke-agent-sandbox/tag",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.gke_agent_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"value": "", "kind": "text"}, "driver": "gke-agent-sandbox"},
+   "id": "image/gke-agent-sandbox/empty",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.gke_agent_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "gke-agent-sandbox"},
+   "id": "image/gke-agent-sandbox/no-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.gke_agent_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "kind": "text"},
+    "driver": "gke-agent-sandbox"},
+   "id": "image/gke-agent-sandbox/upper-hex",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.gke_agent_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "gke-agent-sandbox"},
+   "id": "image/gke-agent-sandbox/short-digest",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.gke_agent_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "gke-agent-sandbox"},
+   "id": "image/gke-agent-sandbox/long-digest",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.gke_agent_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a\nb@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "gke-agent-sandbox"},
+   "id": "image/gke-agent-sandbox/newline-in-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.gke_agent_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a b@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "gke-agent-sandbox"},
+   "id": "image/gke-agent-sandbox/line-separator-in-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.gke_agent_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n", "kind": "text"},
+    "driver": "gke-agent-sandbox"},
+   "id": "image/gke-agent-sandbox/trailing-newline",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.gke_agent_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha512:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "gke-agent-sandbox"},
+   "id": "image/gke-agent-sandbox/sha512",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.gke_agent_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg", "kind": "text"},
+    "driver": "gke-agent-sandbox"},
+   "id": "image/gke-agent-sandbox/non-hex",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aca_sessions_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"kind": "absent"}, "driver": "aca-sessions"},
+   "id": "image/aca-sessions/absent",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aca_sessions_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"kind": "non-text"}, "driver": "aca-sessions"},
+   "id": "image/aca-sessions/non-text",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aca_sessions_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image":
+    {"value": "ghcr.io/acme/agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "kind": "text"},
+    "driver": "aca-sessions"},
+   "id": "image/aca-sessions/pinned",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aca_sessions_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "aca-sessions"},
+   "id": "image/aca-sessions/pinned-minimal",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aca_sessions_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "r/x@sha256:0123456789abcdef000000000000000000000000000000000000000000000000", "kind": "text"},
+    "driver": "aca-sessions"},
+   "id": "image/aca-sessions/pinned-hex-mixed",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aca_sessions_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image":
+    {"value": "x@sha256:0@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "aca-sessions"},
+   "id": "image/aca-sessions/pinned-double-at",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aca_sessions_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"value": "ghcr.io/acme/agent:1.0", "kind": "text"}, "driver": "aca-sessions"},
+   "id": "image/aca-sessions/tag",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aca_sessions_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"value": "", "kind": "text"}, "driver": "aca-sessions"},
+   "id": "image/aca-sessions/empty",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aca_sessions_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "aca-sessions"},
+   "id": "image/aca-sessions/no-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aca_sessions_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "kind": "text"},
+    "driver": "aca-sessions"},
+   "id": "image/aca-sessions/upper-hex",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aca_sessions_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "aca-sessions"},
+   "id": "image/aca-sessions/short-digest",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aca_sessions_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "aca-sessions"},
+   "id": "image/aca-sessions/long-digest",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aca_sessions_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a\nb@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "aca-sessions"},
+   "id": "image/aca-sessions/newline-in-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aca_sessions_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a b@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "aca-sessions"},
+   "id": "image/aca-sessions/line-separator-in-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aca_sessions_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n", "kind": "text"},
+    "driver": "aca-sessions"},
+   "id": "image/aca-sessions/trailing-newline",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aca_sessions_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha512:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "aca-sessions"},
+   "id": "image/aca-sessions/sha512",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aca_sessions_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg", "kind": "text"},
+    "driver": "aca-sessions"},
+   "id": "image/aca-sessions/non-hex",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aws_agentcore_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"kind": "absent"}, "driver": "aws-agentcore"},
+   "id": "image/aws-agentcore/absent",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aws_agentcore_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"kind": "non-text"}, "driver": "aws-agentcore"},
+   "id": "image/aws-agentcore/non-text",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aws_agentcore_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image":
+    {"value": "ghcr.io/acme/agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "kind": "text"},
+    "driver": "aws-agentcore"},
+   "id": "image/aws-agentcore/pinned",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aws_agentcore_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "aws-agentcore"},
+   "id": "image/aws-agentcore/pinned-minimal",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aws_agentcore_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "r/x@sha256:0123456789abcdef000000000000000000000000000000000000000000000000", "kind": "text"},
+    "driver": "aws-agentcore"},
+   "id": "image/aws-agentcore/pinned-hex-mixed",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aws_agentcore_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image":
+    {"value": "x@sha256:0@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "aws-agentcore"},
+   "id": "image/aws-agentcore/pinned-double-at",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aws_agentcore_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"value": "ghcr.io/acme/agent:1.0", "kind": "text"}, "driver": "aws-agentcore"},
+   "id": "image/aws-agentcore/tag",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aws_agentcore_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"value": "", "kind": "text"}, "driver": "aws-agentcore"},
+   "id": "image/aws-agentcore/empty",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aws_agentcore_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "aws-agentcore"},
+   "id": "image/aws-agentcore/no-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aws_agentcore_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "kind": "text"},
+    "driver": "aws-agentcore"},
+   "id": "image/aws-agentcore/upper-hex",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aws_agentcore_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "aws-agentcore"},
+   "id": "image/aws-agentcore/short-digest",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aws_agentcore_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "aws-agentcore"},
+   "id": "image/aws-agentcore/long-digest",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aws_agentcore_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a\nb@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "aws-agentcore"},
+   "id": "image/aws-agentcore/newline-in-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aws_agentcore_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a b@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "aws-agentcore"},
+   "id": "image/aws-agentcore/line-separator-in-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aws_agentcore_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n", "kind": "text"},
+    "driver": "aws-agentcore"},
+   "id": "image/aws-agentcore/trailing-newline",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aws_agentcore_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha512:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "aws-agentcore"},
+   "id": "image/aws-agentcore/sha512",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aws_agentcore_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg", "kind": "text"},
+    "driver": "aws-agentcore"},
+   "id": "image/aws-agentcore/non-hex",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aws_ecs_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"kind": "absent"}, "driver": "aws-ecs"},
+   "id": "image/aws-ecs/absent",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aws_ecs_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"kind": "non-text"}, "driver": "aws-ecs"},
+   "id": "image/aws-ecs/non-text",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aws_ecs_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image":
+    {"value": "ghcr.io/acme/agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "kind": "text"},
+    "driver": "aws-ecs"},
+   "id": "image/aws-ecs/pinned",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aws_ecs_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "aws-ecs"},
+   "id": "image/aws-ecs/pinned-minimal",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aws_ecs_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "r/x@sha256:0123456789abcdef000000000000000000000000000000000000000000000000", "kind": "text"},
+    "driver": "aws-ecs"},
+   "id": "image/aws-ecs/pinned-hex-mixed",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aws_ecs_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image":
+    {"value": "x@sha256:0@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "aws-ecs"},
+   "id": "image/aws-ecs/pinned-double-at",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aws_ecs_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"value": "ghcr.io/acme/agent:1.0", "kind": "text"}, "driver": "aws-ecs"},
+   "id": "image/aws-ecs/tag",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aws_ecs_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"value": "", "kind": "text"}, "driver": "aws-ecs"},
+   "id": "image/aws-ecs/empty",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aws_ecs_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "aws-ecs"},
+   "id": "image/aws-ecs/no-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aws_ecs_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "kind": "text"},
+    "driver": "aws-ecs"},
+   "id": "image/aws-ecs/upper-hex",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aws_ecs_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "aws-ecs"},
+   "id": "image/aws-ecs/short-digest",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aws_ecs_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "aws-ecs"},
+   "id": "image/aws-ecs/long-digest",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aws_ecs_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a\nb@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "aws-ecs"},
+   "id": "image/aws-ecs/newline-in-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aws_ecs_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a b@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "aws-ecs"},
+   "id": "image/aws-ecs/line-separator-in-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aws_ecs_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n", "kind": "text"},
+    "driver": "aws-ecs"},
+   "id": "image/aws-ecs/trailing-newline",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aws_ecs_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha512:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "aws-ecs"},
+   "id": "image/aws-ecs/sha512",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.aws_ecs_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg", "kind": "text"},
+    "driver": "aws-ecs"},
+   "id": "image/aws-ecs/non-hex",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloud_run_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"kind": "absent"}, "driver": "cloud-run-sandbox"},
+   "id": "image/cloud-run-sandbox/absent",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloud_run_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"kind": "non-text"}, "driver": "cloud-run-sandbox"},
+   "id": "image/cloud-run-sandbox/non-text",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloud_run_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image":
+    {"value": "ghcr.io/acme/agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "kind": "text"},
+    "driver": "cloud-run-sandbox"},
+   "id": "image/cloud-run-sandbox/pinned",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloud_run_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "cloud-run-sandbox"},
+   "id": "image/cloud-run-sandbox/pinned-minimal",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloud_run_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "r/x@sha256:0123456789abcdef000000000000000000000000000000000000000000000000", "kind": "text"},
+    "driver": "cloud-run-sandbox"},
+   "id": "image/cloud-run-sandbox/pinned-hex-mixed",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloud_run_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image":
+    {"value": "x@sha256:0@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "cloud-run-sandbox"},
+   "id": "image/cloud-run-sandbox/pinned-double-at",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloud_run_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"value": "ghcr.io/acme/agent:1.0", "kind": "text"}, "driver": "cloud-run-sandbox"},
+   "id": "image/cloud-run-sandbox/tag",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloud_run_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"value": "", "kind": "text"}, "driver": "cloud-run-sandbox"},
+   "id": "image/cloud-run-sandbox/empty",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloud_run_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "cloud-run-sandbox"},
+   "id": "image/cloud-run-sandbox/no-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloud_run_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "kind": "text"},
+    "driver": "cloud-run-sandbox"},
+   "id": "image/cloud-run-sandbox/upper-hex",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloud_run_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "cloud-run-sandbox"},
+   "id": "image/cloud-run-sandbox/short-digest",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloud_run_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "cloud-run-sandbox"},
+   "id": "image/cloud-run-sandbox/long-digest",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloud_run_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a\nb@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "cloud-run-sandbox"},
+   "id": "image/cloud-run-sandbox/newline-in-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloud_run_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a b@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "cloud-run-sandbox"},
+   "id": "image/cloud-run-sandbox/line-separator-in-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloud_run_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n", "kind": "text"},
+    "driver": "cloud-run-sandbox"},
+   "id": "image/cloud-run-sandbox/trailing-newline",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloud_run_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha512:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "cloud-run-sandbox"},
+   "id": "image/cloud-run-sandbox/sha512",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloud_run_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg", "kind": "text"},
+    "driver": "cloud-run-sandbox"},
+   "id": "image/cloud-run-sandbox/non-hex",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloud_run_service_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"kind": "absent"}, "driver": "cloud-run-service"},
+   "id": "image/cloud-run-service/absent",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloud_run_service_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"kind": "non-text"}, "driver": "cloud-run-service"},
+   "id": "image/cloud-run-service/non-text",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloud_run_service_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image":
+    {"value": "ghcr.io/acme/agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "kind": "text"},
+    "driver": "cloud-run-service"},
+   "id": "image/cloud-run-service/pinned",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloud_run_service_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "cloud-run-service"},
+   "id": "image/cloud-run-service/pinned-minimal",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloud_run_service_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "r/x@sha256:0123456789abcdef000000000000000000000000000000000000000000000000", "kind": "text"},
+    "driver": "cloud-run-service"},
+   "id": "image/cloud-run-service/pinned-hex-mixed",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloud_run_service_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image":
+    {"value": "x@sha256:0@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "cloud-run-service"},
+   "id": "image/cloud-run-service/pinned-double-at",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloud_run_service_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"value": "ghcr.io/acme/agent:1.0", "kind": "text"}, "driver": "cloud-run-service"},
+   "id": "image/cloud-run-service/tag",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloud_run_service_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"value": "", "kind": "text"}, "driver": "cloud-run-service"},
+   "id": "image/cloud-run-service/empty",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloud_run_service_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "cloud-run-service"},
+   "id": "image/cloud-run-service/no-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloud_run_service_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "kind": "text"},
+    "driver": "cloud-run-service"},
+   "id": "image/cloud-run-service/upper-hex",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloud_run_service_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "cloud-run-service"},
+   "id": "image/cloud-run-service/short-digest",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloud_run_service_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "cloud-run-service"},
+   "id": "image/cloud-run-service/long-digest",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloud_run_service_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a\nb@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "cloud-run-service"},
+   "id": "image/cloud-run-service/newline-in-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloud_run_service_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a b@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "cloud-run-service"},
+   "id": "image/cloud-run-service/line-separator-in-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloud_run_service_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n", "kind": "text"},
+    "driver": "cloud-run-service"},
+   "id": "image/cloud-run-service/trailing-newline",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloud_run_service_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha512:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "cloud-run-service"},
+   "id": "image/cloud-run-service/sha512",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloud_run_service_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg", "kind": "text"},
+    "driver": "cloud-run-service"},
+   "id": "image/cloud-run-service/non-hex",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.external_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"kind": "absent"}, "driver": "external"},
+   "id": "image/external/absent",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.external_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"kind": "non-text"}, "driver": "external"},
+   "id": "image/external/non-text",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.external_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image":
+    {"value": "ghcr.io/acme/agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "kind": "text"},
+    "driver": "external"},
+   "id": "image/external/pinned",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.external_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "external"},
+   "id": "image/external/pinned-minimal",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.external_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "r/x@sha256:0123456789abcdef000000000000000000000000000000000000000000000000", "kind": "text"},
+    "driver": "external"},
+   "id": "image/external/pinned-hex-mixed",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.external_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image":
+    {"value": "x@sha256:0@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "external"},
+   "id": "image/external/pinned-double-at",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.external_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"value": "ghcr.io/acme/agent:1.0", "kind": "text"}, "driver": "external"},
+   "id": "image/external/tag",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.external_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"value": "", "kind": "text"}, "driver": "external"},
+   "id": "image/external/empty",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.external_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "external"},
+   "id": "image/external/no-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.external_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "kind": "text"},
+    "driver": "external"},
+   "id": "image/external/upper-hex",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.external_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "external"},
+   "id": "image/external/short-digest",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.external_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "external"},
+   "id": "image/external/long-digest",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.external_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a\nb@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "external"},
+   "id": "image/external/newline-in-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.external_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a b@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "external"},
+   "id": "image/external/line-separator-in-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.external_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n", "kind": "text"},
+    "driver": "external"},
+   "id": "image/external/trailing-newline",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.external_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha512:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "external"},
+   "id": "image/external/sha512",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.external_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg", "kind": "text"},
+    "driver": "external"},
+   "id": "image/external/non-hex",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.vercel_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"kind": "absent"}, "driver": "vercel-sandbox"},
+   "id": "image/vercel-sandbox/absent",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.vercel_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"kind": "non-text"}, "driver": "vercel-sandbox"},
+   "id": "image/vercel-sandbox/non-text",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.vercel_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image":
+    {"value": "ghcr.io/acme/agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "kind": "text"},
+    "driver": "vercel-sandbox"},
+   "id": "image/vercel-sandbox/pinned",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.vercel_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "vercel-sandbox"},
+   "id": "image/vercel-sandbox/pinned-minimal",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.vercel_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "r/x@sha256:0123456789abcdef000000000000000000000000000000000000000000000000", "kind": "text"},
+    "driver": "vercel-sandbox"},
+   "id": "image/vercel-sandbox/pinned-hex-mixed",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.vercel_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image":
+    {"value": "x@sha256:0@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "vercel-sandbox"},
+   "id": "image/vercel-sandbox/pinned-double-at",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.vercel_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"value": "ghcr.io/acme/agent:1.0", "kind": "text"}, "driver": "vercel-sandbox"},
+   "id": "image/vercel-sandbox/tag",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.vercel_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"value": "", "kind": "text"}, "driver": "vercel-sandbox"},
+   "id": "image/vercel-sandbox/empty",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.vercel_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "vercel-sandbox"},
+   "id": "image/vercel-sandbox/no-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.vercel_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "kind": "text"},
+    "driver": "vercel-sandbox"},
+   "id": "image/vercel-sandbox/upper-hex",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.vercel_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "vercel-sandbox"},
+   "id": "image/vercel-sandbox/short-digest",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.vercel_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "vercel-sandbox"},
+   "id": "image/vercel-sandbox/long-digest",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.vercel_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a\nb@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "vercel-sandbox"},
+   "id": "image/vercel-sandbox/newline-in-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.vercel_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a b@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "vercel-sandbox"},
+   "id": "image/vercel-sandbox/line-separator-in-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.vercel_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n", "kind": "text"},
+    "driver": "vercel-sandbox"},
+   "id": "image/vercel-sandbox/trailing-newline",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.vercel_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha512:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "vercel-sandbox"},
+   "id": "image/vercel-sandbox/sha512",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.vercel_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg", "kind": "text"},
+    "driver": "vercel-sandbox"},
+   "id": "image/vercel-sandbox/non-hex",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloudflare_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"kind": "absent"}, "driver": "cloudflare-sandbox"},
+   "id": "image/cloudflare-sandbox/absent",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloudflare_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"kind": "non-text"}, "driver": "cloudflare-sandbox"},
+   "id": "image/cloudflare-sandbox/non-text",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloudflare_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image":
+    {"value": "ghcr.io/acme/agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "kind": "text"},
+    "driver": "cloudflare-sandbox"},
+   "id": "image/cloudflare-sandbox/pinned",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloudflare_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "cloudflare-sandbox"},
+   "id": "image/cloudflare-sandbox/pinned-minimal",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloudflare_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "r/x@sha256:0123456789abcdef000000000000000000000000000000000000000000000000", "kind": "text"},
+    "driver": "cloudflare-sandbox"},
+   "id": "image/cloudflare-sandbox/pinned-hex-mixed",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloudflare_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image":
+    {"value": "x@sha256:0@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "cloudflare-sandbox"},
+   "id": "image/cloudflare-sandbox/pinned-double-at",
+   "expected": {"acceptedOnCreate": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloudflare_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"value": "ghcr.io/acme/agent:1.0", "kind": "text"}, "driver": "cloudflare-sandbox"},
+   "id": "image/cloudflare-sandbox/tag",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloudflare_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input": {"image": {"value": "", "kind": "text"}, "driver": "cloudflare-sandbox"},
+   "id": "image/cloudflare-sandbox/empty",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloudflare_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "cloudflare-sandbox"},
+   "id": "image/cloudflare-sandbox/no-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloudflare_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "kind": "text"},
+    "driver": "cloudflare-sandbox"},
+   "id": "image/cloudflare-sandbox/upper-hex",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloudflare_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "cloudflare-sandbox"},
+   "id": "image/cloudflare-sandbox/short-digest",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloudflare_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "cloudflare-sandbox"},
+   "id": "image/cloudflare-sandbox/long-digest",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloudflare_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a\nb@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "cloudflare-sandbox"},
+   "id": "image/cloudflare-sandbox/newline-in-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloudflare_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a b@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "cloudflare-sandbox"},
+   "id": "image/cloudflare-sandbox/line-separator-in-reference",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloudflare_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n", "kind": "text"},
+    "driver": "cloudflare-sandbox"},
+   "id": "image/cloudflare-sandbox/trailing-newline",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloudflare_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha512:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "text"},
+    "driver": "cloudflare-sandbox"},
+   "id": "image/cloudflare-sandbox/sha512",
+   "expected": {"acceptedOnCreate": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptConfiguration.cloudflare_sandbox_profile_create_requires_a_pinned_image",
+    "AgentWorkspace.Theorems.Normative.ConceptConfiguration.sha256_pin_boundaries",
+    "AgentWorkspace.Theorems.Meta.ConceptConfiguration.image_rule_ignores_the_driver"],
+   "input":
+   {"image": {"value": "a@sha256:gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg", "kind": "text"},
+    "driver": "cloudflare-sandbox"},
+   "id": "image/cloudflare-sandbox/non-hex",
+   "expected": {"acceptedOnCreate": false}}],
+ "family": "concept-configuration",
+ "description": "driverConfig.image on create, every driver x pinned, tagged and malformed references"}

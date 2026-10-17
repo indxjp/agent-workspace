@@ -1,0 +1,33 @@
+{
+  "protocolVersion": "0.3.0",
+  "name": "support-triage",
+  "description": "support-triage — an Agent Workspace agent",
+  "url": "https://aw.example.com/api/a2a/agents/support-triage",
+  "preferredTransport": "JSONRPC",
+  "version": "1.0.0",
+  "capabilities": {
+    "streaming": true,
+    "pushNotifications": false
+  },
+  "defaultInputModes": ["text/plain"],
+  "defaultOutputModes": ["text/plain"],
+  "skills": [
+    {
+      "id": "support-triage",
+      "name": "support-triage",
+      "description": "support-triage — an Agent Workspace agent",
+      "tags": ["agent-workspace"]
+    }
+  ],
+  "securitySchemes": {
+    "awBearer": {
+      "type": "http",
+      "scheme": "bearer"
+    }
+  },
+  "security": [
+    {
+      "awBearer": []
+    }
+  ]
+}

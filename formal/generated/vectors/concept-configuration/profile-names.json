@@ -1,0 +1,57 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Meta.ConceptConfiguration.blank_profile_name_passes_the_contract_but_not_the_check",
+    "AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.valid_profile_satisfies_the_profile_checks"],
+   "input": "default",
+   "id": "profile-name/\"default\"",
+   "expected": {"databaseAccepted": true, "contractAccepted": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Meta.ConceptConfiguration.blank_profile_name_passes_the_contract_but_not_the_check",
+    "AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.valid_profile_satisfies_the_profile_checks"],
+   "input": "a",
+   "id": "profile-name/\"a\"",
+   "expected": {"databaseAccepted": true, "contractAccepted": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Meta.ConceptConfiguration.blank_profile_name_passes_the_contract_but_not_the_check",
+    "AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.valid_profile_satisfies_the_profile_checks"],
+   "input": " default ",
+   "id": "profile-name/\" default \"",
+   "expected": {"databaseAccepted": true, "contractAccepted": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Meta.ConceptConfiguration.blank_profile_name_passes_the_contract_but_not_the_check",
+    "AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.valid_profile_satisfies_the_profile_checks"],
+   "input": "   ",
+   "id": "profile-name/\"   \"",
+   "expected": {"databaseAccepted": false, "contractAccepted": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Meta.ConceptConfiguration.blank_profile_name_passes_the_contract_but_not_the_check",
+    "AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.valid_profile_satisfies_the_profile_checks"],
+   "input": " ",
+   "id": "profile-name/\" \"",
+   "expected": {"databaseAccepted": false, "contractAccepted": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Meta.ConceptConfiguration.blank_profile_name_passes_the_contract_but_not_the_check",
+    "AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.valid_profile_satisfies_the_profile_checks"],
+   "input": "\u0009",
+   "id": "profile-name/\"\\u0009\"",
+   "expected": {"databaseAccepted": true, "contractAccepted": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Meta.ConceptConfiguration.blank_profile_name_passes_the_contract_but_not_the_check",
+    "AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.valid_profile_satisfies_the_profile_checks"],
+   "input": "\u0009\n",
+   "id": "profile-name/\"\\u0009\\n\"",
+   "expected": {"databaseAccepted": true, "contractAccepted": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Meta.ConceptConfiguration.blank_profile_name_passes_the_contract_but_not_the_check",
+    "AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.valid_profile_satisfies_the_profile_checks"],
+   "input": "",
+   "id": "profile-name/\"\"",
+   "expected": {"databaseAccepted": false, "contractAccepted": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Meta.ConceptConfiguration.blank_profile_name_passes_the_contract_but_not_the_check",
+    "AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.valid_profile_satisfies_the_profile_checks"],
+   "input": "ä",
+   "id": "profile-name/\"ä\"",
+   "expected": {"databaseAccepted": true, "contractAccepted": true}}],
+ "family": "concept-configuration",
+ "description": "Runtime-profile names: what the contract accepts and what runtime_profiles_name_not_blank accepts"}

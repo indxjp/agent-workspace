@@ -1,0 +1,34 @@
+---
+title: "EnginesClient"
+description: "Every method of EnginesClient, its parameters, return type, and route."
+---
+
+<Note>This page is generated from `packages/sdk/src/resources/engines.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+`/api/engines` — spec §5.15 (ENG-02c, ADR-0065). The engines this deployment can run an agent
+on, with what each one can honour of the platform's portable agent configuration.
+
+Read-only, and it has no `get(id)`: the catalogue is short, every field of a descriptor travels
+in the list, and a route that answered one engine by id would be a second way to ask the same
+question. An engine is installed by deploying an adapter, never through the API, so there is no
+write method either.
+
+This is the call to make **before** putting an engine on an agent policy: an `engine` this
+deployment does not register is refused by `agents.replacePolicy` with
+`400 unsupported_engine`, and the list here is what that refusal is taken against.
+
+## list
+
+Every registered engine, in the deployment's catalogue order.
+
+```ts
+async list(options?: RequestOptions): Promise<readonly EngineDescriptor[]>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<readonly EngineDescriptor[]>`
+
+**Route:** `GET /api/engines`

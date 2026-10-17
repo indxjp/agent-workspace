@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Workspaces — Agent Workspace</title>
+    <link rel="stylesheet" href="assets/app.css" />
+  </head>
+  <body>
+    <script>
+      window.PAGE = { nav: 'workspaces', crumbs: [['Workspaces']] };
+    </script>
+
+    <div class="app">
+      <div class="main">
+        <div class="page">
+          <div class="page-head">
+            <div>
+              <h1>Workspaces</h1>
+              <div class="sub">
+                Every workspace you currently belong to, the role you hold in it, and whether it is
+                archived.
+              </div>
+            </div>
+            <div class="actions">
+              <button class="btn primary" data-modal-open="m-create">Create workspace</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="table-wrap">
+              <table class="tbl">
+                <thead>
+                  <tr>
+                    <th>Workspace</th>
+                    <th>Your role</th>
+                    <th>Status</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr class="selected">
+                    <td>
+                      <div class="cell-main">Meridian Manufacturing</div>
+                      <div class="cell-sub">meridian-manufacturing</div>
+                    </td>
+                    <td><span class="badge info">Owner</span></td>
+                    <td><span class="badge ok">Active</span></td>
+                    <td>
+                      <button
+                        class="btn sm primary"
+                        data-toast="Showing Meridian Manufacturing settings below"
+                      >
+                        Manage
+                      </button>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <div class="cell-main">Northwind Labs</div>
+                      <div class="cell-sub">northwind-labs</div>
+                    </td>
+                    <td><span class="badge">Admin</span></td>
+                    <td><span class="badge ok">Active</span></td>
+                    <td>
+                      <button class="btn sm" data-toast="Showing Northwind Labs settings below">
+                        Manage
+                      </button>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <div class="cell-main">Contoso Field Service</div>
+                      <div class="cell-sub">contoso-field-service</div>
+                    </td>
+                    <td><span class="badge muted">Viewer</span></td>
+                    <td><span class="badge ok">Active</span></td>
+                    <td>
+                      <button
+                        class="btn sm"
+                        data-toast="Showing Contoso Field Service settings below"
+                      >
+                        Manage
+                      </button>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <div class="cell-main">Legacy Pilot</div>
+                      <div class="cell-sub">legacy-pilot</div>
+                    </td>
+                    <td><span class="badge">Builder</span></td>
+                    <td><span class="badge warn">Archived</span></td>
+                    <td>
+                      <button class="btn sm" data-toast="Showing Legacy Pilot settings below">
+                        Manage
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="section-head"><h2>Meridian Manufacturing</h2></div>
+
+          <div class="card">
+            <div class="card-body">
+              <div class="field mb0 row2">
+                <div><label>Name</label><input type="text" value="Meridian Manufacturing" /></div>
+                <div style="align-self: end">
+                  <button class="btn primary" data-toast="Name saved">Save</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-head"><h2>Lifecycle</h2></div>
+          <div class="card">
+            <div class="card-body">
+              <p class="small muted mb0">
+                Archiving stops new activity in this workspace. It stays visible, and can be
+                restored from this screen at any time.
+              </p>
+              <button class="btn mt16" data-modal-open="m-archive">Archive workspace…</button>
+            </div>
+          </div>
+
+          <div class="section-head">
+            <h2>Legacy Pilot <span class="badge warn" style="margin-left: 8px">Archived</span></h2>
+          </div>
+          <div class="card">
+            <div class="card-body">
+              <p class="small mb0" style="color: var(--warn)">
+                Archived on 1 Mar 2026. It stays visible and readable, but new activity in it is
+                blocked.
+              </p>
+              <button class="btn mt16" data-toast="Legacy Pilot restored">Restore workspace</button>
+            </div>
+          </div>
+
+          <div class="section-head"><h2>Contoso Field Service — Viewer</h2></div>
+          <div class="card">
+            <div class="card-body">
+              <p class="mb0"><b>Contoso Field Service</b></p>
+              <p class="small muted mt8 mb0">Only this workspace's Owner can rename it.</p>
+              <p class="small muted mt16 mb0">Only this workspace's Owner can archive it.</p>
+            </div>
+          </div>
+
+          <div class="callout mt16">
+            <span class="ico">!</span>
+            <div class="grow">
+              <b>403 forbidden</b> — worked example of a refused request, rendered exactly as the
+              server worded it: "Only this workspace's own Owner may rename or archive it."
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="scrim" id="m-create" hidden>
+      <div class="modal">
+        <div class="m-head"><h3>Create a workspace</h3></div>
+        <div class="m-body">
+          <div class="field"><label>Name</label><input type="text" placeholder="Acme Corp" /></div>
+          <div class="field mb0">
+            <label>Slug</label><input type="text" class="mono-input" placeholder="acme-corp" />
+            <div class="help">Lower-case letters, digits and hyphens.</div>
+          </div>
+        </div>
+        <div class="m-foot">
+          <button class="btn" data-modal-close>Cancel</button
+          ><button class="btn primary" data-modal-close data-toast="Workspace created">
+            Create workspace
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="scrim" id="m-archive" hidden>
+      <div class="modal">
+        <div class="m-head">
+          <h3>Archive Meridian Manufacturing</h3>
+          <div class="sub">
+            Stops new activity. Stays visible, and can be restored from this screen at any time.
+          </div>
+        </div>
+        <div class="m-body">
+          <div class="field mb0">
+            <label>Type "Meridian Manufacturing" to confirm</label><input type="text" />
+          </div>
+        </div>
+        <div class="m-foot">
+          <button class="btn" data-modal-close>Cancel</button
+          ><button class="btn danger" data-modal-close data-toast="Meridian Manufacturing archived">
+            Archive workspace
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script src="assets/app.js"></script>
+  </body>
+</html>

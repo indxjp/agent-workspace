@@ -1,0 +1,97 @@
+---
+title: "Eject to plain code"
+description: "Generate a standalone TypeScript project for the Claude Agent SDK, Mastra or the OpenAI Agents SDK from your agent, run it with Node, and learn what it no longer has."
+---
+
+<Info>
+**Chapter 7 · Run it on other platforms — step 8 of 9** · [the chapter map](/path/platforms)
+
+- **You will:** generate a plain TypeScript project from `assistant` and run it without Agent Workspace.
+- **You will learn:** the three eject targets, what each project contains, and what an ejected agent no longer has.
+- **You need:** [step 1](/platforms/overview); Node.js 24 or later to run the result.
+</Info>
+
+Ejecting is exporting to a platform that is not a service: the output is a small TypeScript project
+that calls an agent SDK directly. Use it to leave Agent Workspace, to read how your agent maps onto
+an SDK, or to start from working code.
+
+The block below creates a fresh project and ejects its agent to the Claude Agent SDK. That target
+needs no options and accepts the fresh project's agent as it is.
+
+```sh title="Eject a fresh project's agent" claim="run"
+npm create @indx-workspace@latest my-agent -- --yes
+cd my-agent && npx aw platforms export --platform eject-claude-agent-sdk --out ejected
+```
+
+## The three targets
+
+| Platform id               | Runs on                | Its model must be                          |
+| ------------------------- | ---------------------- | ------------------------------------------ |
+| `eject-claude-agent-sdk`  | the Claude Agent SDK   | any without a non-Anthropic provider       |
+| `eject-mastra`            | Mastra                 | Anthropic's or OpenAI's, or none           |
+| `eject-openai-agents`     | the OpenAI Agents SDK  | one the target can route, or none          |
+
+A model the target cannot run is refused with `platform_model_unsupported`. Mastra routes the model
+as `<provider>/<id>`, and an agent that names none runs on `anthropic/claude-sonnet-4-5`. The only
+option of all three is `packageName`, the npm name of the generated project; it defaults to the
+agent's name.
+
+## What you get
+
+```text title="The layout of an ejected project (illustrative)" claim="illustrative"
+ejected/
+  package.json
+  tsconfig.json
+  .env.example
+  .gitignore
+  README.md
+  PLATFORM_REPORT.md
+  src/agent.ts         the agent's options, permissions, MCP servers and subagents
+  src/main.ts          reads a prompt from the command line and runs the agent
+  src/code-tools.ts    only when the agent has code tools
+  tools/               your code tools, copied by the export
+  .claude/skills/…     the skills (Claude Agent SDK); .mastra/skills/… for Mastra
+```
+
+The OpenAI Agents SDK has no skills, so that project has no skills folder. Dependencies are pinned,
+and `.env.example` lists the variables the project reads, with no values.
+
+## Run it
+
+```sh title="Run the ejected project (illustrative)" claim="illustrative"
+cd ejected
+npm install
+cp .env.example .env
+node --env-file=.env src/main.ts "your prompt"
+```
+
+Fill in `.env` first. If the agent has code tools, the export copies your project's `tools/` folder;
+add any package your tool files import, and `src/code-tools.ts` loads them from there. An
+ejected project runs code tools and local (stdio) MCP servers in its own process, so neither is
+dropped, which is the opposite of a hosted platform.
+
+## What it no longer has
+
+The ejected project is a program, not a deployment. It does not have Agent Workspace around it: the
+gateway, the control plane with its accounts, workspaces and run history, the sandbox runtimes, and
+the limits your deployment sets for an agent. It runs with the permissions the SDK is given, and
+the report says how each of your four permissions was translated. What else is missing depends on
+the target:
+
+| Target                    | Dropped, in addition                                                                 |
+| ------------------------- | ------------------------------------------------------------------------------------ |
+| all three                 | OpenAPI tools (`code_tool_needs_public_mcp`: they run in the gateway) and knowledge (`knowledge_unsupported`) |
+| `eject-claude-agent-sdk`  | web search and web fetch when the agent has no unrestricted network (`permissions_unsupported`) |
+| `eject-mastra`            | web search and web fetch (`builtin_unsupported`) and the dollar budget (`limits_unsupported`) |
+| `eject-openai-agents`     | file and shell tools you granted (the SDK has none), skills, web fetch (`builtin_unsupported`), hosted tools unless the model is OpenAI's, the dollar budget |
+
+In the OpenAI Agents SDK, a subagent is a handoff: the conversation moves to it and does not return
+to the root agent.
+
+An ejected project cannot be imported back into Agent Workspace: `aw platforms import` reads
+platforms, and code is not one. `aw platforms publish` refuses an eject target, because there is
+nothing to publish to.
+
+<Card title="Next: Switch the engine" icon="arrow-right" href="/platforms/switch-engine">
+  Keep the platform, change the agent loop.
+</Card>

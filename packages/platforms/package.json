@@ -1,0 +1,163 @@
+{
+  "name": "@indx-workspace/platforms",
+  "version": "0.6.9",
+  "description": "The PlatformTarget port, the per-field verdict model and the conformance kit that every agent-platform translator (Copilot Studio, Foundry, Gemini Enterprise, AgentCore, ...) is built on; pure, no I/O.",
+  "license": "Apache-2.0",
+  "homepage": "https://docs.agentworkspace.indx.jp",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/indxjp/agent-workspace.git",
+    "directory": "packages/platforms"
+  },
+  "bugs": {
+    "url": "https://github.com/indxjp/agent-workspace/issues"
+  },
+  "keywords": [
+    "agent-workspace",
+    "claude",
+    "ai-agents",
+    "deploy"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./src/testing/index.ts",
+      "default": "./dist/testing/index.js"
+    },
+    "./claude-managed-agents": {
+      "types": "./src/targets/claude-managed-agents/index.ts",
+      "default": "./dist/targets/claude-managed-agents/index.js"
+    },
+    "./copilot-studio": {
+      "types": "./src/targets/copilot-studio/index.ts",
+      "default": "./dist/targets/copilot-studio/index.js"
+    },
+    "./m365-declarative-agent": {
+      "types": "./src/targets/m365-declarative-agent/index.ts",
+      "default": "./dist/targets/m365-declarative-agent/index.js"
+    },
+    "./microsoft-foundry": {
+      "types": "./src/targets/microsoft-foundry/index.ts",
+      "default": "./dist/targets/microsoft-foundry/index.js"
+    },
+    "./gemini-enterprise": {
+      "types": "./src/targets/gemini-enterprise/index.ts",
+      "default": "./dist/targets/gemini-enterprise/index.js"
+    },
+    "./aws-agentcore": {
+      "types": "./src/targets/aws-agentcore/index.ts",
+      "default": "./dist/targets/aws-agentcore/index.js"
+    },
+    "./eject-claude-agent-sdk": {
+      "types": "./src/targets/eject-claude-agent-sdk/index.ts",
+      "default": "./dist/targets/eject-claude-agent-sdk/index.js"
+    },
+    "./eject-mastra": {
+      "types": "./src/targets/eject-mastra/index.ts",
+      "default": "./dist/targets/eject-mastra/index.js"
+    },
+    "./eject-openai-agents": {
+      "types": "./src/targets/eject-openai-agents/index.ts",
+      "default": "./dist/targets/eject-openai-agents/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.map",
+    "CHANGELOG.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./testing": {
+        "types": "./dist/testing/index.d.ts",
+        "default": "./dist/testing/index.js"
+      },
+      "./claude-managed-agents": {
+        "types": "./dist/targets/claude-managed-agents/index.d.ts",
+        "default": "./dist/targets/claude-managed-agents/index.js"
+      },
+      "./copilot-studio": {
+        "types": "./dist/targets/copilot-studio/index.d.ts",
+        "default": "./dist/targets/copilot-studio/index.js"
+      },
+      "./m365-declarative-agent": {
+        "types": "./dist/targets/m365-declarative-agent/index.d.ts",
+        "default": "./dist/targets/m365-declarative-agent/index.js"
+      },
+      "./microsoft-foundry": {
+        "types": "./dist/targets/microsoft-foundry/index.d.ts",
+        "default": "./dist/targets/microsoft-foundry/index.js"
+      },
+      "./gemini-enterprise": {
+        "types": "./dist/targets/gemini-enterprise/index.d.ts",
+        "default": "./dist/targets/gemini-enterprise/index.js"
+      },
+      "./aws-agentcore": {
+        "types": "./dist/targets/aws-agentcore/index.d.ts",
+        "default": "./dist/targets/aws-agentcore/index.js"
+      },
+      "./eject-claude-agent-sdk": {
+        "types": "./dist/targets/eject-claude-agent-sdk/index.d.ts",
+        "default": "./dist/targets/eject-claude-agent-sdk/index.js"
+      },
+      "./eject-mastra": {
+        "types": "./dist/targets/eject-mastra/index.d.ts",
+        "default": "./dist/targets/eject-mastra/index.js"
+      },
+      "./eject-openai-agents": {
+        "types": "./dist/targets/eject-openai-agents/index.d.ts",
+        "default": "./dist/targets/eject-openai-agents/index.js"
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json"
+  },
+  "dependencies": {
+    "@indx-workspace/contracts": "workspace:*",
+    "yaml": "2.9.1",
+    "zod": "4.6.6"
+  },
+  "devDependencies": {
+    "@typescript/native": "npm:typescript@7.0.2",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
+    "vitest": "5.0.3"
+  },
+  "nx": {
+    "targets": {
+      "lint": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "eslint packages/platforms --max-warnings 0"
+        }
+      },
+      "test": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "vitest run --project @indx-workspace/platforms --reporter=default --reporter=json --outputFile={projectRoot}/.vitest-report.json",
+          "env": {
+            "NODE_OPTIONS": "--unhandled-rejections=strict",
+            "VITEST_MAX_WORKERS": "4"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,63 @@
+---
+title: "Platform compatibility matrix"
+description: "What each agent platform and eject target carries natively, what it maps and what it drops, generated from the targets' own declarations."
+---
+
+<Info>
+- **Read this when:** you are choosing a platform, or you want to know why a field was dropped in a `PLATFORM_REPORT.md`.
+- **You will learn:** which capabilities each platform carries as they are, which it translates and which it cannot carry.
+- **Used in:** [Chapter 7: Run it on other platforms](/path/platforms).
+</Info>
+
+Each column is one value of `--platform` in `aw platforms export`. Read a cell as the answer to
+"what happens to this field of my agent when I export it there?". The export itself always tells you
+field by field in its `PLATFORM_REPORT.md`; this page is the same answer for all platforms at once.
+
+## Legend
+
+| Cell | Verdict | Meaning |
+| ---- | ------- | ------- |
+| `✓`  | native  | The platform has the capability and the field is carried as it is. |
+| `≈`  | mapped  | The field is translated, and the report says how. |
+| `-`  | dropped | The platform cannot carry it. The field is dropped and the report names the drop code. |
+
+The **Import** row is `✓` when `aw platforms import --from <id>` can read that platform's own
+files back into a portable project; a target without an importer shows `-`. The **Conformance**
+row is `✓` when the target passes the shared conformance run that every platform target must pass.
+
+## The matrix
+
+{/* platform-matrix:start */}
+
+| Capability | claude-managed-agents | copilot-studio | m365-declarative-agent | microsoft-foundry | gemini-enterprise | aws-agentcore | eject-claude-agent-sdk | eject-mastra | eject-openai-agents |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Description | ✓ | ≈ | ✓ | ✓ | ✓ | - | ≈ | ✓ | ✓ |
+| Instructions | ✓ | ✓ | ✓ | ✓ | ≈ | ✓ | ✓ | ✓ | ✓ |
+| Model choice | ✓ | ≈ | - | ≈ | ≈ | ≈ | ✓ | ≈ | ≈ |
+| Agent engine choice | - | - | - | - | ≈ | - | ≈ | ≈ | ≈ |
+| File, command and network permissions | ≈ | ≈ | ≈ | ≈ | ≈ | ≈ | ✓ | ✓ | ≈ |
+| Remote MCP servers | ✓ | ≈ | ≈ | ✓ | ≈ | ✓ | ✓ | ✓ | ✓ |
+| Local (stdio) MCP servers | - | - | - | - | - | - | ✓ | ✓ | ✓ |
+| Code tools | ≈ | ≈ | ≈ | ≈ | ≈ | ≈ | ✓ | ✓ | ✓ |
+| OpenAPI tools | - | - | ≈ | ≈ | ≈ | ≈ | - | - | - |
+| Built-in tools | ≈ | ≈ | ≈ | ✓ | ≈ | ≈ | ≈ | ≈ | ≈ |
+| Skills | ✓ | - | - | - | ≈ | ≈ | ✓ | ✓ | - |
+| Knowledge files | - | ✓ | - | ≈ | ≈ | - | - | - | - |
+| Knowledge URLs | - | ≈ | ≈ | - | ≈ | - | - | - | - |
+| Knowledge connectors | - | - | - | - | ≈ | - | - | - | - |
+| Subagents | ✓ | ≈ | - | ≈ | ≈ | - | ≈ | ≈ | ≈ |
+| Turn and budget limits | - | - | - | - | ≈ | ≈ | ✓ | ≈ | ≈ |
+| Import | ✓ | ✓ | ✓ | ✓ | - | ✓ | - | - | - |
+| Conformance | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Docs | [Claude Managed Agents](https://platform.claude.com/docs/en/managed-agents/overview) | [Microsoft Copilot Studio](https://learn.microsoft.com/en-us/microsoft-copilot-studio/visual-studio-code-extension-overview) | [Microsoft 365 Copilot declarative agent](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/declarative-agent-manifest-1.8) | [Microsoft Foundry Agent Service](https://learn.microsoft.com/en-us/azure/foundry/agents/overview) | [Gemini Enterprise](https://docs.cloud.google.com/gemini/enterprise/docs/register-and-manage-an-a2a-agent) | [AWS Bedrock AgentCore (harness)](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/harness.md) | [Claude Agent SDK project](https://code.claude.com/docs/en/agent-sdk/typescript) | [Mastra project](https://mastra.ai/reference/agents/agent) | [OpenAI Agents SDK project](https://openai.github.io/openai-agents-js/) |
+
+{/* platform-matrix:end */}
+
+This table is generated from the targets' own declarations by `pnpm docs:generate` and copied
+here; it cannot be edited on this page, and `pnpm docs:check` fails when the two differ.
+
+## Two names that look alike
+
+`aws-agentcore` is a platform id here: the Amazon Bedrock AgentCore harness an agent is published
+to. It is also the id of a runtime driver, where it names the sandbox a run executes in. They are
+different things that share a name; see [AWS AgentCore](/platforms/aws-agentcore).

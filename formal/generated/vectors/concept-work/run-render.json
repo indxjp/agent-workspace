@@ -1,0 +1,68 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptWork.total_tokens_is_the_sum_of_four_counters",
+    "AgentWorkspace.Theorems.Normative.ConceptWork.duration_needs_both_timestamps"],
+   "input":
+   {"toolCalls": 0,
+    "startedAt": null,
+    "outputTokens": 0,
+    "inputTokens": 0,
+    "endedAt": null,
+    "cacheReadInputTokens": 0,
+    "cacheCreationInputTokens": 0},
+   "id": "render/0-0-0-0-0/null/null",
+   "expected": {"totalTokens": 0, "toolCalls": 0, "durationMs": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptWork.total_tokens_is_the_sum_of_four_counters",
+    "AgentWorkspace.Theorems.Normative.ConceptWork.duration_needs_both_timestamps"],
+   "input":
+   {"toolCalls": 2,
+    "startedAt": 1000,
+    "outputTokens": 20,
+    "inputTokens": 10,
+    "endedAt": null,
+    "cacheReadInputTokens": 3,
+    "cacheCreationInputTokens": 4},
+   "id": "render/10-20-3-4-2/1000/null",
+   "expected": {"totalTokens": 37, "toolCalls": 2, "durationMs": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptWork.total_tokens_is_the_sum_of_four_counters",
+    "AgentWorkspace.Theorems.Normative.ConceptWork.duration_needs_both_timestamps"],
+   "input":
+   {"toolCalls": 2,
+    "startedAt": 1000,
+    "outputTokens": 20,
+    "inputTokens": 10,
+    "endedAt": 3500,
+    "cacheReadInputTokens": 3,
+    "cacheCreationInputTokens": 4},
+   "id": "render/10-20-3-4-2/1000/3500",
+   "expected": {"totalTokens": 37, "toolCalls": 2, "durationMs": 2500}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptWork.total_tokens_is_the_sum_of_four_counters",
+    "AgentWorkspace.Theorems.Normative.ConceptWork.duration_needs_both_timestamps"],
+   "input":
+   {"toolCalls": 9,
+    "startedAt": null,
+    "outputTokens": 0,
+    "inputTokens": 1,
+    "endedAt": 5,
+    "cacheReadInputTokens": 0,
+    "cacheCreationInputTokens": 0},
+   "id": "render/1-0-0-0-9/null/5",
+   "expected": {"totalTokens": 1, "toolCalls": 9, "durationMs": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptWork.total_tokens_is_the_sum_of_four_counters",
+    "AgentWorkspace.Theorems.Normative.ConceptWork.duration_needs_both_timestamps"],
+   "input":
+   {"toolCalls": 0,
+    "startedAt": 0,
+    "outputTokens": 250000,
+    "inputTokens": 100000,
+    "endedAt": 0,
+    "cacheReadInputTokens": 7,
+    "cacheCreationInputTokens": 0},
+   "id": "render/100000-250000-7-0-0/0/0",
+   "expected": {"totalTokens": 350007, "toolCalls": 0, "durationMs": 0}}],
+ "family": "concept-work",
+ "description": "renderRun's derived totalTokens and durationMs"}

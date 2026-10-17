@@ -1,0 +1,9 @@
+{
+  // The type-checking view: the whole of `src`, tests included, emitting
+  // nothing. This is the project the editor and type-aware ESLint resolve to.
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": ["src"]
+}

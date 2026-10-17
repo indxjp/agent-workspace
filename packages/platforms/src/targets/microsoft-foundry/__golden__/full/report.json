@@ -1,0 +1,152 @@
+[
+  {
+    "path": "toolEndpoint",
+    "verdict": "mapped",
+    "note": "served as the aw-tools MCP server; secret ACME_TOOL_ENDPOINT_TOKEN is held by project connection aw-tools"
+  },
+  {
+    "path": "support-triage.description",
+    "verdict": "native",
+    "note": "description"
+  },
+  {
+    "path": "support-triage.instructions",
+    "verdict": "native",
+    "note": "definition.instructions"
+  },
+  {
+    "path": "support-triage.model",
+    "verdict": "mapped",
+    "note": "Foundry runs a deployment, not a model id; the model is kept in metadata aw.model"
+  },
+  {
+    "path": "support-triage.permissions.readFiles",
+    "verdict": "dropped",
+    "code": "permissions_unsupported",
+    "note": "a prompt agent has no readFiles"
+  },
+  {
+    "path": "support-triage.permissions.writeFiles",
+    "verdict": "mapped",
+    "note": "a prompt agent has no file system or shell, so this holds"
+  },
+  {
+    "path": "support-triage.permissions.runCommands",
+    "verdict": "mapped",
+    "note": "a prompt agent has no file system or shell, so this holds"
+  },
+  {
+    "path": "support-triage.permissions.unrestrictedNetwork",
+    "verdict": "mapped",
+    "note": "a prompt agent has no file system or shell, so this holds"
+  },
+  {
+    "path": "support-triage.tools.0",
+    "verdict": "mapped",
+    "note": "secret ZENDESK_TOKEN is held by project connection aw-zendesk"
+  },
+  {
+    "path": "support-triage.tools.1",
+    "verdict": "dropped",
+    "code": "stdio_mcp_unsupported",
+    "note": "Foundry accepts only remote MCP endpoints"
+  },
+  {
+    "path": "support-triage.tools.2",
+    "verdict": "mapped",
+    "note": "served by the shared aw-tools MCP server"
+  },
+  {
+    "path": "support-triage.tools.3",
+    "verdict": "dropped",
+    "code": "permissions_unsupported",
+    "note": "allow rule 0 is refused: admits no operation"
+  },
+  {
+    "path": "support-triage.tools.4",
+    "verdict": "native",
+    "note": "web search"
+  },
+  {
+    "path": "support-triage.tools.5",
+    "verdict": "native",
+    "note": "Python sandbox, no outbound network"
+  },
+  {
+    "path": "support-triage.skills.0",
+    "verdict": "dropped",
+    "code": "skills_unsupported",
+    "note": "skills attach to Foundry only through a Toolbox (preview)"
+  },
+  {
+    "path": "support-triage.knowledge.0",
+    "verdict": "dropped",
+    "code": "knowledge_unsupported",
+    "note": "set the vectorStores option for support-triage to search files"
+  },
+  {
+    "path": "support-triage.knowledge.1",
+    "verdict": "dropped",
+    "code": "knowledge_unsupported",
+    "note": "Foundry has no url knowledge source"
+  },
+  {
+    "path": "support-triage.subagents.0",
+    "verdict": "mapped",
+    "note": "called over A2A through project connection aw-agent-billing-specialist"
+  },
+  {
+    "path": "support-triage.limits.maxTurns",
+    "verdict": "dropped",
+    "code": "limits_unsupported",
+    "note": "Foundry has no turn limit"
+  },
+  {
+    "path": "support-triage.limits.maxBudgetUsd",
+    "verdict": "dropped",
+    "code": "limits_unsupported",
+    "note": "Foundry has no budget limit"
+  },
+  {
+    "path": "billing-specialist.description",
+    "verdict": "native",
+    "note": "description"
+  },
+  {
+    "path": "billing-specialist.instructions",
+    "verdict": "native",
+    "note": "definition.instructions"
+  },
+  {
+    "path": "billing-specialist.model",
+    "verdict": "mapped",
+    "note": "Foundry runs a deployment, not a model id; the model is kept in metadata aw.model"
+  },
+  {
+    "path": "billing-specialist.permissions.readFiles",
+    "verdict": "dropped",
+    "code": "permissions_unsupported",
+    "note": "a prompt agent has no readFiles"
+  },
+  {
+    "path": "billing-specialist.permissions.writeFiles",
+    "verdict": "mapped",
+    "note": "a prompt agent has no file system or shell, so this holds"
+  },
+  {
+    "path": "billing-specialist.permissions.runCommands",
+    "verdict": "mapped",
+    "note": "a prompt agent has no file system or shell, so this holds"
+  },
+  {
+    "path": "billing-specialist.permissions.unrestrictedNetwork",
+    "verdict": "mapped",
+    "note": "a prompt agent has no file system or shell, so this holds"
+  },
+  {
+    "path": "billing-specialist.skills.0",
+    "verdict": "dropped",
+    "code": "skills_unsupported",
+    "note": "skills attach to Foundry only through a Toolbox (preview)"
+  }
+]

@@ -1,0 +1,138 @@
+{
+  "schemaVersion": 2,
+  "releaseVerdict": "blocked",
+  "canonical": true,
+  "releaseEvidenceManifest": "docs/release/evidence-manifest.json",
+  "capabilities": [
+    {
+      "id": "relational-state",
+      "area": "Control-plane relational state",
+      "status": "implemented",
+      "releaseImpact": "required",
+      "evidence": ["migrations", "packages/core/src/db/repositories"],
+      "evidenceRequirement": { "id": "relational-state", "maxAgeDays": 30, "approval": "none" }
+    },
+    {
+      "id": "resource-workflow",
+      "area": "Files, Skills, and Connectors product workflow",
+      "status": "partial",
+      "releaseImpact": "blocker",
+      "evidence": ["apps/web/server/files", "apps/web/server/skills", "apps/web/server/connectors"],
+      "evidenceRequirement": { "id": "resource-workflow", "maxAgeDays": 14, "approval": "none" }
+    },
+    {
+      "id": "durable-run-events",
+      "area": "Durable run-event persistence and replay",
+      "status": "implemented",
+      "releaseImpact": "required",
+      "evidence": ["packages/core/src/db/schema/run-events.ts", "apps/web/server/runs/store.ts"],
+      "evidenceRequirement": { "id": "durable-run-events", "maxAgeDays": 14, "approval": "none" }
+    },
+    {
+      "id": "durable-resume",
+      "area": "Session resume lifecycle",
+      "status": "partial",
+      "releaseImpact": "blocker",
+      "evidence": ["apps/web/server/sessions", "apps/web/server/runs/acceptance"],
+      "evidenceRequirement": { "id": "durable-resume", "maxAgeDays": 14, "approval": "none" }
+    },
+    {
+      "id": "provider-adapters",
+      "area": "Provider adapters",
+      "status": "fixture-verified",
+      "releaseImpact": "required",
+      "evidence": ["docs/compatibility/providers.md", "tests/providers"],
+      "evidenceRequirement": { "id": "provider-adapters", "maxAgeDays": 30, "approval": "none" }
+    },
+    {
+      "id": "live-provider-e2e",
+      "area": "Live provider billing, streaming, and errors",
+      "status": "deferred",
+      "releaseImpact": "blocker",
+      "evidence": ["docs/compatibility/unverified.json", "tests/e2e/run.mjs"],
+      "evidenceRequirement": { "id": "live-provider-e2e", "maxAgeDays": 7, "approval": "security" }
+    },
+    {
+      "id": "isolated-runtime",
+      "area": "Local and Docker runtime drivers",
+      "status": "fixture-verified",
+      "releaseImpact": "required",
+      "evidence": ["docs/runtime-driver-matrix.md", "tests/conformance"],
+      "evidenceRequirement": { "id": "isolated-runtime", "maxAgeDays": 14, "approval": "none" }
+    },
+    {
+      "id": "kubernetes-runtime",
+      "area": "Kubernetes runtime lifecycle and isolation",
+      "status": "partial",
+      "releaseImpact": "blocker",
+      "evidence": [
+        "packages/runtime/src/kubernetes.ts",
+        "scripts/dev-cluster/verify-chart-lifecycle.sh"
+      ],
+      "evidenceRequirement": {
+        "id": "kubernetes-runtime",
+        "maxAgeDays": 14,
+        "approval": "security"
+      }
+    },
+    {
+      "id": "managed-cloud-runtimes",
+      "area": "Managed-cloud runtime drivers",
+      "status": "unsupported",
+      "releaseImpact": "none",
+      "evidence": ["docs/runtime-driver-matrix.md"]
+    },
+    {
+      "id": "production-operations",
+      "area": "Production operations controls",
+      "status": "partial",
+      "releaseImpact": "required",
+      "evidence": ["infra/helm/agent-workspace", "docs/operations/runbook.md"],
+      "evidenceRequirement": {
+        "id": "production-operations",
+        "maxAgeDays": 30,
+        "approval": "owner"
+      }
+    },
+    {
+      "id": "browser-accessibility",
+      "area": "Browser and accessibility automation",
+      "status": "partial",
+      "releaseImpact": "required",
+      "evidence": ["tests/browser", ".github/workflows/quality.yml"],
+      "evidenceRequirement": { "id": "browser-accessibility", "maxAgeDays": 14, "approval": "none" }
+    },
+    {
+      "id": "signed-distribution",
+      "area": "Published CLI and signed release images",
+      "status": "deferred",
+      "releaseImpact": "blocker",
+      "evidence": ["infra/release"],
+      "evidenceRequirement": {
+        "id": "signed-distribution",
+        "maxAgeDays": 7,
+        "approval": "security"
+      }
+    },
+    {
+      "id": "usability-approval",
+      "area": "Independent usability approval",
+      "status": "deferred",
+      "releaseImpact": "blocker",
+      "evidence": ["docs/walkthrough"],
+      "evidenceRequirement": { "id": "usability-approval", "maxAgeDays": 30, "approval": "owner" }
+    },
+    {
+      "id": "residual-risk-acceptance",
+      "area": "Residual-risk owner acceptance",
+      "status": "deferred",
+      "releaseImpact": "blocker",
+      "evidence": ["docs/release/security-review-0.1.0.md"],
+      "evidenceRequirement": {
+        "id": "residual-risk-acceptance",
+        "maxAgeDays": 30,
+        "approval": "owner"
+      }
+    }
+  ]
+}

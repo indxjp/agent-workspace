@@ -1,0 +1,67 @@
+openai npm package version: 7.10.0
+node: v24.19.0
+
+### A. api-key auth, dated api-version, chat.completions
+  method : POST
+  URL    : https://example-resource.openai.azure.com/openai/deployments/my-deployment/chat/completions?api-version=2024-10-21
+  path   : /openai/deployments/my-deployment/chat/completions
+  query  : ?api-version=2024-10-21
+  header : api-key: FAKE-KEY-NOT-REAL
+  header : content-type: application/json
+
+### B. api-key auth, dated api-version, responses
+  method : POST
+  URL    : https://example-resource.openai.azure.com/openai/responses?api-version=2024-10-21
+  path   : /openai/responses
+  query  : ?api-version=2024-10-21
+  header : api-key: FAKE-KEY-NOT-REAL
+  header : content-type: application/json
+
+### C. api-key auth, apiVersion "preview" (the v1 preview route)
+  method : POST
+  URL    : https://example-resource.openai.azure.com/openai/responses?api-version=preview
+  path   : /openai/responses
+  query  : ?api-version=preview
+  header : api-key: FAKE-KEY-NOT-REAL
+  header : content-type: application/json
+
+### D. api-key auth, NO deployment configured, dated api-version
+  method : POST
+  URL    : https://example-resource.openai.azure.com/openai/deployments/my-deployment/chat/completions?api-version=2024-10-21
+  path   : /openai/deployments/my-deployment/chat/completions
+  query  : ?api-version=2024-10-21
+  header : api-key: FAKE-KEY-NOT-REAL
+  header : content-type: application/json
+
+### E. Microsoft Entra ID auth via azureADTokenProvider
+  method : POST
+  URL    : https://example-resource.openai.azure.com/openai/deployments/my-deployment/chat/completions?api-version=2024-10-21
+  path   : /openai/deployments/my-deployment/chat/completions
+  query  : ?api-version=2024-10-21
+  header : authorization: Bearer FAKE.ENTRA.TOKEN
+  header : content-type: application/json
+
+### F. baseURL pinned to the v1 route (no apiVersion given)
+  method : POST
+  URL    : https://example-resource.openai.azure.com/openai/v1/deployments/my-deployment/chat/completions?api-version=preview
+  path   : /openai/v1/deployments/my-deployment/chat/completions
+  query  : ?api-version=preview
+  header : api-key: FAKE-KEY-NOT-REAL
+  header : content-type: application/json
+
+### G. constructor validation: apiKey AND azureADTokenProvider together
+  threw OpenAIError: The `apiKey` and `azureADTokenProvider` arguments are mutually exclusive; only one can be passed at a time.
+
+### H. constructor validation: neither endpoint nor baseURL
+  threw OpenAIError: Must provide one of the `baseURL` or `endpoint` arguments, or the `AZURE_OPENAI_ENDPOINT` environment variable
+
+### I. plain OpenAI client pinned at {endpoint}/openai/v1 with an api-key header
+  chat.completions.create    POST  /openai/v1/chat/completions
+  responses.create           POST  /openai/v1/responses
+  responses.retrieve         GET   /openai/v1/responses/resp_abc
+  responses.delete           DELETE/openai/v1/responses/resp_abc
+  responses.inputItems.list  GET   /openai/v1/responses/resp_abc/input_items
+  responses.cancel           POST  /openai/v1/responses/resp_abc/cancel
+
+### J. openai/azure.js deployment-scoped endpoint set (read from the shipped build)
+  '/completions' '/chat/completions' '/embeddings' '/audio/transcriptions' '/audio/translations' '/audio/speech' '/images/generations' '/batches' '/images/edits'

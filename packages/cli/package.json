@@ -1,0 +1,133 @@
+{
+  "name": "@indx-workspace/cli",
+  "version": "0.6.9",
+  "description": "The Agent Workspace project CLI: create-agent-workspace generates a deployment project from one validated profile, and agent-workspace starts and validates it.",
+  "license": "Apache-2.0",
+  "homepage": "https://docs.agentworkspace.indx.jp",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/indxjp/agent-workspace.git",
+    "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/indxjp/agent-workspace/issues"
+  },
+  "keywords": [
+    "agent-workspace",
+    "claude",
+    "ai-agents",
+    "cli",
+    "self-hosted"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./create": {
+      "types": "./src/create.ts",
+      "default": "./dist/create.js"
+    },
+    "./deploy": {
+      "types": "./src/deploy/project.ts",
+      "default": "./dist/deploy/project.js"
+    },
+    "./publish": {
+      "types": "./src/publish/index.ts",
+      "default": "./dist/publish/index.js"
+    }
+  },
+  "bin": {
+    "create-agent-workspace": "./dist/create.js",
+    "agent-workspace": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.map",
+    "modules",
+    "templates",
+    "schema",
+    "CHANGELOG.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./create": {
+        "types": "./dist/create.d.ts",
+        "default": "./dist/create.js"
+      },
+      "./deploy": {
+        "types": "./dist/deploy/project.d.ts",
+        "default": "./dist/deploy/project.js"
+      },
+      "./publish": {
+        "types": "./dist/publish/index.d.ts",
+        "default": "./dist/publish/index.js"
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@indx-workspace/contracts": "workspace:*",
+    "@indx-workspace/sdk": "workspace:*",
+    "pg": "8.23.1",
+    "yaml": "2.9.1",
+    "zod": "4.6.6"
+  },
+  "peerDependencies": {
+    "@aws-sdk/client-s3": "^3.1145.0",
+    "@google-cloud/storage": "^8.2.0"
+  },
+  "peerDependenciesMeta": {
+    "@aws-sdk/client-s3": {
+      "optional": true
+    },
+    "@google-cloud/storage": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@aws-sdk/client-s3": "3.1149.0",
+    "@google-cloud/storage": "8.4.0",
+    "@types/node": "26.6.5",
+    "@types/pg": "8.23.1",
+    "@typescript/native": "npm:typescript@7.0.2",
+    "ajv": "8.20.0",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
+    "vitest": "5.0.3"
+  },
+  "nx": {
+    "targets": {
+      "lint": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "eslint packages/cli --max-warnings 0"
+        }
+      },
+      "test": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "vitest run --project @indx-workspace/cli --reporter=default --reporter=json --outputFile={projectRoot}/.vitest-report.json",
+          "env": {
+            "NODE_OPTIONS": "--unhandled-rejections=strict",
+            "VITEST_MAX_WORKERS": "4"
+          }
+        }
+      }
+    }
+  }
+}

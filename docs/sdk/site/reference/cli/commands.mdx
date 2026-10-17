@@ -1,0 +1,1161 @@
+---
+title: "CLI commands"
+description: "Every `aw` command, its usage and summary, plus the global flags and exit codes."
+---
+
+<Note>This page is generated from `packages/aw/src/commands/index.ts`, `packages/aw/src/help.ts`, `packages/aw/src/output.ts`, `packages/aw/src/commands/*.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## Global flags
+
+```text
+Configuration (flags, then AGENT_WORKSPACE_URL / AGENT_WORKSPACE_API_KEY, then the local URL of
+./agent-workspace.yaml, then the default profile; aw init and aw dev take none of these):
+  --url <url>            the control plane
+  --api-key-stdin        read the API key from stdin (a key is never accepted as a flag value)
+  --profile <name>       a profile from ~/.config/agent-workspace/profiles.json
+  --timeout <ms>         abort a request that produces no response headers in time
+
+Output:
+  --json                 exactly the SDK's returned value, as JSON
+  --jsonl                one JSON object per line (streams and listings)
+  --raw                  streams print each event's engine-native payload, not its AgentEvent
+  --quiet                no informational notices on stderr
+  --version              print the aw and contracts versions and exit
+
+Exit codes: 0 ok, 1 the server refused (error: <code>: <message> on stderr; an unsupported
+contracts version also names both versions and the fix), 2 usage,
+3 the response broke the contract, 4 no response (network, timeout),
+5 --strict found dropped fields (aw platforms), 130 interrupted.
+```
+
+## Exit codes
+
+| Name | Code |
+| --- | --- |
+| `ok` | `0` |
+| `problem` | `1` |
+| `usage` | `2` |
+| `contract` | `3` |
+| `transport` | `4` |
+| `dropped` | `5` |
+| `interrupted` | `130` |
+
+## aw init
+
+Write a starter project here: agent-workspace.yaml, an agent and a surface
+
+```
+aw init [--yes] [--theme <theme>] [--sandbox <sandbox>] [--provider <provider>] [--model-base-url <url>] [--agent <agent>] [--engine <engine>] [--tools <tools>] [--openapi <openapi>] [--permissions <permissions>] [--title <title>] [--color <color>] [--platform <platform>] [--answers <file>]
+```
+
+## aw dev
+
+Run this project on a local runtime (on --port, else PORT, else environments.local.port), sign aw in, create the default model connection and push agents/ and surfaces/ to local on every save; --sandbox docker (or runtime.default: docker) needs a reachable Docker
+
+```
+aw dev [--quiet] [--verbose] [--open | --no-open] [--sandbox <local|docker>] [--port <n>]
+```
+
+## aw dev status
+
+Say whether this project's aw dev is running and ready, and its URL; exits non-zero while it is starting or stopped
+
+```
+aw dev status [--json]
+```
+
+## aw dev stop
+
+Stop this project's running aw dev (a background start too), its runtime and its database
+
+```
+aw dev stop
+```
+
+## aw tool call
+
+Run one code tool from tools/ through the local tool host and print its result
+
+```
+aw tool call <name> [--input <json>|-] [--json|--jsonl]
+```
+
+## aw check
+
+Check this project's agents and surfaces against the server, saving nothing
+
+```
+aw check
+```
+
+## aw push
+
+Show what this project's agents and surfaces would change; with --yes, save a version and point local at it
+
+```
+aw push [--yes] [--summary <text>]
+```
+
+## aw eval
+
+Run evals/\<agent\>.yaml's cases against a version on the server and store the score
+
+```
+aw eval [agent] [version] [--min-score <0..1>] [--junit <file>] [--baseline <id>] [--json]
+```
+
+## aw eval run
+
+Same as aw eval; takes up to 200 cases and follows the run until it completes
+
+```
+aw eval run [agent] [version] [--min-score <0..1>] [--junit <file>] [--baseline <id>] [--json]
+```
+
+## aw eval add
+
+Append a case to evals/\<agent\>.yaml, keeping its comments; nothing is sent to the server
+
+```
+aw eval add <input> [--agent <name>] [--expect-contains <text>]... [--expect-tool <name>] [--json]
+```
+
+## aw eval add-case
+
+Show the evaluation case a thumbs-down on a run becomes, and append it with --yes
+
+```
+aw eval add-case <runId> [--yes]
+```
+
+## aw promote
+
+Show production moving to local's version (or [version]), and move it with --yes
+
+```
+aw promote [agent] [version] [--yes]
+```
+
+## aw rollback
+
+Show production moving back to its previous version, and move it with --yes
+
+```
+aw rollback [agent] [--yes]
+```
+
+## aw versions
+
+An agent's versions, which version each environment runs, and the last pointer moves
+
+```
+aw versions [agent]
+```
+
+## aw deploy
+
+Deploy the project's production environment through agent-workspace deploy; plans unless --yes; --infra names a checkout's infra/ whose gcp-cloudrun module or kubernetes chart is used instead of the one shipped with @indx-workspace/cli
+
+```
+aw deploy <environment> [--plan | --yes] [--infra <dir>]
+```
+
+## aw platforms list
+
+Every agent platform an agent can be exported to, with what each supports
+
+```
+aw platforms list [--json]
+```
+
+## aw platforms export
+
+Compile the project's agent into a platform's files, report what maps and what is dropped; --strict exits 5 when any field is dropped
+
+```
+aw platforms export --platform <id> [--agent <name>] [--env <name>] [--out <dir>] [--strict] [--json]
+```
+
+## aw platforms publish
+
+Export the agent to a platform, show the vendor tool's plan, and publish it with --yes; a plan with changes exits 3
+
+```
+aw platforms publish --platform <id> [--agent <name>] [--env <name>] [--out <dir>] [--plan | --yes] [--experimental] [--strict] [--json]
+```
+
+## aw platforms import
+
+Turn a platform's agent files into agents/\<name\>.agent.md; --yes overwrites existing files
+
+```
+aw platforms import --from <id> <path> [--yes] [--json]
+```
+
+## aw platforms doctor
+
+Check that each enabled platform compiles, and what it would drop
+
+```
+aw platforms doctor [--platform <id>] [--agent <name>] [--json]
+```
+
+## aw feedback
+
+List the ratings of an agent's runs: run id, input, answer and comment
+
+```
+aw feedback [agent] [--negative] [--since <7d|12h>]
+```
+
+## aw chat
+
+Talk to an agent (a name or an id; the only agent by default) on its local draft, or on a version or environment: interactive on a terminal, one answer with --prompt or piped input
+
+```
+aw chat [agent] [--prompt|-p <text>] [--agent-version <n> | --env local|production]
+```
+
+## aw me
+
+The workspace, role and principal this credential resolves to
+
+```
+aw me
+```
+
+## aw login
+
+Sign in as yourself through a browser; stores a short-lived token
+
+```
+aw login
+```
+
+## aw logout
+
+Revoke the stored sign-in on the server and forget it
+
+```
+aw logout
+```
+
+## aw whoami
+
+Who the current credential is (the same answer as `aw me`)
+
+```
+aw whoami
+```
+
+## aw workspaces list
+
+Every workspace you belong to, with your role in each (after `aw login`)
+
+```
+aw workspaces list
+```
+
+## aw workspaces get
+
+One of your workspaces
+
+```
+aw workspaces get <id>
+```
+
+## aw workspaces create
+
+Create a workspace; you become its first Owner
+
+```
+aw workspaces create [--file <json>] [--name <name>] [--slug <slug>]
+```
+
+## aw workspaces update
+
+Rename, archive or restore a workspace (Owner only)
+
+```
+aw workspaces update <id> [--file <json>] [--name <name>] [--archived true|false]
+```
+
+## aw workspaces select
+
+Act in another of your workspaces from now on (after `aw login`)
+
+```
+aw workspaces select <id|slug>
+```
+
+## aw workspaces sharing-policy get
+
+Whether members may publish public shares
+
+```
+aw workspaces sharing-policy get
+```
+
+## aw workspaces sharing-policy set
+
+Turn public sharing on or off (Owner only)
+
+```
+aw workspaces sharing-policy set <true|false>
+```
+
+## aw team members list
+
+The workspace's members and their roles
+
+```
+aw team members list
+```
+
+## aw team members add
+
+Attach an existing user to the workspace
+
+```
+aw team members add [--file <json>] [--email <email>] [--role <role>]
+```
+
+## aw team members set-role
+
+Move a member to another role
+
+```
+aw team members set-role <id> <role>
+```
+
+## aw team members remove
+
+Remove a member
+
+```
+aw team members remove <id>
+```
+
+## aw team users list
+
+The users who are members of the workspace
+
+```
+aw team users list
+```
+
+## aw team users create
+
+Create a user and make it a member
+
+```
+aw team users create [--file <json>] [--email <email>] [--name <name>] [--role <role>]
+```
+
+## aw team invitations list
+
+Every invitation the workspace has sent, newest first (after `aw login`)
+
+```
+aw team invitations list
+```
+
+## aw team invitations create
+
+Invite an address; the link is shown once
+
+```
+aw team invitations create [--file <json>] [--email <email>] [--role <role>]
+```
+
+## aw team invitations resend
+
+Rotate an invitation link and extend its expiry
+
+```
+aw team invitations resend <id>
+```
+
+## aw team invitations revoke
+
+Revoke an invitation
+
+```
+aw team invitations revoke <id>
+```
+
+## aw team api-keys list
+
+Every API key of the workspace, revoked ones included
+
+```
+aw team api-keys list
+```
+
+## aw team api-keys create
+
+Mint a key; the secret is shown once
+
+```
+aw team api-keys create [--file <json>] [--name <name>] [--role <role>]
+```
+
+## aw team api-keys revoke
+
+Revoke a key
+
+```
+aw team api-keys revoke <id>
+```
+
+## aw endpoint-clients list
+
+Every endpoint client of the workspace, revoked ones included
+
+```
+aw endpoint-clients list
+```
+
+## aw endpoint-clients get
+
+One endpoint client
+
+```
+aw endpoint-clients get <id>
+```
+
+## aw endpoint-clients create
+
+Create a client for an MCP project or one agent (a2a-agent takes exactly one --agent)
+
+```
+aw endpoint-clients create [--file <json>] [--name <name>] [--kind <kind>] [--agent <name>] [--tool <tool>]
+```
+
+## aw endpoint-clients update
+
+Replace the agents, the tool allow-list and/or the OAuth redirect URIs of a client
+
+```
+aw endpoint-clients update <id> [--file <json>] [--agent <name>] [--tool <tool>] [--redirect-uri <uri> …]
+```
+
+## aw endpoint-clients revoke
+
+Revoke a client and every key bound to it
+
+```
+aw endpoint-clients revoke <id>
+```
+
+## aw endpoint-clients keys create
+
+Mint an endpoint-scoped key; the secret is shown once
+
+```
+aw endpoint-clients keys create <id> [--file <json>] [--name <name>] [--expires-at <iso>]
+```
+
+## aw endpoint-clients secret rotate
+
+Rotate the OAuth client secret; the secret is shown once and the old one stops working
+
+```
+aw endpoint-clients secret rotate <id>
+```
+
+## aw models connections list
+
+Every model connection
+
+```
+aw models connections list
+```
+
+## aw models connections get
+
+One model connection
+
+```
+aw models connections get <id>
+```
+
+## aw models connections create
+
+Store a connection and its credential (apiKey from --value-stdin or the body)
+
+```
+aw models connections create --file <json> [--name <name>] [--value-stdin]
+```
+
+## aw models connections update
+
+Rename or reconfigure a connection
+
+```
+aw models connections update <id> [--file <json>] [--name <name>]
+```
+
+## aw models connections remove
+
+Delete a connection; agents that referenced it are named
+
+```
+aw models connections remove <id>
+```
+
+## aw models connections rotate-credential
+
+Replace the stored credential
+
+```
+aw models connections rotate-credential <id> --value-stdin
+```
+
+## aw models connections test
+
+Probe the provider with the stored credential
+
+```
+aw models connections test <id>
+```
+
+## aw models discover
+
+Every model every ready connection offers
+
+```
+aw models discover
+```
+
+## aw runtimes profiles list
+
+Every runtime profile
+
+```
+aw runtimes profiles list
+```
+
+## aw runtimes profiles get
+
+One runtime profile
+
+```
+aw runtimes profiles get <id>
+```
+
+## aw runtimes profiles create
+
+Create a runtime profile
+
+```
+aw runtimes profiles create --file <json> [--name <name>]
+```
+
+## aw runtimes profiles update
+
+Change a runtime profile
+
+```
+aw runtimes profiles update <id> [--file <json>] [--name <name>]
+```
+
+## aw runtimes profiles remove
+
+Delete a profile; agents that referenced it fall back to none
+
+```
+aw runtimes profiles remove <id>
+```
+
+## aw runtimes connections list
+
+Every runtime connection
+
+```
+aw runtimes connections list
+```
+
+## aw runtimes connections create
+
+Create a runtime connection (credential from --value-stdin or the body)
+
+```
+aw runtimes connections create --file <json> [--name <name>] [--value-stdin]
+```
+
+## aw secrets list
+
+Every secret, metadata only
+
+```
+aw secrets list
+```
+
+## aw secrets create
+
+Store a new secret
+
+```
+aw secrets create --name <NAME> --value-stdin | --file <json>
+```
+
+## aw secrets replace
+
+Rotate a secret's value in place
+
+```
+aw secrets replace <name|id> --value-stdin
+```
+
+## aw secrets remove
+
+Delete a secret nothing references
+
+```
+aw secrets remove <name|id>
+```
+
+## aw files list
+
+The root, or one folder, one level deep
+
+```
+aw files list [--path <folder>]
+```
+
+## aw files upload
+
+Write (or overwrite) one file from a local file
+
+```
+aw files upload <path> <local-file>
+```
+
+## aw files mkdir
+
+Create an empty folder
+
+```
+aw files mkdir <path>
+```
+
+## aw files download
+
+Save a file locally, or show a folder
+
+```
+aw files download <path> [local-file]
+```
+
+## aw files move
+
+Rename or move a file or a whole folder
+
+```
+aw files move <path> <new-path>
+```
+
+## aw files remove
+
+Delete a file, or a folder with --recursive
+
+```
+aw files remove <path> [--recursive]
+```
+
+## aw skills list
+
+Every skill, in full detail
+
+```
+aw skills list
+```
+
+## aw skills get
+
+One skill
+
+```
+aw skills get <name>
+```
+
+## aw skills import
+
+Import a directory holding SKILL.md (name defaults to the directory name)
+
+```
+aw skills import <dir> [--name <name>]
+```
+
+## aw skills export
+
+Write a skill's files into a directory
+
+```
+aw skills export <name> <dir>
+```
+
+## aw skills update
+
+Enable/disable, write or remove files in one patch
+
+```
+aw skills update <name> --file <json>
+```
+
+## aw skills enable
+
+Enable a skill
+
+```
+aw skills enable <name>
+```
+
+## aw skills disable
+
+Disable a skill
+
+```
+aw skills disable <name>
+```
+
+## aw skills remove
+
+Delete a skill no agent is assigned
+
+```
+aw skills remove <name>
+```
+
+## aw connectors list
+
+Every MCP connector
+
+```
+aw connectors list
+```
+
+## aw connectors get
+
+One connector
+
+```
+aw connectors get <id>
+```
+
+## aw connectors create
+
+Save a connector (credential from --value-stdin or the body)
+
+```
+aw connectors create --file <json> [--name <name>] [--value-stdin]
+```
+
+## aw connectors update
+
+Change a connector's fields (credential from --value-stdin or the body)
+
+```
+aw connectors update <id> --file <json> [--name <name>] [--value-stdin]
+```
+
+## aw connectors remove
+
+Delete a connector
+
+```
+aw connectors remove <id>
+```
+
+## aw connectors rotate-credential
+
+Replace the saved credential
+
+```
+aw connectors rotate-credential <id> --value-stdin
+```
+
+## aw connectors test
+
+Run the MCP handshake against a saved connector
+
+```
+aw connectors test <id>
+```
+
+## aw connectors test-draft
+
+Test a connector before saving it
+
+```
+aw connectors test-draft --file <json> [--name <name>] [--value-stdin]
+```
+
+## aw engines list
+
+Every engine this deployment can run an agent on
+
+```
+aw engines list
+```
+
+## aw agents list
+
+Every agent
+
+```
+aw agents list
+```
+
+## aw agents get
+
+One agent
+
+```
+aw agents get <id>
+```
+
+## aw agents create
+
+Create an agent, optionally with its resource assignments in one call
+
+```
+aw agents create --file <json> [--name <name>] [--engine <id>] [--skill <id>]... [--connector <id>]... [--grant-file <id>[:read|read-write]]...
+```
+
+## aw agents update
+
+Change an agent (a runtime switch is `{ "runtimeProfileId": … }`)
+
+```
+aw agents update <id> [--file <json>] [--name <name>] [--engine <id>]
+```
+
+## aw agents remove
+
+Delete an agent and, today, its sessions and runs
+
+```
+aw agents remove <id>
+```
+
+## aw agents assignments get
+
+The files, skills and connectors the agent may reach
+
+```
+aw agents assignments get <id>
+```
+
+## aw agents assignments set
+
+Replace every assignment at once
+
+```
+aw agents assignments set <id> --file <json>
+```
+
+## aw agents grants get
+
+Membership principals permitted to run this agent
+
+```
+aw agents grants get <id>
+```
+
+## aw agents grants set
+
+Replace every Viewer grant at once
+
+```
+aw agents grants set <id> --file <json>
+```
+
+## aw agents policy get
+
+The agent's policy (S-13) — stored, or compiled when none was ever set
+
+```
+aw agents policy get <id>
+```
+
+## aw agents policy set
+
+Replace the agent's policy as one operation (S-13)
+
+```
+aw agents policy set <id> --file <json>
+```
+
+## aw agents export
+
+The agent as a portable, name-keyed definition (K-1): aw agents export \<id\> \> agent.json
+
+```
+aw agents export <id>
+```
+
+## aw agents import
+
+Recreate an exported agent here, resolving skills and connectors by name (K-1)
+
+```
+aw agents import <file|-> [--on-missing fail|skip]
+```
+
+## aw agents versions list
+
+An agent's versions and which version each environment runs
+
+```
+aw agents versions list <id>
+```
+
+## aw agents versions create
+
+Check a version body, and save it as the next version with --yes
+
+```
+aw agents versions create <id> --file <json> [--summary <text>] [--yes]
+```
+
+## aw agents pointers set
+
+Show a pointer move, and point an environment at a version with --yes
+
+```
+aw agents pointers set <id> <environment> <version> [--yes]
+```
+
+## aw projects list
+
+Active projects, or archived ones, or all
+
+```
+aw projects list [--archived active|archived|all]
+```
+
+## aw projects get
+
+One project
+
+```
+aw projects get <id>
+```
+
+## aw projects create
+
+Create a project
+
+```
+aw projects create --file <json> [--name <name>]
+```
+
+## aw projects update
+
+Change a project
+
+```
+aw projects update <id> [--file <json>] [--name <name>]
+```
+
+## aw projects archive
+
+Retire a project; it keeps its history
+
+```
+aw projects archive <id>
+```
+
+## aw projects restore
+
+Bring an archived project back
+
+```
+aw projects restore <id>
+```
+
+## aw projects start-session
+
+Open a session attributed to the project
+
+```
+aw projects start-session <id> [agent-id]
+```
+
+## aw projects adopt-session
+
+Move an existing session into the project
+
+```
+aw projects adopt-session <id> <session-id>
+```
+
+## aw sessions list
+
+Sessions the caller may see, newest first: one page, or every page with --all
+
+```
+aw sessions list [--status active|archived] [--limit <1-200>] [--cursor <cursor>] [--all]
+```
+
+## aw sessions get
+
+One session
+
+```
+aw sessions get <id>
+```
+
+## aw sessions rename
+
+Give a session a title
+
+```
+aw sessions rename <id> <title>
+```
+
+## aw sessions archive
+
+Archive a session
+
+```
+aw sessions archive <id>
+```
+
+## aw sessions restore
+
+Restore an archived session
+
+```
+aw sessions restore <id>
+```
+
+## aw sessions transcript
+
+The stored transcript, one provider-native entry per line
+
+```
+aw sessions transcript <provider-session-id> [--project-key <key>] [--subpath <key>]
+```
+
+## aw sessions subkeys
+
+The subagent transcripts stored under the session
+
+```
+aw sessions subkeys <provider-session-id> [--project-key <key>]
+```
+
+## aw runs start
+
+Queue a run, and optionally wait for or follow it
+
+```
+aw runs start <agent> --prompt <text>|--prompt-file <path> [--session <id>] [--model <conn>:<model>] [--wait|--follow] [--fail-on-error]
+```
+
+## aw runs get
+
+One run
+
+```
+aw runs get <id>
+```
+
+## aw runs list
+
+One page of run history, newest first
+
+```
+aw runs list [--status <status>] [--agent <id>] [--project <id>] [--limit <n>] [--cursor <cursor>]
+```
+
+## aw runs events
+
+Stream the run on one connection
+
+```
+aw runs events <id> [--after <event-id>]
+```
+
+## aw runs trace
+
+A run's steps and tool calls as a tree, with inputs, outputs, tokens and cost
+
+```
+aw runs trace <id>
+```
+
+## aw runs follow
+
+Stream the run, reconnecting with the last event id
+
+```
+aw runs follow <id> [--after <event-id>] [--interrupt-on-cancel]
+```
+
+## aw runs interrupt
+
+Stop a run this caller may run
+
+```
+aw runs interrupt <id>
+```
+
+## aw runs rate
+
+Rate a run's answer thumbs-up or -down, as the widget does
+
+```
+aw runs rate <id> --up|--down [--comment <text>]
+```
+
+## aw runs wait
+
+Follow the run to its end and print the settled record
+
+```
+aw runs wait <id>
+```
+
+## aw shares list
+
+The caller's shares, or every share for an Owner or Admin
+
+```
+aw shares list
+```
+
+## aw shares revoke
+
+Revoke a share; its link stops resolving at once
+
+```
+aw shares revoke <id>
+```
+
+## aw metrics recent-runs
+
+This process's recently finished runs (a window, not the run store)
+
+```
+aw metrics recent-runs
+```
+
+## aw audit list
+
+The audit trail, newest first: one page, or every page with --all
+
+```
+aw audit list [--limit <1-500>] [--cursor <cursor>] [--all]
+```
+
+## aw tokens mint
+
+Mint a short-lived, run- or session-scoped bearer for a customer frontend
+
+```
+aw tokens mint --scope run|session --id <id> [--ttl <seconds>]
+```

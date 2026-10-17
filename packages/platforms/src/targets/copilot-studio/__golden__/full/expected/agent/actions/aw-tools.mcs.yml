@@ -1,0 +1,18 @@
+mcs.metadata:
+  componentName: aw-tools
+  description: MCP server aw-tools
+kind: TaskDialog
+modelDisplayName: aw-tools
+modelDescription: Tools from the aw-tools MCP server
+action:
+  kind: InvokeExternalAgentTaskAction
+  connectionReference: acme_supportTriage.mcp.aw-tools
+  connectionProperties:
+    mode: Maker
+  operationDetails:
+    kind: ModelContextProtocolMetadata
+    operationId: InvokeMCP
+    tools:
+      kind: UseSpecificTools
+      tools:
+        - get_order

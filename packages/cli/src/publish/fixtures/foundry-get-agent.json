@@ -1,0 +1,19 @@
+{
+  "object": "agent",
+  "id": "support-triage",
+  "name": "support-triage",
+  "versions": {
+    "latest": {
+      "object": "agent.version",
+      "name": "support-triage",
+      "version": "3",
+      "description": "Triages customer support tickets and drafts replies.",
+      "definition": {
+        "kind": "prompt",
+        "model": "claude-sonnet-4-6",
+        "instructions": "An older instruction text.",
+        "tools": [{ "type": "web_search" }]
+      }
+    }
+  }
+}

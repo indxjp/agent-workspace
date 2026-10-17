@@ -1,0 +1,17 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ContractsEngines.wire_orders_match_the_exports",
+    "AgentWorkspace.Theorems.WellFormed.ContractsEngines.engine_ids_are_not_model_providers"],
+   "input": {"question": "the engine vocabulary, in wire order"},
+   "id": "vocabulary",
+   "expected":
+   {"wireProtocols": ["anthropic-messages", "openai-responses", "openai-chat-completions"],
+    "limitEnforcements": ["native", "adapter"],
+    "engineIds": ["claude-agent-sdk", "openai-agents", "pi", "mastra"],
+    "budgetEnforcements": ["native", "adapter", "none"]}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.ContractsEngines.default_registry_is_the_catalogue"],
+   "input": {"question": "which engines a deployment registers by default"},
+   "id": "default-registry",
+   "expected": {"registered": ["claude-agent-sdk", "openai-agents", "pi", "mastra"]}}],
+ "family": "engines",
+ "description": "The engine vocabulary as the contracts publish it, in wire order"}

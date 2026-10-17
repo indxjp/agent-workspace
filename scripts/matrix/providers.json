@@ -1,0 +1,30 @@
+{
+  "providers": [
+    {
+      "id": "anthropic",
+      "default": "native",
+      "overrides": { "prompt-caching": "unsupported" },
+      "basis": "recorded-fixture conformance; no live provider credential was available"
+    },
+    {
+      "id": "openai",
+      "default": "not-derivable",
+      "basis": "out of the tested 0.1.0 provider scope under D-03"
+    },
+    {
+      "id": "azure-openai",
+      "default": "native",
+      "overrides": {
+        "thinking": "unsupported",
+        "prompt-caching": "unsupported",
+        "context-management": "unsupported"
+      },
+      "basis": "recorded-fixture conformance; no live provider credential was available"
+    },
+    {
+      "id": "openai-compatible",
+      "default": "not-derivable",
+      "basis": "out of the tested 0.1.0 provider scope under D-03"
+    }
+  ]
+}

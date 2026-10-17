@@ -1,0 +1,356 @@
+---
+title: "routes"
+description: "The @indx-workspace/contracts/routes exports, sorted alphabetically."
+---
+
+<Note>This page is generated from `packages/contracts/src/routes.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## API_ROUTE_EXCLUSIONS
+
+Declared routes that are not part of the programmatic surface, and why. Two kinds (ADR-0080):
+
+- browser journeys — spec 04 §1 puts first-run setup, OIDC sign-in and the public share pages
+  permanently out of scope;
+- private runner routes — the transcript writes and the ENG-06 engine-state routes, which only
+  `apps/runner` calls, with the signed per-run token rather than a workspace credential
+  (`apps/web/server/sessions/state-api.ts`; 04 §5.11: runtime-only, not exposed by the SDK).
+
+- `{ method: 'POST', path: '/api/setup', because: 'first-run setup (04 §1)' }`
+- `{ method: 'GET', path: '/api/auth/login', because: 'OIDC sign-in (04 §1)' }`
+- `{ method: 'POST', path: '/api/auth/callback', because: 'OIDC sign-in (04 §1)' }`
+- `{ method: 'GET', path: '/api/auth/workspace', because: 'the HTML workspace-selection step of OIDC sign-in (04 §1)', }`
+- ``{ method: 'GET', path: '/api/auth/cli-verify', because: "the HTML page approving `aw login`'s code, a browser sign-in step (04 §1)", }``
+- ``{ method: 'POST', path: '/api/auth/cli-verify', because: "the form post approving `aw login`'s code, a browser sign-in step (04 §1)", }``
+- `{ method: 'GET', path: '/api/cron/retention', because: 'platform cron job (CRON_SECRET bearer)', }`
+- `{ method: 'GET', path: '/p/:token', because: 'a public share page (04 §1)' }`
+- `{ method: 'POST', path: '/p/:token/messages', because: 'a public share page (04 §1)' }`
+- `{ method: 'GET', path: '/p/s/:name', because: 'a hosted surface page (04 §1)' }`
+- `{ method: 'POST', path: '/p/s/:name/sessions', because: "the hosted surface's session bootstrap: loopback, or an anonymous visitor from the surface's allowed origins (04 §1)", }`
+- `{ method: 'GET', path: '/p/s/:name/widget.js', because: 'the hosted surface widget loader (04 §1)', }`
+- `{ method: 'GET', path: '/p/s/:name/try', because: 'the hosted surface try page (04 §1)' }`
+- `{ method: 'POST', path: '/api/sessions/:engineSessionId/transcript', because: 'private runner route (per-run token)', }`
+- `{ method: 'DELETE', path: '/api/sessions/:engineSessionId/transcript', because: 'private runner route (per-run token)', }`
+- `{ method: 'GET', path: '/api/sessions/:engineSessionId/state-entries', because: 'private runner route (per-run token)', }`
+- `{ method: 'POST', path: '/api/sessions/:engineSessionId/state-entries', because: 'private runner route (per-run token)', }`
+- `{ method: 'PUT', path: '/api/sessions/:engineSessionId/state-entries', because: 'private runner route (per-run token)', }`
+- `{ method: 'DELETE', path: '/api/sessions/:engineSessionId/state-entries', because: 'private runner route (per-run token)', }`
+- `{ method: 'GET', path: '/api/sessions/:engineSessionId/state-streams', because: 'private runner route (per-run token)', }`
+- `{ method: 'GET', path: '/api/sessions/:engineSessionId/state-blobs', because: 'private runner route (per-run token)', }`
+- `{ method: 'PUT', path: '/api/sessions/:engineSessionId/state-blobs', because: 'private runner route (per-run token)', }`
+- `{ method: 'GET', path: '/.well-known/oauth-authorization-server', because: 'OAuth 2.0 authorization server metadata (RFC 8414), a public discovery document', }`
+- `{ method: 'GET', path: '/.well-known/oauth-protected-resource/mcp/projects/:name', because: 'OAuth protected resource metadata (RFC 9728), a public discovery document', }`
+- `{ method: 'GET', path: '/.well-known/oauth-protected-resource/api/a2a/agents/:agentName', because: 'OAuth protected resource metadata (RFC 9728), a public discovery document', }`
+- `{ method: 'GET', path: '/oauth/authorize', because: 'the HTML consent page of the OAuth authorization code grant, a browser sign-in step (04 §1)', }`
+- `{ method: 'POST', path: '/oauth/authorize', because: 'the consent form post of the OAuth authorization code grant, a browser sign-in step (04 §1)', }`
+- `{ method: 'POST', path: '/oauth/token', because: 'the OAuth token endpoint (RFC 6749), form-encoded and authenticated by the client secret or the grant, not by a workspace credential', }`
+- `{ method: 'POST', path: '/oauth/revoke', because: 'the OAuth token revocation endpoint (RFC 7009), form-encoded and authenticated by the client', }`
+
+## API_ROUTES
+
+The catalogue, grouped by family in the order of spec 04 §5.
+
+- `{ method: 'GET', path: '/api/me', operationId: 'me', tag: 'me', summary: 'Read the calling principal, its workspace and role', success: ok(json('MeResponseSchema')), }`
+- `{ method: 'GET', path: '/api/workspaces', operationId: 'workspaces.list', tag: 'workspaces', summary: 'List the workspaces the caller belongs to', success: ok(json('WorkspaceListResponseSchema')), }`
+- `{ method: 'POST', path: '/api/workspaces', operationId: 'workspaces.create', tag: 'workspaces', summary: 'Create a workspace', request: UNDESCRIBED, success: created(json('WorkspaceMembershipResponseSchema')), }`
+- `{ method: 'GET', path: '/api/workspaces/:id', operationId: 'workspaces.get', tag: 'workspaces', summary: 'Read one workspace and the caller membership in it', success: ok(json('WorkspaceMembershipResponseSchema')), }`
+- `{ method: 'PATCH', path: '/api/workspaces/:id', operationId: 'workspaces.update', tag: 'workspaces', summary: 'Rename a workspace', request: UNDESCRIBED, success: ok(json('WorkspaceResponseSchema')), }`
+- `{ method: 'POST', path: '/api/auth/workspace', operationId: 'workspaces.select', tag: 'workspaces', summary: "Switch the session's workspace", request: json('WorkspaceSwitchRequestSchema'), success: ok(json('WorkspaceSwitchResponseSchema')), security: 'session-cookie', }`
+- `{ method: 'POST', path: '/api/auth/cli-workspace', operationId: 'workspaces.selectForUserToken', tag: 'workspaces', summary: "Move the CLI's user token to another of the person's workspaces", request: json('WorkspaceSwitchRequestSchema'), success: ok(json('WorkspaceSwitchResponseSchema')), security: 'user-token', }`
+- ``{ method: 'POST', path: '/api/auth/cli-device', operationId: 'auth.startDevice', tag: 'auth', summary: 'Start a device authorization for `aw login` (RFC 8628)', success: ok(json('DeviceAuthorizationResponseSchema')), security: 'none', }``
+- `{ method: 'POST', path: '/api/auth/cli-token', operationId: 'auth.pollToken', tag: 'auth', summary: 'Poll with the device code; the user token once the person approved', request: json('CliTokenRequestSchema'), success: ok(json('CliTokenResponseSchema')), security: 'none', }`
+- ``{ method: 'DELETE', path: '/api/auth/cli-token', operationId: 'auth.revoke', tag: 'auth', summary: 'Revoke the presented user token (`aw logout`)', success: NO_CONTENT, security: 'user-token', }``
+- `{ method: 'GET', path: '/api/sharing-policies', operationId: 'workspaces.sharingPolicy.get', tag: 'workspaces', summary: "Read the workspace's sharing policy", success: ok(json('SharingPolicySchema')), }`
+- `{ method: 'PATCH', path: '/api/sharing-policies', operationId: 'workspaces.sharingPolicy.set', tag: 'workspaces', summary: "Change the workspace's sharing policy", request: json('SharingPolicySchema'), success: ok(json('SharingPolicySchema')), }`
+- `{ method: 'POST', path: '/api/tokens', operationId: 'tokens.mint', tag: 'tokens', summary: 'Mint a short-lived browser token', request: json('MintTokenRequestSchema'), success: created(json('MintTokenResponseSchema')), }`
+- `{ method: 'GET', path: '/api/memberships', operationId: 'team.members.list', tag: 'team', summary: 'List the members of the workspace', success: ok(json('MembershipListResponseSchema')), }`
+- `{ method: 'POST', path: '/api/memberships', operationId: 'team.members.add', tag: 'team', summary: 'Add a user to the workspace', request: UNDESCRIBED, success: created(json('MembershipResponseSchema')), }`
+- `{ method: 'PATCH', path: '/api/memberships/:id', operationId: 'team.members.setRole', tag: 'team', summary: "Change a member's role", request: UNDESCRIBED, success: ok(json('MembershipResponseSchema')), }`
+- `{ method: 'DELETE', path: '/api/memberships/:id', operationId: 'team.members.remove', tag: 'team', summary: 'Remove a member', success: NO_CONTENT, }`
+- `{ method: 'GET', path: '/api/users', operationId: 'team.users.list', tag: 'team', summary: 'List users', success: ok(json('UserListResponseSchema')), }`
+- `{ method: 'POST', path: '/api/users', operationId: 'team.users.create', tag: 'team', summary: 'Create a user', request: UNDESCRIBED, success: created(json('CreatedUserResponseSchema')), }`
+- `{ method: 'GET', path: '/api/invitations', operationId: 'team.invitations.list', tag: 'team', summary: 'List invitations', success: ok(json('InvitationListResponseSchema')), }`
+- `{ method: 'POST', path: '/api/invitations', operationId: 'team.invitations.create', tag: 'team', summary: 'Invite someone to the workspace', request: UNDESCRIBED, success: created(json('IssuedInvitationResponseSchema')), }`
+- `{ method: 'DELETE', path: '/api/invitations/:id', operationId: 'team.invitations.revoke', tag: 'team', summary: 'Revoke an invitation', success: ok(json('InvitationResponseSchema')), }`
+- `{ method: 'POST', path: '/api/invitations/:id/resend', operationId: 'team.invitations.resend', tag: 'team', summary: 'Re-issue an invitation', success: ok(json('IssuedInvitationResponseSchema')), }`
+- `{ method: 'POST', path: '/api/invitations/:id/accept', operationId: 'team.invitations.accept', tag: 'team', summary: 'Accept an invitation', request: UNDESCRIBED, success: ok(json('AcceptedInvitationResponseSchema')), security: 'invitation-identity', }`
+- `{ method: 'GET', path: '/api/api-keys', operationId: 'team.apiKeys.list', tag: 'team', summary: 'List API keys', success: ok(json('ApiKeyListResponseSchema')), }`
+- `{ method: 'POST', path: '/api/api-keys', operationId: 'team.apiKeys.create', tag: 'team', summary: 'Mint an API key; the secret is returned once', request: UNDESCRIBED, success: created(json('MintedApiKeyResponseSchema')), }`
+- `{ method: 'DELETE', path: '/api/api-keys/:id', operationId: 'team.apiKeys.revoke', tag: 'team', summary: 'Revoke an API key', success: ok(json('ApiKeyResponseSchema')), }`
+- `{ method: 'GET', path: '/api/endpoint-clients', operationId: 'endpointClients.list', tag: 'endpointClients', summary: 'List endpoint clients', success: ok(json('EndpointClientListResponseSchema')), }`
+- `{ method: 'POST', path: '/api/endpoint-clients', operationId: 'endpointClients.create', tag: 'endpointClients', summary: 'Create an endpoint client for an MCP project or an A2A agent', request: json('CreateEndpointClientRequestSchema'), success: created(json('EndpointClientResponseSchema')), }`
+- `{ method: 'GET', path: '/api/endpoint-clients/:id', operationId: 'endpointClients.get', tag: 'endpointClients', summary: 'Read one endpoint client', success: ok(json('EndpointClientResponseSchema')), }`
+- `{ method: 'PATCH', path: '/api/endpoint-clients/:id', operationId: 'endpointClients.update', tag: 'endpointClients', summary: "Change an endpoint client's agents or tool allow-list", request: json('UpdateEndpointClientRequestSchema'), success: ok(json('EndpointClientResponseSchema')), }`
+- `{ method: 'DELETE', path: '/api/endpoint-clients/:id', operationId: 'endpointClients.revoke', tag: 'endpointClients', summary: 'Revoke an endpoint client and every key bound to it', success: ok(json('EndpointClientResponseSchema')), }`
+- `{ method: 'POST', path: '/api/endpoint-clients/:id/keys', operationId: 'endpointClients.mintKey', tag: 'endpointClients', summary: 'Mint an endpoint-scoped API key; the secret is returned once', request: json('MintEndpointKeyRequestSchema'), success: created(json('MintedApiKeyResponseSchema')), }`
+- `{ method: 'POST', path: '/api/endpoint-clients/:id/secret', operationId: 'endpointClients.rotateSecret', tag: 'endpointClients', summary: "Rotate an endpoint client's OAuth client secret; the secret is returned once", success: created(json('RotateEndpointClientSecretResponseSchema')), }`
+- `{ method: 'GET', path: '/api/model-connections', operationId: 'models.connections.list', tag: 'models', summary: 'List model connections', success: ok(json('ModelConnectionListResponseSchema')), }`
+- `{ method: 'POST', path: '/api/model-connections', operationId: 'models.connections.create', tag: 'models', summary: 'Create a model connection', request: UNDESCRIBED, success: created(json('ModelConnectionResourceSchema')), }`
+- `{ method: 'GET', path: '/api/model-connections/:id', operationId: 'models.connections.get', tag: 'models', summary: 'Read one model connection', success: ok(json('ModelConnectionResourceSchema')), }`
+- `{ method: 'PATCH', path: '/api/model-connections/:id', operationId: 'models.connections.update', tag: 'models', summary: 'Update a model connection', request: UNDESCRIBED, success: ok(json('ModelConnectionResourceSchema')), }`
+- `{ method: 'DELETE', path: '/api/model-connections/:id', operationId: 'models.connections.remove', tag: 'models', summary: 'Delete a model connection', success: ok(json('DeleteModelConnectionResponseSchema')), }`
+- `{ method: 'POST', path: '/api/model-connections/:id/credential', operationId: 'models.connections.rotateCredential', tag: 'models', summary: "Replace a model connection's credential", request: UNDESCRIBED, success: NO_CONTENT, }`
+- `{ method: 'POST', path: '/api/model-connections/:id/test', operationId: 'models.connections.test', tag: 'models', summary: 'Probe a model connection; a failed probe answers 502 with the outcome', success: [ { status: 200, body: json('ModelConnectionTestOutcomeSchema') }, { status: 502, body: json('ModelConnectionTestOutcomeSchema') }, ], }`
+- `{ method: 'GET', path: '/api/models', operationId: 'models.discover', tag: 'models', summary: 'Discover the models every connection offers', success: ok(json('DiscoveredModelsResponseSchema')), }`
+- `{ method: 'GET', path: '/api/runtime-profiles', operationId: 'runtimes.profiles.list', tag: 'runtimes', summary: 'List runtime profiles', success: ok(json('RuntimeProfileListResponseSchema')), }`
+- `{ method: 'POST', path: '/api/runtime-profiles', operationId: 'runtimes.profiles.create', tag: 'runtimes', summary: 'Create a runtime profile', request: UNDESCRIBED, success: created(json('RuntimeProfileResourceSchema')), }`
+- `{ method: 'GET', path: '/api/runtime-profiles/:id', operationId: 'runtimes.profiles.get', tag: 'runtimes', summary: 'Read one runtime profile', success: ok(json('RuntimeProfileResourceSchema')), }`
+- `{ method: 'PATCH', path: '/api/runtime-profiles/:id', operationId: 'runtimes.profiles.update', tag: 'runtimes', summary: 'Update a runtime profile', request: UNDESCRIBED, success: ok(json('RuntimeProfileResourceSchema')), }`
+- `{ method: 'DELETE', path: '/api/runtime-profiles/:id', operationId: 'runtimes.profiles.remove', tag: 'runtimes', summary: 'Delete a runtime profile', success: NO_CONTENT, }`
+- `{ method: 'GET', path: '/api/runtime-connections', operationId: 'runtimes.connections.list', tag: 'runtimes', summary: 'List runtime connections', success: ok(json('RuntimeConnectionListResponseSchema')), }`
+- `{ method: 'POST', path: '/api/runtime-connections', operationId: 'runtimes.connections.create', tag: 'runtimes', summary: 'Create a runtime connection', request: UNDESCRIBED, success: created(json('RuntimeConnectionResourceSchema')), }`
+- ``{ method: 'POST', path: '/api/runtimes/:id', operationId: 'runtimes.test', tag: 'runtimes', summary: 'Test a runtime driver (the id is the literal `test`)', request: UNDESCRIBED, success: ok(UNDESCRIBED), }``
+- `{ method: 'GET', path: '/api/setup/runtime-detect', operationId: 'runtimes.detect', tag: 'runtimes', summary: 'Detect which runtime drivers the host can run', success: ok(UNDESCRIBED), security: 'none', }`
+- `{ method: 'GET', path: '/api/secrets', operationId: 'secrets.list', tag: 'secrets', summary: 'List secrets (names only)', success: ok(json('SecretListResponseSchema')), }`
+- `{ method: 'POST', path: '/api/secrets', operationId: 'secrets.create', tag: 'secrets', summary: 'Store a secret', request: UNDESCRIBED, success: created(json('SecretResourceSchema')), }`
+- `{ method: 'PUT', path: '/api/secrets/:id', operationId: 'secrets.replace', tag: 'secrets', summary: "Replace a secret's value", request: UNDESCRIBED, success: ok(json('SecretResourceSchema')), }`
+- ``{ method: 'DELETE', path: '/api/secrets/:id', operationId: 'secrets.remove', tag: 'secrets', summary: 'Delete a secret nothing references (`409 secret_in_use` names the referrers)', success: NO_CONTENT, }``
+- `{ method: 'GET', path: '/api/files', operationId: 'files.list', tag: 'files', summary: 'List files and folders', success: ok(json('FileListResponseSchema')), }`
+- ``{ method: 'POST', path: '/api/files', operationId: 'files.upload', tag: 'files', summary: 'Upload a file (bytes, path in `x-file-path`) or create a folder (`x-folder-path`)', request: BINARY, success: [ { status: 200, body: json('FileResponseSchema') }, { status: 201, body: json('FileResponseSchema') }, ], }``
+- `{ method: 'GET', path: '/api/files/:id', operationId: 'files.download', tag: 'files', summary: "Download a file's bytes (the id is the base64url path)", success: ok(BINARY), }`
+- `{ method: 'PATCH', path: '/api/files/:id', operationId: 'files.move', tag: 'files', summary: 'Move or rename a file or folder', request: UNDESCRIBED, success: ok(json('MoveFileResponseSchema')), }`
+- `{ method: 'DELETE', path: '/api/files/:id', operationId: 'files.remove', tag: 'files', summary: 'Delete a file or a folder subtree', success: [ { status: 200, body: json('RemoveFileResponseSchema') }, { status: 204, body: NONE }, ], }`
+- `{ method: 'GET', path: '/api/skills', operationId: 'skills.list', tag: 'skills', summary: 'List skills', success: ok(json('SkillListResponseSchema')), }`
+- `{ method: 'POST', path: '/api/skills', operationId: 'skills.import', tag: 'skills', summary: 'Import a skill', request: UNDESCRIBED, success: created(json('SkillResponseSchema')), }`
+- `{ method: 'GET', path: '/api/skills/:name', operationId: 'skills.get', tag: 'skills', summary: 'Read one skill, or export it with its files', success: ok(json('SkillResponseSchema', 'SkillExportResponseSchema')), }`
+- `{ method: 'PATCH', path: '/api/skills/:name', operationId: 'skills.update', tag: 'skills', summary: 'Update a skill', request: UNDESCRIBED, success: ok(json('SkillResponseSchema')), }`
+- ``{ method: 'DELETE', path: '/api/skills/:name', operationId: 'skills.remove', tag: 'skills', summary: 'Delete a skill no agent is assigned (`409 skill_in_use` names the referrers)', success: NO_CONTENT, }``
+- ``{ method: 'POST', path: '/api/tool-bundles', operationId: 'toolBundles.upload', tag: 'tool-bundles', summary: 'Store a code-tool bundle by its SHA-256 (`200` when the workspace already held it)', request: json('UploadToolBundleRequestSchema'), success: [ ...created(json('UploadToolBundleResponseSchema')), ...ok(json('UploadToolBundleResponseSchema')), ], }``
+- `{ method: 'GET', path: '/api/tool-bundles/:digest', operationId: 'toolBundles.get', tag: 'tool-bundles', summary: 'Read the address and size of a stored code-tool bundle', success: ok(json('ToolBundleResponseSchema')), }`
+- `{ method: 'GET', path: '/api/connectors', operationId: 'connectors.list', tag: 'connectors', summary: 'List MCP connectors', success: ok(json('ConnectorListResponseSchema')), }`
+- `{ method: 'POST', path: '/api/connectors', operationId: 'connectors.create', tag: 'connectors', summary: 'Create a connector, or test a draft without saving it', request: UNDESCRIBED, success: [ { status: 200, body: json('TestConnectionOutcomeSchema') }, { status: 201, body: json('ConnectorResourceSchema') }, ], }`
+- `{ method: 'GET', path: '/api/connectors/:id', operationId: 'connectors.get', tag: 'connectors', summary: 'Read one connector', success: ok(json('ConnectorResourceSchema')), }`
+- `{ method: 'PATCH', path: '/api/connectors/:id', operationId: 'connectors.rotateCredential', tag: 'connectors', summary: "Replace a connector's credential", request: UNDESCRIBED, success: ok(json('ConnectorResourceSchema')), }`
+- `{ method: 'DELETE', path: '/api/connectors/:id', operationId: 'connectors.remove', tag: 'connectors', summary: 'Delete a connector', success: NO_CONTENT, }`
+- `{ method: 'POST', path: '/api/connectors/:id/test-connection', operationId: 'connectors.test', tag: 'connectors', summary: 'Test a saved connector', success: ok(json('TestConnectionOutcomeSchema')), }`
+- `{ method: 'GET', path: '/api/agents', operationId: 'agents.list', tag: 'agents', summary: 'List agents', success: ok(json('AgentListResponseSchema')), }`
+- `{ method: 'POST', path: '/api/agents', operationId: 'agents.create', tag: 'agents', summary: 'Create an agent, optionally with its resource assignments, or from a first version (dryRun checks it)', request: UNDESCRIBED, success: [ ...created( json( 'AgentResourceSchema', 'CreateAgentWithAssignmentsResponseSchema', 'CreateAgentFromVersionResponseSchema', ), ), ...ok(json('AgentVersionCheckResponseSchema')), ], }`
+- `{ method: 'GET', path: '/api/agents/:id', operationId: 'agents.get', tag: 'agents', summary: 'Read one agent', success: ok(json('AgentResourceSchema')), }`
+- `{ method: 'PATCH', path: '/api/agents/:id', operationId: 'agents.update', tag: 'agents', summary: 'Update an agent', request: UNDESCRIBED, success: ok(json('AgentResourceSchema')), }`
+- `{ method: 'DELETE', path: '/api/agents/:id', operationId: 'agents.remove', tag: 'agents', summary: 'Delete an agent', success: NO_CONTENT, }`
+- `{ method: 'GET', path: '/api/agents/:id/resources', operationId: 'agents.getResourceAssignments', tag: 'agents', summary: "Read an agent's resource assignments", success: ok(json('AgentResourceAssignmentsResponseSchema')), }`
+- `{ method: 'PUT', path: '/api/agents/:id/resources', operationId: 'agents.replaceResourceAssignments', tag: 'agents', summary: "Replace an agent's resource assignments", request: json('AgentResourceAssignmentsSchema'), success: ok(json('AgentResourceAssignmentsResponseSchema')), }`
+- `{ method: 'GET', path: '/api/agents/:id/grants', operationId: 'agents.getGrants', tag: 'agents', summary: "Read an agent's grants", success: ok(json('AgentGrantsSchema')), }`
+- `{ method: 'PUT', path: '/api/agents/:id/grants', operationId: 'agents.replaceGrants', tag: 'agents', summary: "Replace an agent's grants", request: json('AgentGrantsSchema'), success: ok(json('AgentGrantsSchema')), }`
+- `{ method: 'GET', path: '/api/agents/:id/policy', operationId: 'agents.getPolicy', tag: 'agents', summary: "Read an agent's policy", success: ok(json('AgentPolicyResponseSchema')), }`
+- `{ method: 'PUT', path: '/api/agents/:id/policy', operationId: 'agents.replacePolicy', tag: 'agents', summary: "Replace an agent's policy", request: json('AgentPolicySchema'), success: ok(json('AgentPolicyResponseSchema')), }`
+- `{ method: 'GET', path: '/api/agents/:id/versions', operationId: 'agents.listVersions', tag: 'agents', summary: "List an agent's versions and pointers", success: ok(json('AgentVersionListResponseSchema')), }`
+- `{ method: 'POST', path: '/api/agents/:id/versions', operationId: 'agents.createVersion', tag: 'agents', summary: 'Save a version of an agent, or check one with dryRun', request: json('CreateAgentVersionRequestSchema'), success: [ ...created(json('AgentVersionResourceSchema')), ...ok(json('AgentVersionCheckResponseSchema')), ], }`
+- `{ method: 'PUT', path: '/api/agents/:id/pointers', operationId: 'agents.setPointer', tag: 'agents', summary: 'Point an environment at a saved version', request: json('SetAgentPointerRequestSchema'), success: ok(json('SetAgentPointerResponseSchema')), }`
+- `{ method: 'POST', path: '/api/agents/:id/promote', operationId: 'agents.promote', tag: 'agents', summary: "Point production at local's version, or check the move with dryRun", request: json('PromoteAgentRequestSchema'), success: ok(json('AgentPointerMoveResponseSchema')), }`
+- `{ method: 'POST', path: '/api/agents/:id/rollback', operationId: 'agents.rollback', tag: 'agents', summary: 'Point an environment back at its previous version, or check it with dryRun', request: json('RollbackAgentRequestSchema'), success: ok(json('AgentPointerMoveResponseSchema')), }`
+- `{ method: 'POST', path: '/api/agents/:id/evaluations', operationId: 'agents.evaluate', tag: 'agents', summary: "Run a version's evaluation cases and store the score", request: json('CreateEvaluationRequestSchema'), success: created(json('EvaluationResourceSchema')), }`
+- `{ method: 'POST', path: '/api/agents/:id/evaluation-runs', operationId: 'agents.evaluationRuns.create', tag: 'agents', summary: "Start an asynchronous run of a version's evaluation cases", request: json('CreateEvaluationRunRequestSchema'), success: [{ status: 202, body: json('EvaluationRunResourceSchema') }], }`
+- `{ method: 'GET', path: '/api/agents/:id/evaluation-runs', operationId: 'agents.evaluationRuns.get', tag: 'agents', summary: 'Read an evaluation run and its results so far', success: ok(json('EvaluationRunResourceSchema')), }`
+- `{ method: 'POST', path: '/api/agents/:id/evaluation-advance', operationId: 'agents.evaluationRuns.advance', tag: 'agents', summary: 'Run the next cases of an evaluation run', request: json('AdvanceEvaluationRunRequestSchema'), success: ok(json('EvaluationRunResourceSchema')), }`
+- `{ method: 'GET', path: '/api/agents/:id/feedback', operationId: 'agents.listFeedback', tag: 'agents', summary: "List the ratings of an agent's runs", success: ok(json('RunFeedbackListResponseSchema')), }`
+- `{ method: 'GET', path: '/api/projects', operationId: 'projects.list', tag: 'projects', summary: 'List projects', success: ok(json('ProjectListResponseSchema')), }`
+- `{ method: 'POST', path: '/api/projects', operationId: 'projects.create', tag: 'projects', summary: 'Create a project', request: UNDESCRIBED, success: created(json('ProjectResourceSchema')), }`
+- `{ method: 'GET', path: '/api/projects/:id', operationId: 'projects.get', tag: 'projects', summary: 'Read one project', success: ok(json('ProjectResourceSchema')), }`
+- `{ method: 'PATCH', path: '/api/projects/:id', operationId: 'projects.update', tag: 'projects', summary: 'Update a project', request: UNDESCRIBED, success: ok(json('ProjectResourceSchema')), }`
+- `{ method: 'POST', path: '/api/projects/:id/archive', operationId: 'projects.archive', tag: 'projects', summary: 'Archive a project', success: ok(json('ProjectResourceSchema')), }`
+- `{ method: 'POST', path: '/api/projects/:id/restore', operationId: 'projects.restore', tag: 'projects', summary: 'Restore an archived project', success: ok(json('ProjectResourceSchema')), }`
+- `{ method: 'POST', path: '/api/projects/:id/sessions', operationId: 'projects.startSession', tag: 'projects', summary: 'Start a session in a project, or adopt an existing one', request: UNDESCRIBED, success: [ { status: 200, body: json('ProjectSessionResponseSchema', 'ProjectSessionMoveResponseSchema'), }, { status: 201, body: json('ProjectSessionResponseSchema') }, ], }`
+- `{ method: 'GET', path: '/api/sessions', operationId: 'sessions.list', tag: 'sessions', summary: 'List sessions', success: ok(json('SessionListResponseSchema')), }`
+- `{ method: 'GET', path: '/api/sessions/:engineSessionId', operationId: 'sessions.get', tag: 'sessions', summary: 'Read one session', success: ok(json('SessionResponseSchema')), }`
+- `{ method: 'PATCH', path: '/api/sessions/:engineSessionId', operationId: 'sessions.update', tag: 'sessions', summary: 'Rename or archive a session', request: UNDESCRIBED, success: ok(json('SessionResponseSchema')), }`
+- `{ method: 'GET', path: '/api/sessions/:engineSessionId/transcript', operationId: 'sessions.transcript.read', tag: 'sessions', summary: "Read a session's transcript", success: ok(json('TranscriptResponseSchema')), }`
+- `{ method: 'GET', path: '/api/sessions/:engineSessionId/subkeys', operationId: 'sessions.transcript.subkeys', tag: 'sessions', summary: "List a transcript's subkeys", success: ok(json('TranscriptSubkeysResponseSchema')), }`
+- `{ method: 'POST', path: '/api/agents/:id/runs', operationId: 'runs.start', tag: 'runs', summary: 'Start a run of an agent', request: json('StartRunRequestSchema'), success: [{ status: 202, body: json('StartRunResponseSchema') }], }`
+- `{ method: 'GET', path: '/api/runs', operationId: 'runs.list', tag: 'runs', summary: 'List runs', success: ok(json('RunListResponseSchema')), }`
+- `{ method: 'GET', path: '/api/runs/:id', operationId: 'runs.get', tag: 'runs', summary: 'Read one run', success: ok(json('RunResponseSchema')), }`
+- `{ method: 'POST', path: '/api/runs/:id', operationId: 'runs.revokeTokensDeprecated', tag: 'runs', summary: 'Revoke gateway tokens (deprecated alias of the revoke-tokens route)', request: UNDESCRIBED, success: ok(json('RevokeRunTokensResponseSchema')), deprecated: true, }`
+- ``{ method: 'GET', path: '/api/runs/:id/events', operationId: 'runs.events', tag: 'runs', summary: "Follow a run's events (resume with `Last-Event-ID`)", success: ok({ kind: 'event-stream', frames: [ 'RunStatusEventDataSchema', 'AgentFrameSchema', 'RunFailedFrameDataSchema', 'StreamResetFrameDataSchema', ], }), }``
+- `{ method: 'POST', path: '/api/runs/:id/interrupt', operationId: 'runs.interrupt', tag: 'runs', summary: 'Interrupt a run', success: ok(json('InterruptRunResponseSchema')), }`
+- `{ method: 'POST', path: '/api/runs/:id/feedback', operationId: 'runs.feedback', tag: 'runs', summary: 'Rate a run (thumbs up or down)', request: json('RunFeedbackRequestSchema'), success: NO_CONTENT, }`
+- `{ method: 'POST', path: '/api/runs/:id/revoke-tokens', operationId: 'runs.revokeTokens', tag: 'runs', summary: "Revoke a run's gateway tokens", request: UNDESCRIBED, success: ok(json('RevokeRunTokensResponseSchema')), }`
+- `{ method: 'GET', path: '/api/shares', operationId: 'shares.list', tag: 'shares', summary: 'List shares', success: ok(json('ShareListResponseSchema')), }`
+- `{ method: 'POST', path: '/api/shares', operationId: 'shares.publish', tag: 'shares', summary: 'Publish a session as a share', request: UNDESCRIBED, success: created(json('ShareResourceSchema')), }`
+- `{ method: 'DELETE', path: '/api/shares/:id', operationId: 'shares.revoke', tag: 'shares', summary: 'Revoke a share', success: NO_CONTENT, }`
+- `{ method: 'GET', path: '/api/metrics', operationId: 'observability.metrics.recentRuns', tag: 'observability', summary: 'Recent run telemetry', success: ok(json('RunTelemetryListResponseSchema')), }`
+- `{ method: 'GET', path: '/api/audit-events', operationId: 'observability.audit.list', tag: 'observability', summary: 'List audit events', success: ok(json('AuditEventListResponseSchema')), }`
+- `{ method: 'GET', path: '/api/engines', operationId: 'engines.list', tag: 'engines', summary: 'List the engines this deployment knows', success: ok(json('EngineListResponseSchema')), }`
+- `{ method: 'GET', path: '/api/platforms', operationId: 'platforms.list', tag: 'platforms', summary: 'List the agent platforms an agent can be exported to', success: ok(json('PlatformListResponseSchema')), }`
+- `{ method: 'POST', path: '/api/agents/:id/platform-exports', operationId: 'platforms.export', tag: 'platforms', summary: 'Export a saved version of an agent for one platform, with the verdict report', request: json('PlatformExportRequestSchema'), success: ok(json('PlatformExportResponseSchema')), }`
+- `{ method: 'POST', path: '/api/agents/:id/platform-archives', operationId: 'platforms.exportArchive', tag: 'platforms', summary: 'The same export as a POSIX tar archive', request: json('PlatformExportRequestSchema'), success: ok(BINARY), }`
+- ``{ method: 'POST', path: '/api/a2a/agents/:agentName', operationId: 'a2a.rpc', tag: 'a2a', summary: 'A2A v0.3 JSON-RPC to a published agent (message/send, message/stream, tasks/get, tasks/cancel)', request: json('A2aJsonRpcRequestSchema'), // message/stream answers `text/event-stream`, each `data:` one A2aJsonRpcResponseSchema; one // status carries one body kind in this catalogue, so the stream is described in ADR-0135. success: ok(json('A2aJsonRpcResponseSchema')), security: 'endpoint-credential', }``
+- `{ method: 'GET', path: '/api/a2a/agents/:agentName/.well-known/agent-card.json', operationId: 'a2a.agentCard', tag: 'a2a', summary: "Read a published agent's A2A v0.3 agent card", success: ok(json('A2aAgentCardSchema')), security: 'endpoint-credential', }`
+- ``{ method: 'POST', path: '/mcp/projects/:name', operationId: 'mcp.projectRpc', tag: 'mcp', summary: "MCP JSON-RPC to an endpoint client's production code tools (initialize, ping, tools/list, tools/call)", request: json('A2aJsonRpcRequestSchema'), // The JSON-RPC 2.0 envelope is protocol-neutral; a notification (no `id`) is answered 202. success: ok(json('A2aJsonRpcResponseSchema')), security: 'endpoint-credential', }``
+
+## API_SCHEMAS
+
+Every contract schema an entry below may name, keyed by its exported name.
+
+## ApiBody
+
+What travels in a request or response body.
+
+- `json` — `application/json`, parsed with the named schema; more than one name lists the
+  alternatives a route answers on the same status (a client tells them apart by shape).
+- `json-undescribed` — `application/json` the contracts do not yet describe (see the header).
+- `binary` — opaque bytes (`application/octet-stream`, or the stored file's own type).
+- `event-stream` — `text/event-stream`; `frames` names the schemas of each frame's `data:`.
+- `none` — no body (`204`, or a request that sends nothing).
+
+- `{ readonly kind: "json"; readonly schemas: readonly [ApiSchemaName, ...ApiSchemaName[]]; }`
+- `{ readonly kind: "json-undescribed"; }`
+- `{ readonly kind: "binary"; }`
+- `{ readonly kind: "event-stream"; readonly frames: readonly ApiSchemaName[]; }`
+- `{ readonly kind: "none"; }`
+
+## ApiRoute
+
+One public route and the contracts it is parsed with.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `method` | `"GET" \| "POST" \| "PUT" \| "PATCH" \| "DELETE"` | Yes |  |
+| `path` | `string` | Yes | The path in the specification's own notation: `:id`, not `[id]` or `{id}`. |
+| `operationId` | `string` | Yes | Stable and unique: the SDK operation name where one exists (`agents.list`). |
+| `tag` | `string` | Yes | The SDK resource family the route belongs to; the OpenAPI tag. |
+| `summary` | `string` | Yes |  |
+| `request` | `undefined \| { readonly kind: "json"; readonly schemas: readonly [ApiSchemaName, ...ApiSchemaName[]]; } \| { readonly kind: "json-undescribed"; } \| { readonly kind: "binary"; } \| { readonly kind: "event-stream"; readonly frames: readonly ApiSchemaName[]; } \| { readonly kind: "none"; }` | No | Absent when the request carries no body. |
+| `success` | `readonly ApiSuccess[]` | Yes |  |
+| `deprecated` | `undefined \| true` | No | Kept for one release and replaced by another route (04 §4). |
+| `security` | `undefined \| "none" \| "session-cookie" \| "invitation-identity" \| "user-token" \| "endpoint-credential"` | No | How the caller proves who it is, when that is not the default — a workspace API key, a browser token or the control plane's session cookie. Mirrors the public and identity-only routes of `apps/web/server/rbac/authorisation-matrix.test.ts`: - `none` — no identity proof at all; - `session-cookie` — only the control plane's own browser session (the route is exempt from the proxy's session gate and checks the cookie itself); - `invitation-identity` — the invitation-identity cookie, not a workspace credential; - `user-token` — only the `awu_live_` token `aw login` holds, which the route acts on itself (revoke it, move it to another workspace; ADR-0083); - `endpoint-credential` — only an endpoint-scoped key, a workspace API key or (T1c) an OAuth access token, never a browser session: the published-agent endpoint (ADR-0135) is exempt from the proxy's session gate and authenticates the bearer itself. |
+
+## ApiRouteMethod
+
+The methods a public route answers.
+
+- `"GET"`
+- `"POST"`
+- `"PUT"`
+- `"PATCH"`
+- `"DELETE"`
+
+## ApiRouteSecurity
+
+A non-default credential requirement of a route (see `ApiRoute.security`).
+
+- `"none"`
+- `"session-cookie"`
+- `"invitation-identity"`
+- `"user-token"`
+- `"endpoint-credential"`
+
+## ApiSchemaName
+
+The name of a schema in `API_SCHEMAS`.
+
+- `"A2aAgentCardSchema"`
+- `"A2aJsonRpcRequestSchema"`
+- `"A2aJsonRpcResponseSchema"`
+- `"AcceptedInvitationResponseSchema"`
+- `"AdvanceEvaluationRunRequestSchema"`
+- `"AgentFrameSchema"`
+- `"AgentGrantsSchema"`
+- `"AgentListResponseSchema"`
+- `"AgentPointerMoveResponseSchema"`
+- `"AgentPolicyResponseSchema"`
+- `"AgentPolicySchema"`
+- `"AgentResourceAssignmentsResponseSchema"`
+- `"AgentResourceAssignmentsSchema"`
+- `"AgentResourceSchema"`
+- `"AgentVersionCheckResponseSchema"`
+- `"AgentVersionListResponseSchema"`
+- `"AgentVersionResourceSchema"`
+- `"ApiKeyListResponseSchema"`
+- `"ApiKeyResponseSchema"`
+- `"ApiProblemSchema"`
+- `"AuditEventListResponseSchema"`
+- `"CliTokenRequestSchema"`
+- `"CliTokenResponseSchema"`
+- `"ConnectorListResponseSchema"`
+- `"ConnectorResourceSchema"`
+- `"CreateAgentFromVersionResponseSchema"`
+- `"CreateAgentVersionRequestSchema"`
+- `"CreateAgentWithAssignmentsResponseSchema"`
+- `"CreateEndpointClientRequestSchema"`
+- `"CreateEvaluationRequestSchema"`
+- `"CreateEvaluationRunRequestSchema"`
+- `"CreatedUserResponseSchema"`
+- `"DeleteModelConnectionResponseSchema"`
+- `"DiscoveredModelsResponseSchema"`
+- `"EndpointClientListResponseSchema"`
+- `"EndpointClientResponseSchema"`
+- `"EngineListResponseSchema"`
+- `"PlatformExportRequestSchema"`
+- `"PlatformExportResponseSchema"`
+- `"PlatformListResponseSchema"`
+- `"EvaluationResourceSchema"`
+- `"EvaluationRunResourceSchema"`
+- `"DeviceAuthorizationResponseSchema"`
+- `"FileListResponseSchema"`
+- `"FileResponseSchema"`
+- `"InterruptRunResponseSchema"`
+- `"InvitationListResponseSchema"`
+- `"InvitationResponseSchema"`
+- `"IssuedInvitationResponseSchema"`
+- `"MeResponseSchema"`
+- `"MembershipListResponseSchema"`
+- `"MembershipResponseSchema"`
+- `"MintEndpointKeyRequestSchema"`
+- `"MintTokenRequestSchema"`
+- `"MintTokenResponseSchema"`
+- `"MintedApiKeyResponseSchema"`
+- `"ModelConnectionListResponseSchema"`
+- `"ModelConnectionResourceSchema"`
+- `"ModelConnectionTestOutcomeSchema"`
+- `"MoveFileResponseSchema"`
+- `"ProjectListResponseSchema"`
+- `"ProjectResourceSchema"`
+- `"ProjectSessionMoveResponseSchema"`
+- `"ProjectSessionResponseSchema"`
+- `"PromoteAgentRequestSchema"`
+- `"RemoveFileResponseSchema"`
+- `"RevokeRunTokensResponseSchema"`
+- `"RollbackAgentRequestSchema"`
+- `"RotateEndpointClientSecretResponseSchema"`
+- `"RunFailedFrameDataSchema"`
+- `"RunFeedbackListResponseSchema"`
+- `"RunFeedbackRequestSchema"`
+- `"RunListResponseSchema"`
+- `"RunResponseSchema"`
+- `"RunStatusEventDataSchema"`
+- `"RunTelemetryListResponseSchema"`
+- `"RuntimeConnectionListResponseSchema"`
+- `"RuntimeConnectionResourceSchema"`
+- `"RuntimeProfileListResponseSchema"`
+- `"RuntimeProfileResourceSchema"`
+- `"SecretListResponseSchema"`
+- `"SecretResourceSchema"`
+- `"SessionListResponseSchema"`
+- `"SessionResponseSchema"`
+- `"SetAgentPointerRequestSchema"`
+- `"SetAgentPointerResponseSchema"`
+- `"ShareListResponseSchema"`
+- `"ShareResourceSchema"`
+- `"SharingPolicySchema"`
+- `"SkillExportResponseSchema"`
+- `"SkillListResponseSchema"`
+- `"SkillResponseSchema"`
+- `"StartRunRequestSchema"`
+- `"StartRunResponseSchema"`
+- `"StreamResetFrameDataSchema"`
+- `"TestConnectionOutcomeSchema"`
+- `"ToolBundleResponseSchema"`
+- `"TranscriptResponseSchema"`
+- `"TranscriptSubkeysResponseSchema"`
+- `"UpdateEndpointClientRequestSchema"`
+- `"UploadToolBundleRequestSchema"`
+- `"UploadToolBundleResponseSchema"`
+- `"UserListResponseSchema"`
+- `"WorkspaceListResponseSchema"`
+- `"WorkspaceMembershipResponseSchema"`
+- `"WorkspaceResponseSchema"`
+- `"WorkspaceSwitchRequestSchema"`
+- `"WorkspaceSwitchResponseSchema"`
+
+## ApiSuccess
+
+One success answer of a route. Failures are the standard envelope and are not listed per route.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `status` | `number` | Yes |  |
+| `body` | `{ readonly kind: "json"; readonly schemas: readonly [ApiSchemaName, ...ApiSchemaName[]]; } \| { readonly kind: "json-undescribed"; } \| { readonly kind: "binary"; } \| { readonly kind: "event-stream"; readonly frames: readonly ApiSchemaName[]; } \| { readonly kind: "none"; }` | Yes |  |

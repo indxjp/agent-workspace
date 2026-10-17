@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Run — Agent Workspace</title>
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<script>window.PAGE = { nav: "runs", crumbs: [["Runs", "runs.html"], ["run_9c41f0"]] };</script>
+
+<div class="app">
+  <div class="main">
+    <div class="page">
+
+      <div class="page-head">
+        <div>
+          <h1>Q3 contract summary</h1>
+          <div class="sub">
+            <a href="agent.html">Customer Support Agent</a> · today 14:32 · session <span class="mono">sess_8f21c4</span> ·
+            run <span class="mono">run_9c41f0</span>
+          </div>
+        </div>
+        <div class="actions">
+          <span class="badge ok">Completed</span>
+          <button class="btn" data-modal-open="m-share-session">Share</button>
+          <a class="btn" href="agent-run.html">Continue session</a>
+        </div>
+      </div>
+
+      <div class="stat-row mb16">
+        <div class="stat"><div class="k">Duration</div><div class="v">23 s</div></div>
+        <div class="stat"><div class="k">Turns</div><div class="v">6</div></div>
+        <div class="stat"><div class="k">Input</div><div class="v">11 940</div></div>
+        <div class="stat"><div class="k">Output</div><div class="v">2 264</div></div>
+        <div class="stat"><div class="k">Cost</div><div class="v">$0.08</div></div>
+        <div class="stat"><div class="k">Tool calls</div><div class="v">5</div></div>
+      </div>
+
+      <div class="split-wide">
+        <div>
+          <div class="card">
+            <div class="card-head"><h3>Transcript</h3>
+              <div class="actions"><span class="badge info">Shared · public link</span></div>
+            </div>
+            <div class="card-body">
+              <div class="chat">
+                <div class="msg user">
+                  <div class="who">AI</div>
+                  <div class="body"><div class="name">Aya Ito</div>
+                    <p class="mb0">Prepare a summary of the three supplier contracts in <span class="mono">contracts/2026-q3/</span>, and tell me which ones deviate from our standard payment terms.</p></div>
+                </div>
+                <div class="msg agent">
+                  <div class="who">CS</div>
+                  <div class="body"><div class="name">Customer Support Agent</div>
+                    <p>Reviewing the uploaded files…</p>
+                    <div class="activity">
+                      <div class="act"><span class="tick">✓</span> Read <span class="tool">agreement-01.pdf</span><span class="dur">0.6 s</span></div>
+                      <div class="act"><span class="tick">✓</span> Read <span class="tool">agreement-02.pdf</span><span class="dur">0.5 s</span></div>
+                      <div class="act"><span class="tick">✓</span> Read <span class="tool">agreement-03.pdf</span><span class="dur">0.7 s</span></div>
+                      <div class="act"><span class="tick">✓</span> Internal Search <span class="tool">mcp__internalSearch.query</span><span class="dur">1.2 s</span></div>
+                      <div class="act"><span class="tick">✓</span> Wrote <span class="tool">output/contract-review-2026-q3.md</span><span class="dur">3.4 s</span></div>
+                    </div>
+                    <p><b>Summary of the three Q3 supplier contracts</b></p>
+                    <p>Kobayashi Precision Parts matches the standard clause set. Nordwind Logistics uses
+                      <b>net 60</b> instead of net 30. Tanaka Tooling is missing the
+                      <b>termination-for-convenience</b> clause.</p>
+                    <p class="mb0">Full comparison written to <span class="mono">output/contract-review-2026-q3.md</span>.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <details class="adv">
+            <summary>Show technical details <span class="hint">SDK events, usage, runtime</span></summary>
+            <div class="adv-body">
+              <div class="card"><div class="card-body event-log">
+                <div class="line"><span class="ts">14:32:04.118</span><span class="ev">system.init</span><span class="dt">session_id=sess_8f21c4 model=claude-sonnet-5 tools=7 mcp_servers=2</span></div>
+                <div class="line"><span class="ts">14:32:05.201</span><span class="ev">tool_result.Read</span><span class="dt">ok · 18 pages · 42.1k characters</span></div>
+                <div class="line"><span class="ts">14:32:07.744</span><span class="ev">mcp.response</span><span class="dt">5 results · 1.2 s · internalSearch</span></div>
+                <div class="line"><span class="ts">14:32:11.402</span><span class="ev">tool_result.Write</span><span class="dt">ok · 6.1 KB written</span></div>
+                <div class="line"><span class="ts">14:32:26.918</span><span class="ev">result</span><span class="dt">status=completed turns=6 duration_ms=22800 cost_usd=0.0812</span></div>
+              </div></div>
+            </div>
+          </details>
+        </div>
+
+        <aside>
+          <div class="card">
+            <div class="card-head"><h3>Configuration used</h3></div>
+            <div class="card-body">
+              <dl class="kv" style="grid-template-columns:110px 1fr">
+                <dt>Agent</dt><dd><a href="agent.html">Customer Support Agent</a></dd>
+                <dt>Project</dt><dd><a href="project.html">Q3 Supplier Contracts</a></dd>
+                <dt>Model</dt><dd>Claude Sonnet 5<div class="muted small">Anthropic · via gateway</div></dd>
+                <dt>Runtime</dt><dd>Standard Sandbox<div class="muted small">Docker · image @sha256:9f2c…4b1e</div></dd>
+                <dt>Skills</dt><dd>3 loaded</dd>
+                <dt>Connectors</dt><dd>internalSearch, jira</dd>
+                <dt>Permissions</dt><dd>Read, Write<div class="muted small">Bash and WebFetch denied</div></dd>
+              </dl>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h3>Sharing</h3></div>
+            <div class="card-body">
+              <div class="secret mb8"><span class="grow">…/p/pub_7Yk2mQ</span><button class="btn sm" data-toast="Link copied">Copy</button></div>
+              <div class="small muted">Public link · created 4 minutes ago by Aya Ito · 14 views · no expiry</div>
+              <div class="btn-row mt16">
+                <a class="btn sm" href="public-run.html">View public page</a>
+                <button class="btn sm danger" data-toast="Public link revoked">Revoke</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h3>Output files</h3></div>
+            <div class="card-body">
+              <div class="row" style="padding:8px 0;border:0">
+                <div class="grow"><div class="title">contract-review-2026-q3.md</div><div class="meta">6.1 KB</div></div>
+                <div class="right"><button class="btn sm" data-toast="Downloading…">Download</button></div>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ---------- share a session / run history (spec §20.6.2) ---------- -->
+<div class="scrim" id="m-share-session" hidden>
+  <div class="modal">
+    <div class="m-head"><h3>Share “Q3 contract summary”</h3><div class="sub">Publishing creates a redacted snapshot of this conversation.</div></div>
+    <div class="m-body">
+      <div class="label">Who can see this</div>
+      <div class="choices mb16">
+        <div class="choice"><div class="mark"></div><div class="grow"><div class="t">Only me</div><div class="d">Aya Ito</div></div></div>
+        <div class="choice"><div class="mark"></div><div class="grow"><div class="t">Everyone in Meridian Manufacturing</div><div class="d">Workspace members with a role that allows viewing</div></div></div>
+        <div class="choice selected"><div class="mark"></div><div class="grow"><div class="t">Anyone with the link</div><div class="d">Unauthenticated, read only, revocable at any time</div></div></div>
+      </div>
+
+      <div class="label">Include</div>
+      <div class="checks mb16">
+        <label class="check on locked"><span class="box"></span><span class="grow"><span class="t">Messages</span><span class="d">The conversation itself</span></span></label>
+        <label class="check on"><span class="box"></span><span class="grow"><span class="t">Tool and connector activity</span><span class="d">Names and durations only — never arguments</span></span></label>
+        <label class="check"><span class="box"></span><span class="grow"><span class="t">Technical details</span><span class="d">Raw SDK events and token usage</span></span></label>
+        <label class="check"><span class="box"></span><span class="grow"><span class="t">Output files</span><span class="d">1 file · 6.1 KB</span></span></label>
+      </div>
+
+      <div class="field row2">
+        <div><label>Expires</label><select><option>Never</option><option>In 24 hours</option><option>In 7 days</option><option selected>In 30 days</option></select></div>
+        <div><label>Passphrase <span class="muted small">optional</span></label><input type="password" placeholder="Not set"></div>
+      </div>
+
+      <div class="callout warn">
+        <span class="ico">⚠</span>
+        <div class="grow">A published transcript is a <b>snapshot</b>. Later messages in this session are not
+          added to the public page unless you publish again.</div>
+      </div>
+
+      <div class="callout mt8">
+        <span class="ico">🔒</span>
+        <div class="grow">Secrets, environment values, connector credentials and internal endpoint URLs are
+          removed when the snapshot is created — not hidden at display time.</div>
+      </div>
+
+      <div class="secret mt16"><span class="grow">https://agents.meridian.example/p/pub_7Yk2mQ</span><button class="btn sm" data-toast="Link copied">Copy</button></div>
+    </div>
+    <div class="m-foot">
+      <button class="btn danger" data-modal-close data-toast="Public link revoked">Revoke link</button>
+      <span style="flex:1"></span>
+      <button class="btn" data-modal-close>Cancel</button>
+      <button class="btn primary" data-modal-close data-toast="Snapshot republished">Publish</button>
+    </div>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

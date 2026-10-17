@@ -1,0 +1,55 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.permitted_grant_admits_exactly_permitted",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.unknown_owner_is_decided_as_other"],
+   "input": {"role": "viewer", "path": "/api/secrets/row-a", "method": "GET", "grant": "none"},
+   "id": "apply-grant/none",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "secrets", "operation": "read", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null},
+    "allowed": {"unknown": false, "permitted": false, "own": false, "other": false, "not-applicable": false}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.permitted_grant_admits_exactly_permitted",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.unknown_owner_is_decided_as_other"],
+   "input": {"role": "builder", "path": "/api/agents/row-a", "method": "PATCH", "grant": "own"},
+   "id": "apply-grant/own",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "agents", "operation": "write", "grant": "own"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "allow", "other": "deny", "not-applicable": "allow"},
+     "code": null,
+     "because": null},
+    "allowed": {"unknown": false, "permitted": false, "own": true, "other": false, "not-applicable": true}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.permitted_grant_admits_exactly_permitted",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.unknown_owner_is_decided_as_other"],
+   "input": {"role": "viewer", "path": "/api/agents/row-a/runs", "method": "POST", "grant": "permitted"},
+   "id": "apply-grant/permitted",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "agents", "operation": "run", "grant": "permitted"},
+     "effects": {"unknown": "deny", "permitted": "allow", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null},
+    "allowed": {"unknown": false, "permitted": true, "own": false, "other": false, "not-applicable": false}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.permitted_grant_admits_exactly_permitted",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.unknown_owner_is_decided_as_other"],
+   "input": {"role": "owner", "path": "/api/agents/row-a", "method": "GET", "grant": "any"},
+   "id": "apply-grant/any",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "agents", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null},
+    "allowed": {"unknown": true, "permitted": true, "own": true, "other": true, "not-applicable": true}}}],
+ "family": "authz-decide",
+ "description": "applyGrant's twenty cells"}

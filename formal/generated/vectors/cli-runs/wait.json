@@ -1,0 +1,15 @@
+{"vectors":
+ [{"witnesses": ["AgentWorkspace.Theorems.Refinement.CliRuns.failed_wait_exit_diverges"],
+   "input": {"status": "completed"},
+   "id": "completed",
+   "expected": {"targetExit": 0, "currentExit": 0}},
+  {"witnesses": ["AgentWorkspace.Theorems.Refinement.CliRuns.failed_wait_exit_diverges"],
+   "input": {"status": "failed"},
+   "id": "failed",
+   "expected": {"targetExit": 1, "currentExit": 0}},
+  {"witnesses": ["AgentWorkspace.Theorems.Refinement.CliRuns.failed_wait_exit_diverges"],
+   "input": {"status": "cancelled"},
+   "id": "cancelled",
+   "expected": {"targetExit": 1, "currentExit": 0}}],
+ "family": "cli-runs",
+ "description": "Current versus target wait exit"}

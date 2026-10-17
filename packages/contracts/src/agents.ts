@@ -1,0 +1,109 @@
+// The public surface of `@indx-workspace/contracts/agents`, listed by name. The code lives in
+// `./agents/`, one module per reason to change:
+//   permissions   — the four permission switches an agent carries
+//   resource      — the agent resource, its CRUD bodies, resource assignments and run grants
+//   tool-rules    — Claude's tool-rule grammar and the tool policy built on it
+//   policy        — the stored policy arms, their sources and problem codes
+//   engine-switch — carrying a policy's narrowing across an engine switch
+//   definition    — the portable `AgentDefinition` file
+// The engine-native constants come from `./engine-catalogue.js`.
+
+export {
+  AGENT_PERMISSION_KEYS,
+  AgentPermissionsSchema,
+  type AgentPermissionKey,
+  type AgentPermissions,
+} from './agents/permissions.js';
+export {
+  CLAUDE_PERMISSION_TOOL_DENIALS,
+  MASTRA_TOOL_CALL_CONCURRENCY_MAX,
+  MASTRA_TOOL_NAMES,
+  MASTRA_TOOL_PERMISSION,
+  OPENAI_AGENTS_REASONING_EFFORTS,
+  OPENAI_AGENTS_TOOL_NAMES,
+  OPENAI_AGENTS_TOOL_PERMISSION,
+  PI_THINKING_LEVELS,
+  PI_TOOL_NAMES,
+  PI_TOOL_PERMISSION,
+  CLAUDE_GRANT_SHELL_DENIALS,
+  claudeDeniedToolsFor,
+  claudeReadOnlyGrantDenials,
+  claudeRulePath,
+  type MastraToolName,
+  type OpenAiAgentsReasoningEffort,
+  type OpenAiAgentsToolName,
+  type PiThinkingLevel,
+  type PiToolName,
+} from './engine-catalogue.js';
+export {
+  AGENT_INSTRUCTIONS_MAX_LENGTH,
+  AGENT_MODEL_MAX_LENGTH,
+  AGENT_MUTABLE_FIELDS,
+  AGENT_NAME_MAX_LENGTH,
+  AgentGrantsSchema,
+  AgentListResponseSchema,
+  AgentResourceAssignmentsResponseSchema,
+  AgentResourceAssignmentsSchema,
+  AgentResourceSchema,
+  CreateAgentWithAssignmentsResponseSchema,
+  type AgentGrants,
+  type AgentListResponse,
+  type AgentResource,
+  type AgentResourceAssignments,
+  type CreateAgentInput,
+  type CreateAgentOptions,
+  type CreateAgentWithAssignmentsResponse,
+  type UpdateAgentPatch,
+} from './agents/resource.js';
+export {
+  AGENT_TOOL_PERMISSION_MODES,
+  AgentToolPermissionModeSchema,
+  AgentToolPolicySchema,
+  DenyingToolRuleSchema,
+  GrantingToolRuleSchema,
+  claudeBaseToolPolicyFor,
+  type AgentToolPermissionMode,
+  type AgentToolPolicy,
+} from './agents/tool-rules.js';
+export {
+  AGENT_POLICY_PROBLEM_CODES,
+  AGENT_POLICY_SOURCES,
+  AgentPolicyLimitsSchema,
+  AgentPolicyResponseSchema,
+  AgentPolicySchema,
+  AgentSkillPolicySchema,
+  PortablePolicyBaseSchema,
+  engineSettingsOf,
+  policyNarrowedPermissions,
+  type AgentPolicy,
+  type AgentPolicyLimits,
+  type AgentPolicyProblemCode,
+  type AgentPolicyResponse,
+  type AgentPolicySource,
+  type AgentSkillPolicy,
+  type PortablePolicyBase,
+} from './agents/policy.js';
+export {
+  translatePolicyForEngineSwitch,
+  type EngineSwitchCarriedItem,
+  type EngineSwitchTranslation,
+} from './agents/engine-switch.js';
+export {
+  AGENT_DEFINITION_API_VERSION,
+  AGENT_DEFINITION_FILE_PATH_MAX_LENGTH,
+  AGENT_DEFINITION_KIND,
+  AGENT_DEFINITION_MAX_REFERENCES,
+  AGENT_DEFINITION_ON_MISSING,
+  AGENT_DEFINITION_ORPHAN_DETAIL_PREFIX,
+  AGENT_DEFINITION_PROBLEM_CODES,
+  AGENT_DEFINITION_REFERENCE_KINDS,
+  AgentDefinitionAgentSchema,
+  AgentDefinitionResourcesSchema,
+  AgentDefinitionSchema,
+  type AgentDefinition,
+  type AgentDefinitionAgent,
+  type AgentDefinitionOnMissing,
+  type AgentDefinitionProblemCode,
+  type AgentDefinitionReferenceKind,
+  type AgentDefinitionResources,
+} from './agents/definition.js';

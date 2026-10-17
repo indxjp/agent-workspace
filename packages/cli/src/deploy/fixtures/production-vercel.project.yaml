@@ -1,0 +1,12 @@
+apiVersion: agentworkspace.dev/v2
+kind: Project
+name: acme-ai
+environments:
+  local:
+    cloud: local
+    identity:
+      bootstrapAdmin: owner@acme.example
+      oidc: https://login.acme.example
+  production:
+    target: vercel
+    url: https://agents.acme.example

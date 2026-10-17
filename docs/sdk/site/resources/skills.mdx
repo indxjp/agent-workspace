@@ -1,0 +1,328 @@
+---
+title: "Skills"
+description: "Import, read, edit and export the SKILL.md directories an agent can use."
+---
+
+<Info>
+
+- **Read this when:** you upload, edit, enable, export or delete a `SKILL.md` directory from code or `aw skills`, or a skill call returns an error code.
+- **You will learn:** what a stored skill holds, the rules for importing and patching its files, and why a skill still assigned to an agent cannot be deleted.
+- **Used in:** [Chapter 2 · Build your agent](/path/build) (step-by-step: [Skills](/building/skills)).
+
+</Info>
+
+What you can do with skills:
+
+- [Import](#import) a skill from one `SKILL.md` or a whole directory, and [list](#list) or [get](#get) skills in full.
+- [Update](#update) a skill: enable or disable it, write files, remove files.
+- [Export](#export) a skill's directory byte for byte, and [remove](#remove) a skill no agent uses.
+- Give an agent a skill through its [resource assignments](/resources/agents#replaceresourceassignments).
+
+`aw.skills` manages a workspace's skills: named directories of `SKILL.md` plus supporting files
+that an agent's runtime can load. It wraps `/api/skills/**` (API specification §5.7). Source:
+`packages/sdk/src/resources/skills.ts`, contract: `packages/contracts/src/skills.ts`. Who may
+import, edit or assign a skill is governed by the role table on
+[Ownership and sharing](/concepts/ownership-and-sharing).
+
+<Note>
+  Two SDKs are named in this documentation and they are not the same thing. The **Claude Agent
+  SDK** (`@anthropic-ai/claude-agent-sdk`) is Anthropic's package for running a Claude agent; the
+  **Agent Workspace SDK** (`@indx-workspace/sdk`, the client this site's guides and reference document) is this platform's
+  typed client for its own control-plane API. A skill is a **Claude Agent SDK-native** concept —
+  its directory shape (`SKILL.md` frontmatter plus files) is exactly what the Claude Agent SDK
+  loads from `.claude/skills/<name>/`, and every skill this API renders carries
+  `provider: 'claude-agent-sdk'` in the platform's runtime-neutrality model (API specification
+  §6.1). The Agent Workspace SDK stores and serves that directory; it does not reinterpret it or
+  invent a portable skill format of its own.
+</Note>
+
+A skill in full is a `SkillDetail`:
+
+```ts title="illustrative" claim="illustrative"
+interface SkillDetail {
+  id: string; // the resource catalog's row id, opaque
+  name: string; // the slug every route addresses it by
+  enabled: boolean;
+  description: string | null; // from SKILL.md's frontmatter
+  fileCount: number;
+  createdAt: string;
+  updatedAt: string;
+  source: string | null; // SKILL.md's complete text
+  instructions: string | null; // SKILL.md's Markdown body
+  allowedTools: readonly string[] | null;
+  files: readonly { path: string; sizeBytes: number }[]; // stat only, no bytes
+}
+```
+
+<Note>
+  K-4 (issue #234): `id` is required. A route with no resource catalog configured answers `503
+  skills_runtime_not_configured` rather than a body without one, and `POST`/`PATCH` refuse a
+  `SKILL.md` whose bytes are not valid UTF-8 (`400 malformed_content`), so a skill can no longer be
+  created in the state that once left `id` absent.
+</Note>
+
+## Complete example
+
+```ts title="skills-example.ts" claim="compile"
+import { createClient } from '@indx-workspace/sdk';
+
+const baseUrl = process.env.AGENT_WORKSPACE_URL;
+const apiKey = process.env.AGENT_WORKSPACE_API_KEY;
+if (baseUrl === undefined || apiKey === undefined) {
+  throw new Error('Set AGENT_WORKSPACE_URL and AGENT_WORKSPACE_API_KEY');
+}
+const aw = createClient({
+  baseUrl,
+  auth: { kind: 'api-key', apiKey },
+});
+
+async function main(): Promise<void> {
+  const skillMd = [
+    '---',
+    'name: release-notes',
+    'description: Draft release notes from merged pull requests.',
+    '---',
+    '',
+    'Read the merged PRs since the last tag and draft release notes.',
+  ].join('\n');
+
+  const encode = (text: string) => Buffer.from(text, 'utf8').toString('base64');
+
+  const created = await aw.skills.import({
+    name: 'release-notes',
+    files: [{ path: 'SKILL.md', contentBase64: encode(skillMd) }],
+  });
+  console.log(`created ${created.name}, enabled: ${created.enabled}`);
+
+  const all = await aw.skills.list();
+  console.log(all.map((s) => s.name));
+
+  const updated = await aw.skills.update('release-notes', { enabled: false });
+  console.log(`enabled: ${updated.enabled}`);
+
+  const exported = await aw.skills.export('release-notes');
+  console.log(exported.files.map((f) => f.path));
+}
+
+main();
+```
+
+## `list`
+
+Every skill of the caller's workspace, by name, each already in full `SkillDetail`. Unpaginated,
+and — unlike a typical "list" — every item is the same shape `get` returns, not a summary.
+
+**Route:** `GET /api/skills`
+
+```ts title="illustrative" claim="illustrative"
+const skills = await aw.skills.list();
+```
+
+See [Errors](/guides/errors) for the codes every route can raise (`401 unauthenticated`,
+`403 forbidden`) and `503 skills_runtime_not_configured` below. K-4 (issue #234): also
+`500 store_inconsistent` when a row has no readable `SKILL.md` (`POST`/`PATCH` refuse to create
+that state, so this can only be a pre-existing row) — one such row hides the whole list rather
+than being silently omitted or listed with no `id`. `get` and `update` refuse the same row in the
+same words, so no route answers a body without the `id` every skill carries.
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw skills list
+```
+
+</CodeGroup>
+
+See [`skills.list`](/reference/sdk/skills#list).
+
+## `import`
+
+Create a skill from one `SKILL.md`, or import a whole directory in one call. `files` must be
+non-empty and contain a `SKILL.md` entry; every path is relative to the skill directory with
+forward slashes, and `contentBase64` is standard padded base64 (an empty file is `""`). There is
+no per-file or file-count bound — only the whole request body is bounded
+(`MAX_SKILL_REQUEST_BODY_BYTES`, 16 MiB).
+
+**Route:** `POST /api/skills`
+
+```ts title="illustrative" claim="illustrative"
+const skill = await aw.skills.import({
+  name: 'release-notes',
+  files: [{ path: 'SKILL.md', contentBase64: 'LS0t...' }],
+});
+```
+
+| Code                            | Status | Meaning                                                                                                                      |
+| ------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `missing_name`                  | 400    | No `name` in the body.                                                                                                       |
+| `invalid_name`                  | 400    | `name` outside `SKILL_NAME_PATTERN` (`^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$`, 1–64 chars).                                  |
+| `missing_files`                 | 400    | `files` absent or empty.                                                                                                     |
+| `malformed_file_entry`          | 400    | A `files` entry that is not `{ path, contentBase64 }` with a non-empty string path.                                          |
+| `inadmissible_path`             | 400    | A path outside the server's admission grammar (see `SKILL_FILE_PATH_MAX_BYTES`, 4096 UTF-8 bytes).                           |
+| `duplicate_path`                | 400    | The same path twice in one request.                                                                                          |
+| `missing_skill_md`              | 400    | No entry named `SKILL.md`.                                                                                                   |
+| `malformed_content`             | 400    | A `contentBase64` outside the standard base64 alphabet, or (K-4, issue #234) `SKILL.md`'s decoded bytes are not valid UTF-8. |
+| `invalid_path`                  | 400    | A path the object-store key guard refuses after admission.                                                                   |
+| `skill_already_exists`          | 409    | The name is already taken in this workspace.                                                                                 |
+| `colliding_paths`               | 409    | Two paths in the request differ only by letter case.                                                                         |
+| `skills_runtime_not_configured` | 503    | This deployment has no skills backend configured.                                                                            |
+
+Source: `SKILLS_PROBLEM_CODES` in `packages/contracts/src/skills.ts`.
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw skills import ./release-notes
+aw skills import ./release-notes --name custom-name
+```
+
+</CodeGroup>
+
+`aw skills import` reads every file under the directory recursively (`name` defaults to the
+directory's own name). See
+[`skills.import`](/reference/sdk/skills#import) and
+[`SKILLS_PROBLEM_CODES`](/reference/contracts/skills#skills_problem_codes).
+
+## `get`
+
+Read one skill in full detail. A missing skill and a name outside the slug grammar both answer
+the same `404` — an invalid name could never have named a real skill, so there is nothing to
+distinguish.
+
+**Route:** `GET /api/skills/:name`
+
+```ts title="illustrative" claim="illustrative"
+const skill = await aw.skills.get('release-notes');
+```
+
+| Code                            | Status | Meaning                                                                                                      |
+| ------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------ |
+| `skill_not_found`               | 404    | No such skill (also a `:name` outside `SKILL_NAME_PATTERN`).                                                 |
+| `store_inconsistent`            | 500    | The row has no readable `SKILL.md`, so it has no `id` to answer with — the same refusal `list` gives for it. |
+| `skills_runtime_not_configured` | 503    | This deployment has no skills backend configured.                                                            |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw skills get release-notes
+```
+
+</CodeGroup>
+
+See [`skills.get`](/reference/sdk/skills#get).
+
+## `export`
+
+The skill's directory, byte for byte — every stored file re-served exactly as it was imported,
+`SKILL.md` included, in a stable order by path. Importing a `SkillExport` under another name
+reproduces the skill.
+
+**Route:** `GET /api/skills/:name?export=true`
+
+```ts title="illustrative" claim="illustrative"
+const exported = await aw.skills.export('release-notes');
+for (const file of exported.files) {
+  console.log(file.path, Buffer.from(file.contentBase64, 'base64').byteLength);
+}
+```
+
+| Code                            | Status | Meaning                                                                     |
+| ------------------------------- | ------ | --------------------------------------------------------------------------- |
+| `skill_not_found`               | 404    | No such skill.                                                              |
+| `store_inconsistent`            | 500    | The export listed a file it could then not read back (a concurrent delete). |
+| `skills_runtime_not_configured` | 503    | This deployment has no skills backend configured.                           |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw skills export release-notes ./exported
+```
+
+</CodeGroup>
+
+`aw skills export <name> <dir>` writes the files under `<dir>` locally. See
+[`skills.export`](/reference/sdk/skills#export) and
+[`SkillExportSchema`](/reference/contracts/skills#skillexportschema).
+
+## `update`
+
+Enable or disable a skill, write or overwrite files, and remove files — any combination, in one
+patch, as long as at least one field is present. Writes run before deletes in the same request, so
+a case-only rename of one path is a collision (`409 colliding_paths`); do it as two requests.
+`removeFiles` may never name `SKILL.md`.
+
+**Route:** `PATCH /api/skills/:name`
+
+```ts title="illustrative" claim="illustrative"
+const patched = await aw.skills.update('release-notes', {
+  enabled: false,
+  files: [{ path: 'NOTES.md', contentBase64: 'PT4=' }],
+  removeFiles: ['old.md'],
+});
+```
+
+| Code                                                                                | Status | Meaning                                                                                                               |
+| ----------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------- |
+| `empty_patch`                                                                       | 400    | The body sets none of `enabled`, `files`, `removeFiles`.                                                              |
+| `cannot_remove_skill_md`                                                            | 400    | `removeFiles` names `SKILL.md`, in any letter case.                                                                   |
+| `malformed_file_entry` / `inadmissible_path` / `malformed_content` / `invalid_path` | 400    | Same rules as `import`, applied to `files`.                                                                           |
+| `skill_not_found`                                                                   | 404    | No such skill.                                                                                                        |
+| `colliding_paths`                                                                   | 409    | Two paths differ only by letter case, in the request or against an existing file.                                     |
+| `skill_md_removal_rejected`                                                         | 409    | The deletes would have left the skill without `SKILL.md`; rolled back.                                                |
+| `store_inconsistent`                                                                | 500    | The row has no readable `SKILL.md`, so it has no `id` to answer with — the same refusal `list` and `get` give for it. |
+| `skills_runtime_not_configured`                                                     | 503    | This deployment has no skills backend configured.                                                                     |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw skills enable release-notes
+aw skills disable release-notes
+aw skills update release-notes --file patch.json
+```
+
+</CodeGroup>
+
+`aw skills enable`/`disable` are shorthand for `update(name, { enabled })`. See
+[`skills.update`](/reference/sdk/skills#update).
+
+## `remove`
+
+Delete a skill: its catalog row, its files and its record. A skill still assigned to an agent is
+refused rather than deleted: the `409 skill_in_use` problem names every agent in `details` as
+`agent:<id>` (read them with `parseInUseReferrers` from `@indx-workspace/contracts`), and nothing
+changes. Unassign it, then retry. A Builder deletes only a skill it owns; an Admin reads, writes
+and deletes any skill (ADR-0116); a Viewer has no skills grant.
+
+A delete that stops part-way — the store fails after the catalog row is gone — is finished by
+calling `remove` again. The skill's owner is recorded before anything is removed, so the owning
+Builder can retry it, and until then no list or read brings the skill back or hands it to someone
+else.
+
+**Route:** `DELETE /api/skills/:name` — `204` on success.
+
+```ts title="illustrative" claim="illustrative"
+await aw.skills.remove('release-notes');
+```
+
+| Code              | Status | Meaning                                                            |
+| ----------------- | ------ | ------------------------------------------------------------------ |
+| `skill_not_found` | 404    | No skill with that name in this workspace.                         |
+| `skill_in_use`    | 409    | An agent still has the skill assigned; `details` names each agent. |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw skills remove release-notes
+```
+
+</CodeGroup>
+
+See [`skills.remove`](/reference/sdk/skills#remove).
+
+## See also
+
+- [SkillsClient](/reference/sdk/skills) — full method signatures.
+- [skills](/reference/contracts/skills) — every schema and constant,
+  including `SKILLS_PROBLEM_CODES`, `SKILL_NAME_PATTERN`, `MAX_SKILL_REQUEST_BODY_BYTES`.
+- [Connectors](/resources/connectors) and [Files](/resources/files) —
+  the other resource kinds an agent's assignments (§5.9) reference alongside skills.

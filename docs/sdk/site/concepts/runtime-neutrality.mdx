@@ -1,0 +1,247 @@
+---
+title: "Runtime neutrality"
+description: "What every engine must honour or refuse by name, what stays engine-native, and the neutral AgentEvent view computed from relayed events."
+---
+
+<Info>
+  - **Read this when:** you choose an engine for an agent, or render runs from more than one engine.
+  - **You will learn:** what every engine honours or refuses by name, what stays engine-native, the
+  neutral `agent.*` event vocabulary, and how each of the four engines maps the portable core. -
+  **Used in:** [Chapter 2: Build your agent](/path/build) and [Chapter 4: Put it in your
+  product](/path/embed).
+</Info>
+
+This page states the platform's runtime-neutrality rules.
+
+## Two packages named "SDK"
+
+The platform has two things called an SDK, and they are not related by inheritance or wrapping
+— one runs inside the platform, the other is the platform's own client:
+
+- **The Claude Agent SDK** (`@anthropic-ai/claude-agent-sdk`) is Anthropic's package: an _engine_
+  — "the harness that turns an agent definition and a prompt into model calls, tool calls and a
+  stream of events" (API specification §1.1). It is confined to one file,
+  `packages/engine-claude-agent-sdk/src/boundary.ts` (`tests/no-sdk-import.test.ts` enforces that
+  nothing else imports it), and it is the platform's reference engine. The OpenAI Agents SDK
+  (`@openai/agents`) is the second engine, confined the same way to
+  `packages/engine-openai-agents/src/boundary.ts` (see [The second engine](#the-second-engine-the-openai-agents-sdk)),
+  the pi coding agent is the third, confined to `packages/engine-pi/src/boundary.ts` (see
+  [The third engine](#the-third-engine-the-pi-coding-agent)), and Mastra is the fourth, confined to
+  `packages/engine-mastra/src/boundary.ts` (see [The fourth engine](#the-fourth-engine-mastra)).
+- **The Agent Workspace SDK** — `@indx-workspace/contracts` and `@indx-workspace/sdk` — is what
+  you write code against: the published contracts of the control plane's own `/api/**` surface and a typed
+  client over them. It is a client _of_ the control plane, not a wrapper _around_ the Claude Agent
+  SDK; nothing in `packages/sdk` imports `@anthropic-ai/claude-agent-sdk`, and
+  `dependency-cruiser`'s `sdk-depends-only-on-contracts` rule would fail the build if it did.
+
+Put plainly: the Claude Agent SDK is what the runner runs; the Agent Workspace SDK is what you use
+to talk to the platform that hosts the runner.
+
+## What is portable, and what stays provider-native
+
+"Runtime neutrality" does not mean abstracting the engine away, and it does not mean pretending
+every engine is the same. It means a **portable core** that every engine either honours exactly or
+refuses by name, plus an **engine-native arm** for everything else, so that a second engine is
+added without renaming or reshaping the first.
+"Refuses by name" is the whole of the alternative: a configuration an engine cannot
+honour is answered with a typed `422 engine_capability_unsupported` naming the missing capability,
+at agent save and again at run compose. It is never silently dropped. API specification §6.1,
+reproduced:
+
+| Concept                  | Portable (workspace-owned)                                                                                                                                                                             | Engine-native (the policy arm for `engine: 'claude-agent-sdk'`) |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------- |
+| Agent identity and prose | `name`, `instructions`, `permissions` (the four human checkboxes), owner                                                                                                                               | —                                                               |
+| Model                    | `(modelConnectionId, model)`                                                                                                                                                                           | model id strings are the model provider's                       |
+| Runtime placement        | runtime profile, driver, network/filesystem policy                                                                                                                                                     | —                                                               |
+| Resources                | files, connectors (MCP is an open protocol), assignments, skills (a `SKILL.md` directory is the Agent Skills format, which pi, Mastra and the OpenAI `SandboxAgent` also read — portable with refusal) | where a skill is materialised inside the sandbox                |
+| Execution policy         | `limits` (`maxTurns`, `maxBudgetUsd`)                                                                                                                                                                  | `tools` (`claude_code_preset`, `permissionMode`, …)             |
+| Session identity         | `Session.id`                                                                                                                                                                                           | `providerSessionId` (today `engineSessionId`)                   |
+| Events                   | `run-status`, `run-failed`, `stream-reset`, `done`, and the neutral `AgentEvent` view (below)                                                                                                          | the raw classified message in `frame.data`                      |
+| Transcript               | the resource and its keys                                                                                                                                                                              | the JSONL line format                                           |
+| Usage and cost           | gateway-metered (`run_usage_records`) for every engine                                                                                                                                                 | the engine's own self-reported usage, informational only        |
+
+The two concrete portable surfaces this site's reference pages describe are:
+
+- **The `AgentDefinition`-shaped fields on the agent resource** — `name`, `instructions`,
+  `permissions`, the `(modelConnectionId, model)` pair, and the runtime profile reference on
+  `AgentResource` (`packages/contracts/src/agents.ts`). These are workspace-owned data, not
+  anything the Claude Agent SDK defines; `aw.agents.export`/`import` moves them (plus policy,
+  skills, and connectors, by name) as one `AgentDefinition` unit between workspaces or
+  environments (API specification §6.2).
+- **The neutral `agent.*` event stream**, produced by the engine's adapter in the runner and parsed
+  by `@indx-workspace/sdk/events` — described below.
+
+The agent's tool policy and its transcripts are deliberately _not_ abstracted: the `tools`/
+`permissionMode` policy is Claude Agent SDK vocabulary, and a transcript's line format is the
+engine's own. Skills are no longer in that group — `SKILL.md` is the Agent Skills format, which pi,
+Mastra and the OpenAI Agents SDK's `SandboxAgent` also read — so they are portable with refusal
+like connectors.
+
+Until 2026-09-26 this page also said that no provider-independent policy format would be invented
+until a second engine existed to require one. The Owner has since decided that the platform
+accepts other engines, so the portable core above _is_ that format, and that decision is now fixed.
+
+## The `agent.*` event stream — one vocabulary, normalised in the runner
+
+Events are normalised **once, where the engine is** — in the runner, by that engine's adapter —
+and not by each client. So the stream itself carries a closed, engine-neutral vocabulary
+(`AGENT_FRAME_NAMES` in `packages/contracts/src/run-events.ts`), and every frame names the `engine`
+that produced it and carries the engine-native message in `raw`.
+
+| Frame                 | Meaning                                                                                                                                                                       |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `agent.session`       | The engine opened or resumed its own session; carries `engineSessionId` and the `model` it reports, or `null`.                                                                |
+| `agent.message`       | One whole turn's prose: `role`, a `messageId` that repeats across a growing snapshot, and `blocks` of `text` and `reasoning`.                                                 |
+| `agent.message.delta` | One increment of a streamed message. Only an engine whose `capabilities.streamingText` is `true` emits it.                                                                    |
+| `agent.tool.call`     | The engine invoked a tool: `toolCallId`, `name`, `input`, and `kind` — one of ACP's tool-call kinds, so a tool's _effect_ is legible without knowing the engine's tool names. |
+| `agent.tool.result`   | The tool answered: `status` (did the call run) and `isError` (the engine's verdict on the answer), which are different facts.                                                 |
+| `agent.usage`         | The engine's own token counters, informational. Billing is gateway-metered; a counter the engine did not report is `null`, never `0`.                                         |
+| `agent.result`        | How the engine's turn ended, as one of ACP's stop reasons. The _run's_ outcome is `run.status`, written by the control plane.                                                 |
+| `agent.native`        | Everything the engine emitted that has no neutral meaning. Never dropped, never interpreted. This is what makes the closed set safe: an adapter forwards rather than invents. |
+| `agent.malformed`     | The engine produced something its adapter could not parse — reported by name, not forwarded as though it had been understood.                                                 |
+
+`@indx-workspace/sdk/events` exports `toAgentEvent(frame)`, which **parses** a `kind: 'runtime'`
+`RunEventFrame` against the contract and answers the typed frame. It knows nothing about any engine:
+a second engine adds nothing to it, and the same consumer code renders any engine's run. A payload
+that does not satisfy its schema is a `ContractViolationError` — the platform wrote it, so a mismatch
+is drift.
+
+Platform frames — `run-status`, `run-failed`, `stream-reset`, `done` — are the _platform_ speaking
+about the run and the stream, not the engine speaking about the turn. `toAgentEvent` returns `null`
+for them, since they are already typed on `RunEventFrame` itself (see
+[Run lifecycle](/concepts/run-lifecycle)).
+
+A run recorded before the neutral event vocabulary
+is **upgraded on read** through the same mapping a live run goes through, so replaying it yields the
+same `AgentEvent` sequence as a fresh run of the same engine messages.
+
+```ts title="rendering a run with the neutral view (illustrative)" claim="illustrative"
+import { toAgentEvent } from '@indx-workspace/sdk/events';
+
+for await (const frame of aw.runs.follow(runId, { signal })) {
+  const event = toAgentEvent(frame);
+  if (event === null) continue; // a platform frame: run-status, run-failed, stream-reset, done
+  switch (event.frame) {
+    case 'agent.message':
+      render(event.role, event.blocks);
+      break;
+    case 'agent.tool.call':
+      showToolCall(event.name, event.kind, event.input);
+      break;
+    // agent.session, agent.tool.result, agent.usage, agent.result, agent.native, agent.malformed …
+  }
+}
+```
+
+The browser's own assistant-response rendering is the `assistant` arm of this vocabulary, exported as
+`assistantResponseFromAgentEvent` and re-exported by the application rather than duplicated — one
+reading, shared by the SDK's own consumers and the control plane's UI.
+
+## What every engine has to satisfy
+
+The contract every engine must meet is below. The platform supplies three things and nothing else: an `AgentEngine` **port**
+(`packages/engine`, depending on the contracts alone), the **portable core** above, and a
+**neutral event stream**. A second engine arrives as one adapter package
+(`packages/engine-<id>`), importing its own third-party SDK from exactly one boundary file, and is
+reached through the runner's registry by id; it passes the same conformance kit every other
+adapter passes. What it cannot do is emulate: a capability its engine lacks is a typed refusal.
+Nothing in the resource model of §5 changes shape to accommodate any of this — that invariance is
+the test of whether neutrality was actually achieved, not merely claimed.
+
+Two rules fall out of the port rather than out of any one engine. Billing is always
+gateway-metered, so an engine's own usage report is informational and can never change a billed
+number (D6). And a session is pinned to the engine of its first run — session state is
+engine-native and opaque to the platform, so a run that would use a different engine is refused
+with `409 session_engine_mismatch` rather than re-pinned (D8).
+
+## The second engine: the OpenAI Agents SDK
+
+`engine: 'openai-agents'` runs an agent on the OpenAI Agents SDK. It is the
+proof that the port is not one engine's shape, and every difference from the Claude engine is a
+declared capability or a refusal by name rather than a silent narrowing:
+
+| Portable requirement  | On `openai-agents`                                                                                                                                                                                                                                                           |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The four permissions  | `readFiles` → `read_file`, `list_files`, `search_files`; `writeFiles` → `apply_patch`; `runCommands` → `shell` (withheld while a read-only file grant exists); `unrestrictedNetwork` → no tool of its own; remote (HTTP/SSE) connectors are allowed without it, as on Claude |
+| File grants           | enforced by the adapter's own Editor: a write inside a read-only grant is refused and the file is unchanged                                                                                                                                                                  |
+| Connectors (MCP)      | stdio, streamable HTTP and SSE connectors, with the credentials compose resolves                                                                                                                                                                                             |
+| Skills                | **refused**: `skills: false`, so a skill assignment is `422 engine_capability_unsupported`                                                                                                                                                                                   |
+| `limits.maxTurns`     | the SDK's own `maxTurns`; the run ends with `stopReason: 'max_turns'`                                                                                                                                                                                                        |
+| `limits.maxBudgetUsd` | **provisional** `maxBudget: 'adapter'` — priced from the usage the gateway reports back, stops `max_budget`; an unpriced model is refused; billing stays the gateway's (#342 moves the cap there)                                                                            |
+| Fork a session        | **refused**: `fork: false`                                                                                                                                                                                                                                                   |
+
+The model is reached through the gateway in the connection's own dialect: the Responses API for an
+OpenAI-family connection (Chat Completions is supported by the adapter, though no connection field
+selects it yet) and Anthropic Messages, through the SDK's AI SDK adapter, for an Anthropic-family
+one — every request authenticated with the run token as `Authorization: Bearer`. The SDK's tracing,
+which exports to OpenAI by default, is always off; vendor-hosted tools are never compiled and the
+gateway refuses them anyway. Billing comes only from the gateway's `run_usage_records`. The agent's
+conversation items live in the platform's engine-scoped session store, so a later run on the same
+session resumes them.
+
+## The third engine: the pi coding agent
+
+`engine: 'pi'` runs an agent on the pi coding agent (`@earendil-works/pi-coding-agent`, pinned at
+1.1.0), in process, through `packages/engine-pi/src/boundary.ts`. pi has no
+permission system and no MCP client, so the adapter configures it rather than patching it:
+
+| Portable requirement  | On `pi`                                                                                                                                                                                                                 |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The four permissions  | `readFiles` → `read`; `writeFiles` → `write`, `edit`; `runCommands` → `bash` (withheld while a read-only file grant exists; runs with the request's environment, not the runner's); `unrestrictedNetwork` → no tool     |
+| File grants           | enforced by the adapter's guard in pi-agent-core's `beforeToolCall`: a tool not offered, a read outside the workspace, or a write or edit into a read-only grant or `.pi` is blocked — `..` and symbolic links included |
+| Connectors (MCP)      | **refused**: `mcp: false`, so a connector is `422 engine_capability_unsupported` with `capability: 'mcp'`                                                                                                               |
+| Skills                | placed at `.pi/skills/<name>/` and loaded by a pinned resource loader                                                                                                                                                   |
+| `limits.maxTurns`     | `maxTurns: 'adapter'` — counted on `turn_end`, stopped with pi-agent-core's `terminate` hint; the run ends with `stopReason: 'max_turns'`                                                                               |
+| `limits.maxBudgetUsd` | **provisional** `maxBudget: 'adapter'` — priced from the shared provisional price table (`packages/engine/src/prices.ts`), stops `max_budget`; an unpriced model is refused                                             |
+| Fork a session        | supported: `fork: true` copies the parent's stream under a new header                                                                                                                                                   |
+
+The pinned resource loader hands pi only the platform-placed skills and the agent's instructions,
+appended to pi's own system prompt; nothing is read from `~/.pi`, `~/.agents` or project discovery
+(`AGENTS.md`, `.agents/skills`, `.pi/extensions`). The model is reached through the gateway in
+Anthropic Messages only — the gateway translates it for an OpenAI-family connection — with the run token as the
+model's `Authorization: Bearer` header and a public placeholder as pi's `x-api-key`; the gateway is
+unchanged. pi's JSONL session tree is stored as one engine-scoped store stream per session, one
+entry per line, so a later run on the same session resumes it.
+
+## The fourth engine: Mastra
+
+`engine: 'mastra'` runs an agent as a plain Mastra `Agent` (`@mastra/core`, pinned at 1.76.0)
+over a `Workspace`, in process, through `packages/engine-mastra/src/boundary.ts`.
+No Mastra server, `Harness`, workflow or wrapper of another engine is used:
+
+| Portable requirement  | On `mastra`                                                                                                                                                                                                                                                                                                                   |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The four permissions  | `readFiles` → `read_file`, `list_files`, `grep`, `file_stat`; `writeFiles` → `write_file`, `edit_file`, `mkdir`, `delete`; `runCommands` → `execute_command` and the process tools (withheld while a read-only file grant exists; they run with the request's environment, not the runner's); `unrestrictedNetwork` → no tool |
+| File grants           | enforced by wrapping the workspace's `LocalFilesystem`: a write into a read-only grant or `.mastra`, through `~`, outside the workspace, `..` and symbolic links included, is refused                                                                                                                                         |
+| Connectors (MCP)      | Mastra's `MCPClient`; the tools stream as `kind: 'mcp'`, and a tool that asks for an approval is refused                                                                                                                                                                                                                      |
+| Skills                | placed at `.mastra/skills/<name>/` and read as workspace skills                                                                                                                                                                                                                                                               |
+| `limits.maxTurns`     | `maxTurns: 'native'` — Mastra's `maxSteps`; a run cut short ends with `stopReason: 'max_turns'`                                                                                                                                                                                                                               |
+| `limits.maxBudgetUsd` | **provisional** `maxBudget: 'adapter'` — priced from the shared provisional price table, stops `max_budget`; an unpriced model is refused                                                                                                                                                                                     |
+| Fork a session        | **refused**: `fork: false`                                                                                                                                                                                                                                                                                                    |
+
+The model is an explicit AI SDK provider at the gateway — Anthropic Messages, OpenAI Responses or
+Chat Completions, each connection in its own dialect — with the run token as
+`Authorization: Bearer`; Mastra's `"provider/model"` strings, which read provider keys from the
+environment, are never used. Conversation memory is a Mastra thread whose records are journalled
+into the platform's engine-scoped store, one stream per thread, so a later run on the same session
+recalls the earlier one; the sandbox holds no database credential, and semantic recall, working
+memory, title generation, telemetry and every observability exporter are off.
+
+<Note>
+  **Today:** four engines behind the port — `claude-agent-sdk`, `openai-agents`, `pi` and `mastra` —
+  with `engine` as the policy discriminant. A generic ACP adapter follows as a further unit on issue
+  #299.
+</Note>
+
+<Note>
+  Adding an engine is code inside the platform, not something the SDK can do at runtime — it is the
+  **Extend** surface of [Public surface and stability](/concepts/public-surface), and [Extend the
+  platform](/building/extending-the-platform) walks through it with the real interface names.
+  Everything an agent *does* with an engine — its instructions, permissions, skills, connectors,
+  model and runtime — is **Configure**: data through the API, no code.
+</Note>
+
+<Card title="Run lifecycle" icon="route" href="/concepts/run-lifecycle">
+  See where `AgentEvent` fits into the run's event stream, and how `run.status` and `AgentEvent`
+  relate.
+</Card>

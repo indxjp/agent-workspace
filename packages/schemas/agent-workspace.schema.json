@@ -1,0 +1,427 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "dependentRequired": { "apiVersion": ["kind"] },
+  "description": "The Agent Workspace deployment profile. Generated from packages/cli/src/profile-schema.ts by packages/cli/scripts/generate-profile-schema.mjs; never edit it by hand. `agent-workspace validate` is authoritative and also checks that connection strings and the OIDC issuer parse as URLs.",
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "apiVersion": { "const": "agentworkspace.dev/v1", "type": "string" },
+        "cloud": { "const": "aws", "type": "string" },
+        "identity": {
+          "additionalProperties": false,
+          "properties": {
+            "bootstrapAdmin": {
+              "description": "The first workspace Owner's sign-in identity, an email address.",
+              "minLength": 1,
+              "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",
+              "type": "string"
+            },
+            "oidc": {
+              "description": "The https:// issuer URL of the OIDC provider people sign in through.",
+              "minLength": 1,
+              "pattern": "^[hH][tT][tT][pP][sS]:\\/\\/",
+              "type": "string"
+            }
+          },
+          "required": ["bootstrapAdmin"],
+          "type": "object"
+        },
+        "kind": { "const": "Deployment", "type": "string" },
+        "runtime": {
+          "additionalProperties": false,
+          "properties": {
+            "default": {
+              "description": "The sandbox driver an agent's runtime profile falls back to.",
+              "enum": ["local", "docker", "kubernetes", "cloud-run-service", "aca-sessions"],
+              "type": "string"
+            }
+          },
+          "required": ["default"],
+          "type": "object"
+        },
+        "storage": {
+          "additionalProperties": false,
+          "properties": {
+            "objects": {
+              "description": "The object store cloud \"aws\" keeps files in: s3://<bucket>.",
+              "minLength": 1,
+              "pattern": "^(?:[sS]3:\\/\\/[a-z0-9][a-z0-9.-]{1,61}[a-z0-9])$",
+              "type": "string"
+            },
+            "relational": {
+              "description": "A postgres:// or postgresql:// connection string, or rds, the PostgreSQL cloud \"aws\" names.",
+              "examples": ["rds"],
+              "minLength": 1,
+              "pattern": "^(?:[pP][oO][sS][tT][gG][rR][eE][sS](?:[qQ][lL])?:\\/\\/|(?:rds)$)",
+              "type": "string"
+            },
+            "secrets": {
+              "description": "Where cloud \"aws\" keeps the secrets it encrypts.",
+              "enum": ["local-key", "kms"],
+              "type": "string"
+            }
+          },
+          "required": ["relational", "objects", "secrets"],
+          "type": "object"
+        }
+      },
+      "required": ["cloud", "storage", "runtime", "identity"],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "apiVersion": { "const": "agentworkspace.dev/v1", "type": "string" },
+        "cloud": { "const": "gcp", "type": "string" },
+        "identity": {
+          "additionalProperties": false,
+          "properties": {
+            "bootstrapAdmin": {
+              "description": "The first workspace Owner's sign-in identity, an email address.",
+              "minLength": 1,
+              "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",
+              "type": "string"
+            },
+            "oidc": {
+              "description": "The https:// issuer URL of the OIDC provider people sign in through.",
+              "minLength": 1,
+              "pattern": "^[hH][tT][tT][pP][sS]:\\/\\/",
+              "type": "string"
+            }
+          },
+          "required": ["bootstrapAdmin"],
+          "type": "object"
+        },
+        "kind": { "const": "Deployment", "type": "string" },
+        "runtime": {
+          "additionalProperties": false,
+          "properties": {
+            "default": {
+              "description": "The sandbox driver an agent's runtime profile falls back to.",
+              "enum": ["local", "docker", "kubernetes", "cloud-run-service", "aca-sessions"],
+              "type": "string"
+            }
+          },
+          "required": ["default"],
+          "type": "object"
+        },
+        "storage": {
+          "additionalProperties": false,
+          "properties": {
+            "objects": {
+              "description": "The object store cloud \"gcp\" keeps files in: s3://<bucket>, or gcs://<bucket>.",
+              "minLength": 1,
+              "pattern": "^(?:[sS]3:\\/\\/[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]|[gG][cC][sS]:\\/\\/[a-z0-9][a-z0-9.-]{1,61}[a-z0-9])$",
+              "type": "string"
+            },
+            "relational": {
+              "description": "A postgres:// or postgresql:// connection string, or cloud-sql, the PostgreSQL cloud \"gcp\" names.",
+              "examples": ["cloud-sql"],
+              "minLength": 1,
+              "pattern": "^(?:[pP][oO][sS][tT][gG][rR][eE][sS](?:[qQ][lL])?:\\/\\/|(?:cloud-sql)$)",
+              "type": "string"
+            },
+            "secrets": {
+              "description": "Where cloud \"gcp\" keeps the secrets it encrypts.",
+              "enum": ["local-key", "secret-manager"],
+              "type": "string"
+            }
+          },
+          "required": ["relational", "objects", "secrets"],
+          "type": "object"
+        }
+      },
+      "required": ["cloud", "storage", "runtime", "identity"],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "apiVersion": { "const": "agentworkspace.dev/v1", "type": "string" },
+        "cloud": { "const": "azure", "type": "string" },
+        "identity": {
+          "additionalProperties": false,
+          "properties": {
+            "bootstrapAdmin": {
+              "description": "The first workspace Owner's sign-in identity, an email address.",
+              "minLength": 1,
+              "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",
+              "type": "string"
+            },
+            "oidc": {
+              "description": "The https:// issuer URL of the OIDC provider people sign in through.",
+              "minLength": 1,
+              "pattern": "^[hH][tT][tT][pP][sS]:\\/\\/",
+              "type": "string"
+            }
+          },
+          "required": ["bootstrapAdmin"],
+          "type": "object"
+        },
+        "kind": { "const": "Deployment", "type": "string" },
+        "runtime": {
+          "additionalProperties": false,
+          "properties": {
+            "default": {
+              "description": "The sandbox driver an agent's runtime profile falls back to.",
+              "enum": ["local", "docker", "kubernetes", "cloud-run-service", "aca-sessions"],
+              "type": "string"
+            }
+          },
+          "required": ["default"],
+          "type": "object"
+        },
+        "storage": {
+          "additionalProperties": false,
+          "properties": {
+            "objects": {
+              "description": "The object store cloud \"azure\" keeps files in: s3://<bucket>, or azblob://<container>, or local-filesystem.",
+              "minLength": 1,
+              "pattern": "^(?:[sS]3:\\/\\/[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]|[aA][zZ][bB][lL][oO][bB]:\\/\\/(?!.*--)[a-z0-9][a-z0-9-]{1,61}[a-z0-9]|local-filesystem)$",
+              "type": "string"
+            },
+            "relational": {
+              "description": "A postgres:// or postgresql:// connection string, or azure-postgres, the PostgreSQL cloud \"azure\" names.",
+              "examples": ["azure-postgres"],
+              "minLength": 1,
+              "pattern": "^(?:[pP][oO][sS][tT][gG][rR][eE][sS](?:[qQ][lL])?:\\/\\/|(?:azure-postgres)$)",
+              "type": "string"
+            },
+            "secrets": {
+              "description": "Where cloud \"azure\" keeps the secrets it encrypts.",
+              "enum": ["local-key", "key-vault"],
+              "type": "string"
+            }
+          },
+          "required": ["relational", "objects", "secrets"],
+          "type": "object"
+        }
+      },
+      "required": ["cloud", "storage", "runtime", "identity"],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "apiVersion": { "const": "agentworkspace.dev/v1", "type": "string" },
+        "cloud": { "const": "local", "type": "string" },
+        "identity": {
+          "additionalProperties": false,
+          "properties": {
+            "bootstrapAdmin": {
+              "description": "The first workspace Owner's sign-in identity, an email address.",
+              "minLength": 1,
+              "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",
+              "type": "string"
+            },
+            "oidc": {
+              "description": "The https:// issuer URL of the OIDC provider people sign in through.",
+              "minLength": 1,
+              "pattern": "^[hH][tT][tT][pP][sS]:\\/\\/",
+              "type": "string"
+            }
+          },
+          "required": ["bootstrapAdmin"],
+          "type": "object"
+        },
+        "kind": { "const": "Deployment", "type": "string" },
+        "runtime": {
+          "additionalProperties": false,
+          "properties": {
+            "default": {
+              "description": "The sandbox driver an agent's runtime profile falls back to.",
+              "enum": ["local", "docker", "kubernetes", "cloud-run-service", "aca-sessions"],
+              "type": "string"
+            }
+          },
+          "required": ["default"],
+          "type": "object"
+        },
+        "storage": {
+          "additionalProperties": false,
+          "properties": {
+            "objects": {
+              "description": "The object store cloud \"local\" keeps files in: s3://<bucket>, or local-filesystem.",
+              "minLength": 1,
+              "pattern": "^(?:[sS]3:\\/\\/[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]|local-filesystem)$",
+              "type": "string"
+            },
+            "relational": {
+              "description": "A postgres:// or postgresql:// connection string, or compose-postgres, the PostgreSQL cloud \"local\" names.",
+              "examples": ["compose-postgres"],
+              "minLength": 1,
+              "pattern": "^(?:[pP][oO][sS][tT][gG][rR][eE][sS](?:[qQ][lL])?:\\/\\/|(?:compose-postgres)$)",
+              "type": "string"
+            },
+            "secrets": {
+              "description": "Where cloud \"local\" keeps the secrets it encrypts.",
+              "enum": ["local-key"],
+              "type": "string"
+            }
+          },
+          "required": ["relational", "objects", "secrets"],
+          "type": "object"
+        }
+      },
+      "required": ["cloud", "storage", "runtime", "identity"],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "apiVersion": { "const": "agentworkspace.dev/v1", "type": "string" },
+        "cloud": { "const": "vercel", "type": "string" },
+        "identity": {
+          "additionalProperties": false,
+          "properties": {
+            "bootstrapAdmin": {
+              "description": "The first workspace Owner's sign-in identity, an email address.",
+              "minLength": 1,
+              "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",
+              "type": "string"
+            },
+            "oidc": {
+              "description": "The https:// issuer URL of the OIDC provider people sign in through.",
+              "minLength": 1,
+              "pattern": "^[hH][tT][tT][pP][sS]:\\/\\/",
+              "type": "string"
+            }
+          },
+          "required": ["bootstrapAdmin"],
+          "type": "object"
+        },
+        "kind": { "const": "Deployment", "type": "string" },
+        "runtime": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "default": { "const": "external", "type": "string" },
+                "provider": {
+                  "description": "The sandbox provider the external driver reaches; e2b when omitted.",
+                  "enum": ["e2b"],
+                  "type": "string"
+                }
+              },
+              "required": ["default"],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": { "default": { "const": "vercel-sandbox", "type": "string" } },
+              "required": ["default"],
+              "type": "object"
+            }
+          ]
+        },
+        "storage": {
+          "additionalProperties": false,
+          "properties": {
+            "objects": {
+              "description": "The object store cloud \"vercel\" keeps files in: s3://<bucket>.",
+              "minLength": 1,
+              "pattern": "^(?:[sS]3:\\/\\/[a-z0-9][a-z0-9.-]{1,61}[a-z0-9])$",
+              "type": "string"
+            },
+            "relational": {
+              "description": "A postgres:// or postgresql:// connection string, or neon, the PostgreSQL cloud \"vercel\" names.",
+              "examples": ["neon"],
+              "minLength": 1,
+              "pattern": "^(?:[pP][oO][sS][tT][gG][rR][eE][sS](?:[qQ][lL])?:\\/\\/|(?:neon)$)",
+              "type": "string"
+            },
+            "secrets": {
+              "description": "Where cloud \"vercel\" keeps the secrets it encrypts.",
+              "enum": ["local-key"],
+              "type": "string"
+            }
+          },
+          "required": ["relational", "objects", "secrets"],
+          "type": "object"
+        }
+      },
+      "required": ["cloud", "storage", "runtime", "identity"],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "apiVersion": { "const": "agentworkspace.dev/v1", "type": "string" },
+        "cloud": { "const": "cloudflare", "type": "string" },
+        "identity": {
+          "additionalProperties": false,
+          "properties": {
+            "bootstrapAdmin": {
+              "description": "The first workspace Owner's sign-in identity, an email address.",
+              "minLength": 1,
+              "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",
+              "type": "string"
+            },
+            "oidc": {
+              "description": "The https:// issuer URL of the OIDC provider people sign in through.",
+              "minLength": 1,
+              "pattern": "^[hH][tT][tT][pP][sS]:\\/\\/",
+              "type": "string"
+            }
+          },
+          "required": ["bootstrapAdmin"],
+          "type": "object"
+        },
+        "kind": { "const": "Deployment", "type": "string" },
+        "runtime": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "default": { "const": "external", "type": "string" },
+                "provider": {
+                  "description": "The sandbox provider the external driver reaches; e2b when omitted.",
+                  "enum": ["e2b"],
+                  "type": "string"
+                }
+              },
+              "required": ["default"],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": { "default": { "const": "cloudflare-sandbox", "type": "string" } },
+              "required": ["default"],
+              "type": "object"
+            }
+          ]
+        },
+        "storage": {
+          "additionalProperties": false,
+          "properties": {
+            "objects": {
+              "description": "The object store cloud \"cloudflare\" keeps files in: s3://<bucket>.",
+              "minLength": 1,
+              "pattern": "^(?:[sS]3:\\/\\/[a-z0-9][a-z0-9.-]{1,61}[a-z0-9])$",
+              "type": "string"
+            },
+            "relational": {
+              "description": "A postgres:// or postgresql:// connection string, or neon, supabase, the PostgreSQL cloud \"cloudflare\" names.",
+              "examples": ["neon", "supabase"],
+              "minLength": 1,
+              "pattern": "^(?:[pP][oO][sS][tT][gG][rR][eE][sS](?:[qQ][lL])?:\\/\\/|(?:neon|supabase)$)",
+              "type": "string"
+            },
+            "secrets": {
+              "description": "Where cloud \"cloudflare\" keeps the secrets it encrypts.",
+              "enum": ["local-key"],
+              "type": "string"
+            }
+          },
+          "required": ["relational", "objects", "secrets"],
+          "type": "object"
+        }
+      },
+      "required": ["cloud", "storage", "runtime", "identity"],
+      "type": "object"
+    }
+  ],
+  "title": "agent-workspace.yaml (agentworkspace.dev/v1, Deployment)",
+  "type": "object"
+}

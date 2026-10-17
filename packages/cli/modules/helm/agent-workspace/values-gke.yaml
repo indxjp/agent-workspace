@@ -1,0 +1,4 @@
+storageClassName: standard-rwo
+service:
+  annotations:
+    cloud.google.com/load-balancer-type: Internal

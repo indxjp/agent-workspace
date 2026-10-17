@@ -1,0 +1,18 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.Refinement.SessionStateMigration.the_main_transcript_lands_under_the_project_key"],
+   "input": {"subpath": "", "projectKey": "w1"},
+   "id": "main",
+   "expected": {"streamKey": "w1/"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Refinement.SessionStateMigration.the_main_transcript_lands_under_the_project_key"],
+   "input": {"subpath": "subagents/agent-1", "projectKey": "w1"},
+   "id": "subagent",
+   "expected": {"streamKey": "w1/subagents/agent-1"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Refinement.SessionStateMigration.the_main_transcript_lands_under_the_project_key"],
+   "input": {"subpath": "subagents/agent-1/nested", "projectKey": "w1"},
+   "id": "nested-subagent",
+   "expected": {"streamKey": "w1/subagents/agent-1/nested"}}],
+ "family": "session-state",
+ "description": "A Claude session key as one opaque stream key"}

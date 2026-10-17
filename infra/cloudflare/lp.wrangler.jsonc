@@ -1,0 +1,15 @@
+// Static Worker for lp.agentworkspace.indx.jp. Build the assets first: pnpm sites:build lp
+// Deploy: pnpm sites:deploy (see infra/cloudflare/README.md).
+{
+  "$schema": "https://unpkg.com/wrangler@4.147.0/config-schema.json",
+  "name": "agent-workspace-lp",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "../../dist/sites/lp",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page",
+  },
+  "routes": [{ "pattern": "lp.agentworkspace.indx.jp", "custom_domain": true }],
+  "workers_dev": false,
+  "observability": { "enabled": true },
+}

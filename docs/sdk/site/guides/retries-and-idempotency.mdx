@@ -1,0 +1,178 @@
+---
+title: "Retries and idempotency"
+description: "The SDK retries nothing on its own except follow()'s reconnect, and supports no idempotency key. What is safe to retry yourself, and how to avoid starting a run twice."
+---
+
+<Info>
+
+- **Read this when:** you decide whether to retry a failed call, or must not start the same run
+  twice.
+- **You will learn:** the one built-in retry (`follow`'s reconnect), which failures are safe to
+  retry, and how to guard `runs.start` against a duplicate.
+- **Used in:** [Chapter 4: Put it in your product](/path/embed) and [Chapter 5: Ship it to your
+  servers](/path/ship).
+
+</Info>
+
+**`@indx-workspace/sdk` performs no automatic retry for ordinary requests, and has no
+idempotency-key mechanism.** A call resolves once or throws once. The only built-in retry is
+`runs.follow()`'s reconnect, which resumes a _read_ and never resends a `start`.
+
+**What you can do**
+
+- [Keep a run stream alive across dropped connections](#the-one-built-in-retry-follow-’s-reconnect)
+- [Decide whether a failure is worth retrying](#decide-whether-a-failure-is-worth-retrying)
+- [Retry a read with backoff](#retry-a-read-with-backoff)
+- [Avoid starting a run twice](#runs-start-is-not-idempotent)
+
+## The one built-in retry: `follow()`'s reconnect
+
+`runs.follow` reconnects a dropped event-stream connection by itself, resuming from the last
+durable event id with `Last-Event-ID`. Tune it, or leave the defaults (`maxReconnects` 5,
+`reconnectDelayMs` 3000):
+
+```ts title="illustrative" claim="illustrative"
+for await (const frame of aw.runs.follow(runId, { maxReconnects: 8, reconnectDelayMs: 2000 })) {
+  // …
+}
+```
+
+It reconnects when the underlying `events()` call throws a `TransportError` that is not your own
+signal aborting. It never re-sends `POST /api/agents/:id/runs`: the run was already queued. See
+[Reconnection](/guides/streaming#reconnection) for the full contract, and
+[Timeouts and cancellation](/guides/timeouts-and-cancellation) for how a `timeoutMs` deadline feeds
+into it as just another drop. Every other method, `runs.start` included, makes exactly one request.
+
+## Decide whether a failure is worth retrying
+
+| Failure                                    | Safe to retry?                                  | Why                                                                                                                                                                                                                                                                                                                                              |
+| ------------------------------------------ | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `TransportError` with `aborted === false`  | Yes, for an **idempotent read** (`get`, `list`) | No response arrived at all — the server state is unaffected either way, so repeating a read is free.                                                                                                                                                                                                                                             |
+| `TransportError` with `aborted === true`   | No, not automatically                           | Either you asked for it (your own `signal`), or a `timeoutMs` headers deadline fired — in both cases the caller made a deliberate choice to stop waiting; re-issuing the same call defeats that choice. Decide explicitly instead of looping.                                                                                                    |
+| `ApiProblemError` with `status` 429 or 503 | Yes, honouring `retryAfterSeconds` when present | These are the two statuses the server uses to say "not now, but try again" — `429` for rate limiting, `503` for `service_unavailable`. If `retryAfterSeconds` is non-`null`, wait at least that long before retrying.                                                                                                                            |
+| `ApiProblemError` with any other status    | No                                              | A `4xx` other than `429` is the server telling you the request itself is wrong (bad auth, not found, validation failure, forbidden) — retrying sends the identical wrong request again. A `5xx` other than `503` (`internal_error`, `upstream_failure`) isn't advertised as transient by the server; don't assume it will resolve on repetition. |
+| `ContractViolationError`                   | **Never**                                       | The response and this SDK's contract disagree. Retrying reissues the identical request to the identical server version and gets the identical mismatched body back — see [ContractViolationError: the response does not match the contract](/guides/errors#contractviolationerror-the-response-does-not-match-the-contract).                     |
+
+## Retry a read with backoff
+
+Copy the `withRetry` wrapper below into your project; it encodes the table above. It is
+documentation, not part of the SDK: `@indx-workspace/sdk` exports nothing like it, and there is no
+plan for it to. Then wrap any read:
+
+```ts title="illustrative" claim="illustrative"
+const agent = await withRetry(() => aw.agents.get(agentId, { signal }), { signal });
+```
+
+<Accordion title="with-retry.ts: example code to copy">
+
+```ts title="with-retry.ts" claim="compile"
+import { ApiProblemError, TransportError } from '@indx-workspace/sdk';
+
+interface WithRetryOptions {
+  /** Total attempts, including the first. Default 3. */
+  readonly maxAttempts?: number;
+  readonly signal?: AbortSignal;
+}
+
+function isRetryable(error: unknown): boolean {
+  if (error instanceof TransportError) return !error.aborted;
+  if (error instanceof ApiProblemError) return error.status === 429 || error.status === 503;
+  return false; // ContractViolationError, or anything else: never retry.
+}
+
+function delayMs(error: unknown, attempt: number): number {
+  if (error instanceof ApiProblemError && error.retryAfterSeconds !== null) {
+    return error.retryAfterSeconds * 1000;
+  }
+  return 250 * 2 ** (attempt - 1); // exponential backoff: 250ms, 500ms, 1000ms, …
+}
+
+/**
+ * Retry an idempotent call — a read, or a write you've made idempotent yourself — under the rules
+ * in /guides/retries-and-idempotency. Never wrap a runs.start you can't otherwise deduplicate.
+ */
+export async function withRetry<T>(
+  fn: () => Promise<T>,
+  options: WithRetryOptions = {},
+): Promise<T> {
+  const maxAttempts = options.maxAttempts ?? 3;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (!isRetryable(error) || attempt >= maxAttempts) throw error;
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(resolve, delayMs(error, attempt));
+        options.signal?.addEventListener(
+          'abort',
+          () => {
+            clearTimeout(timer);
+            reject(error);
+          },
+          { once: true },
+        );
+      });
+    }
+  }
+}
+```
+
+</Accordion>
+
+## `runs.start` is not idempotent
+
+`POST /api/agents/:id/runs` answers `202`: accepted, not "already existed". Calling `runs.start`
+twice with the same prompt creates **two** runs. A `TransportError` on `runs.start` means you do not
+know whether the server queued the run before the connection failed, so retrying blind can
+double-start it.
+
+<Note>
+  **Today:** a retried `runs.start` after a lost response may start a second run, and this page
+  shows how to detect it. **Target:** an `Idempotency-Key` header on run start, honoured with the
+  run leases the platform is adding. Tracked as [S-6](/concepts/roadmap#s-6-idempotency-keys) and
+  [RF-301](/concepts/roadmap#rf-301-run-leases-and-attempts).
+</Note>
+
+There is no idempotency key to prevent this: the SDK has none, and nothing in
+`StartRunRequestSchema` accepts one. To reduce the risk, check before retrying: list the agent's
+queued runs and look for one against the same session. `RunListQuery` has no `sessionId` filter
+(see [Pagination](/guides/pagination)), so filter client-side by each `RunResource`'s `sessionId`.
+This is best-effort, not a guarantee: a very recent duplicate could still slip through before it is
+queryable, and a brand-new session has no `sessionId` to correlate on.
+
+<Accordion title="start-once.ts: a best-effort duplicate check">
+
+```ts title="start-once.ts (illustrative)" claim="illustrative"
+async function startRunOnce(
+  aw: AgentWorkspaceClient,
+  agentId: string,
+  sessionId: string | null,
+  prompt: string,
+) {
+  try {
+    return await aw.runs.start(agentId, { prompt, sessionId });
+  } catch (error) {
+    if (!(error instanceof TransportError) || error.aborted) throw error;
+
+    // We don't know if the server saw the request. RunListQuery has no sessionId filter, so
+    // list by agent and check client-side for a run against the same session that just appeared.
+    const recent = await aw.runs.list({ agent: agentId, status: 'queued' });
+    const alreadyStarted =
+      sessionId !== null ? recent.runs.find((run) => run.sessionId === sessionId) : undefined;
+    if (alreadyStarted !== undefined)
+      return { run: alreadyStarted, events: `/api/runs/${alreadyStarted.id}/events` };
+
+    // Still uncertain — the caller decides whether to retry and risk a duplicate, or surface this.
+    throw error;
+  }
+}
+```
+
+</Accordion>
+
+## See also
+
+- [Errors](/guides/errors): the full shape of each error, including `retryAfterSeconds`.
+- [Timeouts and cancellation](/guides/timeouts-and-cancellation): why a `timeoutMs` expiry is
+  `aborted: true`, and therefore not covered by the automatic-retry rules above.
+- [Runs](/resources/runs): `runs.start`'s full contract.

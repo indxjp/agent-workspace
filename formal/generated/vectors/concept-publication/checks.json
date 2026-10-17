@@ -1,0 +1,82 @@
+{"vectors":
+ [{"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptPublication.refined_checks_are_the_catalogue's",
+    "AgentWorkspace.Theorems.WellFormed.ConceptPublication.non_negative_amount_edges",
+    "AgentWorkspace.Theorems.Invariants.ConceptPublication.share_db_valid_iff_row_checks",
+    "AgentWorkspace.Theorems.Invariants.ConceptPublication.charge_db_valid_iff_row_check",
+    "AgentWorkspace.Theorems.Meta.ConceptPublication.a_space_subject_id_passes_validation_but_not_the_database"],
+   "input": {"table": "shares", "name": "shares_agent_mode_only"},
+   "id": "check/shares_agent_mode_only",
+   "expected":
+   {"sql": "\"shares\".\"mode\" is null or \"shares\".\"subject_type\" = 'agent'",
+    "cases":
+    [{"row": {"subject_type": "agent", "mode": "definition"}, "holds": true},
+     {"row": {"subject_type": "agent", "mode": "runnable"}, "holds": true},
+     {"row": {"subject_type": "agent"}, "holds": true},
+     {"row": {"subject_type": "session", "mode": "definition"}, "holds": false},
+     {"row": {"subject_type": "project", "mode": "runnable"}, "holds": false},
+     {"row": {"subject_type": "skill"}, "holds": true}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptPublication.refined_checks_are_the_catalogue's",
+    "AgentWorkspace.Theorems.WellFormed.ConceptPublication.non_negative_amount_edges",
+    "AgentWorkspace.Theorems.Invariants.ConceptPublication.share_db_valid_iff_row_checks",
+    "AgentWorkspace.Theorems.Invariants.ConceptPublication.charge_db_valid_iff_row_check",
+    "AgentWorkspace.Theorems.Meta.ConceptPublication.a_space_subject_id_passes_validation_but_not_the_database"],
+   "input": {"table": "shares", "name": "shares_budget_nonnegative"},
+   "id": "check/shares_budget_nonnegative",
+   "expected":
+   {"sql": "\"shares\".\"budget_cap_usd\" is null or \"shares\".\"budget_cap_usd\" >= 0",
+    "cases":
+    [{"row": {}, "holds": true},
+     {"row": {"budget_cap_usd": "0"}, "holds": true},
+     {"row": {"budget_cap_usd": "20.0000"}, "holds": true},
+     {"row": {"budget_cap_usd": "-0.0001"}, "holds": false},
+     {"row": {"budget_cap_usd": "-0"}, "holds": true}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptPublication.refined_checks_are_the_catalogue's",
+    "AgentWorkspace.Theorems.WellFormed.ConceptPublication.non_negative_amount_edges",
+    "AgentWorkspace.Theorems.Invariants.ConceptPublication.share_db_valid_iff_row_checks",
+    "AgentWorkspace.Theorems.Invariants.ConceptPublication.charge_db_valid_iff_row_check",
+    "AgentWorkspace.Theorems.Meta.ConceptPublication.a_space_subject_id_passes_validation_but_not_the_database"],
+   "input": {"table": "shares", "name": "shares_spend_nonnegative"},
+   "id": "check/shares_spend_nonnegative",
+   "expected":
+   {"sql": "\"shares\".\"spent_usd\" >= 0",
+    "cases":
+    [{"row": {"spent_usd": "0"}, "holds": true},
+     {"row": {"spent_usd": "0.000001"}, "holds": true},
+     {"row": {"spent_usd": "-0.000001"}, "holds": false},
+     {"row": {"spent_usd": "-0.000000"}, "holds": true}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptPublication.refined_checks_are_the_catalogue's",
+    "AgentWorkspace.Theorems.WellFormed.ConceptPublication.non_negative_amount_edges",
+    "AgentWorkspace.Theorems.Invariants.ConceptPublication.share_db_valid_iff_row_checks",
+    "AgentWorkspace.Theorems.Invariants.ConceptPublication.charge_db_valid_iff_row_check",
+    "AgentWorkspace.Theorems.Meta.ConceptPublication.a_space_subject_id_passes_validation_but_not_the_database"],
+   "input": {"table": "shares", "name": "shares_subject_id_not_blank"},
+   "id": "check/shares_subject_id_not_blank",
+   "expected":
+   {"sql": "length(btrim(\"shares\".\"subject_id\")) > 0",
+    "cases":
+    [{"row": {"subject_id": "a1"}, "holds": true},
+     {"row": {"subject_id": ""}, "holds": false},
+     {"row": {"subject_id": " "}, "holds": false},
+     {"row": {"subject_id": "   "}, "holds": false},
+     {"row": {"subject_id": "\u0009"}, "holds": true},
+     {"row": {"subject_id": " x "}, "holds": true}]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptPublication.refined_checks_are_the_catalogue's",
+    "AgentWorkspace.Theorems.WellFormed.ConceptPublication.non_negative_amount_edges",
+    "AgentWorkspace.Theorems.Invariants.ConceptPublication.share_db_valid_iff_row_checks",
+    "AgentWorkspace.Theorems.Invariants.ConceptPublication.charge_db_valid_iff_row_check",
+    "AgentWorkspace.Theorems.Meta.ConceptPublication.a_space_subject_id_passes_validation_but_not_the_database"],
+   "input": {"table": "share_run_charges", "name": "share_run_charges_nonnegative"},
+   "id": "check/share_run_charges_nonnegative",
+   "expected":
+   {"sql": "\"share_run_charges\".\"charged_usd\" >= 0",
+    "cases":
+    [{"row": {"charged_usd": "0"}, "holds": true},
+     {"row": {"charged_usd": "0.5"}, "holds": true},
+     {"row": {"charged_usd": "-0.000001"}, "holds": false}]}}],
+ "family": "concept-publication",
+ "description": "The five non-closed-set checks of the cluster: their SQL and their verdict on sample rows"}

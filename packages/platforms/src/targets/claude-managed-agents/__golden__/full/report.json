@@ -1,0 +1,148 @@
+[
+  {
+    "path": "toolEndpoint",
+    "verdict": "mapped",
+    "note": "Emitted as the MCP server aw-tools; its credential is planned as a static_bearer vault credential"
+  },
+  {
+    "path": "support-triage.description",
+    "verdict": "native",
+    "note": "Emitted as the description"
+  },
+  {
+    "path": "support-triage.instructions",
+    "verdict": "native",
+    "note": "Emitted as the Markdown body, which is the system prompt"
+  },
+  {
+    "path": "support-triage.model",
+    "verdict": "native",
+    "note": "Emitted as the model"
+  },
+  {
+    "path": "support-triage.permissions.readFiles",
+    "verdict": "mapped",
+    "note": "Enables the sandbox file tools read, glob and grep (not workspace files)"
+  },
+  {
+    "path": "support-triage.permissions.writeFiles",
+    "verdict": "mapped",
+    "note": "Enables the sandbox file tools write and edit (not workspace files)"
+  },
+  {
+    "path": "support-triage.permissions.runCommands",
+    "verdict": "mapped",
+    "note": "Enables the sandbox shell: the bash tool"
+  },
+  {
+    "path": "support-triage.permissions.unrestrictedNetwork",
+    "verdict": "mapped",
+    "note": "The environment networking type is limited, with allow_mcp_servers"
+  },
+  {
+    "path": "support-triage.tools.0",
+    "verdict": "mapped",
+    "note": "Emitted as an mcp_servers entry plus an mcp_toolset; the credential is planned in aw-vault-credentials.json as a static_bearer vault credential, never written into a file"
+  },
+  {
+    "path": "support-triage.tools.1",
+    "verdict": "dropped",
+    "code": "stdio_mcp_unsupported",
+    "note": "Claude Managed Agents connects to remote MCP servers only"
+  },
+  {
+    "path": "support-triage.tools.2",
+    "verdict": "mapped",
+    "note": "Served by the project's tool endpoint as the MCP server aw-tools"
+  },
+  {
+    "path": "support-triage.tools.3",
+    "verdict": "dropped",
+    "code": "field_unsupported",
+    "note": "Managed Agents has no OpenAPI tool type; expose the API through an MCP server and add it as an mcp tool"
+  },
+  {
+    "path": "support-triage.tools.4",
+    "verdict": "native",
+    "note": "Enabled as the web_search tool; with limited networking its results are limited to the environment allowed_hosts"
+  },
+  {
+    "path": "support-triage.tools.5",
+    "verdict": "mapped",
+    "note": "Code runs through the sandbox shell: the bash tool is enabled"
+  },
+  {
+    "path": "support-triage.skills.0",
+    "verdict": "native",
+    "note": "Copied to skills/refund-policy and listed by path"
+  },
+  {
+    "path": "support-triage.knowledge.0",
+    "verdict": "dropped",
+    "code": "knowledge_unsupported",
+    "note": "Agents have no knowledge field; attach the content to a session instead"
+  },
+  {
+    "path": "support-triage.knowledge.1",
+    "verdict": "dropped",
+    "code": "knowledge_unsupported",
+    "note": "Agents have no knowledge field; attach the content to a session instead"
+  },
+  {
+    "path": "support-triage.subagents.0",
+    "verdict": "mapped",
+    "note": "VERIFY-1: ant apply resolving a relative file path as the agent id is not yet confirmed; see #1003"
+  },
+  {
+    "path": "support-triage.limits.maxTurns",
+    "verdict": "dropped",
+    "code": "limits_unsupported",
+    "note": "Agents have no turn limit"
+  },
+  {
+    "path": "support-triage.limits.maxBudgetUsd",
+    "verdict": "dropped",
+    "code": "limits_unsupported",
+    "note": "Budgets are set per session at creation"
+  },
+  {
+    "path": "billing-specialist.description",
+    "verdict": "native",
+    "note": "Emitted as the description"
+  },
+  {
+    "path": "billing-specialist.instructions",
+    "verdict": "native",
+    "note": "Emitted as the Markdown body, which is the system prompt"
+  },
+  {
+    "path": "billing-specialist.model",
+    "verdict": "native",
+    "note": "Emitted as the model"
+  },
+  {
+    "path": "billing-specialist.permissions.readFiles",
+    "verdict": "mapped",
+    "note": "Enables the sandbox file tools read, glob and grep (not workspace files)"
+  },
+  {
+    "path": "billing-specialist.permissions.writeFiles",
+    "verdict": "mapped",
+    "note": "Enables the sandbox file tools write and edit (not workspace files)"
+  },
+  {
+    "path": "billing-specialist.permissions.runCommands",
+    "verdict": "mapped",
+    "note": "Enables the sandbox shell: the bash tool"
+  },
+  {
+    "path": "billing-specialist.permissions.unrestrictedNetwork",
+    "verdict": "mapped",
+    "note": "The sandbox is shared and its networking follows the root agent"
+  },
+  {
+    "path": "billing-specialist.skills.0",
+    "verdict": "native",
+    "note": "Copied to skills/refund-policy and listed by path"
+  }
+]

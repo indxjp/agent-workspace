@@ -1,0 +1,4 @@
+# .env is this deployment's secrets: the generated administrator password, the session,
+# gateway and runner-manager tokens, the master encryption key and every store credential.
+# The profile beside it, agent-workspace.yaml, is the file that belongs in version control.
+.env

@@ -1,0 +1,62 @@
+{
+  "$schema": "./node_modules/nx/schemas/nx-schema.json",
+  "//": "Nx owns the TASK graph of this pnpm workspace (build / typecheck / lint / test per project) so CI can run only what a change affects (`nx affected`) and replay what it has already computed (the task cache). pnpm still owns installs and the workspace protocol. Every target is a plain `command` declared in the owning package.json `nx` block — there is no Nx plugin, no executor and no project.json to learn. See docs/adr/0053-ci-runs-on-nx-and-blacksmith-never-on-a-self-hosted-runner.md and, for the cross-run cache, docs/adr/0110-nx-cloud-is-replaced-by-a-self-hosted-oidc-gated-remote-cache.md.",
+  "defaultBase": "main",
+  "//namedInputs": "lintConfig: The flat ESLint config and the root tsconfig it resolves type information through are read by every project's lint and typecheck, so they are inputs to all of them without being inside any one project. vitestConfig: The root Vitest config supplies every project's alias map and collection rules. TEST_DATABASE_URL and the S3 variables are part of the hash on purpose: the database-backed suites SKIP when they are absent (and the CI gate 'No test in the run was skipped' fails), so a result computed without services must never be replayed for a run that has them.",
+  "namedInputs": {
+    "default": ["{projectRoot}/**/*", "sharedGlobals"],
+    "sharedGlobals": [
+      "{workspaceRoot}/package.json",
+      "{workspaceRoot}/pnpm-lock.yaml",
+      "{workspaceRoot}/pnpm-workspace.yaml",
+      "{workspaceRoot}/tsconfig.json",
+      "{workspaceRoot}/nx.json",
+      {
+        "runtime": "node --version"
+      }
+    ],
+    "lintConfig": [
+      "{workspaceRoot}/eslint.config.mjs",
+      "{workspaceRoot}/tsconfig.root.json",
+      "{workspaceRoot}/tsconfig.architecture.json"
+    ],
+    "vitestConfig": [
+      "{workspaceRoot}/vitest.config.ts",
+      {
+        "env": "TEST_DATABASE_URL"
+      },
+      {
+        "env": "TEST_S3_ENDPOINT"
+      }
+    ]
+  },
+  "targetDefaults": {
+    "build": {
+      "cache": true,
+      "dependsOn": ["^build"],
+      "inputs": ["default", "^default"],
+      "outputs": ["{projectRoot}/dist"]
+    },
+    "//dependsOn": "typecheck, lint and test depend on the project's OWN build as well as its dependencies' (`build` before `^build`): the root `tests/` files that several packages' test files import resolve those packages by name through node_modules, i.e. through `dist/index.d.ts`, so a typecheck that ran while its own package's build was still writing dist read half-emitted declarations (`unknown[]` where `readonly TEvent[]` was expected, run 35521409361, @agent-workspace/runtime:typecheck). A project with no build target simply skips that edge.",
+    "typecheck": {
+      "cache": true,
+      "dependsOn": ["build", "^build"],
+      "inputs": ["default", "^default", "lintConfig"]
+    },
+    "lint": {
+      "cache": true,
+      "dependsOn": ["build", "^build"],
+      "inputs": ["default", "^default", "lintConfig"]
+    },
+    "test": {
+      "cache": true,
+      "dependsOn": ["build", "^build"],
+      "inputs": ["default", "^default", "vitestConfig"],
+      "//outputs": "The JSON report is declared as an output so a cache replay restores it: the CI gate that reads every report to prove no test was skipped must find one for every project that ran, replayed or not.",
+      "outputs": ["{projectRoot}/.vitest-report.json"],
+      "//workers": "Each PACKAGE's test target sets VITEST_MAX_WORKERS=4 in its own env (package.json) so ten Vitest processes started at once share a 16-core runner instead of each claiming every core. The root project's target deliberately sets none: the `tests` project is serial by design (tests/vitest.config.ts, fileParallelism: false), and a VITEST_MAX_WORKERS in its environment OVERRIDES that setting and runs its files in parallel — measured on Vitest 5.0.0 with a three-file probe (a/b/c start within 3 ms of each other under VITEST_MAX_WORKERS=4, strictly one after another without it). That is what made two `next dev` servers race for one lock in runs 35521409361 / 35521944657 / 35522535672 when the workflow step exported the variable for every task."
+    }
+  },
+  "//neverConnectToCloud": "Nx Cloud is decommissioned (docs/adr/0110). This stops Nx from ever contacting it, whatever NX_CLOUD_* variable or nxCloudId reappears; it does NOT disable the self-hosted HTTP remote cache, which CI connects per job through .github/actions/nx-remote-cache (NX_SELF_HOSTED_REMOTE_CACHE_SERVER). scripts/ci/check-nx-cache-config.mjs keeps both true.",
+  "neverConnectToCloud": true
+}

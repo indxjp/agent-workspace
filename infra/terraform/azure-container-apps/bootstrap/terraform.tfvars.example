@@ -1,0 +1,14 @@
+subscription_id = "00000000-0000-0000-0000-000000000000"
+location        = "japaneast"
+name            = "agent-workspace"
+
+# Omit this value for local-only deployment. When set, the bootstrap creates a federated
+# credential scoped to the GitHub Actions environment below; no client secret is generated.
+# The environment name must match the `environment:` of the job that logs in.
+github_repository  = "example/agent-workspace"
+github_environment = "azure-preview"
+
+tags = {
+  owner       = "platform-team"
+  cost-center = "development"
+}

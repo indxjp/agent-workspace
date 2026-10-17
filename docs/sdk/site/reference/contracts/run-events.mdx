@@ -1,0 +1,620 @@
+---
+title: "run-events"
+description: "The @indx-workspace/contracts/run-events exports, sorted alphabetically."
+---
+
+<Note>This page is generated from `packages/contracts/src/run-events.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## AGENT_FRAME_NAMES
+
+The closed set of neutral `event:` names a run stream carries.
+
+**Closed, and closed on purpose.** ADR-0065 D5 puts normalisation in the engine's adapter so
+that every consumer reads one vocabulary instead of re-deriving one engine's classification;
+an adapter that meets something this set cannot express emits `AgentNativeFrameSchema`
+rather than inventing a name, so the set grows by an amendment to this file and never by a
+runtime deciding to send something new.
+
+The order is the wire order and is not re-sorted:
+`formal/AgentWorkspace/Events/AgentFrames.lean` transcribes it position by position.
+
+- `'agent.session'`
+- `'agent.message'`
+- `'agent.message.delta'`
+- `'agent.tool.call'`
+- `'agent.tool.result'`
+- `'agent.usage'`
+- `'agent.result'`
+- `'agent.native'`
+- `'agent.malformed'`
+
+## AGENT_FRAME_RAW_MAX_BYTES
+
+The largest engine-native payload one frame's `raw` may carry, in UTF-8 bytes.
+
+`raw` exists so that nothing an engine said is lost, which makes it the one field whose size a
+tenant's agent controls: a tool result holding a 40 MB file would otherwise be written into
+`run_events`, replayed to every follower, and held in a browser's transcript. The cap is
+therefore enforced where the frame is produced, and a payload over it is **truncated with a
+marker, never rejected** — dropping the frame would lose the neutral fields too, which are the
+part a consumer renders.
+
+64 KiB is chosen against the frames this stream actually carries: the largest Claude Agent SDK
+`result` message observed in R-01's probes is a few kilobytes, so the cap bites only on tool
+output, which is exactly the payload a client should be fetching from the file it names rather
+than reading out of an event log.
+
+The cap is per frame, and every frame derived from one engine message carries that message: a
+message that fans out into _n_ frames stores up to _n_ capped copies. That is deliberate — each
+frame is readable on its own — and `docs/sdk/04-api-specification.md` §6.3 states the cost.
+
+Value: `65_536`
+
+## AGENT_STOP_REASONS
+
+Why a turn ended, as a closed set, aligned with ACP's prompt-turn stop reasons
+(https://agentclientprotocol.com/protocol/prompt-turn).
+
+`max_budget` and `cancelled` are the platform's own words for two of them: a run stopped by a
+spend cap is not the same event as a run the model chose to end, and a run a user interrupted is
+not a failure (`packages/core/src/db/schema/runs.ts` says so of the `cancelled` status).
+
+- `'end_turn'`
+- `'max_turns'`
+- `'max_budget'`
+- `'refusal'`
+- `'cancelled'`
+- `'error'`
+
+## AGENT_TOOL_KINDS
+
+What a tool call *does*, as a closed set.
+
+Borrowed verbatim from the Agent Client Protocol's tool-call kinds
+(https://agentclientprotocol.com/protocol/tool-calls) so that ENG-11's generic ACP adapter maps
+one-to-one instead of translating twice. `other` is the honest answer for a tool whose effect an
+adapter cannot name — never a default that hides an unmapped `execute`.
+
+- `'read'`
+- `'edit'`
+- `'delete'`
+- `'move'`
+- `'search'`
+- `'execute'`
+- `'fetch'`
+- `'mcp'`
+- `'other'`
+
+## AgentFrame
+
+- `AgentSessionFrame`
+- `AgentMessageFrame`
+- `AgentMessageDeltaFrame`
+- `AgentToolCallFrame`
+- `AgentToolResultFrame`
+- `AgentUsageFrame`
+- `AgentResultFrame`
+- `AgentNativeFrame`
+- `AgentMalformedFrame`
+
+## AgentFrameName
+
+- `"agent.session"`
+- `"agent.message"`
+- `"agent.message.delta"`
+- `"agent.tool.call"`
+- `"agent.tool.result"`
+- `"agent.usage"`
+- `"agent.result"`
+- `"agent.native"`
+- `"agent.malformed"`
+
+## AgentFrameRawTruncation
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `truncated` | `true` | Yes |  |
+| `encodedBytes` | `null \| number` | Yes |  |
+| `limitBytes` | `number` | Yes |  |
+
+## AgentFrameRawTruncationSchema
+
+What `raw` becomes when the engine-native payload did not fit under
+`AGENT_FRAME_RAW_MAX_BYTES`, or could not be serialised at all.
+
+A marker object rather than a truncated string: a consumer must be able to tell "this is the
+engine's payload" from "this is what is left of it" by a positive check, and a clipped JSON
+fragment answers neither question. `encodedBytes` is the size that did not fit, or `null` when
+the payload had no JSON representation to measure.
+
+The producer side — the function that applies the cap — is the control plane's
+`capAgentFrameRaw` (in `packages/core`), next to the mapping that builds the frame. This contract
+is what a *consumer* needs: the limit, and the shape to recognise when it was reached.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `truncated` | `true` | Yes |  |
+| `encodedBytes` | `null \| number` | Yes |  |
+| `limitBytes` | `number` | Yes |  |
+
+## AgentFrameSchema
+
+Every neutral frame, discriminated by the `frame` field that repeats its `event:` name.
+
+- `AgentSessionFrame`
+- `AgentMessageFrame`
+- `AgentMessageDeltaFrame`
+- `AgentToolCallFrame`
+- `AgentToolResultFrame`
+- `AgentUsageFrame`
+- `AgentResultFrame`
+- `AgentNativeFrame`
+- `AgentMalformedFrame`
+
+## AgentMalformedFrame
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `reason` | `string` | Yes |  |
+| `engine` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
+| `raw` | `unknown` | Yes | The engine-native message, verbatim, capped by `capAgentFrameRaw`. Typed `unknown` deliberately: it is another vendor's shape and this contract makes no promise about it. |
+| `frame` | `"agent.malformed"` | Yes |  |
+
+## AgentMalformedFrameSchema
+
+`agent.malformed` — the engine produced something its adapter could not parse.
+
+Distinct from `agent.native`, and the distinction is ADR-0015's: `agent.native` is well-formed
+and unmapped, so it is forwarded; this is not well-formed, and it is reported by name rather
+than forwarded as though it had been understood. It is the successor of the `malformed` relayed
+name and keeps the same guarantee.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `reason` | `string` | Yes |  |
+| `engine` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
+| `raw` | `unknown` | Yes | The engine-native message, verbatim, capped by `capAgentFrameRaw`. Typed `unknown` deliberately: it is another vendor's shape and this contract makes no promise about it. |
+| `frame` | `"agent.malformed"` | Yes |  |
+
+## AgentMessageBlock
+
+- `Readonly<{ type: "text"; text: string; }>`
+- `Readonly<{ type: "reasoning"; text: string; }>`
+
+## AgentMessageBlockSchema
+
+One block of a message: what the model said, or what it thought before saying it.
+
+- `Readonly<{ type: "text"; text: string; }>`
+- `Readonly<{ type: "reasoning"; text: string; }>`
+
+## AgentMessageDeltaFrame
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `messageId` | `null \| string` | Yes |  |
+| `block` | `"text" \| "reasoning"` | Yes |  |
+| `text` | `string` | Yes |  |
+| `engine` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
+| `raw` | `unknown` | Yes | The engine-native message, verbatim, capped by `capAgentFrameRaw`. Typed `unknown` deliberately: it is another vendor's shape and this contract makes no promise about it. |
+| `frame` | `"agent.message.delta"` | Yes |  |
+
+## AgentMessageDeltaFrameSchema
+
+`agent.message.delta` — one increment of a message being streamed.
+
+Emitted only by an engine whose `capabilities.streamingText` is `true` (`./engines.ts`). A consumer
+that ignores deltas still renders a complete transcript from `agent.message` alone: a delta is
+an early view of a turn, never the only view of it.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `messageId` | `null \| string` | Yes |  |
+| `block` | `"text" \| "reasoning"` | Yes |  |
+| `text` | `string` | Yes |  |
+| `engine` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
+| `raw` | `unknown` | Yes | The engine-native message, verbatim, capped by `capAgentFrameRaw`. Typed `unknown` deliberately: it is another vendor's shape and this contract makes no promise about it. |
+| `frame` | `"agent.message.delta"` | Yes |  |
+
+## AgentMessageFrame
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `messageId` | `null \| string` | Yes |  |
+| `role` | `"user" \| "assistant"` | Yes |  |
+| `blocks` | `readonly (Readonly<{ type: "text"; text: string; }> \| Readonly<{ type: "reasoning"; text: string; }>)[]` | Yes |  |
+| `engine` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
+| `raw` | `unknown` | Yes | The engine-native message, verbatim, capped by `capAgentFrameRaw`. Typed `unknown` deliberately: it is another vendor's shape and this contract makes no promise about it. |
+| `frame` | `"agent.message"` | Yes |  |
+
+## AgentMessageFrameSchema
+
+`agent.message` — one whole turn's prose.
+
+Tool use is **not** a block here: it is its own frame, so a consumer renders a tool call without
+having to walk a message's content. `messageId` is the engine's own id for the turn and is
+`null` when the engine gave it none; when it is non-null a later frame repeating it is the same
+turn grown, which is what lets a transcript replace instead of appending.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `messageId` | `null \| string` | Yes |  |
+| `role` | `"user" \| "assistant"` | Yes |  |
+| `blocks` | `readonly (Readonly<{ type: "text"; text: string; }> \| Readonly<{ type: "reasoning"; text: string; }>)[]` | Yes |  |
+| `engine` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
+| `raw` | `unknown` | Yes | The engine-native message, verbatim, capped by `capAgentFrameRaw`. Typed `unknown` deliberately: it is another vendor's shape and this contract makes no promise about it. |
+| `frame` | `"agent.message"` | Yes |  |
+
+## AgentNativeFrame
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `type` | `string` | Yes |  |
+| `payload` | `unknown` | Yes |  |
+| `engine` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
+| `raw` | `unknown` | Yes | The engine-native message, verbatim, capped by `capAgentFrameRaw`. Typed `unknown` deliberately: it is another vendor's shape and this contract makes no promise about it. |
+| `frame` | `"agent.native"` | Yes |  |
+
+## AgentNativeFrameSchema
+
+`agent.native` — everything the engine emitted that has no neutral meaning.
+
+**Never dropped, never interpreted.** This frame is what makes the closed vocabulary safe: an
+adapter meeting a message it cannot map forwards it here, so the "every engine message reaches a
+frame" invariant holds without the neutral set having to grow to cover one engine's telemetry.
+`type` is the engine's own name for the message.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `type` | `string` | Yes |  |
+| `payload` | `unknown` | Yes |  |
+| `engine` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
+| `raw` | `unknown` | Yes | The engine-native message, verbatim, capped by `capAgentFrameRaw`. Typed `unknown` deliberately: it is another vendor's shape and this contract makes no promise about it. |
+| `frame` | `"agent.native"` | Yes |  |
+
+## AgentResultFrame
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `stopReason` | `"error" \| "cancelled" \| "end_turn" \| "max_turns" \| "max_budget" \| "refusal"` | Yes |  |
+| `turns` | `null \| number` | Yes |  |
+| `engineCostUsd` | `null \| number` | Yes |  |
+| `engine` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
+| `raw` | `unknown` | Yes | The engine-native message, verbatim, capped by `capAgentFrameRaw`. Typed `unknown` deliberately: it is another vendor's shape and this contract makes no promise about it. |
+| `frame` | `"agent.result"` | Yes |  |
+
+## AgentResultFrameSchema
+
+`agent.result` — the engine's terminal accounting for the turn.
+
+It says how the *engine's* turn ended. The run's own outcome is `run.status`, written by the
+control plane, and the two are deliberately separate: a turn that ended `end_turn` inside a run
+the platform then failed to record is not a completed run.
+
+`engineCostUsd` is the engine's self-reported estimate, or `null`. It is never shown as money on
+its own — `packages/core`'s `classifyRunCost` is the gate that decides whether a figure may be.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `stopReason` | `"error" \| "cancelled" \| "end_turn" \| "max_turns" \| "max_budget" \| "refusal"` | Yes |  |
+| `turns` | `null \| number` | Yes |  |
+| `engineCostUsd` | `null \| number` | Yes |  |
+| `engine` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
+| `raw` | `unknown` | Yes | The engine-native message, verbatim, capped by `capAgentFrameRaw`. Typed `unknown` deliberately: it is another vendor's shape and this contract makes no promise about it. |
+| `frame` | `"agent.result"` | Yes |  |
+
+## AgentSessionFrame
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `engineSessionId` | `string` | Yes |  |
+| `model` | `null \| string` | Yes |  |
+| `engine` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
+| `raw` | `unknown` | Yes | The engine-native message, verbatim, capped by `capAgentFrameRaw`. Typed `unknown` deliberately: it is another vendor's shape and this contract makes no promise about it. |
+| `frame` | `"agent.session"` | Yes |  |
+
+## AgentSessionFrameSchema
+
+`agent.session` — the engine opened or resumed its own session for this run.
+
+`engineSessionId` is the id the engine will accept back to continue the conversation; it is what
+`sessions.engine_session_id` stores. `model` is the model the engine reports it is about to use,
+or `null` when it names none — never the model the platform asked for, which the run row already
+records.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `engineSessionId` | `string` | Yes |  |
+| `model` | `null \| string` | Yes |  |
+| `engine` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
+| `raw` | `unknown` | Yes | The engine-native message, verbatim, capped by `capAgentFrameRaw`. Typed `unknown` deliberately: it is another vendor's shape and this contract makes no promise about it. |
+| `frame` | `"agent.session"` | Yes |  |
+
+## AgentStopReason
+
+- `"error"`
+- `"cancelled"`
+- `"end_turn"`
+- `"max_turns"`
+- `"max_budget"`
+- `"refusal"`
+
+## AgentStopReasonSchema
+
+- `"error"`
+- `"cancelled"`
+- `"end_turn"`
+- `"max_turns"`
+- `"max_budget"`
+- `"refusal"`
+
+## AgentToolCallFrame
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `toolCallId` | `string` | Yes |  |
+| `name` | `string` | Yes |  |
+| `kind` | `"mcp" \| "read" \| "edit" \| "delete" \| "move" \| "search" \| "execute" \| "fetch" \| "other"` | Yes |  |
+| `input` | `unknown` | Yes |  |
+| `engine` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
+| `raw` | `unknown` | Yes | The engine-native message, verbatim, capped by `capAgentFrameRaw`. Typed `unknown` deliberately: it is another vendor's shape and this contract makes no promise about it. |
+| `frame` | `"agent.tool.call"` | Yes |  |
+
+## AgentToolCallFrameSchema
+
+`agent.tool.call` — the engine invoked a tool.
+
+`toolCallId` is what the matching `AgentToolResultFrameSchema` names, and the pairing is an
+invariant of the stream rather than a convention: a result whose call was never announced is a
+transcript with a hole in it.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `toolCallId` | `string` | Yes |  |
+| `name` | `string` | Yes |  |
+| `kind` | `"mcp" \| "read" \| "edit" \| "delete" \| "move" \| "search" \| "execute" \| "fetch" \| "other"` | Yes |  |
+| `input` | `unknown` | Yes |  |
+| `engine` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
+| `raw` | `unknown` | Yes | The engine-native message, verbatim, capped by `capAgentFrameRaw`. Typed `unknown` deliberately: it is another vendor's shape and this contract makes no promise about it. |
+| `frame` | `"agent.tool.call"` | Yes |  |
+
+## AgentToolKind
+
+- `"mcp"`
+- `"read"`
+- `"edit"`
+- `"delete"`
+- `"move"`
+- `"search"`
+- `"execute"`
+- `"fetch"`
+- `"other"`
+
+## AgentToolKindSchema
+
+- `"mcp"`
+- `"read"`
+- `"edit"`
+- `"delete"`
+- `"move"`
+- `"search"`
+- `"execute"`
+- `"fetch"`
+- `"other"`
+
+## AgentToolResultFrame
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `toolCallId` | `string` | Yes |  |
+| `status` | `"completed" \| "failed"` | Yes |  |
+| `output` | `string` | Yes |  |
+| `isError` | `false \| true` | Yes |  |
+| `engine` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
+| `raw` | `unknown` | Yes | The engine-native message, verbatim, capped by `capAgentFrameRaw`. Typed `unknown` deliberately: it is another vendor's shape and this contract makes no promise about it. |
+| `frame` | `"agent.tool.result"` | Yes |  |
+
+## AgentToolResultFrameSchema
+
+`agent.tool.result` — the tool answered.
+
+`status` and `isError` are not the same fact and neither is derived from the other: `status` says
+whether the call ran to completion, `isError` is the engine's own verdict on the answer. A tool
+that completed and returned an error has `status: 'completed'` and `isError: true`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `toolCallId` | `string` | Yes |  |
+| `status` | `"completed" \| "failed"` | Yes |  |
+| `output` | `string` | Yes |  |
+| `isError` | `false \| true` | Yes |  |
+| `engine` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
+| `raw` | `unknown` | Yes | The engine-native message, verbatim, capped by `capAgentFrameRaw`. Typed `unknown` deliberately: it is another vendor's shape and this contract makes no promise about it. |
+| `frame` | `"agent.tool.result"` | Yes |  |
+
+## AgentUsageFrame
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `inputTokens` | `number` | Yes |  |
+| `outputTokens` | `number` | Yes |  |
+| `cacheReadInputTokens` | `null \| number` | Yes |  |
+| `cacheCreationInputTokens` | `null \| number` | Yes |  |
+| `reasoningTokens` | `null \| number` | Yes |  |
+| `engine` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
+| `raw` | `unknown` | Yes | The engine-native message, verbatim, capped by `capAgentFrameRaw`. Typed `unknown` deliberately: it is another vendor's shape and this contract makes no promise about it. |
+| `frame` | `"agent.usage"` | Yes |  |
+
+## AgentUsageFrameSchema
+
+`agent.usage` — the engine's own token counters, **informational**.
+
+Billing is metered at the gateway and lives in `run_usage_records` (ADR-0065 D6). This frame is
+what the engine says it spent, which is a different measurement and is presented as such; a
+consumer that adds it up is reporting the engine's opinion, not an invoice. Counters an engine
+does not report are `null`, never `0`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `inputTokens` | `number` | Yes |  |
+| `outputTokens` | `number` | Yes |  |
+| `cacheReadInputTokens` | `null \| number` | Yes |  |
+| `cacheCreationInputTokens` | `null \| number` | Yes |  |
+| `reasoningTokens` | `null \| number` | Yes |  |
+| `engine` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
+| `raw` | `unknown` | Yes | The engine-native message, verbatim, capped by `capAgentFrameRaw`. Typed `unknown` deliberately: it is another vendor's shape and this contract makes no promise about it. |
+| `frame` | `"agent.usage"` | Yes |  |
+
+## CONTROL_FRAME_NAMES
+
+Frames the stream writes about itself. `done` means nothing further will be delivered on this
+or any later connection — and says nothing about whether the run succeeded; `run-failed` is the
+frame that does. `error` is reserved and never emitted: HTML §9.2 would dispatch it into
+`EventSource`'s transport-error listener.
+
+- `'done'`
+- `'run-failed'`
+- `'stream-reset'`
+
+## ControlFrameName
+
+- `"done"`
+- `"run-failed"`
+- `"stream-reset"`
+
+## EVENT_NAME_PATTERN
+
+The grammar every `event:` name must satisfy; SSE has no escaping, so the set is narrow.
+
+Value: `/^[A-Za-z][A-Za-z0-9._-]{0,63}$/`
+
+## isAgentFrameName
+
+Whether an `event:` name is one of the neutral frames.
+
+```ts
+isAgentFrameName(name: string): name is AgentFrameName
+```
+
+## isAgentFrameRawTruncated
+
+Whether a frame's `raw` is the truncation marker rather than the engine's payload.
+
+A positive check on the marker's own shape, not a guess from a missing field: a payload that
+happens to carry a `truncated` key of its own is not this marker unless it matches the whole
+schema, and a consumer branching on it is deciding from what is there.
+
+```ts
+isAgentFrameRawTruncated(raw: unknown): raw is AgentFrameRawTruncation
+```
+
+## isLegacyRelayedEventName
+
+Whether an `event:` name is one of the pre-ENG-03 relayed names, and therefore a stored row the
+event-read path must upgrade before serving it.
+
+```ts
+isLegacyRelayedEventName(name: string): name is RelayedEventName
+```
+
+## RELAYED_EVENT_NAMES
+
+The `event:` names the runner relayed **before ENG-03 (#302)**: its *classification* of one
+Claude Agent SDK message, with the SDK's own `type` and `subtype` inside `data`.
+
+They are kept, and kept in this order, for one reason: `run_events` rows written before the
+change still carry them, and the event-read path recognises a row by its name in order to
+upgrade it to an `AGENT_FRAME_NAMES` frame. No writer produces them any more — a runtime
+that sent one today would be relaying a vocabulary no consumer reads.
+
+- `'system'`
+- `'system-unknown'`
+- `'result'`
+- `'result-unknown'`
+- `'sdk-event'`
+- `'unknown'`
+- `'malformed'`
+
+## RelayedEventData
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `string` | Yes |  |
+
+## RelayedEventDataSchema
+
+`data` of a relayed runtime event: the runner's classification envelope. `kind` is always
+present; the rest is the SDK's own message and is passed through unvalidated because the SDK's
+type union grows in patch releases — a consumer narrows the parts it reads.
+
+Only the legacy read path (see `RELAYED_EVENT_NAMES`) still meets this shape.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `string` | Yes |  |
+
+## RelayedEventName
+
+- `"unknown"`
+- `"result"`
+- `"system"`
+- `"system-unknown"`
+- `"result-unknown"`
+- `"sdk-event"`
+- `"malformed"`
+
+## RUN_STATUS_EVENT
+
+The durable event the platform appends on every run status change.
+
+Value: `'run.status'`
+
+## RunFailedFrameData
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `status` | `"unknown" \| "completed" \| "failed" \| "running" \| "queued" \| "cancelled"` | Yes |  |
+| `message` | `string` | Yes |  |
+
+## RunFailedFrameDataSchema
+
+`data` of a `run-failed` frame. `status` is the run's own terminal status, or `"unknown"` when
+producing the stream threw and the run's outcome is unknown to this connection — reconnecting
+with `Last-Event-ID` is then the right thing to do.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `status` | `"unknown" \| "completed" \| "failed" \| "running" \| "queued" \| "cancelled"` | Yes |  |
+| `message` | `string` | Yes |  |
+
+## RunStatusEventData
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `status` | `"completed" \| "failed" \| "running" \| "queued" \| "cancelled"` | Yes |  |
+| `error` | `null \| string` | Yes | The safe public failure text, or `null`. |
+
+## RunStatusEventDataSchema
+
+`data` of a `RUN_STATUS_EVENT` frame.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `status` | `"completed" \| "failed" \| "running" \| "queued" \| "cancelled"` | Yes |  |
+| `error` | `null \| string` | Yes | The safe public failure text, or `null`. |
+
+## StreamResetFrameData
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `reason` | `string` | Yes |  |
+| `resumedAfter` | `null \| string` | Yes | The oldest id the stream can actually start after, or `null` when nothing is retained. |
+
+## StreamResetFrameDataSchema
+
+`data` of a `stream-reset` frame: what follows is not contiguous with what the client has.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `reason` | `string` | Yes |  |
+| `resumedAfter` | `null \| string` | Yes | The oldest id the stream can actually start after, or `null` when nothing is retained. |

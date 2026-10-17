@@ -1,0 +1,7 @@
+{"vectors":
+ [{"witnesses": ["AgentWorkspace.Theorems.Normative.SdkRuns.list_keeps_nonempty_query"],
+   "input": {"status": "completed", "limit": 2, "agent": "agent"},
+   "id": "nonempty",
+   "expected": [["status", "completed"], ["agent", "agent"], ["limit", "2"]]}],
+ "family": "sdk-runs",
+ "description": "Nonempty list query ordering"}

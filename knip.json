@@ -1,0 +1,173 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "include": ["files", "dependencies", "unlisted", "unresolved", "duplicates", "exports", "types"],
+  "treatConfigHintsAsErrors": true,
+  "workspaces": {
+    ".": {
+      "entry": [
+        "scripts/**/*.mjs",
+        "tests/**/*.ts",
+        "tests/**/*.mjs",
+        "*.config.{js,mjs,ts}",
+        "infra/cloudflare/sandbox-bridge/src/worker.ts"
+      ],
+      "project": [
+        "scripts/**/*.mjs",
+        "tests/**/*.ts",
+        "tests/**/*.mjs",
+        "*.{js,mjs,ts}",
+        "infra/cloudflare/sandbox-bridge/src/*.ts"
+      ]
+    },
+    "apps/runner": {
+      "entry": ["src/{index,start,manager-start}.ts", "src/api/index.ts", "src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "apps/web": {
+      "entry": [
+        "app/**/{page,layout,route,loading,error,not-found,template,default}.{ts,tsx}",
+        "{instrumentation,instrumentation-node,middleware}.ts",
+        "server/**/*.test.ts",
+        "server/runs/acceptance/instrumentation.ts",
+        "server/runs/acceptance/run-acceptance.mjs",
+        "server/runs/acceptance/fake-runner.mjs",
+        "server/sessions/acceptance/vitest.config.mjs",
+        "server/sessions/acceptance/resume.acceptance.ts",
+        "server/connectors/fixtures/{http,sse,stdio}-server.mjs",
+        "components/**/*.test.{ts,tsx}",
+        "contracts/**/*.test.ts",
+        "lib/**/*.test.ts"
+      ],
+      "project": [
+        "app/**/*.{ts,tsx}",
+        "app/**/*.css",
+        "components/**/*.{ts,tsx}",
+        "contracts/**/*.ts",
+        "lib/**/*.ts",
+        "server/**/*.{ts,mts,mjs}"
+      ],
+      "ignoreIssues": {
+        "{contracts,server}/**/*": ["exports", "types"]
+      }
+    },
+    "packages/contracts": {
+      "entry": [
+        "src/{index,agents,api-keys,connectors,engines,files,invitations,models,observability,projects,routes,run-events,runs,runtimes,secrets,sessions,shares,skills,team,workspaces,platforms,portable-agent}.ts",
+        "src/**/*.test.ts"
+      ],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/sdk": {
+      "entry": ["src/**/*.test.ts", "src/project/starters/**/*.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/react": {
+      "entry": ["src/**/*.test.{ts,tsx}"],
+      "project": ["src/**/*.{ts,tsx}"]
+    },
+    "packages/aw": {
+      "entry": ["src/**/*.test.ts", "src/project/loader-child.ts", "src/tools/host-child.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/core": {
+      "entry": [
+        "src/{auth,audit,db,secrets,storage,telemetry}/index.ts",
+        "src/db/{migrate,seed,drizzle.config}.ts",
+        "src/storage/azure-live.vitest.config.mjs",
+        "src/{secrets,storage}/*.live.acceptance.ts",
+        "src/**/*.test.ts"
+      ],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/platforms": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/engine": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/engine-claude-agent-sdk": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/engine-mastra": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/engine-openai-agents": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/engine-pi": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/egress-proxy": {
+      "entry": ["src/{index,main}.ts", "src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/tool-host": {
+      "entry": ["src/{index,main}.ts", "src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/runtime": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/gateway": {
+      "entry": ["src/{index,start}.ts", "src/api/index.ts", "src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/cli": {
+      "entry": ["src/{index,create,start}.ts", "src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/create": {
+      "entry": ["src/index.ts", "src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/embedded": {
+      "entry": ["src/{index,bin,launch}.ts", "src/**/*.test.ts"],
+      "project": ["src/**/*.ts"],
+      "ignoreDependencies": [
+        "@agent-workspace/engine",
+        "@agent-workspace/engine-claude-agent-sdk",
+        "@agent-workspace/engine-mastra",
+        "@agent-workspace/engine-openai-agents",
+        "@agent-workspace/engine-pi",
+        "@ai-sdk/anthropic",
+        "@ai-sdk/openai",
+        "@anthropic-ai/claude-agent-sdk",
+        "@anthropic-ai/sdk",
+        "@aws-sdk/client-kms",
+        "@azure/identity",
+        "@azure/keyvault-secrets",
+        "@earendil-works/chord",
+        "@earendil-works/pi-agent-core",
+        "@earendil-works/pi-ai",
+        "@earendil-works/pi-codemode",
+        "@earendil-works/pi-coding-agent",
+        "@earendil-works/pi-mcp",
+        "@earendil-works/pi-telemetry",
+        "@earendil-works/pi-tui",
+        "@google-cloud/secret-manager",
+        "@kubernetes/client-node",
+        "@mastra/core",
+        "@mastra/mcp",
+        "@mastra/memory",
+        "@modelcontextprotocol/sdk",
+        "@openai/agents",
+        "@openai/agents-extensions",
+        "drizzle-orm",
+        "google-auth-library",
+        "next",
+        "pg",
+        "react",
+        "react-dom",
+        "ws",
+        "yaml"
+      ]
+    }
+  }
+}
