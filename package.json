@@ -70,7 +70,7 @@
     "@types/node": "26.6.5",
     "@types/pg": "8.23.1",
     "@typescript/native": "npm:typescript@7.0.2",
-    "@vitest/coverage-v8": "5.0.3",
+    "@vitest/coverage-v8": "5.0.4",
     "dependency-cruiser": "18.6.0",
     "drizzle-orm": "0.45.4",
     "embedded-postgres": "17.10.0-beta.17",
@@ -84,8 +84,8 @@
     "pg": "8.23.1",
     "prettier": "3.9.10",
     "typescript": "npm:@typescript/typescript6@6.0.2",
-    "typescript-eslint": "8.71.1",
-    "vitest": "5.0.3"
+    "typescript-eslint": "8.71.2",
+    "vitest": "5.0.4"
   },
   "nx": {
     "includedScripts": [],
