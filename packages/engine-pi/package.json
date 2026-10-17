@@ -22,8 +22,8 @@
   "dependencies": {
     "@indx-workspace/contracts": "workspace:*",
     "@agent-workspace/engine": "workspace:*",
-    "@earendil-works/pi-coding-agent": "1.1.0",
-    "zod": "4.6.6"
+    "@earendil-works/pi-coding-agent": "1.2.0",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@typescript/native": "npm:typescript@7.0.2",
