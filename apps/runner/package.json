@@ -37,7 +37,7 @@
     "@agent-workspace/engine": "workspace:*",
     "@agent-workspace/runtime": "workspace:*",
     "@indx-workspace/contracts": "workspace:*",
-    "zod": "4.6.6"
+    "zod": "4.6.7"
   },
   "nx": {
     "targets": {
