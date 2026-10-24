@@ -40,7 +40,7 @@
     "@types/react-dom": "19.3.0",
     "@typescript/native": "npm:typescript@7.0.2",
     "drizzle-orm": "0.45.4",
-    "happy-dom": "21.0.1",
+    "happy-dom": "21.0.4",
     "tailwindcss": "4.3.3",
     "typescript": "npm:@typescript/typescript6@6.0.2"
   },
