@@ -26,8 +26,8 @@
   "dependencies": {
     "@indx-workspace/contracts": "workspace:*",
     "@agent-workspace/engine": "workspace:*",
-    "@ai-sdk/anthropic": "4.0.85",
-    "@ai-sdk/provider": "4.0.31",
+    "@ai-sdk/anthropic": "4.0.87",
+    "@ai-sdk/provider": "4.0.33",
     "@openai/agents": "0.21.0",
     "@openai/agents-extensions": "0.21.0",
     "zod": "4.6.7"
