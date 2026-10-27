@@ -1,0 +1,11 @@
+{
+  // Gives type-aware ESLint's `projectService`, which searches upwards for the nearest
+  // `tsconfig.json`, a project for the `.mts` tool (the root `tsconfig.json` includes nothing).
+  // `tsconfig.root.json` also includes `scripts/**/*.mts`, which is what `pnpm typecheck` checks.
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["*.mts"]
+}

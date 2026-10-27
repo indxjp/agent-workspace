@@ -13,7 +13,7 @@ import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 
-import { runDockerCommand, type DockerCommandResult } from '@agent-workspace/runtime';
+import { runDockerCommand, type DockerCommandResult } from '@agent-workspace/runtime/driver/docker';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
@@ -134,7 +134,7 @@ http.createServer((request, response) => {
 
 /** `runtime.Dockerfile`'s pinned Node base, so the lane pulls nothing the release does not. */
 const NODE_IMAGE =
-  'node:24.21.0-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6';
+  'node:24.22.1-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205';
 
 const RunReport = z
   .object({

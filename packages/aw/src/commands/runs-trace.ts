@@ -158,6 +158,8 @@ export function buildTrace(run: RunResource, timed: readonly TimedEvent[]): Trac
       case 'agent.message.delta':
       case 'agent.native':
       case 'agent.malformed':
+      case 'agent.approval.requested':
+      case 'agent.handoff':
         break;
       default:
         return unreachable(event);

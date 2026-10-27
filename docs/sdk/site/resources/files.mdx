@@ -195,13 +195,8 @@ the file and reported back as `contentType`; omit it and the file is stored with
 null`. A download never echoes an uploader's `contentType` as active content — the server serves
 only a closed table of inert types, everything else as `application/octet-stream`.
 
-<Note>
-  **Today:** every upload and download passes through the control plane; a customer frontend moves
-  bytes only via its own backend. **Target:** `files.createUploadUrl` and `files.createDownloadUrl`
-  return short-lived URLs directly on the object store, so a browser holding a browser token moves
-  bytes without a relay. Tracked as
-  [N-4](/concepts/roadmap#n-4-presigned-file-transfer-for-browsers).
-</Note>
+This route relays the bytes through the control plane. To move them straight to the object store
+from a browser, see [`createUploadUrl`](#createuploadurl).
 
 **Route:** `POST /api/files` (raw body, path in the `x-file-path` header)
 
@@ -211,15 +206,16 @@ const file = await aw.files.upload('notes/todo.txt', new TextEncoder().encode('s
 });
 ```
 
-| Code                           | Status | Meaning                                                               |
-| ------------------------------ | ------ | --------------------------------------------------------------------- |
-| `invalid_path`                 | 400    | A `path` the server's key-safety check refuses.                       |
-| `reserved_path`                | 400    | `.claude/**` (runner state) or the internal empty-folder marker name. |
-| `missing_file_path`            | 400    | The `x-file-path` header was not sent.                                |
-| `unsupported_path_encoding`    | 400    | `x-resource-path-encoding` was sent but is not `percent-utf8`.        |
-| `invalid_path_encoding`        | 400    | The header value does not decode as valid percent-encoded UTF-8.      |
-| `store_inconsistent`           | 500    | The store could not settle the write.                                 |
-| `files_runtime_not_configured` | 503    | This deployment has no files backend configured.                      |
+| Code                           | Status | Meaning                                                                                                 |
+| ------------------------------ | ------ | ------------------------------------------------------------------------------------------------------- |
+| `invalid_path`                 | 400    | A `path` the server's key-safety check refuses.                                                         |
+| `reserved_path`                | 400    | `.claude/**` (runner state), `skill-revisions/**` (immutable) or the internal empty-folder marker name. |
+| `missing_file_path`            | 400    | The `x-file-path` header was not sent.                                                                  |
+| `unsupported_path_encoding`    | 400    | `x-resource-path-encoding` was sent but is not `percent-utf8`.                                          |
+| `invalid_path_encoding`        | 400    | The header value does not decode as valid percent-encoded UTF-8.                                        |
+| `upload_in_progress`           | 409    | The path has an upload in flight; retry once it has finished.                                           |
+| `store_inconsistent`           | 500    | The store could not settle the write.                                                                   |
+| `files_runtime_not_configured` | 503    | This deployment has no files backend configured.                                                        |
 
 Also `413 request_body_too_large` above `MAX_UPLOAD_BYTES` (64 MiB), refused while the body
 streams — this is the shared `COMMON_PROBLEM_CODES.request_body_too_large`, not a files-owned
@@ -254,6 +250,7 @@ const folder = await aw.files.createFolder('archive/2026');
 | `reserved_path`                                       | 400    | Same rule as `upload`.                           |
 | `unsupported_path_encoding` / `invalid_path_encoding` | 400    | Same rule as `upload`.                           |
 | `name_conflict`                                       | 409    | The path already exists.                         |
+| `upload_in_progress`                                  | 409    | The path has an upload in flight.                |
 | `files_runtime_not_configured`                        | 503    | This deployment has no files backend configured. |
 
 <CodeGroup>
@@ -303,6 +300,100 @@ aw files download reports/q3          # a folder path prints its metadata instea
 
 See [`files.download`](/reference/sdk/files#download).
 
+## `search`
+
+Find text inside the workspace's files (PDF, Office documents, text and CSV; Japanese included).
+Hits come back best first as a path, a page and a snippet, which is what an answer needs to cite.
+Text is read **on demand**, a bounded number of files per request, and cached; `pending` counts the
+files not yet searchable, so while it is above zero the answer is partial and repeating the call
+continues the work.
+
+**Route:** `GET /api/files/search?q=&limit=`
+
+```ts title="illustrative" claim="illustrative"
+const { hits, pending } = await aw.files.search('maintenance interval', { limit: 5 });
+for (const hit of hits) console.log(`${hit.path} p.${hit.page}: ${hit.snippet}`);
+if (pending > 0) console.log(`${pending} files still being read; search again`);
+```
+
+| Code                   | Status | Meaning                                            |
+| ---------------------- | ------ | -------------------------------------------------- |
+| `invalid_search_query` | 400    | `q` is missing, empty, or `limit` is out of range. |
+| `search_unavailable`   | 500    | The search backend failed; nothing was changed.    |
+
+A running Claude agent with `readFiles` gets the same search as the `search_files` tool
+(`mcp__agent-workspace__search_files`), answered only from the files its run was granted. List that
+name in the agent's `tools.autoApprove` to let a headless run call it without asking.
+
+## `createUploadUrl`
+
+Mint a short-lived `PUT` URL on the object store, so the bytes never pass through the control
+plane. On S3 and GCS `sizeBytes` is signed into the URL — the store refuses a body of any other
+length; an Azure Blob SAS cannot carry a length, so Azure does not enforce it.
+`contentType` is signed when you give one; send the returned `headers` with the `PUT`, unchanged.
+`ttlSeconds` is 60 to 900 (default 300) and is independent of the browser token's own lifetime. The
+route does no object-store I/O: the file appears when the `PUT` succeeds, and a URL used after
+`expiresAt` is refused by the store.
+
+A browser token, of `session` or `run` scope, is refused with `403 token_out_of_scope` on every
+store: a visitor uploads through `POST /api/sessions/:id/attachments`, which applies the surface's
+attachment rules a presigned `PUT` would skip. An API key or a signed-in member is held to the
+ordinary files grant (a Viewer has none; a Builder may write only files it owns).
+
+The browser's `PUT` is cross-origin, so the bucket needs a CORS rule that allows `PUT` and the
+returned headers from your embedding origin.
+
+**Route:** `POST /api/files/:id/upload-urls` (`:id` is `fileRouteId(path)`)
+
+```ts title="illustrative" claim="illustrative"
+const sessionId = '…';
+const target = await aw.files.createUploadUrl(
+  `.attachments/${sessionId}/report.pdf`,
+  { sizeBytes: blob.size, contentType: 'application/pdf' },
+);
+await fetch(target.url, { method: target.method, headers: target.headers, body: blob });
+```
+
+| Code                           | Status | Meaning                                                                                                 |
+| ------------------------------ | ------ | ------------------------------------------------------------------------------------------------------- |
+| `malformed_body`               | 400    | `sizeBytes` is missing or out of range, or `ttlSeconds` is outside 60 to 900.                          |
+| `reserved_path`                | 400    | `.claude/**`, `skill-revisions/**` or the internal empty-folder marker name.                            |
+| `file_not_found`               | 404    | An unminted id.                                                                                         |
+| `token_out_of_scope`           | 403    | A browser token (`run` or `session` scope).                                                             |
+| `direct_transfer_unsupported`  | 501    | This deployment's store cannot sign (local filesystem or in-memory): use [`upload`](#upload).           |
+| `files_runtime_not_configured` | 503    | This deployment has no files backend configured.                                                        |
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw files upload .attachments/<sessionId>/report.pdf ./report.pdf --direct
+```
+
+</CodeGroup>
+
+See [`files.createUploadUrl`](/reference/sdk/files#createuploadurl).
+
+## `createDownloadUrl`
+
+Mint a short-lived `GET` URL that serves a file as the same inert attachment `download` returns
+(`application/octet-stream` unless the stored type is on the closed inert table). Same scope, TTL
+and CORS rules as `createUploadUrl`. A missing path, or a path that names a folder, is a
+`404 file_not_found`.
+
+**Route:** `POST /api/files/:id/download-urls`
+
+```ts title="illustrative" claim="illustrative"
+const link = await aw.files.createDownloadUrl('.attachments/<sessionId>/report.pdf', {
+  ttlSeconds: 120,
+});
+window.location.assign(link.url);
+```
+
+Problem codes are those of `createUploadUrl`, where `malformed_body` concerns
+only `ttlSeconds`.
+
+See [`files.createDownloadUrl`](/reference/sdk/files#createdownloadurl).
+
 ## `move`
 
 Rename or move a file or a whole folder subtree. A file answers `{ file }`; a folder answers a
@@ -324,6 +415,7 @@ if ('status' in outcome && outcome.status === 'partial') {
 | ------------------------------ | ------ | --------------------------------------------------------------- |
 | `file_not_found`               | 404    | The source path does not exist.                                 |
 | `name_conflict`                | 409    | `newPath` already exists.                                       |
+| `upload_in_progress`           | 409    | `newPath`, or a path under the folder, has an upload in flight. |
 | `self_descendant`              | 409    | A folder moved into itself or one of its own descendants.       |
 | `subtree_too_large`            | 413    | The folder holds more than `MAX_SUBTREE_OBJECTS` (500) objects. |
 | `rename_inconsistent`          | 500    | The store could not settle the rename.                          |

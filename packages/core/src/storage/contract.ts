@@ -40,8 +40,20 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { OBJECT_METADATA_SUFFIX, UnsafeObjectKeyError } from './key-safety.js';
-import type { ObjectStore, ObjectStoreProvider } from './object-store.js';
+import { inferContentType } from './content-type.js';
+import { OBJECT_METADATA_SUFFIX, toObjectKey, UnsafeObjectKeyError } from './key-safety.js';
+import { workspaceFolder } from './object-name.js';
+import {
+  ObjectConflictError,
+  RangeNotSatisfiableError,
+  SignedUrlUnsupportedError,
+  type ObjectStore,
+  type ObjectStoreProvider,
+  type ObjectStoreProviderV2,
+  type ObjectStoreV2,
+  type WriteOptions,
+} from './object-store.js';
+import { bytesToStream, streamToBytes } from './streams.js';
 
 const WORKSPACE_A = '11111111-1111-4111-8111-111111111111';
 const WORKSPACE_B = '22222222-2222-4222-8222-222222222222';
@@ -50,6 +62,24 @@ const WORKSPACE_B = '22222222-2222-4222-8222-222222222222';
 export interface ObjectStoreContractFixture {
   readonly provider: ObjectStoreProvider;
   readonly teardown: () => Promise<void>;
+}
+
+/** {@link ObjectStoreContractFixture} for a backend that implements the v2 port. */
+export interface ObjectStoreV2ContractFixture {
+  readonly provider: ObjectStoreProviderV2;
+  readonly teardown: () => Promise<void>;
+  /** A signed URL can be fetched over HTTP from here (SeaweedFS, a live cloud), not just parsed. */
+  readonly signedUrlsFetchable?: boolean;
+  /**
+   * Writes `bytes` at the backend's own full `key`, past every guard, the way a foreign tool (a
+   * cloud console) would. Absent where only this module can write (the in-memory reference).
+   */
+  readonly plantRaw?: (key: string, bytes: Uint8Array) => Promise<void>;
+  /**
+   * The backend keeps no content type of its own (a connected folder has no sidecar), so it reports
+   * the type its file name implies instead of the one a caller wrote.
+   */
+  readonly contentTypeFromName?: true;
 }
 
 const utf8 = (text: string): Uint8Array => new TextEncoder().encode(text);
@@ -477,6 +507,503 @@ export function defineObjectStoreContract(
         } finally {
           await teardown();
         }
+      });
+    });
+  });
+}
+
+/**
+ * The v2 half of the contract: head, streaming read/write, range, conditional write. Separate from
+ * {@link defineObjectStoreContract} so a backend that has not moved to v2 keeps running only the
+ * buffered suite; a v2 backend runs both.
+ */
+export function defineObjectStoreV2Contract(
+  label: string,
+  setup: () => Promise<ObjectStoreV2ContractFixture>,
+): void {
+  describe(`ObjectStoreV2 contract — ${label}`, () => {
+    async function withStore(
+      run: (store: ObjectStoreV2, fixture: ObjectStoreV2ContractFixture) => Promise<void>,
+    ): Promise<void> {
+      const fixture = await setup();
+      const { provider, teardown } = fixture;
+      try {
+        await run(provider.forWorkspace(WORKSPACE_A), fixture);
+      } finally {
+        await teardown();
+      }
+    }
+
+    describe('head()', () => {
+      it('is null for a missing key and reports size, content type and an etag for an object', async () => {
+        await withStore(async (store) => {
+          expect(await store.head('missing.txt')).toBeNull();
+          await store.put('h.txt', { body: utf8('12345'), contentType: 'text/plain' });
+          const meta = await store.head('h.txt');
+          expect(meta).toMatchObject({ sizeBytes: 5, contentType: 'text/plain' });
+          expect(meta?.etag).toEqual(expect.any(String));
+          expect(meta?.etag).not.toBe('');
+        });
+      });
+
+      it('changes the etag when the content changes', async () => {
+        await withStore(async (store) => {
+          await store.write('e.txt', utf8('one'), {});
+          const first = await store.head('e.txt');
+          await store.write('e.txt', utf8('two!'), {});
+          const second = await store.head('e.txt');
+          expect(second?.etag).not.toBe(first?.etag);
+          expect(second?.sizeBytes).toBe(4);
+        });
+      });
+    });
+
+    describe('read() and write() stream bytes', () => {
+      it('read() is null for a missing key', async () => {
+        await withStore(async (store) => {
+          expect(await store.read('never.txt')).toBeNull();
+        });
+      });
+
+      it('write() accepts a multi-chunk stream, returns meta, and read() streams the same bytes back', async () => {
+        await withStore(async (store, { contentTypeFromName }) => {
+          const chunks = [utf8('alpha-'), utf8('beta-'), utf8('gamma')];
+          const body = new ReadableStream<Uint8Array>({
+            start(controller) {
+              for (const chunk of chunks) controller.enqueue(chunk);
+              controller.close();
+            },
+          });
+          const written = await store.write('s/stream.bin', body, { contentType: 'text/plain' });
+          expect(written.sizeBytes).toBe(16);
+          const read = await store.read('s/stream.bin');
+          expect(read?.meta).toMatchObject({
+            sizeBytes: 16,
+            contentType:
+              contentTypeFromName === true ? inferContentType('s/stream.bin') : 'text/plain',
+          });
+          expect(read?.meta.etag).toBe(written.etag);
+          expect(asText(await streamToBytes(read!.body))).toBe('alpha-beta-gamma');
+        });
+      });
+
+      it('write() accepts bytes, and the buffered get() sees them', async () => {
+        await withStore(async (store) => {
+          await store.write('b.txt', utf8('bytes'), {});
+          expect(asText((await store.get('b.txt'))!.body)).toBe('bytes');
+        });
+      });
+
+      it('write() round-trips binary bytes through a stream', async () => {
+        await withStore(async (store) => {
+          const bytes = new Uint8Array(70_000);
+          for (let i = 0; i < bytes.length; i += 1) bytes[i] = (i * 7) % 256;
+          await store.write('bin.bin', bytesToStream(bytes), {});
+          const read = await store.read('bin.bin');
+          expectBytesEqual(await streamToBytes(read!.body), bytes);
+        });
+      });
+
+      it('head(), read() and write() refuse an unsafe key like put() does', async () => {
+        await withStore(async (store) => {
+          await expect(store.write('../x', utf8('x'), {})).rejects.toThrow(UnsafeObjectKeyError);
+          await expect(store.read('../x')).rejects.toThrow(UnsafeObjectKeyError);
+          await expect(store.head('../x')).rejects.toThrow(UnsafeObjectKeyError);
+        });
+      });
+    });
+
+    describe('range reads', () => {
+      it('serve a closed range, an open-ended range, and report the whole size', async () => {
+        await withStore(async (store) => {
+          if (!store.capabilities.range) return;
+          await store.write('r.txt', utf8('0123456789'), {});
+          const closed = await store.read('r.txt', { range: { start: 2, end: 5 } });
+          expect(asText(await streamToBytes(closed!.body))).toBe('2345');
+          expect(closed?.range).toEqual({ start: 2, end: 5 });
+          expect(closed?.meta.sizeBytes).toBe(10);
+          const open = await store.read('r.txt', { range: { start: 7 } });
+          expect(asText(await streamToBytes(open!.body))).toBe('789');
+          expect(open?.range).toEqual({ start: 7, end: 9 });
+          const whole = await store.read('r.txt');
+          expect(whole?.range).toBeNull();
+        });
+      });
+    });
+
+    describe('a range that cannot be satisfied is refused identically everywhere', () => {
+      const bad: ReadonlyArray<readonly [string, { start: number; end?: number }]> = [
+        ['a negative start', { start: -5 }],
+        ['a negative start with an end', { start: -5, end: 3 }],
+        ['a fractional start', { start: 1.5 }],
+        ['a fractional end', { start: 1, end: 2.5 }],
+        ['NaN', { start: Number.NaN }],
+        ['start after end', { start: 5, end: 2 }],
+        ['a start at the object size', { start: 10 }],
+        ['a start past the object size', { start: 99, end: 120 }],
+      ];
+      for (const [name, range] of bad) {
+        it(`rejects ${name} with RangeNotSatisfiableError`, async () => {
+          await withStore(async (store) => {
+            if (!store.capabilities.range) return;
+            await store.write('range.txt', utf8('0123456789'), {});
+            await expect(store.read('range.txt', { range })).rejects.toThrow(
+              RangeNotSatisfiableError,
+            );
+          });
+        });
+      }
+
+      it('rejects any range on a zero-byte object, and still streams it whole', async () => {
+        await withStore(async (store) => {
+          if (!store.capabilities.range) return;
+          await store.write('empty.txt', new Uint8Array(0), {});
+          await expect(store.read('empty.txt', { range: { start: 0 } })).rejects.toThrow(
+            RangeNotSatisfiableError,
+          );
+          await expect(store.read('empty.txt', { range: { start: 0, end: 0 } })).rejects.toThrow(
+            RangeNotSatisfiableError,
+          );
+          const whole = await store.read('empty.txt');
+          expect((await streamToBytes(whole!.body)).byteLength).toBe(0);
+        });
+      });
+
+      it('clamps an end past the last byte', async () => {
+        await withStore(async (store) => {
+          if (!store.capabilities.range) return;
+          await store.write('clamp.txt', utf8('0123456789'), {});
+          const read = await store.read('clamp.txt', { range: { start: 8, end: 500 } });
+          expect(asText(await streamToBytes(read!.body))).toBe('89');
+          expect(read?.range).toEqual({ start: 8, end: 9 });
+        });
+      });
+
+      it('a missing object is null, not a range error', async () => {
+        await withStore(async (store) => {
+          if (!store.capabilities.range) return;
+          expect(await store.read('nope.txt', { range: { start: 0 } })).toBeNull();
+        });
+      });
+    });
+
+    describe('a write whose body fails', () => {
+      function failingBody(): ReadableStream<Uint8Array> {
+        let pulls = 0;
+        return new ReadableStream<Uint8Array>({
+          pull(controller) {
+            pulls += 1;
+            if (pulls > 2) controller.error(new Error('source broke'));
+            else controller.enqueue(new Uint8Array(1024).fill(7));
+          },
+        });
+      }
+
+      it('rejects, leaves no object behind and keeps the previous one intact', async () => {
+        await withStore(async (store) => {
+          await expect(store.write('half.bin', failingBody(), {})).rejects.toThrow('source broke');
+          expect(await store.head('half.bin')).toBeNull();
+          expect(await store.list('')).toEqual([]);
+
+          await store.write('kept.txt', utf8('original'), {});
+          await expect(store.write('kept.txt', failingBody(), {})).rejects.toThrow();
+          expect(asText((await store.get('kept.txt'))!.body)).toBe('original');
+        });
+      });
+    });
+
+    describe('conditional write', () => {
+      it('ifNoneMatch "*" creates once and then conflicts', async () => {
+        await withStore(async (store) => {
+          if (!store.capabilities.conditionalPut) return;
+          await store.write('c.txt', utf8('first'), { ifNoneMatch: '*' });
+          await expect(store.write('c.txt', utf8('second'), { ifNoneMatch: '*' })).rejects.toThrow(
+            ObjectConflictError,
+          );
+          expect(asText((await store.get('c.txt'))!.body)).toBe('first');
+        });
+      });
+
+      it('ifMatch replaces only the version it names, and conflicts on a stale or missing one', async () => {
+        await withStore(async (store) => {
+          if (!store.capabilities.conditionalPut) return;
+          await expect(store.write('m.txt', utf8('x'), { ifMatch: '"nope"' })).rejects.toThrow(
+            ObjectConflictError,
+          );
+          const v1 = await store.write('m.txt', utf8('v1'), {});
+          const v2 = await store.write('m.txt', utf8('v2-longer'), { ifMatch: v1.etag });
+          await expect(store.write('m.txt', utf8('v3'), { ifMatch: v1.etag })).rejects.toThrow(
+            ObjectConflictError,
+          );
+          expect(asText((await store.get('m.txt'))!.body)).toBe('v2-longer');
+          await store.write('m.txt', utf8('v3'), { ifMatch: v2.etag });
+          expect(asText((await store.get('m.txt'))!.body)).toBe('v3');
+        });
+      });
+
+      it('head() reports the etag the write returned', async () => {
+        await withStore(async (store) => {
+          const written = await store.write('w.txt', utf8('mine'), {});
+          expect((await store.head('w.txt'))?.etag).toBe(written.etag);
+        });
+      });
+
+      it('ifMatch with ifNoneMatch is refused, the body cancelled and nothing written', async () => {
+        await withStore(async (store) => {
+          let cancelled = false;
+          let pulls = 0;
+          const body = new ReadableStream<Uint8Array>({
+            pull: (controller) => {
+              pulls += 1;
+              if (pulls > 3) controller.close();
+              else controller.enqueue(utf8('x'));
+            },
+            cancel: () => {
+              cancelled = true;
+            },
+          });
+          // A JavaScript caller can pass both; the type allows only one.
+          const both = { ifNoneMatch: '*', ifMatch: '"any"' } as unknown as WriteOptions;
+          await expect(store.write('both.txt', body, both)).rejects.toThrow(ObjectConflictError);
+          expect(cancelled).toBe(true);
+          expect(await store.head('both.txt')).toBeNull();
+        });
+      });
+
+      it('two concurrent ifNoneMatch "*" writes: exactly one wins', async () => {
+        await withStore(async (store) => {
+          if (!store.capabilities.conditionalPut) return;
+          const results = await Promise.allSettled([
+            store.write('race.txt', bytesToStream(utf8('left')), { ifNoneMatch: '*' }),
+            store.write('race.txt', bytesToStream(utf8('right')), { ifNoneMatch: '*' }),
+          ]);
+          expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+          const lost = results.find(
+            (result): result is PromiseRejectedResult => result.status === 'rejected',
+          );
+          expect(lost?.reason).toBeInstanceOf(ObjectConflictError);
+        });
+      });
+    });
+
+    describe('listPage() pages with an opaque cursor', () => {
+      async function drain(
+        store: ObjectStoreV2,
+        prefix: string,
+        recursive: boolean,
+        limit: number,
+      ): Promise<string[]> {
+        const keys: string[] = [];
+        let cursor: string | undefined;
+        for (let guard = 0; guard < 50; guard += 1) {
+          const page = await store.listPage(prefix, {
+            recursive,
+            limit,
+            ...(cursor === undefined ? {} : { cursor }),
+          });
+          expect(page.entries.length).toBeLessThanOrEqual(Math.max(1, limit));
+          keys.push(...page.entries.map((entry) => entry.key));
+          if (page.cursor === null) return keys;
+          cursor = page.cursor;
+        }
+        throw new Error('listPage never finished');
+      }
+
+      it('visits every entry once, one level or recursively', async () => {
+        await withStore(async (store) => {
+          for (const name of ['a', 'b', 'c', 'd', 'e']) {
+            await store.put(`p/${name}.txt`, { body: utf8(name) });
+          }
+          await store.put('p/sub/deep.txt', { body: utf8('deep') });
+          await store.put('p-sibling/x.txt', { body: utf8('x') });
+
+          const level = await drain(store, 'p', false, 2);
+          expect([...level].sort()).toEqual([
+            'p/a.txt',
+            'p/b.txt',
+            'p/c.txt',
+            'p/d.txt',
+            'p/e.txt',
+            'p/sub',
+          ]);
+          const deep = await drain(store, 'p', true, 2);
+          expect([...deep].sort()).toEqual([
+            'p/a.txt',
+            'p/b.txt',
+            'p/c.txt',
+            'p/d.txt',
+            'p/e.txt',
+            'p/sub/deep.txt',
+          ]);
+        });
+      });
+
+      it('does not skip a folder that shares its key with a file across a page boundary', async () => {
+        await withStore(async (store) => {
+          if (!store.capabilities.fileAndFolderShareKey) return;
+          await store.put('dup/x', { body: utf8('file') });
+          await store.put('dup/x/y', { body: utf8('deep') });
+          const keys: string[] = [];
+          const kinds: string[] = [];
+          let cursor: string | undefined;
+          for (let guard = 0; guard < 10; guard += 1) {
+            const page = await store.listPage('dup', {
+              limit: 1,
+              ...(cursor === undefined ? {} : { cursor }),
+            });
+            keys.push(...page.entries.map((entry) => entry.key));
+            kinds.push(...page.entries.map((entry) => entry.kind));
+            if (page.cursor === null) break;
+            cursor = page.cursor;
+          }
+          expect(keys).toEqual(['dup/x', 'dup/x']);
+          expect([...kinds].sort()).toEqual(['file', 'folder']);
+        });
+      });
+
+      it('treats a limit below 1 as 1 and still finishes', async () => {
+        await withStore(async (store) => {
+          await store.put('lim/a.txt', { body: utf8('a') });
+          await store.put('lim/b.txt', { body: utf8('b') });
+          expect(await drain(store, 'lim', true, 0)).toEqual(['lim/a.txt', 'lim/b.txt']);
+        });
+      });
+
+      it('returns an empty final page for a prefix with nothing under it', async () => {
+        await withStore(async (store) => {
+          expect(await store.listPage('none', {})).toEqual({ entries: [], cursor: null });
+        });
+      });
+    });
+
+    describe('a foreign object the key guard refuses', () => {
+      it('is skipped by every listing, not fatal', async () => {
+        const { provider, teardown, plantRaw } = await setup();
+        try {
+          // Nothing but this module writes to the in-memory reference, so it cannot hold one.
+          if (plantRaw === undefined) return;
+          const store = provider.forWorkspace(WORKSPACE_A);
+          await store.put('docs/real.txt', { body: utf8('real') });
+          const root = `${workspaceFolder(WORKSPACE_A)}docs`;
+          // A console "create folder" is a zero-byte `name/` object; a bare `%` is a legal object
+          // name everywhere and never a valid key.
+          await plantRaw(`${root}/console-folder/`, new Uint8Array());
+          await plantRaw(`${root}/50%.txt`, utf8('foreign'));
+
+          const recursive = (await store.listPage('docs', { recursive: true })).entries;
+          expect(recursive.map((entry) => entry.key)).toEqual(['docs/real.txt']);
+          expect((await store.listPage('docs/console-folder')).entries).toEqual([]);
+          const listings = [
+            recursive,
+            (await store.listPage('docs')).entries,
+            await store.list('docs'),
+            await store.listPrefix('docs'),
+          ];
+          for (const entries of listings) {
+            for (const entry of entries) expect(() => toObjectKey(entry.key)).not.toThrow();
+            expect(entries.map((entry) => entry.key)).toContain('docs/real.txt');
+          }
+        } finally {
+          await teardown();
+        }
+      });
+    });
+
+    describe('signing', () => {
+      async function withSigning(
+        run: (store: ObjectStoreV2, fetchable: boolean) => Promise<void>,
+      ): Promise<void> {
+        const { provider, teardown, signedUrlsFetchable } = await setup();
+        try {
+          await run(provider.forWorkspace(WORKSPACE_A), signedUrlsFetchable === true);
+        } finally {
+          await teardown();
+        }
+      }
+
+      it('is offered exactly when the backend declares it', async () => {
+        await withStore((store) => {
+          expect(store.createSignedUrl !== undefined).toBe(store.capabilities.sign);
+          return Promise.resolve();
+        });
+      });
+
+      // @story US-STO-02
+      it('[US-STO-02][contract][sdk] expiry above 900 s is refused before any I/O', async () => {
+        await withSigning(async (store) => {
+          if (store.createSignedUrl === undefined) {
+            expect(store.capabilities.sign).toBe(false);
+            return;
+          }
+          await expect(
+            store.createSignedUrl('a.txt', { method: 'GET', expiresInSeconds: 901 }),
+          ).rejects.toThrow(SignedUrlUnsupportedError);
+          // The "no backend call" half is proven by the recording backend in object-store.test.ts.
+        });
+      });
+
+      // @story US-STO-05
+      it('[US-STO-05][contract][sdk] a signed GET serves exactly one key and expires', async () => {
+        await withSigning(async (store, fetchable) => {
+          if (store.createSignedUrl === undefined) return;
+          await store.write('a.txt', utf8('alpha'), { contentType: 'text/plain' });
+          await store.write('b.txt', utf8('bravo'), { contentType: 'text/plain' });
+          const signed = await store.createSignedUrl('a.txt', { method: 'GET' });
+          expect(() => new URL(signed.url)).not.toThrow();
+          if (!fetchable) return;
+
+          const served = await fetch(signed.url, { headers: signed.headers });
+          expect(await served.text()).toBe('alpha');
+
+          const other = new URL(signed.url);
+          other.pathname = other.pathname.replace(/a\.txt$/, 'b.txt');
+          expect((await fetch(other, { headers: signed.headers })).ok).toBe(false);
+
+          const past = new Date(Date.now() - 120_000);
+          const expired = await store.createSignedUrl('a.txt', {
+            method: 'GET',
+            expiresInSeconds: 60,
+            now: past,
+          });
+          expect((await fetch(expired.url, { headers: expired.headers })).ok).toBe(false);
+        });
+      });
+
+      // @story US-STO-02
+      it('[US-STO-02][contract][sdk] a signed PUT with a bound length refuses a different length', async () => {
+        await withSigning(async (store, fetchable) => {
+          if (store.createSignedUrl === undefined) return;
+          const request = {
+            method: 'PUT',
+            contentLength: 3,
+            requireBoundContentLength: true,
+          } as const;
+          if (!store.capabilities.boundLengthSign) {
+            await expect(store.createSignedUrl('up.bin', request)).rejects.toThrow(
+              SignedUrlUnsupportedError,
+            );
+            return;
+          }
+          const signed = await store.createSignedUrl('up.bin', request);
+          expect(() => new URL(signed.url)).not.toThrow();
+          if (!fetchable) return;
+
+          const longer = await fetch(signed.url, {
+            method: 'PUT',
+            headers: signed.headers,
+            body: utf8('four'),
+          });
+          expect(longer.ok).toBe(false);
+          expect(await store.head('up.bin')).toBeNull();
+
+          const exact = await fetch(signed.url, {
+            method: 'PUT',
+            headers: signed.headers,
+            body: utf8('abc'),
+          });
+          expect(exact.ok).toBe(true);
+          expect((await store.head('up.bin'))?.sizeBytes).toBe(3);
+        });
       });
     });
   });

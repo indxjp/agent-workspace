@@ -1,18 +1,18 @@
 [
-  { "lane": "claims-windows-pwsh", "where": "README.md:22", "issue": 892 },
+  { "lane": "claims-windows-pwsh", "where": "README.md:90", "issue": 892 },
   {
     "lane": "claims-windows-pwsh",
-    "where": "docs/sdk/site/getting-started/quickstart.mdx:86",
+    "where": "docs/sdk/site/getting-started/quickstart.mdx:70",
     "issue": 892
   },
   {
     "lane": "claims-windows-pwsh",
-    "where": "docs/sdk/site/features/self-host-securely.mdx:119",
+    "where": "docs/sdk/site/features/self-host-securely.mdx:186",
     "issue": 892
   },
   { "lane": "claims-windows-pwsh", "where": "sites/lp/index.html:155", "issue": 892 },
-  { "lane": "claims-windows-pwsh", "where": "sites/lp/index.html:427", "issue": 892 },
-  { "lane": "claims-windows-pwsh", "where": "sites/lp/index.html:816", "issue": 892 },
+  { "lane": "claims-windows-pwsh", "where": "sites/lp/index.html:442", "issue": 892 },
+  { "lane": "claims-windows-pwsh", "where": "sites/lp/index.html:874", "issue": 892 },
   { "lane": "claims-windows-pwsh", "where": "sites/lp/examples.html:103", "issue": 892 },
   {
     "lane": "claims-windows-pwsh",
@@ -24,20 +24,20 @@
     "where": "docs/sdk/site/features/your-stack.mdx:76",
     "issue": 892
   },
-  { "lane": "claims-windows-bash", "where": "README.md:22", "issue": 892 },
+  { "lane": "claims-windows-bash", "where": "README.md:90", "issue": 892 },
   {
     "lane": "claims-windows-bash",
-    "where": "docs/sdk/site/getting-started/quickstart.mdx:86",
+    "where": "docs/sdk/site/getting-started/quickstart.mdx:70",
     "issue": 892
   },
   {
     "lane": "claims-windows-bash",
-    "where": "docs/sdk/site/features/self-host-securely.mdx:119",
+    "where": "docs/sdk/site/features/self-host-securely.mdx:186",
     "issue": 892
   },
   { "lane": "claims-windows-bash", "where": "sites/lp/index.html:155", "issue": 892 },
-  { "lane": "claims-windows-bash", "where": "sites/lp/index.html:427", "issue": 892 },
-  { "lane": "claims-windows-bash", "where": "sites/lp/index.html:816", "issue": 892 },
+  { "lane": "claims-windows-bash", "where": "sites/lp/index.html:442", "issue": 892 },
+  { "lane": "claims-windows-bash", "where": "sites/lp/index.html:874", "issue": 892 },
   { "lane": "claims-windows-bash", "where": "sites/lp/examples.html:103", "issue": 892 },
   {
     "lane": "claims-windows-bash",

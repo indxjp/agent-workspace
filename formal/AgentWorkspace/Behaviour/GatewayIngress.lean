@@ -54,7 +54,7 @@ theorem all_complete (f : ConnectionFamily) : f ∈ all := by cases f <;> decide
 
 /-- The registry id the resolver maps a connection onto: `anthropic-compatible` is served by the
 `anthropic` adapter, so the router only ever sees four ids. -/
-@[aw_spec (ts := "packages/gateway/src/index.ts#createDatabaseGatewayRunResolver")
+@[aw_spec (ts := "packages/gateway/src/database.ts#createDatabaseGatewayRunResolver")
   (ts := "packages/gateway/src/providers/registry.ts#PROVIDER_IDS")]
 def providerId : ConnectionFamily → String
   | anthropic | anthropicCompatible => "anthropic"
@@ -729,7 +729,7 @@ def settle (protocol : WireProtocol) (m : Measurement) : Settlement :=
 /-- The accounting state a settled row leaves the run in: an unmetered row carries no price, so
 the ledger reads `unavailable`; a measured one that priced reads `complete`. -/
 @[aw_spec (ts := "packages/core/src/db/repositories/runs.ts#pricedCount")
-  (ts := "packages/gateway/src/index.ts#createDatabaseUsageRecorder")]
+  (ts := "packages/gateway/src/database.ts#createDatabaseUsageRecorder")]
 def settledAccounting : Settlement → AccountingState
   | .recorded _ true => .complete
   | .recorded _ false => .unavailable

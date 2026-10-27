@@ -28,6 +28,8 @@ import { check, type AnyPgColumn, type PgTableExtraConfigValue } from 'drizzle-o
  * starting with a letter, containing letters, digits and single hyphens.
  */
 const SAFE_VALUE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
+/** The same shape with single underscores in place of hyphens, for a value that is already wire-fixed. */
+const SAFE_SNAKE_VALUE = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/;
 const MAX_VALUE_LENGTH = 64;
 
 /**
@@ -36,15 +38,23 @@ const MAX_VALUE_LENGTH = 64;
  * Exported for the unit test: the rejection behaviour is the point of this module, and a
  * rejection path that is never exercised is not a rejection path.
  *
- * @throws if the list is empty, holds duplicates, or holds any value outside {@link SAFE_VALUE}.
+ * Hyphenated slugs are the rule. `snake` swaps the separator for underscores, for a value whose
+ * wire spelling is already fixed elsewhere (a run status such as `awaiting_approval`); it never
+ * accepts both in one list, so the gate stays a positive assertion about one shape.
+ *
+ * @throws if the list is empty, holds duplicates, or holds any value outside the chosen shape.
  */
-export function renderValueList(values: readonly string[]): string {
+export function renderValueList(
+  values: readonly string[],
+  options: { readonly snake?: boolean } = {},
+): string {
+  const shape = options.snake === true ? SAFE_SNAKE_VALUE : SAFE_VALUE;
   if (values.length === 0) {
     throw new Error('oneOf: the value list is empty; a CHECK over no values can never be true.');
   }
   const seen = new Set<string>();
   for (const value of values) {
-    if (typeof value !== 'string' || !SAFE_VALUE.test(value) || value.length > MAX_VALUE_LENGTH) {
+    if (typeof value !== 'string' || !shape.test(value) || value.length > MAX_VALUE_LENGTH) {
       throw new Error(
         `oneOf: ${JSON.stringify(value)} is not a lower-case slug of at most ${String(MAX_VALUE_LENGTH)} ` +
           'characters, so it cannot be inlined into DDL safely. Rename the value.',
@@ -64,12 +74,14 @@ export function renderValueList(values: readonly string[]): string {
  * @param name   the constraint name, which is what a violation reports — make it readable.
  * @param column the column being constrained.
  * @param values the closed set, normally the same `as const` array passed to `text`'s `enum`.
+ * @param options `snake` accepts underscore-separated values instead of hyphenated ones.
  */
 export function oneOf(
   name: string,
   column: AnyPgColumn,
   values: readonly string[],
+  options: { readonly snake?: boolean } = {},
 ): PgTableExtraConfigValue {
-  const list: SQL = sql.raw(renderValueList(values));
+  const list: SQL = sql.raw(renderValueList(values, options));
   return check(name, sql`${column} in ${list}`);
 }

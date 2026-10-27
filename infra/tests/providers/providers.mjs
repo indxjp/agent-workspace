@@ -17,7 +17,8 @@ export const PUBLIC_HOST = 'example.org';
 
 const ENGINE = 'claude-agent-sdk';
 
-export const runtime = () => import('../../../packages/runtime/dist/index.js');
+/** The generic external driver, its e2b provider and `RuntimeRefusalError`. */
+export const runtime = () => import('../../../packages/runtime/dist/external/index.js');
 
 async function externalDriver(driverId, provider, image) {
   const { createExternalDriver } = await runtime();
@@ -88,7 +89,9 @@ export const PROVIDERS = {
     credentials: ['VERCEL_TOKEN', 'VERCEL_TEAM_ID'],
     secrets: ['VERCEL_TOKEN', 'VERCEL_TEAM_ID'],
     async open(env) {
-      const { createVercelSandboxProvider } = await runtime();
+      const { createVercelSandboxProvider } = await import(
+        '../../../packages/runtime/dist/vercel-sandbox.js'
+      );
       const provider = createVercelSandboxProvider({
         teamId: env.VERCEL_TEAM_ID,
         projectId: env.VERCEL_PROJECT_ID,
@@ -116,7 +119,9 @@ export const PROVIDERS = {
     credentials: ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'],
     secrets: ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'],
     async open(env) {
-      const { createCloudflareSandboxProvider } = await runtime();
+      const { createCloudflareSandboxProvider } = await import(
+        '../../../packages/runtime/dist/cloudflare-sandbox.js'
+      );
       const bridge = await deployBridge({
         image: env.CLOUDFLARE_PROBE_IMAGE,
         gatewayHost: GATEWAY_HOST,

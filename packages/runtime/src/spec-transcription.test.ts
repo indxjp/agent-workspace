@@ -29,7 +29,7 @@
  * Type text is compared after the TypeScript printer renders both sides (so `'x'` and `"x"`, or
  * different line-wrapping, are not reported as differences), after stripping a leading `readonly`
  * token (`driver.ts` writes `RuntimeHandle` etc. as `type`, not `interface`, matching
- * `packages/core/src/types.ts`'s convention, and `readonly ('none' | ...)[]` is that same
+ * `packages/run-protocol/src/types.ts`'s convention, and `readonly ('none' | ...)[]` is that same
  * convention applied to an array-typed field — see `driver.ts`'s own comment on why it is a
  * `type`), and after one further, **fixed and named** substitution: the two spec-only identifiers
  * `AgentRunRequest` and `AgentEvent`, and the spec's bare `AgentConnection` return type, are

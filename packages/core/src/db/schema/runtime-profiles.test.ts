@@ -44,8 +44,10 @@ import path from 'node:path';
 
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
+// The run protocol's `runtimeDriverIds` is this constant; core reads it from the contracts because
+// it may not import `@agent-workspace/run-protocol` (`core-depends-only-on-contracts`, W2-9).
+import { RUNTIME_DRIVERS as runtimeDriverIds } from '@indx-workspace/contracts/runtimes';
 
-import { runtimeDriverIds } from '../../schemas.js';
 import { runtimeProfileDrivers } from './runtime-profiles.js';
 
 const SPEC_PATH = path.resolve(import.meta.dirname, '../../../../../docs/spec.md');
@@ -106,6 +108,13 @@ function normalizeText(text: string): string {
 }
 
 describe('§14.2 driver catalogue — pinned to docs/spec.md, not just to each other', () => {
+  it('keeps the run protocol’s driver catalogue equal to the database schema’s independent copy', () => {
+    // Moved from the run protocol's `schemas.test.ts` with `runtimeDriverIds` (F-08): that package
+    // cannot see the db schema, so the pin lives on this side. A database CHECK cannot reference a
+    // TypeScript type, so a driver added to one copy and not the other fails here.
+    expect([...runtimeDriverIds].sort()).toEqual([...runtimeProfileDrivers].sort());
+  });
+
   it('this package’s two driver-id copies both equal §14.2’s union, read from docs/spec.md', () => {
     const specText = readFileSync(SPEC_PATH, 'utf8');
     const block = firstFencedTsBlock(sectionUnder(specText, SPEC_HEADING), SPEC_HEADING);

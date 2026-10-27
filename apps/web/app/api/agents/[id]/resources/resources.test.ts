@@ -1,26 +1,20 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { GET as getRoute, parseAssignments, PUT as putRoute } from './route';
+import { GET as getRoute, PUT as putRoute } from './route';
+import { parseAssignments } from '../../../../../server/agents/contract';
 import { POST as createAgentRoute } from '../../route';
 import type { AgentResource, AgentResourceAssignments } from '../../../../../contracts/agents';
 import {
   createInMemoryAgentVersionStoreProvider,
   type InMemoryAgentVersionStoreProvider,
 } from '../../../../../server/agent-versions/memory-store';
-import {
-  clearAgentVersionsRuntime,
-  configureAgentVersionsRuntime,
-} from '../../../../../server/agent-versions/runtime';
+import { clearApplicationContext } from '../../../../../server/application-context';
+import { installTestDomains } from '../../../../../server/application-context-fixtures';
 import { createInMemoryAgentStoreProvider } from '../../../../../server/agents/memory-store';
 import type { AgentResourceStoreProvider } from '../../../../../server/agents/resource-store';
-import {
-  clearAgentsRuntime,
-  configureAgentsRuntime,
-  type WorkspaceResolution,
-} from '../../../../../server/agents/runtime';
+import { type WorkspaceResolution } from '../../../../../server/agents/runtime';
 import { createMemoryDirectory } from '../../../../../server/rbac/memory-directory';
 import { Principal } from '../../../../../server/rbac/principal';
-import { clearRbacRuntime, configureRbacRuntime } from '../../../../../server/rbac/runtime';
 
 describe('agent resource assignment request', () => {
   it('accepts all three explicit assignment arrays and both file access modes', () => {
@@ -41,6 +35,31 @@ describe('agent resource assignment request', () => {
       skillIds: ['skill-a'],
       connectorIds: ['connector-a'],
     });
+  });
+
+  it('accepts a revision pin on an assigned skill (SDK-19, N-1)', () => {
+    expect(
+      parseAssignments({
+        files: [],
+        skillIds: ['skill-a'],
+        skillRevisions: { 'skill-a': 2 },
+        connectorIds: [],
+      }),
+    ).toEqual({
+      files: [],
+      skillIds: ['skill-a'],
+      skillRevisions: { 'skill-a': 2 },
+      connectorIds: [],
+    });
+  });
+
+  it.each([
+    { files: [], skillIds: ['a'], skillRevisions: { a: 0 }, connectorIds: [] },
+    { files: [], skillIds: ['a'], skillRevisions: { a: 1.5 }, connectorIds: [] },
+    { files: [], skillIds: ['a'], skillRevisions: 'latest', connectorIds: [] },
+    { files: [], skillIds: ['a'], skillRevisions: { b: 1 }, connectorIds: [] },
+  ])('rejects a malformed pin or one on an unassigned skill (SDK-19, N-1)', (body) => {
+    expect(parseAssignments(body)).toBeNull();
   });
 
   it.each([
@@ -70,9 +89,7 @@ describe('own/other ownership on GET/PUT /api/agents/:id/resources (issue #117)'
   const FILE_ID = '88888888-8888-4888-8888-888888888888';
 
   afterEach(() => {
-    clearAgentsRuntime();
-    clearAgentVersionsRuntime();
-    clearRbacRuntime();
+    clearApplicationContext();
   });
 
   function useMemoryRuntime(): InMemoryAgentVersionStoreProvider {
@@ -87,6 +104,7 @@ describe('own/other ownership on GET/PUT /api/agents/:id/resources (issue #117)'
               files: [],
               skillIds: [],
               connectorIds: [],
+              storageGrants: [],
             }
           );
         },
@@ -94,21 +112,24 @@ describe('own/other ownership on GET/PUT /api/agents/:id/resources (issue #117)'
           if ((await agents.forWorkspace(workspaceId).get(agentId)) === null) {
             return { kind: 'not-found' as const };
           }
-          assignments.set(`${workspaceId}:${agentId}`, next);
-          return { kind: 'updated' as const, assignments: next };
+          const stored = { ...next, storageGrants: next.storageGrants ?? [] };
+          assignments.set(`${workspaceId}:${agentId}`, stored);
+          return { kind: 'updated' as const, assignments: stored };
         },
       }),
     };
-    configureAgentsRuntime({
-      agents,
-      agentResources,
-      resolveWorkspace(request: Request): Promise<WorkspaceResolution> {
-        const workspaceId = request.headers.get(WORKSPACE_HEADER);
-        return Promise.resolve(
-          workspaceId === null
-            ? { kind: 'unauthenticated', reason: 'no test workspace header' }
-            : { kind: 'workspace', workspaceId },
-        );
+    installTestDomains({
+      agents: {
+        agents,
+        agentResources,
+        resolveWorkspace(request: Request): Promise<WorkspaceResolution> {
+          const workspaceId = request.headers.get(WORKSPACE_HEADER);
+          return Promise.resolve(
+            workspaceId === null
+              ? { kind: 'unauthenticated', reason: 'no test workspace header' }
+              : { kind: 'workspace', workspaceId },
+          );
+        },
       },
     });
     // Issue #616: a resources PUT saves a version, so the version store is part of the runtime.
@@ -117,47 +138,49 @@ describe('own/other ownership on GET/PUT /api/agents/:id/resources (issue #117)'
       resources: agentResources,
       references: { [WORKSPACE_A]: { file: [{ id: FILE_ID, name: 'handbook' }] } },
     });
-    configureAgentVersionsRuntime({ versions });
-    configureRbacRuntime({
-      directory: createMemoryDirectory({
-        users: [
-          {
-            email: 'builder-a@example.test',
-            name: 'Builder A',
-            workspaceId: WORKSPACE_A,
-            role: 'builder',
-          },
-          {
-            email: 'builder-b@example.test',
-            name: 'Builder B',
-            workspaceId: WORKSPACE_A,
-            role: 'builder',
-          },
-        ],
-      }),
-      identify: (request) => {
-        const workspaceId = request.headers.get(WORKSPACE_HEADER);
-        const actor = request.headers.get(ACTOR_HEADER);
-        return Promise.resolve(
-          workspaceId === null || actor === null
-            ? null
-            : Principal.fromApiKey({
-                principalId:
-                  actor === 'builder-a@example.test'
-                    ? '36377a6a-7a0b-4610-8efc-d31547dcc38a'
-                    : 'c1353585-43d3-45dd-8276-edf59109fdfa',
-                apiKeyId:
-                  actor === 'builder-a@example.test'
-                    ? '04aa9a6d-4862-41ce-b910-b43ba3f4d12f'
-                    : 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
-                workspaceId,
-                role: 'builder',
-                label:
-                  actor === 'builder-a@example.test'
-                    ? 'Builder A resource key'
-                    : 'Builder B resource key',
-              }),
-        );
+    installTestDomains({ agentVersions: { versions } });
+    installTestDomains({
+      rbac: {
+        directory: createMemoryDirectory({
+          users: [
+            {
+              email: 'builder-a@example.test',
+              name: 'Builder A',
+              workspaceId: WORKSPACE_A,
+              role: 'builder',
+            },
+            {
+              email: 'builder-b@example.test',
+              name: 'Builder B',
+              workspaceId: WORKSPACE_A,
+              role: 'builder',
+            },
+          ],
+        }),
+        identify: (request) => {
+          const workspaceId = request.headers.get(WORKSPACE_HEADER);
+          const actor = request.headers.get(ACTOR_HEADER);
+          return Promise.resolve(
+            workspaceId === null || actor === null
+              ? null
+              : Principal.fromApiKey({
+                  principalId:
+                    actor === 'builder-a@example.test'
+                      ? '36377a6a-7a0b-4610-8efc-d31547dcc38a'
+                      : 'c1353585-43d3-45dd-8276-edf59109fdfa',
+                  apiKeyId:
+                    actor === 'builder-a@example.test'
+                      ? '04aa9a6d-4862-41ce-b910-b43ba3f4d12f'
+                      : 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+                  workspaceId,
+                  role: 'builder',
+                  label:
+                    actor === 'builder-a@example.test'
+                      ? 'Builder A resource key'
+                      : 'Builder B resource key',
+                }),
+          );
+        },
       },
     });
     return versions;
@@ -211,7 +234,12 @@ describe('own/other ownership on GET/PUT /api/agents/:id/resources (issue #117)'
   it('a Builder may replace the resource assignments of the agent it created, and no other Builder may', async () => {
     useMemoryRuntime();
     const agent = await createAsBuilderA();
-    const putBody = JSON.stringify({ files: [], skillIds: [], connectorIds: [] });
+    const putBody = JSON.stringify({
+      files: [],
+      skillIds: [],
+      connectorIds: [],
+      storageGrants: [],
+    });
 
     // Builder's grant on `agents` is `{ read: 'any', write: 'own', run: 'own' }`
     // (`permissions.ts`) — the same width `agents/[id]/route.ts`'s own GET carries, and this
@@ -270,20 +298,29 @@ describe('own/other ownership on GET/PUT /api/agents/:id/resources (issue #117)'
       files: [{ fileId: '99999999-9999-4999-8999-999999999999', access: 'read' }],
       skillIds: [],
       connectorIds: [],
+      storageGrants: [],
     });
     expect(unknown.status).toBe(400);
-    expect(await unknown.json()).toMatchObject({ error: { code: 'unknown-file' } });
+    expect(await unknown.json()).toMatchObject({
+      error: { code: 'unknown_file', details: ['99999999-9999-4999-8999-999999999999'] },
+    });
     expect(versions.versionCount()).toBe(0);
 
     const saved = await put({
       files: [{ fileId: FILE_ID, access: 'read-write' }],
       skillIds: [],
       connectorIds: [],
+      storageGrants: [],
     });
     expect(saved.status, await saved.clone().text()).toBe(200);
     // The agent cannot write files, so the materialised grant is narrowed (#133).
     expect(await saved.json()).toEqual({
-      assignments: { files: [{ fileId: FILE_ID, access: 'read' }], skillIds: [], connectorIds: [] },
+      assignments: {
+        files: [{ fileId: FILE_ID, access: 'read' }],
+        skillIds: [],
+        connectorIds: [],
+        storageGrants: [],
+      },
     });
     const listing = await (await versions.forWorkspace(WORKSPACE_A))?.list(agent.id);
     expect(listing?.versions).toHaveLength(1);

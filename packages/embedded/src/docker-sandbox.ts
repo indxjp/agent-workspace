@@ -18,7 +18,7 @@ import { isIPv4 } from 'node:net';
 import path from 'node:path';
 
 import { startRunnerManager } from '@agent-workspace/runner/manager-start';
-import { runDockerCommand, type DockerCommand } from '@agent-workspace/runtime';
+import { runDockerCommand, type DockerCommand } from '@agent-workspace/runtime/driver/docker';
 
 /** The tag `compose.yaml` builds from `runtime.Dockerfile`, as the runner manager defaults to. */
 export const DEFAULT_DOCKER_RUNTIME_IMAGE = 'agent-workspace/runtime:dev';

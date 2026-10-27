@@ -1,4 +1,4 @@
-ARG NODE_IMAGE=node:24.21.0-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
+ARG NODE_IMAGE=node:24.22.1-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205
 
 FROM ${NODE_IMAGE} AS build
 
@@ -7,7 +7,7 @@ ENV PATH=$PNPM_HOME:$PATH
 # Without CI=1, `pnpm install --prod` below prompts before purging node_modules and a Docker RUN
 # step has no TTY to answer it (the same reason gateway.Dockerfile sets it).
 ENV CI=1
-RUN corepack enable && corepack prepare pnpm@11.28.2 --activate
+RUN corepack enable && corepack prepare pnpm@11.28.8 --activate
 
 WORKDIR /workspace
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json ./
@@ -51,7 +51,7 @@ RUN apt-get update \
              /usr/local/bin/yarn /usr/local/bin/yarnpkg
 ARG VCS_REF=unknown
 LABEL org.opencontainers.image.title="Agent Workspace tool host" \
-      org.opencontainers.image.source="https://github.com/indxdev/agent-workspace" \
+      org.opencontainers.image.source="https://github.com/indxjp/agent-workspace" \
       org.opencontainers.image.revision="$VCS_REF"
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \

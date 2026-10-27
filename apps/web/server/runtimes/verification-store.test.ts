@@ -1,3 +1,4 @@
+import { log as webLogger } from '../telemetry/logger';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -52,7 +53,7 @@ describe('runtime verification persistence', () => {
 
   it('keeps a verification in memory when its directory is on a read-only filesystem', async () => {
     readOnly.on = true;
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const warn = vi.spyOn(webLogger, 'warn').mockImplementation(() => undefined);
     try {
       const cache = await loadRuntimeVerificationCache('/read-only/verification.json');
       const verification = {

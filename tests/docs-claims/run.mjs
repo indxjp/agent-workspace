@@ -16,7 +16,12 @@
  *   no `sudo` here, unlike a default Node install. `cd` moves the page's
  *   directory, and a block that starts with `npm create` starts in a new one (it is another way to
  *   start, not a step after the blocks above it); `npm run dev` is started, waited on until it is ready and signed in, then stopped
- *   with Ctrl+C. Pages whose commands are the same run once and say so. Then the real `aw` binary
+ *   with Ctrl+C. Pages whose commands are the same run once and say so. A page whose only commands
+ *   are the first `sh` block of `getting-started/quickstart.mdx` is not run here when the machine,
+ *   registry and model are the journey's own (the default): journey-e2e's first-hour leg runs that
+ *   block unchanged on the same container, Verdaccio and fake model (T1-T3) and asks the agent it
+ *   starts a question (T4), and the journey leg stops `npm run dev` with Ctrl+C. Its rows say so.
+ *   Then the real `aw` binary
  *   shows the "running without a person" rows of `cli/overview.mdx`: `aw init` without `--yes`, `aw
  *   login` and a silent pipe on `--api-key-stdin`.
  * - `compile` claims are written to a scratch project in the container with the packed packages
@@ -56,7 +61,12 @@ import { parseArgs } from 'node:util';
 
 import { run } from '../generated-project/project.mjs';
 import { positiveIntegerVariable } from '../generated-project/run.mjs';
-import { JourneyFailure, registryOf, workDirectoryOf } from '../journey/harness.mjs';
+import {
+  JourneyFailure,
+  quickstartCommands,
+  registryOf,
+  workDirectoryOf,
+} from '../journey/harness.mjs';
 import {
   FAKE_KEY_PREFIX,
   HOME,
@@ -89,6 +99,8 @@ const DEV_COMMAND = 'npm run dev';
 const NEEDS_KEY = 'skipped: needs ANTHROPIC_API_KEY (not configured)';
 const STACK_BUILDER = 'sites/lp/assets/site.js';
 const CLI_PAGE = 'docs/sdk/site/cli/overview.mdx';
+const QUICKSTART_PAGE = 'docs/sdk/site/getting-started/quickstart.mdx';
+const FIRST_HOUR_OWNS = 'owned by journey-e2e first-hour (T1-T3 run these commands)';
 const MAX_WHAT = 90;
 const MAX_DETAIL_LINES = 40;
 
@@ -107,8 +119,8 @@ const MAX_DETAIL_LINES = 40;
  */
 export function parseArguments(argv, env) {
   const usage =
-    'usage: node tests/docs-claims/run.mjs [--registry <url>] [--model fake|live] [--static] [--machine container|host [--shell sh|bash|pwsh]] [--shard <i>/<n>]';
-  /** @type {{ registry?: string, model?: string, static?: boolean, machine?: string, shell?: string, shard?: string }} */
+    'usage: node tests/docs-claims/run.mjs [--registry <url>] [--model fake|live] [--static] [--machine container|host [--shell sh|bash|pwsh]]';
+  /** @type {{ registry?: string, model?: string, static?: boolean, machine?: string, shell?: string }} */
   let values;
   try {
     ({ values } = parseArgs({
@@ -119,7 +131,6 @@ export function parseArguments(argv, env) {
         static: { type: 'boolean' },
         machine: { type: 'string' },
         shell: { type: 'string' },
-        shard: { type: 'string' },
       },
       strict: true,
     }));
@@ -148,10 +159,6 @@ export function parseArguments(argv, env) {
   if (machine === 'host' && registry === null) {
     throw new JourneyFailure(`${usage} (--machine host needs --registry: there is no Verdaccio)`);
   }
-  const shard = /^([1-9])\/([1-9])$/u.exec(values.shard ?? '1/1');
-  if (shard === null || Number(shard[1]) > Number(shard[2])) {
-    throw new JourneyFailure(`${usage} (--shard is <i>/<n> with 1 <= i <= n <= 9)`);
-  }
   return {
     registry,
     live: model === 'live',
@@ -159,26 +166,7 @@ export function parseArguments(argv, env) {
     staticOnly: values.static === true,
     machine,
     shell: values.shell ?? 'sh',
-    shard: { index: Number(shard[1]), count: Number(shard[2]) },
   };
-}
-
-/**
- * The page plans shard `index` of `count` runs (ci.yml runs the claims on parallel runners). Pages
- * go round-robin in page order, and a page that repeats an earlier page's commands goes with that
- * page, so it is still answered from the earlier rows instead of running again.
- *
- * @param {readonly PagePlan[]} plans @param {{ index: number, count: number }} shard
- * @returns {PagePlan[]}
- */
-export function shardPlans(plans, { index, count }) {
-  /** @type {Map<string, number>} */
-  const shardOf = new Map();
-  return plans.filter((plan) => {
-    const group = plan.sameAsPage ?? plan.page;
-    if (!shardOf.has(group)) shardOf.set(group, (shardOf.size % count) + 1);
-    return shardOf.get(group) === index;
-  });
 }
 
 /** @param {string} page */
@@ -489,6 +477,24 @@ async function runCommand(machine, state, command) {
     ok: result.status === 0,
     output: `$ ${command}\n${result.output}\nexit ${String(result.status)}\n`,
   };
+}
+
+/**
+ * The rows of a page whose every run block is `owned` (the commands journey-e2e's first-hour leg
+ * runs), or null when the page has a block of its own to run. An empty `owned` owns nothing.
+ *
+ * @param {PagePlan} plan @param {readonly string[]} owned
+ * @returns {Row[] | null}
+ */
+export function ownedRows(plan, owned) {
+  const key = owned.join('\n');
+  if (key === '' || !plan.blocks.every((block) => block.commands.join('\n') === key)) return null;
+  return plan.blocks.map((block) => ({
+    where: whereOf(block.claim),
+    state: 'run',
+    what: block.commands.join(' ; '),
+    result: FIRST_HOUR_OWNS,
+  }));
 }
 
 /**
@@ -860,21 +866,23 @@ async function machineRows(options, claims, work, logs, partial) {
       });
     }
 
+    // Only on the journey's own machine, registry and model is the first-hour leg the same proof.
+    const owned =
+      options.machine === 'container' && options.registry === null && !options.live
+        ? quickstartCommands(readRepositoryFile(QUICKSTART_PAGE) ?? '')
+        : [];
     /** @type {Row[]} */
     const rows = [];
     /** @type {Map<string, Row[]>} */
     const done = new Map();
-    for (const plan of shardPlans(runPlans(claims), options.shard)) {
-      const pageRows = await runPage(machine, plan, done, modelMissing);
+    for (const plan of runPlans(claims)) {
+      const pageRows = ownedRows(plan, owned) ?? (await runPage(machine, plan, done, modelMissing));
       done.set(plan.page, pageRows);
       rows.push(...pageRows);
       partial(rows);
     }
-    // The `aw` and compile rows belong to the last shard, the static rows to the first.
-    if (options.shard.index === options.shard.count) {
-      rows.push(...(await personRows(machine)));
-      rows.push(...(await compileRows(machine, claims, work)));
-    }
+    rows.push(...(await personRows(machine)));
+    rows.push(...(await compileRows(machine, claims, work)));
     return rows;
   } finally {
     rmSync(secrets, { recursive: true, force: true });
@@ -931,23 +939,15 @@ async function main() {
   mkdirSync(logs, { recursive: true });
   const { SETUP_QUESTIONS } = await import('@indx-workspace/contracts/setup');
   const claims = extractRepositoryClaims(ROOT);
-  const rows =
-    options.shard.index === 1
-      ? staticRows(
-          claims,
-          SETUP_QUESTIONS.map((question) => question.flag),
-        )
-      : [];
+  const rows = staticRows(
+    claims,
+    SETUP_QUESTIONS.map((question) => question.flag),
+  );
   /** @type {string[]} */
   const notes = [
     `Packages from ${options.registry ?? 'this checkout, in a throwaway Verdaccio'}; model: ${options.live ? 'live' : 'fake'}; machine: ${options.machine === 'host' ? `this computer (${process.platform}), shell ${options.shell}` : 'the journey container'}. Compile rows share one \`tsc\` run, so their duration is its share.`,
     'Run claims execute with `NPM_CONFIG_PREFIX=$HOME/.npm-global` and its `bin` on `PATH`, so a global `npm install` needs no `sudo`; on a default Node install it may fail with EACCES.',
   ];
-  if (options.shard.count > 1) {
-    notes.push(
-      `Shard ${String(options.shard.index)} of ${String(options.shard.count)}: the other shards' rows are in their own reports.`,
-    );
-  }
   if (options.live && options.apiKey === '') {
     notes.push(
       "`ANTHROPIC_API_KEY` is not set: every row from a page's first `npm run dev` on is `skipped`, and a skipped row fails the run; it is never a pass.",

@@ -6,24 +6,20 @@ import { EvaluationRunResourceSchema } from '@indx-workspace/contracts/evaluatio
 import { GET, POST } from './route';
 import { POST as ADVANCE } from '../evaluation-advance/route';
 import { createInMemoryAgentStoreProvider } from '../../../../../server/agents/memory-store';
-import {
-  clearAgentsRuntime,
-  configureAgentsRuntime,
-  type WorkspaceResolution,
-} from '../../../../../server/agents/runtime';
+import { type WorkspaceResolution } from '../../../../../server/agents/runtime';
 import { FIXTURE_PERMISSIONS, versionRequest } from '../../../../../server/agent-versions/fixtures';
 import { createAgentVersion } from '../../../../../server/agent-versions/handlers';
 import { createInMemoryAgentVersionStoreProvider } from '../../../../../server/agent-versions/memory-store';
+import { clearApplicationContext } from '../../../../../server/application-context';
 import {
-  clearAgentVersionsRuntime,
-  configureAgentVersionsRuntime,
-} from '../../../../../server/agent-versions/runtime';
+  installTestDomains,
+  installTestRunApi,
+  resetTestRunApi,
+} from '../../../../../server/application-context-fixtures';
 import { assistantSays } from '../../../../../server/evaluations/fixtures';
 import { createMemoryDirectory } from '../../../../../server/rbac/memory-directory';
 import { Principal } from '../../../../../server/rbac/principal';
-import { clearRbacRuntime, configureRbacRuntime } from '../../../../../server/rbac/runtime';
-import { installRunApi, resetRunApi } from '../../../../../server/runs/environment';
-import { InMemoryRunStore } from '../../../../../server/runs/store';
+import { InMemoryRunStore } from '../../../../../server/runs/memory-store';
 
 /**
  * The three evaluation-run routes (issue #799) through `serveAgentVersionRoute`, driven with real
@@ -93,32 +89,36 @@ beforeEach(async () => {
   );
   AgentVersionResourceSchema.parse(saved.body);
 
-  configureAgentsRuntime({
-    agents,
-    resolveWorkspace(request: Request): Promise<WorkspaceResolution> {
-      const workspaceId = request.headers.get(WORKSPACE_HEADER);
-      return Promise.resolve(
-        workspaceId === null
-          ? { kind: 'unauthenticated', reason: 'no test workspace header' }
-          : { kind: 'workspace', workspaceId },
-      );
+  installTestDomains({
+    agents: {
+      agents,
+      resolveWorkspace(request: Request): Promise<WorkspaceResolution> {
+        const workspaceId = request.headers.get(WORKSPACE_HEADER);
+        return Promise.resolve(
+          workspaceId === null
+            ? { kind: 'unauthenticated', reason: 'no test workspace header' }
+            : { kind: 'workspace', workspaceId },
+        );
+      },
     },
   });
-  configureAgentVersionsRuntime({ versions });
-  configureRbacRuntime({
-    directory: createMemoryDirectory({ users: [] }),
-    identify: (request) => {
-      const workspaceId = request.headers.get(WORKSPACE_HEADER);
-      const actor = request.headers.get(ACTOR_HEADER);
-      if (workspaceId === null || actor === null || !isActor(actor)) return Promise.resolve(null);
-      return Promise.resolve(
-        Principal.fromApiKey({
-          ...ACTORS[actor],
-          apiKeyId: ACTORS[actor].principalId.replace(/^a/u, 'b'),
-          workspaceId,
-          label: `${actor} evaluation runs key`,
-        }),
-      );
+  installTestDomains({ agentVersions: { versions } });
+  installTestDomains({
+    rbac: {
+      directory: createMemoryDirectory({ users: [] }),
+      identify: (request) => {
+        const workspaceId = request.headers.get(WORKSPACE_HEADER);
+        const actor = request.headers.get(ACTOR_HEADER);
+        if (workspaceId === null || actor === null || !isActor(actor)) return Promise.resolve(null);
+        return Promise.resolve(
+          Principal.fromApiKey({
+            ...ACTORS[actor],
+            apiKeyId: ACTORS[actor].principalId.replace(/^a/u, 'b'),
+            workspaceId,
+            label: `${actor} evaluation runs key`,
+          }),
+        );
+      },
     },
   });
 
@@ -130,7 +130,7 @@ beforeEach(async () => {
     score: (row.passed / row.total).toFixed(4),
     createdAt: new Date('2026-10-07T00:00:00Z'),
   });
-  installRunApi({
+  installTestRunApi({
     authenticate: () => Promise.reject(new Error('the evaluation route authenticates via RBAC')),
     findAgent: (_principal, agentId) =>
       Promise.resolve({ id: agentId, workspaceId: WORKSPACE, engine: 'claude-agent-sdk' }),
@@ -178,10 +178,8 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
-  clearAgentsRuntime();
-  clearAgentVersionsRuntime();
-  clearRbacRuntime();
-  resetRunApi();
+  clearApplicationContext();
+  resetTestRunApi();
 });
 
 function request(actor: Actor, path: string, method: 'GET' | 'POST', body?: unknown): Request {

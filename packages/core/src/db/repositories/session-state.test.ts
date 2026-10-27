@@ -242,11 +242,56 @@ describe.skipIf(!hasDatabase)('SessionStateRepository', () => {
     });
     await expect(store.getBlob(sessionId, 'claude-agent-sdk', 'state.tar')).resolves.toEqual({
       blobKey: 'state.tar',
+      objectId: null,
       storageKey: `session-state/${sessionId}/claude-agent-sdk/state.tar`,
       sizeBytes: 4,
       sha256: 'b'.repeat(64),
     });
     await expect(store.getBlob(sessionId, 'claude-agent-sdk', 'absent')).resolves.toBeNull();
+  });
+
+  // @story US-STO-09
+  it('[US-STO-09][unit][run] a replacing put returns the previous location, and a non-ready row is never served', async () => {
+    const store = await repository();
+    const first = crypto.randomUUID();
+    const second = crypto.randomUUID();
+    const blob = (objectId: string) => ({
+      engine: 'claude-agent-sdk' as const,
+      blobKey: 'replaced.tar',
+      objectId,
+      storageKey: `workspaces/${workspaceId}/session-state/${objectId}`,
+      sizeBytes: 1,
+      sha256: 'e'.repeat(64),
+    });
+    await expect(store.putBlob(sessionId, blob(first))).resolves.toEqual({ replaced: null });
+    await expect(store.putBlob(sessionId, blob(second))).resolves.toEqual({
+      replaced: { objectId: first, storageKey: blob(first).storageKey },
+    });
+    await expect(
+      store.getBlob(sessionId, 'claude-agent-sdk', 'replaced.tar'),
+    ).resolves.toMatchObject({ objectId: second });
+
+    for (const status of ['pending', 'deleting'] as const) {
+      await isolated.db
+        .update(sessionStateBlobs)
+        .set({ status })
+        .where(
+          and(
+            eq(sessionStateBlobs.workspaceId, workspaceId),
+            eq(sessionStateBlobs.blobKey, 'replaced.tar'),
+          ),
+        );
+      await expect(
+        store.getBlob(sessionId, 'claude-agent-sdk', 'replaced.tar'),
+      ).resolves.toBeNull();
+      await expect(
+        store
+          .listBlobs(sessionId)
+          .then((rows) => rows.some((row) => row.blobKey === 'replaced.tar')),
+      ).resolves.toBe(false);
+      // The cleanup job still sees the object as held, in whatever status.
+      await expect(store.referencedObjectIds([first, second])).resolves.toEqual([second]);
+    }
   });
 
   it('purges streams, entries and blobs last written before the cutoff, and nothing newer', async () => {
@@ -290,11 +335,14 @@ describe.skipIf(!hasDatabase)('SessionStateRepository', () => {
       blobs: [
         {
           blobKey: 'expired.tar',
+          objectId: null,
           storageKey: `session-state/${sessionId}/claude-agent-sdk/expired.tar`,
           sizeBytes: 1,
           sha256: 'd'.repeat(64),
         },
       ],
+      // The session keeps its `retained/` stream, so its conversation is not purged.
+      sessionIds: [],
     });
     await expect(store.list(key('expired/'), {})).resolves.toBeNull();
     await expect(store.list(key('retained/'), {})).resolves.toHaveLength(1);

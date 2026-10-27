@@ -1,0 +1,282 @@
+{
+  "apps/runner/src/session.ts": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "apps/web/app/(shell)/layout.tsx": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "apps/web/app/api/auth/callback/route.ts": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "apps/web/app/api/auth/login/route.ts": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "apps/web/app/api/auth/workspace/route.ts": {
+    "no-restricted-properties": {
+      "count": 2
+    }
+  },
+  "apps/web/app/api/cron/retention/route.ts": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "apps/web/app/api/invitations/[id]/accept/route.ts": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "apps/web/app/p/s/[name]/page.tsx": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "apps/web/app/p/s/[name]/try/page.tsx": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "apps/web/app/signin/page.tsx": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "apps/web/components/setup/setup-wizard.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "apps/web/server/a2a/dispatch.ts": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "apps/web/server/a2a/limits.ts": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "apps/web/server/auth/index.ts": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "apps/web/server/auth/oidc.ts": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "apps/web/server/auth/session.ts": {
+    "no-restricted-properties": {
+      "count": 4
+    }
+  },
+  "apps/web/server/auth/sign-in-limit.ts": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "apps/web/server/cli-auth/rate-limit.ts": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "apps/web/server/connectors/base-env.ts": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "apps/web/server/engines/images.ts": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "apps/web/server/models/store.ts": {
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "apps/web/server/oauth/limits.ts": {
+    "no-restricted-properties": {
+      "count": 3
+    }
+  },
+  "apps/web/server/oauth/resource.ts": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "apps/web/server/platforms/http.ts": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "apps/web/server/runs/sse.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "apps/web/server/shares/runnable/feature.ts": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "apps/web/server/shares/runnable/visitor-identity.ts": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "apps/web/server/surfaces/loader/handler.ts": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "apps/web/server/surfaces/loader/test-runtime.ts": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "apps/web/server/surfaces/public/handlers.ts": {
+    "no-restricted-properties": {
+      "count": 7
+    }
+  },
+  "apps/web/server/surfaces/public/limits.ts": {
+    "no-restricted-properties": {
+      "count": 2
+    }
+  },
+  "apps/web/server/telemetry/runtime.ts": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "packages/aw/src/tools/host-child.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "packages/aw/src/tools/stdio-bridge.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "packages/core/src/db/bootstrap.ts": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "packages/core/src/db/client.ts": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "packages/core/src/db/migrate.ts": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "packages/core/src/db/repositories/root.ts": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "packages/core/src/db/repositories/testing.ts": {
+    "no-restricted-properties": {
+      "count": 2
+    }
+  },
+  "packages/core/src/db/repositories/unscoped.ts": {
+    "no-restricted-properties": {
+      "count": 3
+    }
+  },
+  "packages/core/src/db/seed.ts": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "packages/core/src/net/egress-policy.ts": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "packages/core/src/posture.ts": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "packages/core/src/secrets/aws-kms-master-key-provider.ts": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "packages/core/src/secrets/master-key-provider.ts": {
+    "no-restricted-properties": {
+      "count": 2
+    }
+  },
+  "packages/core/src/secrets/master-key.ts": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "packages/core/src/secrets/service.ts": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "packages/core/src/storage/local-fs-store.ts": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "packages/embedded/src/postmaster.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "packages/engine-openai-agents/src/boundary.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "packages/engine-openai-agents/src/executors.ts": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "packages/gateway/src/providers/registry.ts": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "packages/runtime/src/cloudflare-sandbox.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "packages/runtime/src/external/e2b.ts": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "packages/runtime/src/transfer.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "packages/runtime/src/vercel-sandbox.ts": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  }
+}

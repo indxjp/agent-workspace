@@ -8,10 +8,154 @@ what the policy covers are on the developer site's
 page. `@indx-workspace/contracts`, `@indx-workspace/sdk` and `@indx-workspace/aw` are released
 in lock-step with one version.
 
+## 0.6.11 — unreleased
+
+### Added
+
+- `AgentResource` gains optional `createdByAgent` (`agentId`, `version`, `runId`) and `archivedAt`,
+  and `ProjectPolicy` gains an optional `builder.allow` list of agent names. A missing `builder`
+  allows no agent to build.
+- `AuditEventSchema` gains the optional `builderRunId`, present only on `agent-created` rows written by a Builder save.
+- `ENDPOINT_CLIENT_KINDS` gains `builder`, the OAuth client of the Builder's MCP door. A `builder` client names no agent, so `POST /api/endpoint-clients` takes `agentIds: []` for it and refuses `toolNames`; `mcp-project` and `a2a-agent` clients keep their agent counts.
+- `BUILDER_REFUSAL_CODES` gains `read_only_client` (403), the refusal an outside MCP client gets for a Builder tool that writes or spends.
+- A GCS storage-connection credential accepts `{ "provider": "gcs", "accessToken" }`, a short-lived OAuth access token; the URL must carry `?project=`. Like a key, it is write-only and never returned. A `serviceAccountJson` whose `type` is not `service_account` (for example `external_account`) is refused as `storage_connection_url_invalid`.
+- An S3 storage-connection credential accepts an optional `sessionToken`, for temporary (STS) credentials. Like the key, it is write-only and never returned.
+
+### Deprecated
+
+- `@indx-workspace/contracts/storage-settings` keeps its 0.6.10 exports for the old storage settings as deprecated shims: each is removed in the next major release, and the server ignores the old storage settings.
+- Constants: `FILE_STORAGE_ROOT_ENV`, `SKILL_STORAGE_ROOT_ENV`, `SESSION_STATE_STORAGE_ROOT_ENV`, `OBJECT_STORAGE_BUCKET_ENV` and `OBJECT_STORAGE_BACKEND_ENV`; removed in the next major release; the server ignores the old storage settings.
+- Types: `ObjectStorageBackend`, `ResolvePath` and `LegacyLocalRoots`; removed in the next major release; the server ignores the old storage settings.
+- Functions: `configuredObjectStorageBackend(env)`, `legacyStorageVariables(env)` (use `ignoredStorageVariables`) and `storageUrlReplacing(location, env)`; removed in the next major release; the server ignores the old storage settings.
+- `resolveStorageSettings(env, resolve?)` still accepts `resolve` and ignores it; the parameter is removed in the next major release, and the server ignores the old storage settings.
+- The `legacy` kind of `StorageSettings` stays in the type so a `case 'legacy'` still compiles; it is never produced, is removed in the next major release, and the server ignores the old storage settings.
+- `ImportSkillInput`, the JSON + base64 body of `POST /api/skills`, is deprecated in favour of
+  `multipart/form-data` (`SKILL_IMPORT_MULTIPART`). The server still accepts it and answers with a
+  `Deprecation` header; it is removed in the next major release.
+
+## 0.6.10 — unreleased
+
+### Added
+
+- Surface attachments (ADR-0146, #1308). `SurfacePartsSchema` accepts `attachments: boolean`;
+  `POST /api/sessions/:engineSessionId/attachments` (`sessions.attachments.upload`) takes a raw
+  body with the file name in `name` and answers `201` `SurfaceAttachmentResponseSchema`
+  (`{ fileId, path, size }`). `SURFACE_ATTACHMENT_MAX_BYTES` (10 MiB), `SURFACE_ATTACHMENTS_MAX_FILES`
+  (20), `SURFACE_ATTACHMENTS_MAX_TOTAL_BYTES` (50 MiB) and `SURFACE_ATTACHMENT_PROBLEM_CODES`
+  (`invalid_attachment_name`, `attachments_quota_exceeded`) describe it.
+- Run attachments (ADR-0146). `StartRunRequest.attachments` names one to `MAX_RUN_ATTACHMENTS`
+  (10) workspace files, as `{ fileId }`, that the run receives read-only. Refusals are `404`
+  `file_not_found`, and `422` `run_attachments_unreadable`, `run_attachments_too_large` and
+  `run_attachments_unsupported_runtime`.
+- `RUN_WARNING_EVENT` (`run.warning`) and `RunWarningEventDataSchema` (`{ code, message? }`): a
+  durable platform notice on a run's event stream, such as `attachments_removed_shell`.
+  `PLATFORM_EVENT_NAMES` lists it with `run.status`.
+- `needsApproval(rules, toolName)` and `canonicalCall(name, input)` in
+  `@indx-workspace/contracts/agents`: the one decision of whether a tool call needs approval, and
+  the RFC 8785 canonical JSON text of a call (it throws `TypeError` on a value that is not JSON).
+  `RequireApprovalRuleSchema` is the rule a `requireApproval` list takes, and
+  `conflictingApprovalRules` finds the rules that also match `autoApprove`.
+- Structured run output (ADR-0143). `StartRunRequest.outputSchema` asks for the answer as a value
+  of a JSON Schema (draft 2020-12, root `type: "object"`, local `#/$defs/` `$ref` only, at most 16
+  levels deep and 32 KiB); a schema outside those limits is a `400` `invalid_body` whose message
+  begins with the limit (`root_type`, `size`, `dialect`, `ref`, `depth`). `outputSchemaViolation`
+  is the one function that judges it. `RunResource.output` (`{ text, structured }`, `null` until
+  the run completes) and the optional `output` of the `agent.result` frame carry the answer. A run
+  that cannot meet its schema fails with `output_schema_unsatisfied` (`parseRunFailure`).
+- A run whose engine cannot be asked for structured output is refused with `422`
+  `engine_capability_unsupported`.
+- Evals check structured output. `EvalCase.outputSchema` is the JSON Schema the case's run answers
+  with (the limits of `outputSchemaViolation`, and at most 4096 characters as JSON), and
+  `EvalExpect.output` is a subset match on `RunResource.output.structured`, scored like
+  `toolInput`; it needs the case's `outputSchema`. An older `aw` reads neither key from an
+  `evals/<agent>.yaml` (the case schema is strict).
+- `CreateAgentInputSchema` and `UpdateAgentPatchSchema` in `@indx-workspace/contracts/agents`: the
+  bodies of `POST /api/agents` and `PATCH /api/agents/:id`, the rules the server applies, and
+  `agentRequestIssueMessages(issues)`, the `details` lines it answers a refused body with.
+  `CreateAgentInput` and `UpdateAgentPatch` are now derived from them; their shape is unchanged.
+- The `agent.handoff` run frame (`AgentHandoffFrameSchema`, with an optional non-empty `reason` that only an operator's stream carries; a visitor's session-scoped stream omits it) ends a run that handed the conversation to a person, and the Claude policy arm accepts `handoff: true` to offer the `handoff_to_person` tool (ADR-0145 D4). An SDK or `aw` older than this release raises `ContractViolationError` on the new frame, so upgrade them before an agent opts in.
+- `RUN_START_PROBLEM_CODES` gains `builder_model_unavailable` (503): a run of the built-in Builder is refused before a run exists when no model connection of the workspace serves the Builder's model.
+- `AgentResource.builtin` marks a platform-managed agent (`'builder'`), and writes to one answer `403 builtin_agent_read_only` (`BUILTIN_AGENT_PROBLEM_CODES`).
+- `AgentResourceSchema` is strict, so an older SDK or `aw` rejects a `GET /api/agents` listing that holds a Builder: clients must update to an SDK/`aw` that knows `builtin` before Builder provisioning is enabled.
+- `RUN_IDEMPOTENCY_PROBLEM_CODES` declares the two refusals a run start's `Idempotency-Key` can
+  draw: `400 invalid_idempotency_key` and `409 run_idempotency_conflict`.
+- `@indx-workspace/contracts/storage-connections` exports the storage-connection wire shape (resource, list, create input, patch, provider-shaped credential, test outcome, browse response, problem codes) and `parseStorageGrantPath` for `storage://<connection>/<folder>` grants. An agent definition's `files[].path` that starts with `storage://` must parse.
+- `parseStorageUrl` marks a refusal for credentials or an unknown query parameter with `secret: true`.
+- `@indx-workspace/contracts/storage-settings` resolves `AW_STORAGE_URL` and the old storage variables the way the server does.
+- `@indx-workspace/contracts/storage-url` exports `parseStorageUrl` and `formatStorageUrl`, the one parser for `AW_STORAGE_URL` (`file:`, `s3:`, `gcs:`, `azblob:`). It refuses credentials and any query parameter it does not list, and a refusal never repeats the URL.
+- `EvalCaseSchema` accepts optional `tags` (labels such as `injection`). They are never scored; a gate over an evaluation report can read them. `BUILDER_EVAL_PASS_SCORE` (0.85) is the Builder's promotion bar.
+- `EvalExpect.awaitsApproval: true` scores an evaluation case at an approval pause (ADR-0145): the run may end at `awaiting_approval`, `tool` and `toolInput` also match the paused call, and the text checks and `judge` read the answer so far. It is refused together with `output`. A case that sets it and completes without pausing fails `run_not_awaiting_approval`. The evaluation never approves: the runner cancels the paused run after scoring. A server older than this contract answers `400 invalid_body` to a file that uses it.
+- `FILES_PROBLEM_CODES.upload_in_progress` (409): an upload, rename, folder creation or folder move that meets an upload still in flight at the path, or under the folder, is refused and nothing is written.
+- `MoveFileRequestSchema` describes the body of `PATCH /api/files/:id`; `MoveFileInput` is now inferred from it, and the route catalogue names it as the request.
+- Public run approval (ADR-0145). `RUN_STATUSES` gains `awaiting_approval`: a run that stopped
+  before a tool call its agent requires approval for. It is not terminal (`isTerminalRunStatus`
+  is `false`); `STOPPED_RUN_STATUSES` and `isStoppedRunStatus` name the statuses where nothing
+  executes. `RunResource.pendingApproval` (`RunApprovalCall | null`) carries the call while the
+  run is paused. The `agent.approval.requested` frame is appended to `AGENT_FRAME_NAMES`.
+  `POST /api/runs/:id/approval` (`RunApprovalRequestSchema` `{ decision, comment? }`, `202` with
+  `RunApprovalResponseSchema`) starts one continuation run in the same session; a second decision
+  or a late one is `409` (`RUN_APPROVAL_PROBLEM_CODES`).
+- `RunResource.agentVersion` is the number of the agent version the run executed, or `null` for a session that pins none. It is server-set and read-only.
+- `RUN_START_PROBLEM_CODES` gains `run_storage_grant_unavailable` (`422`): a granted storage connection folder is gone or no longer allowed when the run starts.
+- `PublishShareCommand.transcript` chooses which turns a session share publishes, as `{ runIds }` of that session's runs (`ShareTranscriptSelectionSchema`, at most `SHARE_TRANSCRIPT_MAX_RUNS`). The server copies each run's prompt and final answer; the command never carries transcript text.
+- `AgentResourceAssignments` carries `storageGrants` (`{ connectionId, prefix, access }`, default `[]`), and the agent-version problem codes include `storage_connection_prefix_not_allowed` and `storage_connection_write_not_allowed`.
+- `TriggerResource.outputSchema`, and an optional `outputSchema` on `CreateTriggerRequest` and
+  `UpdateTriggerRequest` (`null` clears it): the JSON Schema every run the trigger starts answers in,
+  under the same limits as `StartRunRequest.outputSchema` (ADR-0154).
+- `TriggerResource.subject`, and an optional `subject` on `CreateTriggerRequest` and
+  `UpdateTriggerRequest` (`null` clears it): the caller every run the trigger starts asserts to a
+  connector that opts into caller identity, 1 to 256 characters (ADR-0156). New problem code
+  `trigger_subject_not_allowed` (403): setting a subject, or editing a trigger that has one, takes
+  the API-key-creation permission.
+
+### Changed
+
+- `RunResource` gains a required `output` key. A client parsing a run from an older server must
+  tolerate its absence until both sides are on this release.
+- `CreateUploadUrlRequestSchema.sizeBytes` is bounded by the new export `SIGNED_UPLOAD_HARD_MAX_BYTES` (5 GiB, the largest single S3 `PUT`) instead of `MAX_UPLOAD_BYTES` (64 MiB); a deployment may set a lower limit, and a mint above it answers `413 request_body_too_large`.
+- The gateway runs an approved `openapi` write at most once (ADR-0145 D2.1, #1541). It consumes the
+  approval before it reads the credential or dials the upstream, so a repeat of the same call, or
+  a second parallel call, is refused. `TOOL_GATEWAY_PROBLEM_CODES` gains `approval_already_used`
+  (`403`). A migration adds `runs.consumed_tool_calls`, an expand-only column that defaults to `[]`.
+- An `openapi` tool connector may expose write operations (ADR-0113 SD4, amended by #1304).
+  `allow` accepts `POST`, `PUT`, `PATCH` and `DELETE` rules beside `GET` and `HEAD`, and an
+  `operationId:<id>` rule may name a write (`TOOL_OPERATION_METHODS`, `TOOL_WRITE_METHODS`). A
+  method outside those six is `connector_spec_invalid`. `toolApprovalRules(serverKey, operations)`
+  lists the `mcp__<key>__<operation>` rules that need approval, for the engine's `needsApproval`.
+  `TOOL_GATEWAY_PROBLEM_CODES` gains `approval_required` (`403`): the gateway runs a write only for
+  a call the run approved. **Removed:** `connector_write_unsupported` from
+  `TOOL_CONNECTOR_PROBLEM_CODES` and `CONNECTORS_PROBLEM_CODES`. A write rule is no longer a
+  `422`; `readOnly: false` on a PostgreSQL connector is a plain `400 invalid_body`. `openapiTool()`
+  in `@indx-workspace/sdk/define` still refuses a write rule until a later release.
+- `RunResource` gains a required `pendingApproval` key, and `RunResource.status`,
+  `RunStatusEventData.status` and `MetricsRecentRun.status` gain `awaiting_approval`. A client
+  parsing a run from an older server must tolerate the absence of the key, and an older client
+  rejects a run in the new status.
+
+### Fixed
+
+- `outputSchemaViolation` (and so `StartRunRequestSchema`) now follows each local `#/$defs/<name>` reference when it measures depth: a recursive `$ref`, direct or through other definitions, is refused with the `ref` limit, and a definition counts toward the 16-level `depth` limit at the level that references it. A definition shared by several references is still accepted.
+
 ## 0.6.9 — 2026-10-14
 
 ### Added
 
+- `EngineCatalogueEntry.sessionEntryKey` states each engine's session-entry idempotency key, with
+  `SESSION_ENTRY_KEY_FIELDS` and `SessionEntryKeyField` in `@indx-workspace/contracts/engines`.
+- `EngineCatalogueEntry.structuredOutput` states whether an engine can be asked for output shaped
+  by a JSON Schema (ADR-0143): `true` for `claude-agent-sdk`, `false` for the others. It is not a
+  key of `capabilities`, so `GET /api/engines` is unchanged.
+- `approvalOverlapsGate(approved, required)` is the overlap `conflictingApprovalRules` reports, now
+  also counting an `Edit` / `Edit(path)` auto-approval against a gate on `Write`, `MultiEdit`,
+  `NotebookEdit` or `Edit` (Claude Code checks every file write against `Edit` rules).
+- `EngineCatalogueEntry.approvals` states whether an engine can stop a run on a tool call that
+  needs approval (ADR-0145 D5): `true` for `claude-agent-sdk`, `false` for the others. It is not a
+  key of `capabilities`, so `GET /api/engines` is unchanged.
+- Add the MCP server record schemas: `McpServerRecordSchema`, `McpServerConfigSchema`,
+  `McpStdioServerConfigSchema`, `McpHttpServerConfigSchema`, `McpSseServerConfigSchema` and
+  `McpToolPolicySchema`, with the `McpServerRecord` and `McpToolPolicy` types, exported from the
+  package root. Core and the engine adapters parse an `mcpServers` entry with them instead of
+  each restating it.
 - `claudeReadOnlyGrantDenials`, `claudeRulePath` and `CLAUDE_GRANT_SHELL_DENIALS` in
   `@indx-workspace/contracts/agents`: the Claude denials a read-only file grant compiles to, now
   `Edit(//<absolute path>)` — the only rule shape Claude Code matches for a file write — instead

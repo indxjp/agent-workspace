@@ -20,8 +20,10 @@
  * needs is named in one {@link WorkspaceAgentVersionStore.namesOf} read. An id the edit sends that
  * this workspace does not have answers the code the legacy write answered for it.
  */
-import type { AgentDefinitionReferenceKind } from '@agent-workspace/core/db';
+import type { AgentDefinitionReferenceKind, WorkspaceAgentVersionStore } from './store';
+import { storageGrantPaths, type StorageConnectionLookup } from './storage-grants';
 import {
+  AGENT_VERSION_PROBLEM_CODES,
   AgentVersionResourceSchema,
   type AgentVersionBody,
 } from '@indx-workspace/contracts/agent-versions';
@@ -37,14 +39,14 @@ import type {
   UpdateAgentPatch,
 } from '../../contracts/agents';
 import type { AgentRecord } from '../agents/contract';
-import { agentNotFound, problem, type ApiResult } from '../agents/handlers';
+import { agentNotFound } from '../agents/handlers';
+import { problem, type ApiResult } from '../http/result';
 import { compiledPolicyFor } from '../agents/policy';
 import type { RequestCeiling } from '../policy-ceiling/ceiling';
 import type { ToolBundleLookup } from '../tool-bundles/handlers';
 import { toAgentVersionResource } from './contract';
 import { createAgentVersion } from './handlers';
 import { setAgentPointer, type PointerActor } from './pointers';
-import type { WorkspaceAgentVersionStore } from './store';
 
 /** What the console changed: the `PATCH` fields, the whole policy, or the whole assignment set. */
 export type UiEdit =
@@ -68,6 +70,8 @@ export interface UiEditDependencies {
   readonly ceiling?: RequestCeiling | null;
   /** The caller's tool bundles (pipeline step 4, issue #790). */
   readonly toolBundles?: ToolBundleLookup | null;
+  /** The workspace's storage connections, so the body's `storage://` grants resolve (step 4a). */
+  readonly storageConnections?: StorageConnectionLookup | null;
 }
 
 type Reference = readonly [AgentDefinitionReferenceKind, string];
@@ -128,11 +132,23 @@ function unknownReference(kind: AgentDefinitionReferenceKind, id: string): ApiRe
     case 'skill':
     case 'connector':
       return problem(
-        400,
-        `unknown-${kind}`,
-        `The assignment references an unavailable resource: ${id}.`,
+        AGENT_VERSION_PROBLEM_CODES[`unknown_${kind}`],
+        `unknown_${kind}`,
+        `An assigned ${kind} is not in this workspace.`,
+        [id],
       );
   }
+}
+
+/** The pins on assigned skills, renamed from skill id to skill name; `undefined` when none. */
+function pinsByName(
+  assignments: AgentResourceAssignments,
+  names: Names,
+): Readonly<Record<string, number>> | undefined {
+  const pins = Object.entries(assignments.skillRevisions ?? {})
+    .filter(([id]) => assignments.skillIds.includes(id))
+    .map(([id, revision]) => [names('skill', id), revision] as const);
+  return pins.length === 0 ? undefined : Object.fromEntries(pins);
 }
 
 /** The body the agent row and its assignments describe, carrying `surfaces` onto the row's name. */
@@ -166,6 +182,7 @@ function rowBody(
         access: grant.access,
       })),
       skills,
+      skillRevisions: pinsByName(assignments, names),
       connectors: assignments.connectorIds.map((id) => names('connector', id)),
     },
   };
@@ -209,12 +226,18 @@ export function uiEditBody(base: AgentVersionBody, edit: UiEdit, names: Names): 
       break;
     case 'resources': {
       const { assignments } = edit;
+      // A console edit lists file ids, so the `storage://` folder grants of the base stay as they were.
+      const folders = storageGrantPaths(resources.files);
       resources = {
-        files: assignments.files.map((grant) => ({
-          path: names('file', grant.fileId),
-          access: grant.access,
-        })),
+        files: [
+          ...assignments.files.map((grant) => ({
+            path: names('file', grant.fileId),
+            access: grant.access,
+          })),
+          ...resources.files.filter((file) => folders.has(file.path)),
+        ],
         skills: assignments.skillIds.map((id) => names('skill', id)),
+        skillRevisions: pinsByName(assignments, names),
         connectors: assignments.connectorIds.map((id) => names('connector', id)),
       };
       break;
@@ -276,7 +299,8 @@ export async function saveUiEdit(
   if (base === null) return agentNotFound();
 
   // ponytail: create then point is two transactions, as `aw push` is; a refused point leaves an
-  // unpointed `ui` version. One transaction needs a store method that does both.
+  // unpointed `ui` version by design (builder design §08 Data rule 2). One transaction needs a
+  // store method that does both.
   const created = await createAgentVersion(
     { body: uiEditBody(base, edit, names), summary: SUMMARIES[edit.kind], via: 'ui' },
     agent,
@@ -286,7 +310,9 @@ export async function saveUiEdit(
   if (created.status !== 201) return created;
   const { number } = AgentVersionResourceSchema.parse(created.body);
   const pointed = await setAgentPointer(
-    { environment: 'local', version: number },
+    // The edit's body was built on `local`: a concurrent save that moved `local` since answers
+    // `409 pointer_moved` instead of being overwritten.
+    { environment: 'local', version: number, expectedVersion: local?.number ?? null },
     agent,
     actor,
     dependencies,

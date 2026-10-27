@@ -44,10 +44,14 @@
  * drives exactly the forged name above, not a name that could never collide under any prefix
  * scheme, so the limit stated here is the one actually measured (ADR-0031).
  */
-import { runtimeDriverIds } from '@agent-workspace/core';
-import type { WorkspaceScope, WorkspaceScopeResolver } from '@agent-workspace/core/db';
+import { runtimeDriverIds } from '@agent-workspace/run-protocol';
+import {
+  UnknownWorkspaceError,
+  type WorkspaceScope,
+  type WorkspaceScopeResolver,
+} from '@agent-workspace/core/db';
 
-import { problem, type ApiResult } from './handlers';
+import { problem, type ApiResult } from '../http/result';
 
 // ── The port ─────────────────────────────────────────────────────────────────────────────
 
@@ -212,25 +216,6 @@ export interface SecretsRuntimeConnectionStoreDependencies {
   readonly secrets: RuntimeConnectionSecretsPort;
   /** Turns a workspace id into a scope, or answers `null`. Resolved lazily — see below. */
   readonly scopes: WorkspaceScopeResolver;
-}
-
-/**
- * Thrown when a store is asked for a workspace no `workspaces` row names. Declared here, not
- * imported, for the mechanical reason `agents/store.ts` and `runtimes/store.ts` give: every
- * reference to core in this file is a type, and a value import would drag `pg` into the edge
- * bundle `apps/web/instrumentation.ts` also compiles for.
- */
-export class UnknownWorkspaceError extends Error {
-  public readonly workspaceId: string;
-
-  public constructor(workspaceId: string) {
-    super(
-      `no workspace has id ${workspaceId}; a runtime-connection store cannot be scoped to a ` +
-        'workspace that does not exist',
-    );
-    this.name = 'UnknownWorkspaceError';
-    this.workspaceId = workspaceId;
-  }
 }
 
 /**

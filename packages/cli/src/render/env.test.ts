@@ -1,4 +1,6 @@
 import { readFile } from 'node:fs/promises';
+
+import { parseStorageUrl } from '@indx-workspace/contracts/storage-url';
 import { describe, expect, it } from 'vitest';
 
 import { parseEnvironment, type DeploymentImages } from '../deployment.js';
@@ -91,10 +93,9 @@ describe('the rendered environment against the documented inventory', () => {
     expect(local).toEqual([
       'AGENT_WORKSPACE_RUNTIME_IMAGE_CLAUDE_AGENT_SDK',
       'AWS_REGION',
-      'AW_FILE_STORAGE_ROOT',
       'AW_SESSION_MIRROR_URL',
-      'AW_SESSION_TRANSCRIPT_ROOT',
-      'AW_SKILL_STORAGE_ROOT',
+      'AW_STORAGE_SIGNED_UPLOAD_MAX_BYTES',
+      'AW_STORAGE_URL',
       'AW_TRUSTED_PROXY_HOPS',
       'AZURE_KEY_VAULT_URL',
       'AZURE_MASTER_KEY_SECRET_NAME',
@@ -112,10 +113,6 @@ describe('the rendered environment against the documented inventory', () => {
       'MASTER_KEY_PROVIDER',
       'MODEL_GATEWAY_URL',
       'OBJECT_STORAGE_ACCESS_KEY_ID',
-      'OBJECT_STORAGE_BACKEND',
-      'OBJECT_STORAGE_BUCKET',
-      'OBJECT_STORAGE_ENDPOINT',
-      'OBJECT_STORAGE_FORCE_PATH_STYLE',
       'OBJECT_STORAGE_SECRET_ACCESS_KEY',
       'PORT',
       'POSTGRES_DB',
@@ -129,6 +126,7 @@ describe('the rendered environment against the documented inventory', () => {
       'RUNTIME_DRIVER',
       'SEAWEEDFS_ACCESS_KEY_ID',
       'SEAWEEDFS_IMAGE',
+      'SEAWEEDFS_PORT',
       'SEAWEEDFS_SECRET_ACCESS_KEY',
       'SESSION_SECRET',
       'WEB_IMAGE',
@@ -177,24 +175,75 @@ describe('the rendered environment against the documented inventory', () => {
 });
 
 describe('the object store each profile selects', () => {
+  // @story US-STO-10
+  it('[US-STO-10][api][cli] create renders one AW_STORAGE_URL and no legacy storage variables', () => {
+    const legacy = [
+      'OBJECT_STORAGE_BACKEND',
+      'OBJECT_STORAGE_ENDPOINT',
+      'OBJECT_STORAGE_BUCKET',
+      'OBJECT_STORAGE_FORCE_PATH_STYLE',
+      'AW_FILE_STORAGE_ROOT',
+      'AW_SKILL_STORAGE_ROOT',
+      'AW_SESSION_TRANSCRIPT_ROOT',
+    ];
+    const cases = [
+      ['local', localProfile('local-filesystem'), 'file:///var/lib/agent-workspace'],
+      // The bucket, endpoint and path style the old names gave the bundled SeaweedFS.
+      [
+        'local SeaweedFS',
+        localProfile('seaweedfs'),
+        's3://agent-workspace?endpoint=http://seaweedfs:8333&publicEndpoint=http://localhost:8333&pathStyle=true',
+      ],
+      ['aws', defaultProfile({ cloud: 'aws', projectName: 'acme-ai' }), 's3://acme-ai-files'],
+      ['gcp', defaultProfile({ cloud: 'gcp', projectName: 'acme-ai' }), 'gcs://acme-ai-files'],
+      ['vercel', defaultProfile({ cloud: 'vercel', projectName: 'acme-ai' }), 's3://acme-ai-files'],
+      // `deploy` adds the account's R2 endpoint.
+      [
+        'cloudflare',
+        defaultProfile({ cloud: 'cloudflare', projectName: 'acme-ai' }),
+        's3://acme-ai-files?region=auto',
+      ],
+      // The account is a Terraform output, so the module supplies the URL.
+      ['azure', defaultProfile({ cloud: 'azure', projectName: 'acme-ai' }), ''],
+    ] as const;
+    for (const [name, profile, url] of cases) {
+      const text = renderEnv({
+        profile,
+        secrets,
+        images,
+        dockerGroupId: 0,
+        projectName: 'acme-ai',
+      });
+      expect(text.match(/^AW_STORAGE_URL=/gmu), `${name} renders one AW_STORAGE_URL`).toHaveLength(
+        1,
+      );
+      const rendered = parseEnvironment(text);
+      expect(rendered['AW_STORAGE_URL'], name).toBe(url);
+      expect(rendered['AW_STORAGE_SIGNED_UPLOAD_MAX_BYTES'], name).toBe('');
+      for (const key of legacy)
+        expect(Object.keys(rendered), `${name} renders ${key}`).not.toContain(key);
+      if (url !== '') {
+        expect(parseStorageUrl(url).ok, name).toBe(true);
+        expect(url, name).not.toContain('@');
+      }
+    }
+  });
+
   it('wires the Compose SeaweedFS service, under its Compose profile', () => {
     expect(render(localProfile('seaweedfs'))).toMatchObject({
       COMPOSE_PROFILES: 'object-storage',
-      OBJECT_STORAGE_BACKEND: '',
-      OBJECT_STORAGE_ENDPOINT: 'http://seaweedfs:8333',
-      OBJECT_STORAGE_BUCKET: 'agent-workspace',
+      AW_STORAGE_CREATE_BUCKET: 'true',
       OBJECT_STORAGE_ACCESS_KEY_ID: 'agent_workspace',
       OBJECT_STORAGE_SECRET_ACCESS_KEY: secrets.objectStoreSecretKey,
-      OBJECT_STORAGE_FORCE_PATH_STYLE: 'true',
     });
+    // Only the bundled SeaweedFS asks the server to create its bucket.
+    expect(render(localProfile('local-filesystem'))['AW_STORAGE_CREATE_BUCKET']).toBeUndefined();
   });
 
   it('leaves the object store unset for the local-filesystem provider', () => {
     expect(render(localProfile('local-filesystem'))).toMatchObject({
       COMPOSE_PROFILES: '',
-      OBJECT_STORAGE_BACKEND: '',
-      OBJECT_STORAGE_ENDPOINT: '',
-      OBJECT_STORAGE_BUCKET: '',
+      AW_STORAGE_URL: 'file:///var/lib/agent-workspace',
       OBJECT_STORAGE_ACCESS_KEY_ID: '',
       OBJECT_STORAGE_SECRET_ACCESS_KEY: '',
     });
@@ -203,11 +252,9 @@ describe('the object store each profile selects', () => {
   it('names the bucket but no credential on a cloud, because IAM or the key service holds it', () => {
     const aws = render(defaultProfile({ cloud: 'aws', projectName: 'acme-ai' }));
     expect(aws).toMatchObject({
-      OBJECT_STORAGE_BACKEND: 's3',
-      OBJECT_STORAGE_BUCKET: 'acme-ai-files',
-      OBJECT_STORAGE_ENDPOINT: '',
+      AW_STORAGE_URL: 's3://acme-ai-files',
       OBJECT_STORAGE_ACCESS_KEY_ID: '',
-      OBJECT_STORAGE_FORCE_PATH_STYLE: 'false',
+      OBJECT_STORAGE_SECRET_ACCESS_KEY: '',
     });
     // A blank with nothing above it saying who fills it is the failure the comment prevents.
     expect(commentAbove('OBJECT_STORAGE_ACCESS_KEY_ID', 'aws')).toMatch(
@@ -221,26 +268,19 @@ describe('the object store each profile selects', () => {
     expect(commentAbove('OBJECT_STORAGE_ACCESS_KEY_ID', 'azure')).toMatch(
       /managed identity[\s\S]*No account key/u,
     );
-    expect(commentAbove('OBJECT_STORAGE_ENDPOINT', 'azure')).toMatch(
-      /Terraform supplies[\s\S]*https:\/\/<account>\.blob\.core\.windows\.net/u,
+    expect(commentAbove('AW_STORAGE_URL', 'azure')).toMatch(
+      /Container Apps Terraform module supplies the Blob store/u,
     );
     expect(render(azure)).toMatchObject({
-      OBJECT_STORAGE_BACKEND: 'azure-blob',
-      OBJECT_STORAGE_ENDPOINT: '',
-      OBJECT_STORAGE_BUCKET: 'acme-ai-files',
+      AW_STORAGE_URL: '',
       OBJECT_STORAGE_ACCESS_KEY_ID: '',
       OBJECT_STORAGE_SECRET_ACCESS_KEY: '',
-      AW_FILE_STORAGE_ROOT: '',
-      AW_SKILL_STORAGE_ROOT: '',
     });
     // GCS uses the native API and the workload identity; it never needs an HMAC pair.
     expect(render(defaultProfile({ cloud: 'gcp', projectName: 'acme-ai' }))).toMatchObject({
-      OBJECT_STORAGE_BACKEND: 'gcs',
-      OBJECT_STORAGE_BUCKET: 'acme-ai-files',
-      OBJECT_STORAGE_ENDPOINT: '',
+      AW_STORAGE_URL: 'gcs://acme-ai-files',
       OBJECT_STORAGE_ACCESS_KEY_ID: '',
       OBJECT_STORAGE_SECRET_ACCESS_KEY: '',
-      OBJECT_STORAGE_FORCE_PATH_STYLE: 'false',
     });
     expect(commentAbove('OBJECT_STORAGE_ACCESS_KEY_ID', 'gcp')).toMatch(
       /Application Default Credentials/u,
@@ -493,7 +533,7 @@ describe('the rest of the placement', () => {
     expect(env['CRON_SECRET']).toBe(secrets.cronSecret);
     expect(env['RUNTIME_DRIVER']).toBe('vercel-sandbox');
     expect(env['MASTER_KEY_PROVIDER']).toBe('local-key');
-    expect(env['OBJECT_STORAGE_BACKEND']).toBe('s3');
+    expect(env['AW_STORAGE_URL']).toBe('s3://a-files');
     expect(env['EXTERNAL_PROVIDER']).toBeUndefined();
     for (const name of ['RUNNER_URL', 'RUNNER_MANAGER_URL', 'MODEL_GATEWAY_URL']) {
       expect(env[name], name).toBe('');
@@ -516,9 +556,8 @@ describe('the rest of the placement', () => {
     expect(env['RUNTIME_DRIVER']).toBe('external');
     expect(env['EXTERNAL_PROVIDER']).toBe('e2b');
     expect(env['MASTER_KEY_PROVIDER']).toBe('local-key');
-    expect(env['OBJECT_STORAGE_BACKEND']).toBe('s3');
+    expect(env['AW_STORAGE_URL']).toBe('s3://a-files?region=auto');
     expect(env['AWS_REGION']).toBe('auto');
-    expect(env['OBJECT_STORAGE_ENDPOINT']).toBe('');
     for (const name of ['RUNNER_URL', 'RUNNER_MANAGER_URL', 'MODEL_GATEWAY_URL']) {
       expect(env[name], name).toBe('');
     }

@@ -42,6 +42,12 @@ function renderAgentEvent(event: AgentEvent): string {
       return `engine event: ${event.type}`;
     case 'agent.malformed':
       return `engine sent an unreadable event: ${event.reason}`;
+    case 'agent.approval.requested':
+      return `approval needed: ${event.toolName} ${event.canonicalCall}`;
+    case 'agent.handoff':
+      return event.reason === undefined
+        ? 'handed to a person'
+        : `handed to a person: ${event.reason}`;
     default:
       return unreachable(event);
   }
@@ -55,6 +61,8 @@ function renderPlatformFrame(frame: Exclude<RunEventFrame, { kind: 'runtime' }>)
   switch (frame.kind) {
     case 'run-status':
       return `run: ${frame.data.status}${frame.data.error === null ? '' : ` (${frame.data.error})`}`;
+    case 'run-warning':
+      return `warning: ${frame.data.message ?? frame.data.code}`;
     case 'run-failed':
       return `run failed: ${frame.data.message} (status ${frame.data.status})`;
     case 'stream-reset':

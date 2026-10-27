@@ -15,7 +15,7 @@ theorem event_names_equal_phase_one :
     controlFrameNames = Concepts.RunEvent.controlFrameNames ∧
     runStatusEvent = Concepts.RunEvent.runStatusEvent ∧
     relayedEventNames = Concepts.RunEvent.relayedEventNames := by
-  decide
+  decide +kernel
 
 /-- Status data requires its nullable error field and refuses unknown properties. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/run-events.ts#RunStatusEventDataSchema")]
@@ -23,25 +23,36 @@ theorem status_schema_is_strict :
     runStatusData (.obj [("status", .str "running"), ("error", .null)]) = true ∧
     runStatusData (.obj [("status", .str "running")]) = false ∧
     runStatusData (.obj [("status", .str "running"), ("error", .null),
-      ("x", .bool true)]) = false := by decide
+      ("x", .bool true)]) = false := by decide +kernel
+
+/-- Warning data requires a nonempty code, admits optional message text, and refuses unknown
+properties. -/
+@[aw_spec (tier := T0) (ts := "packages/contracts/src/run-events.ts#RunWarningEventDataSchema")]
+theorem warning_schema_is_strict :
+    runWarningData (.obj [("code", .str "attachments_removed_shell")]) = true ∧
+    runWarningData (.obj [("code", .str "c"), ("message", .str "m")]) = true ∧
+    runWarningData (.obj [("code", .str "")]) = false ∧
+    runWarningData (.obj [("message", .str "m")]) = false ∧
+    runWarningData (.obj [("code", .str "c"), ("message", .null)]) = false ∧
+    runWarningData (.obj [("code", .str "c"), ("x", .bool true)]) = false := by decide +kernel
 
 /-- The failure frame admits `unknown`, but still requires public message text. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/run-events.ts#RunFailedFrameDataSchema")]
 theorem failure_schema_admits_unknown :
     runFailedData (.obj [("status", .str "unknown"), ("message", .str "lost")]) = true ∧
-    runFailedData (.obj [("status", .str "failed")]) = false := by decide
+    runFailedData (.obj [("status", .str "failed")]) = false := by decide +kernel
 
 /-- A reset requires `resumedAfter`, including when the value is null. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/run-events.ts#StreamResetFrameDataSchema")]
 theorem reset_schema_requires_nullable_resume :
     streamResetData (.obj [("reason", .str "gap"), ("resumedAfter", .null)]) = true ∧
-    streamResetData (.obj [("reason", .str "gap")]) = false := by decide
+    streamResetData (.obj [("reason", .str "gap")]) = false := by decide +kernel
 
 /-- The relayed event kind must be nonempty. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/run-events.ts#RelayedEventDataSchema")]
 theorem relay_schema_requires_nonempty_kind :
     relayedEventData (.obj [("kind", .str "sdk-event")]) = true ∧
-    relayedEventData (.obj [("kind", .str "")]) = false := by decide
+    relayedEventData (.obj [("kind", .str "")]) = false := by decide +kernel
 
 /-- A control frame has no `id:` line and cannot advance a resume cursor. -/
 @[aw_spec (tier := T0) (doc := "docs/sdk/site/concepts/run-lifecycle.mdx#the-event-stream")
@@ -62,14 +73,14 @@ theorem resume_header_wins (h q₁ q₂ : String) :
 theorem sdk_empty_id_is_present :
     SdkSse.parseSseFrame "event: run.status\nid:\ndata: {}\n" =
       some ⟨"run.status", some "", some "{}"⟩ := by
-  decide
+  decide +kernel
 
 /-- Multiple data fields are joined with one LF before the SDK interprets the payload. -/
 @[aw_spec (tier := T0) (ts := "packages/sdk/src/events/sse.ts#parseSseFrame")]
 theorem sdk_joins_multiline_data :
     SdkSse.parseSseFrame "event: system\ndata: one\ndata: two" =
       some ⟨"system", none, some "one\ntwo"⟩ := by
-  decide
+  decide +kernel
 
 /-- A trailing CR waits for the next chunk, while resolved lone CR and CRLF line endings both
 separate frames. -/
@@ -78,14 +89,14 @@ theorem sdk_splitter_resolves_lone_cr :
     SdkSse.splitSseFrames "event: x\r\r" = ([], "event: x\n\r") ∧
     SdkSse.splitSseFrames "event: x\r\n\r\n" = (["event: x"], "") ∧
     SdkSse.splitSseFrames "event: x\r\revent: y\n\n" = (["event: x", "event: y"], "") := by
-  decide
+  decide +kernel
 
 /-- A 19-digit value still needs a range check: the maximum passes and its successor fails. -/
 @[aw_spec (tier := T0) (ts := "apps/web/server/runs/cursor.ts#readResumeCursor")]
 theorem resume_cursor_range_boundary :
     Resume.parseId "9223372036854775807" = some Resume.maxEventId ∧
     Resume.parseId "9223372036854775808" = none := by
-  decide
+  decide +kernel
 
 /-- A CR at the end of a relay chunk and an LF at the beginning of the next make one line break. -/
 @[aw_spec (tier := T0) (ts := "apps/web/server/runs/relay.ts#SseLineSplitter")]
@@ -93,7 +104,7 @@ theorem relay_crlf_across_chunks :
     let first := Sse.pushLines {} "event: x\r"
     first.2 = ["event: x"] ∧
       (Sse.pushLines first.1 "\ndata: 1\r\n\r\n").2 = ["data: 1", ""] := by
-  decide
+  decide +kernel
 
 /-- The relay does not dispatch a frame containing only an id; that id still becomes the next
 message's `lastEventId`. -/
@@ -102,6 +113,6 @@ theorem relay_id_only_moves_cursor :
     let a := (Sse.assembleLine {} "id: 7").1
     let b := Sse.assembleLine a ""
     b.2 = none ∧ b.1.lastEventId = "7" := by
-  decide
+  decide +kernel
 
 end AgentWorkspace.Theorems.WellFormed.EventsSse

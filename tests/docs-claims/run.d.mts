@@ -31,12 +31,8 @@ export function parseArguments(
   staticOnly: boolean;
   machine: 'container' | 'host';
   shell: string;
-  shard: { index: number; count: number };
 };
-export function shardPlans(
-  plans: readonly PagePlan[],
-  shard: { index: number; count: number },
-): PagePlan[];
+export function ownedRows(plan: PagePlan, owned: readonly string[]): Row[] | null;
 export function exitCodeOf(rows: readonly Row[]): 0 | 1;
 export function runPlans(claims: readonly Claim[]): PagePlan[];
 export function compileSources(

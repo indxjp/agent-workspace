@@ -38,10 +38,13 @@ export interface SidebarUser {
 export function Sidebar({
   workspace,
   user,
+  managers,
 }: {
   readonly workspace: WorkspaceBrand;
   /** `null` when the request carries no session — the foot is then omitted, not faked. */
   readonly user: SidebarUser | null;
+  /** Whether the caller is an Owner or Admin, who also see the entries meant for managers. */
+  readonly managers: boolean;
 }) {
   return (
     <aside className="flex w-full flex-none flex-col border-b border-border bg-surface-2 md:sticky md:top-0 md:h-screen md:w-(--sidebar-w) md:border-r md:border-b-0">
@@ -63,7 +66,7 @@ export function Sidebar({
         />
       )}
 
-      <SidebarNav />
+      <SidebarNav managers={managers} />
 
       {user === null ? null : (
         <div className="border-t border-border p-2.5">

@@ -22,25 +22,22 @@
 import Link from 'next/link';
 import { useEffect, useState, type ReactNode } from 'react';
 
+import { browserClient } from '../../lib/browser-client';
+import { loadRunDetail, type DetailLoad } from './run-requests-model';
 import { StatusBadge } from './run-view';
 import {
   badgeForRunStatus,
   RUN_POLL_INTERVAL_MS,
-  describeRequestFailure,
-  describeTransportRejection,
   formatDuration,
   formatProviderModel,
   formatCostDisplay,
   formatTimestamp,
   formatTokenCount,
-  parseRunDetailResponse,
   reconcileDurableRun,
-  runDetailPath,
   resolveResourceReference,
   shouldPollDurableRun,
   timestampAccessibilityLabel,
   type CatalogState,
-  type RequestProblem,
   type ResourceReference,
   type RunListItem,
 } from './history';
@@ -65,65 +62,6 @@ export interface RunDetailPanelProps {
   readonly catalogs: RunDetailPanelCatalogs;
 }
 
-type DetailLoad =
-  | { readonly kind: 'loading' }
-  | { readonly kind: 'not-found' }
-  | { readonly kind: 'problem'; readonly problem: RequestProblem }
-  | { readonly kind: 'loaded'; readonly run: RunListItem };
-
-/**
- * Fetch `GET /api/runs/:id` once, or throw the same {@link DetailLoad} arm the caller should show
- * for a failure. Never throws for "the run does not exist" or "this workspace cannot see it" —
- * `readRun` in `apps/web/server/runs/api.ts` answers both with the identical `404 run_not_found`
- * (issue #117's concealment rule: a refused or foreign id reads exactly like a nonexistent one),
- * and this function passes that indistinguishability straight through as one `'not-found'` arm.
- */
-export async function fetchRunDetail(runId: string): Promise<DetailLoad> {
-  const path = runDetailPath(runId);
-  if (path === null) {
-    return {
-      kind: 'problem',
-      problem: { kind: 'transport', reason: 'The selected run id is not a canonical UUID.' },
-    };
-  }
-  let response: Response;
-  try {
-    response = await fetch(path, { headers: { accept: 'application/json' } });
-  } catch (error) {
-    return { kind: 'problem', problem: describeTransportRejection(error) };
-  }
-  if (response.status === 404) return { kind: 'not-found' };
-  if (!response.ok) {
-    return {
-      kind: 'problem',
-      problem: await describeRequestFailure(response, () => response.json()),
-    };
-  }
-  let body: unknown;
-  try {
-    body = await response.json();
-  } catch {
-    return {
-      kind: 'problem',
-      problem: {
-        kind: 'transport',
-        reason: 'The server answered 200 with a body that was not JSON.',
-      },
-    };
-  }
-  try {
-    return { kind: 'loaded', run: parseRunDetailResponse(body) };
-  } catch (error) {
-    return {
-      kind: 'problem',
-      problem: {
-        kind: 'transport',
-        reason: `The server's answer did not look like a run: ${error instanceof Error ? error.message : String(error)}`,
-      },
-    };
-  }
-}
-
 export function RunDetailPanel({ runId, backHref, catalogs }: RunDetailPanelProps) {
   const [state, setState] = useState<DetailLoad>({ kind: 'loading' });
 
@@ -132,7 +70,7 @@ export function RunDetailPanel({ runId, backHref, catalogs }: RunDetailPanelProp
     let timer: ReturnType<typeof setTimeout> | null = null;
 
     async function loop(): Promise<void> {
-      const result = await fetchRunDetail(runId);
+      const result = await loadRunDetail(browserClient(), runId);
       if (cancelled) return;
       // The whole state is replaced by this single call's answer — see this file's header.
       setState((current) =>

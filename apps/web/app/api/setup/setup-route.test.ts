@@ -4,18 +4,19 @@
  * the runtime's status and code. A stub runtime stands in for the persistence the route delegates
  * to, so the route's own mapping is what is under test.
  */
+import { captureLog } from '../../../server/telemetry/capture-log';
 import { ApiProblemSchema } from '@indx-workspace/contracts';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { DatabaseRoot } from '@agent-workspace/core/db';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   resetSignInAttempts,
   SIGN_IN_ATTEMPTS_PER_MINUTE,
 } from '../../../server/auth/sign-in-limit';
-import {
-  configureSetupRuntime,
-  type SetupInput,
-  type SetupRuntime,
-} from '../../../server/setup/runtime';
+import { clearApplicationContext } from '../../../server/application-context';
+import { installTestDomains } from '../../../server/application-context-fixtures';
+import { installSetupApi } from '../../../server/composition/setup';
+import type { SetupInput, SetupRuntime } from '../../../server/setup/runtime';
 
 import { POST } from './route';
 
@@ -39,10 +40,15 @@ function setupRequest(body: unknown): Request {
 
 function install(runtime: SetupRuntime): SetupInput[] {
   const received: SetupInput[] = [];
-  configureSetupRuntime({
-    complete: async (input) => {
-      received.push(input);
-      return runtime.complete(input);
+  installTestDomains({
+    setup: {
+      kind: 'serving',
+      runtime: {
+        complete: async (input) => {
+          received.push(input);
+          return runtime.complete(input);
+        },
+      },
     },
   });
   return received;
@@ -50,11 +56,24 @@ function install(runtime: SetupRuntime): SetupInput[] {
 
 afterEach(() => {
   resetSignInAttempts();
-  delete (globalThis as { __agentWorkspaceSetupRuntime__?: SetupRuntime })
-    .__agentWorkspaceSetupRuntime__;
+  clearApplicationContext();
 });
 
 describe('POST /api/setup refuses in the standard envelope', () => {
+  it('answers 503 setup_unavailable with no context and when setup was built without encrypted model storage', async () => {
+    const unwired = await POST(setupRequest(VALID_INPUT));
+    const setup = await installSetupApi({} as unknown as DatabaseRoot, null);
+    expect(setup).toEqual({ kind: 'unavailable' });
+    installTestDomains({ setup });
+    const unavailable = await POST(setupRequest(VALID_INPUT));
+    for (const response of [unwired, unavailable]) {
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({
+        error: { code: 'setup_unavailable', message: 'Setup persistence is not configured.' },
+      });
+    }
+  });
+
   it('answers 429 rate_limited once a client spends its password attempts', async () => {
     install({ complete: () => Promise.reject(new Error('wrong password')) });
     // Without a trusted proxy chain every caller shares one bucket at ten times the limit.
@@ -102,7 +121,7 @@ describe('POST /api/setup refuses in the standard envelope', () => {
 
 describe('POST /api/setup when the runtime throws', () => {
   it('answers a typed 500 setup_failed instead of an empty body, without any secret', async () => {
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const spy = captureLog();
     install({
       complete: () =>
         Promise.reject(
@@ -117,11 +136,11 @@ describe('POST /api/setup when the runtime throws', () => {
     expect(body).toMatchObject({ error: { code: 'setup_failed' } });
     expect(text).not.toContain(VALID_INPUT.providerApiKey);
     expect(text).not.toContain('db.internal');
-    const logged = spy.mock.calls.map((call) => call.map(String).join(' ')).join('\n');
+    const logged = spy.text();
     expect(logged).toContain('TypeError');
     expect(logged).not.toContain(VALID_INPUT.providerApiKey);
     expect(logged).not.toContain('db.internal');
-    spy.mockRestore();
+    spy.restore();
   });
 });
 

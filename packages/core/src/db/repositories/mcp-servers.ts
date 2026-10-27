@@ -90,6 +90,8 @@ export interface McpServerRecord {
   readonly authType: McpAuthType;
   /** A reference into `secrets`, never a value. `null` exactly when `authType === 'none'`. */
   readonly credentialSecretId: string | null;
+  /** The name of the workspace secret that signs the identity assertion; `null` is no opt-in. */
+  readonly identitySecretName: string | null;
   readonly enabled: boolean;
   /** Compatibility attribution for a membership principal. */
   readonly createdBy: string | null;
@@ -113,6 +115,7 @@ export interface CreateMcpServerInput {
   readonly url: string | null;
   readonly authType: McpAuthType;
   readonly credentialSecretId: string | null;
+  readonly identitySecretName?: string | null;
   readonly enabled: boolean;
   readonly ownerPrincipalId: string;
   readonly createdBy?: string | null;
@@ -137,6 +140,8 @@ export interface UpdateMcpServerInput {
   readonly url?: string;
   readonly authType?: McpAuthType;
   readonly credentialSecretId?: string | null;
+  /** `null` removes the identity opt-in. */
+  readonly identitySecretName?: string | null;
 }
 
 /** What updating a connector can produce. */
@@ -163,6 +168,8 @@ export interface ToolConnectorRecord {
   readonly toolConfig: Readonly<Record<string, unknown>>;
   /** A reference into `secrets`, never a value. Always set for `postgres`. */
   readonly credentialSecretId: string | null;
+  /** The name of the workspace secret that signs the identity assertion; `null` is no opt-in. */
+  readonly identitySecretName: string | null;
   readonly enabled: boolean;
   readonly createdBy: string | null;
   readonly ownerPrincipalId: string;
@@ -178,6 +185,7 @@ export interface CreateToolConnectorInput {
   /** An `openapi` connector's registered document text. Absent or `null` stores none. */
   readonly openapiDocument?: string | null;
   readonly credentialSecretId: string | null;
+  readonly identitySecretName?: string | null;
   readonly enabled: boolean;
   readonly ownerPrincipalId: string;
   readonly createdBy?: string | null;
@@ -204,6 +212,8 @@ export interface UpdateToolConnectorInput {
   /** Replaces the stored document text; absent leaves it as it is. */
   readonly openapiDocument?: string | null;
   readonly credentialSecretId?: string | null;
+  /** `null` removes the identity opt-in. */
+  readonly identitySecretName?: string | null;
 }
 
 /** What updating a tool connector can produce. */
@@ -290,6 +300,7 @@ const MCP_SERVER_COLUMNS = {
   url: mcpServers.url,
   authType: mcpServers.authType,
   credentialSecretId: mcpServers.credentialSecretId,
+  identitySecretName: mcpServers.identitySecretName,
   enabled: mcpServers.enabled,
   createdBy: mcpServers.createdBy,
   ownerPrincipalId: mcpServers.ownerPrincipalId,
@@ -304,6 +315,7 @@ const TOOL_CONNECTOR_COLUMNS = {
   kind: mcpServers.kind,
   toolConfig: mcpServers.toolConfig,
   credentialSecretId: mcpServers.credentialSecretId,
+  identitySecretName: mcpServers.identitySecretName,
   enabled: mcpServers.enabled,
   createdBy: mcpServers.createdBy,
   ownerPrincipalId: mcpServers.ownerPrincipalId,
@@ -332,6 +344,7 @@ function toToolRecord(row: {
   kind: string;
   toolConfig: unknown;
   credentialSecretId: string | null;
+  identitySecretName: string | null;
   enabled: boolean;
   createdBy: string | null;
   ownerPrincipalId: string;
@@ -345,6 +358,7 @@ function toToolRecord(row: {
     kind: parseToolConnectorKind(row.kind),
     toolConfig: parseToolConfig(row.toolConfig),
     credentialSecretId: row.credentialSecretId,
+    identitySecretName: row.identitySecretName,
     enabled: row.enabled,
     createdBy: row.createdBy,
     ownerPrincipalId: row.ownerPrincipalId,
@@ -363,6 +377,7 @@ function toRecord(row: {
   url: string | null;
   authType: string;
   credentialSecretId: string | null;
+  identitySecretName: string | null;
   enabled: boolean;
   createdBy: string | null;
   ownerPrincipalId: string;
@@ -384,6 +399,7 @@ function toRecord(row: {
     url: row.url,
     authType: row.authType as McpAuthType,
     credentialSecretId: row.credentialSecretId,
+    identitySecretName: row.identitySecretName,
     enabled: row.enabled,
     createdBy: row.createdBy,
     ownerPrincipalId: row.ownerPrincipalId,
@@ -462,6 +478,7 @@ export function createDatabaseMcpServerRepositoryProvider(
                 url: input.url,
                 authType: input.authType,
                 credentialSecretId: input.credentialSecretId,
+                identitySecretName: input.identitySecretName ?? null,
                 enabled: input.enabled,
                 ownerPrincipalId: input.ownerPrincipalId,
                 createdBy: input.createdBy ?? null,
@@ -494,6 +511,9 @@ export function createDatabaseMcpServerRepositoryProvider(
             ...(input.credentialSecretId === undefined
               ? {}
               : { credentialSecretId: input.credentialSecretId }),
+            ...(input.identitySecretName === undefined
+              ? {}
+              : { identitySecretName: input.identitySecretName }),
           };
           try {
             const rows = await db
@@ -571,6 +591,7 @@ export function createDatabaseMcpServerRepositoryProvider(
                 openapiDocument: input.openapiDocument ?? null,
                 authType: 'none',
                 credentialSecretId: input.credentialSecretId,
+                identitySecretName: input.identitySecretName ?? null,
                 enabled: input.enabled,
                 ownerPrincipalId: input.ownerPrincipalId,
                 createdBy: input.createdBy ?? null,
@@ -605,6 +626,9 @@ export function createDatabaseMcpServerRepositoryProvider(
             ...(input.credentialSecretId === undefined
               ? {}
               : { credentialSecretId: input.credentialSecretId }),
+            ...(input.identitySecretName === undefined
+              ? {}
+              : { identitySecretName: input.identitySecretName }),
           };
           try {
             const rows = await db

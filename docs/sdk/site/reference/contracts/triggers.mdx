@@ -1,0 +1,302 @@
+---
+title: "triggers"
+description: "The @indx-workspace/contracts/triggers exports, sorted alphabetically."
+---
+
+<Note>This page is generated from `packages/contracts/src/triggers.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## CreateTriggerRequest
+
+- `Readonly<{ name: string; agentId: string; prompt: string; kind: "webhook"; zoomSecretToken?: string | undefined; enabled?: boolean | undefined; outputSchema?: Record<string, unknown> | undefined; subject?: string | undefined; }>`
+- `Readonly<{ cron: string; timezone: string; name: string; agentId: string; prompt: string; kind: "schedule"; enabled?: boolean | undefined; outputSchema?: Record<string, unknown> | undefined; subject?: string | undefined; }>`
+
+## CreateTriggerRequestSchema
+
+The body of `POST /api/triggers`. A `schedule` trigger needs a five-field `cron` expression and an
+IANA `timezone`; the server answers `400 invalid_field` for one it cannot parse.
+
+- `Readonly<{ name: string; agentId: string; prompt: string; kind: "webhook"; zoomSecretToken?: string | undefined; enabled?: boolean | undefined; outputSchema?: Record<string, unknown> | undefined; subject?: string | undefined; }>`
+- `Readonly<{ cron: string; timezone: string; name: string; agentId: string; prompt: string; kind: "schedule"; enabled?: boolean | undefined; outputSchema?: Record<string, unknown> | undefined; subject?: string | undefined; }>`
+
+## CreateTriggerResponse
+
+- `TriggerSecretResponse`
+- `TriggerResponse`
+
+## CreateTriggerResponseSchema
+
+The answer of `POST /api/triggers`: the secret for a `webhook`, just the trigger for a `schedule`.
+
+- `TriggerSecretResponse`
+- `TriggerResponse`
+
+## findTriggerTemplateError
+
+Why `template` is not a valid prompt template, or `null`. Any `{{…}}` other than
+`TRIGGER_BODY_PLACEHOLDER` is refused rather than left in the prompt as literal text.
+
+```ts
+findTriggerTemplateError(template: string): string | null
+```
+
+## renderTriggerPrompt
+
+The prompt of one firing: every `{{body}}` replaced by the request body, verbatim. The body is
+untrusted text that is substituted and never interpreted, so the replacement is a function (a
+string would read `$&` and `$1` in it as patterns).
+
+```ts
+renderTriggerPrompt(template: string, body: string): string
+```
+
+## TRIGGER_BODY_PLACEHOLDER
+
+The only substitution a trigger's prompt template has (ADR-0144 D1).
+
+Value: `'{{body}}'`
+
+## TRIGGER_IDEMPOTENCY_KEY_MAX_LENGTH
+
+The longest `Idempotency-Key` a firing accepts; the same bound as the storage column.
+
+Value: `255`
+
+## TRIGGER_KINDS
+
+What starts a run without a person at the keyboard (ADR-0144): a `webhook` is a URL whose secret
+is the whole authentication of the ingress, a `schedule` is a cron expression read in a time zone.
+
+- `'webhook'`
+- `'schedule'`
+
+## TRIGGER_MAX_BODY_BYTES
+
+The largest request body a firing accepts, in bytes (ADR-0144 D2 limit 1).
+
+Value: `256 * 1024`
+
+## TRIGGER_MAX_CONCURRENT_RUNS
+
+The most unfinished runs one trigger has at a time (ADR-0144 D2 limit 3).
+
+Value: `3`
+
+## TRIGGER_PROBLEM_CODES
+
+Domain problem codes of the trigger routes, with the status each travels under. Every miss on the
+public fire route is the one `trigger_not_found` (ADR-0144 D2), so a caller cannot learn whether a
+trigger exists.
+
+| Key | Value |
+| --- | --- |
+| `trigger_not_found` | `404` |
+| `trigger_name_taken` | `409` |
+| `trigger_agent_not_runnable` | `403` |
+| `trigger_not_webhook` | `409` |
+| `trigger_owner_not_allowed` | `403` |
+| `trigger_subject_not_allowed` | `403` |
+| `trigger_delivery_in_progress` | `409` |
+| `trigger_rate_limited` | `429` |
+| `trigger_concurrency_limited` | `429` |
+| `trigger_body_too_large` | `413` |
+| `trigger_prompt_too_long` | `413` |
+| `trigger_idempotency_key_invalid` | `400` |
+| `trigger_zoom_not_configured` | `422` |
+
+## TRIGGER_RATE_PER_MINUTE
+
+The most firings one trigger accepts in a minute (ADR-0144 D2 limit 2).
+
+Value: `30`
+
+## TRIGGER_VALIDATION_TOKEN_MAX_LENGTH
+
+The longest Microsoft Graph `validationToken` the ingress echoes.
+
+Value: `1024`
+
+## TRIGGER_ZOOM_SECRET_TOKEN_MAX_LENGTH
+
+The longest Zoom app secret token a trigger stores.
+
+Value: `256`
+
+## TriggerKind
+
+- `"webhook"`
+- `"schedule"`
+
+## TriggerListResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `triggers` | `readonly TriggerResource[]` | Yes |  |
+
+## TriggerListResponseSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `triggers` | `readonly TriggerResource[]` | Yes |  |
+
+## TriggerOutputSchemaSchema
+
+The JSON Schema every run a trigger starts is asked to answer in (ADR-0154): the same object, and
+the same limits, as `StartRunRequest.outputSchema` (ADR-0143).
+
+`Record<string, unknown>`
+
+## TriggerProblemCode
+
+- `"trigger_not_found"`
+- `"trigger_name_taken"`
+- `"trigger_agent_not_runnable"`
+- `"trigger_not_webhook"`
+- `"trigger_owner_not_allowed"`
+- `"trigger_subject_not_allowed"`
+- `"trigger_delivery_in_progress"`
+- `"trigger_rate_limited"`
+- `"trigger_concurrency_limited"`
+- `"trigger_body_too_large"`
+- `"trigger_prompt_too_long"`
+- `"trigger_idempotency_key_invalid"`
+- `"trigger_zoom_not_configured"`
+
+## TriggerResource
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `name` | `string` | Yes |  |
+| `kind` | `"webhook" \| "schedule"` | Yes |  |
+| `agentId` | `string` | Yes |  |
+| `prompt` | `string` | Yes |  |
+| `cron` | `null \| string` | Yes |  |
+| `timezone` | `null \| string` | Yes |  |
+| `enabled` | `false \| true` | Yes |  |
+| `outputSchema` | `null \| UpdateTriggerRequest` | Yes |  |
+| `subject` | `null \| string` | Yes |  |
+| `ownerPrincipalId` | `string` | Yes |  |
+| `hasSecret` | `false \| true` | Yes |  |
+| `hasZoomSecretToken` | `false \| true` | Yes |  |
+| `lastFiredAt` | `null \| string` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+| `updatedAt` | `string` | Yes |  |
+
+## TriggerResourceSchema
+
+One trigger as every item of `GET /api/triggers` and the body of the single routes render it.
+`hasSecret` and `hasZoomSecretToken` say whether the credential is set; neither is ever returned.
+`outputSchema` is the schema its runs answer in, or `null` when they are untyped (ADR-0154).
+`subject` is the caller its runs act for, or `null` when they have none (ADR-0156).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `name` | `string` | Yes |  |
+| `kind` | `"webhook" \| "schedule"` | Yes |  |
+| `agentId` | `string` | Yes |  |
+| `prompt` | `string` | Yes |  |
+| `cron` | `null \| string` | Yes |  |
+| `timezone` | `null \| string` | Yes |  |
+| `enabled` | `false \| true` | Yes |  |
+| `outputSchema` | `null \| UpdateTriggerRequest` | Yes |  |
+| `subject` | `null \| string` | Yes |  |
+| `ownerPrincipalId` | `string` | Yes |  |
+| `hasSecret` | `false \| true` | Yes |  |
+| `hasZoomSecretToken` | `false \| true` | Yes |  |
+| `lastFiredAt` | `null \| string` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+| `updatedAt` | `string` | Yes |  |
+
+## TriggerResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `trigger` | `TriggerResource` | Yes |  |
+
+## TriggerResponseSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `trigger` | `TriggerResource` | Yes |  |
+
+## TriggerSecretResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `trigger` | `TriggerResource` | Yes |  |
+| `secret` | `string` | Yes |  |
+| `firePath` | `string` | Yes |  |
+| `warning` | `string` | Yes |  |
+
+## TriggerSecretResponseSchema
+
+The answer of `POST /api/triggers` and `POST /api/triggers/:id/secret`: the URL secret, shown
+once, and the path a sender calls. The secret travels in that path because Microsoft Graph and
+Zoom can only call a fixed URL (ADR-0144 D2); a URL can land in access logs of a proxy or CDN
+outside this platform's control, so rotate the secret if one may have leaked. A `schedule`
+trigger has no secret.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `trigger` | `TriggerResource` | Yes |  |
+| `secret` | `string` | Yes |  |
+| `firePath` | `string` | Yes |  |
+| `warning` | `string` | Yes |  |
+
+## UpdateTriggerRequest
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `undefined \| string` | No |  |
+| `prompt` | `undefined \| string` | No |  |
+| `enabled` | `undefined \| false \| true` | No |  |
+| `zoomSecretToken` | `undefined \| null \| string` | No |  |
+| `outputSchema` | `undefined \| null \| Record<string, unknown>` | No |  |
+| `subject` | `undefined \| null \| string` | No |  |
+
+## UpdateTriggerRequestSchema
+
+The body of `PATCH /api/triggers/:id`. `zoomSecretToken` is write-only; `null` clears it, and the
+server refuses it on a `schedule` trigger. `outputSchema` replaces the trigger's schema; `null`
+clears it (ADR-0154). `subject` replaces the caller its runs act for; `null` clears it (ADR-0156).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `undefined \| string` | No |  |
+| `prompt` | `undefined \| string` | No |  |
+| `enabled` | `undefined \| false \| true` | No |  |
+| `zoomSecretToken` | `undefined \| null \| string` | No |  |
+| `outputSchema` | `undefined \| null \| UpdateTriggerRequest` | No |  |
+| `subject` | `undefined \| null \| string` | No |  |
+
+## ZOOM_URL_VALIDATION_EVENT
+
+The `event` of Zoom's endpoint URL validation request.
+
+Value: `'endpoint.url_validation'`
+
+## ZoomUrlValidationEventSchema
+
+Zoom's `endpoint.url_validation` request, as much of it as the ingress reads.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `event` | `"endpoint.url_validation"` | Yes |  |
+| `payload` | `{ plainToken: string; }` | Yes |  |
+
+## ZoomUrlValidationResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `plainToken` | `string` | Yes |  |
+| `encryptedToken` | `string` | Yes |  |
+
+## ZoomUrlValidationResponseSchema
+
+The answer to Zoom's URL validation: the token and its HMAC-SHA256 (hex) under the app secret.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `plainToken` | `string` | Yes |  |
+| `encryptedToken` | `string` | Yes |  |

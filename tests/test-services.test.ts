@@ -19,6 +19,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createCleanup } from '../scripts/test-services/cleanup.mjs';
 import { TestServicesError } from '../scripts/test-services/errors.mjs';
 import {
+  AZURITE_IMAGE,
+  FAKE_GCS_SERVER_IMAGE,
   SEAWEEDFS_IMAGE,
   SEAWEEDFS_RELEASE_ASSETS,
   SEAWEEDFS_VERSION,
@@ -155,6 +157,22 @@ describe('the SeaweedFS pins', () => {
     const digests = [...ci.matchAll(/chrislusf\/seaweedfs@sha256:[0-9a-f]{64}/gu)].map((m) => m[0]);
     expect(digests.length).toBeGreaterThan(0);
     for (const digest of digests) expect(digest).toBe(SEAWEEDFS_IMAGE);
+  });
+
+  it('pins the same Azurite and fake-gcs-server digests as the CI emulator step', () => {
+    const ci = readFileSync(path.join(ROOT, '.github/workflows/ci.yml'), 'utf8');
+    for (const [image, pin] of [
+      ['mcr.microsoft.com/azure-storage/azurite', AZURITE_IMAGE],
+      ['fsouza/fake-gcs-server', FAKE_GCS_SERVER_IMAGE],
+    ] as const) {
+      const pattern = new RegExp(
+        `${image.replaceAll('.', String.raw`\.`)}@sha256:[0-9a-f]{64}`,
+        'gu',
+      );
+      const digests = [...ci.matchAll(pattern)].map((m) => m[0]);
+      expect(digests.length).toBeGreaterThan(0);
+      for (const digest of digests) expect(digest).toBe(pin);
+    }
   });
 
   it('caches under ${XDG_CACHE_HOME:-~/.cache}/agent-workspace/seaweedfs/<version>', () => {
@@ -298,7 +316,9 @@ describe('the native fallback reuses existing pins', () => {
 describe('the native PostgreSQL cluster', () => {
   // initdb copies the host's TZ into the cluster's `timezone`, so on a JST host every text-cast
   // timestamptz read `+09` and year-0001 values carried a local-mean-time offset Date cannot parse.
-  it('runs in UTC, as the Docker image does, whatever the host time zone is', async () => {
+  // `DROP DATABASE` waits for a forced checkpoint; with fsync on, dozens of suites tearing down at
+  // once queued on those checkpoints and `isolated.close()` took up to 9 s of the 10 s hook budget.
+  it('runs in UTC and without fsync, whatever the host time zone is', async () => {
     const dir = tempDir();
     const port = await freeLoopbackPort();
     const child = spawn(
@@ -341,15 +361,15 @@ describe('the native PostgreSQL cluster', () => {
             "import pg from 'pg';",
             `const client = new pg.Client('postgres://postgres:postgres@127.0.0.1:${String(port)}/agent_workspace_test');`,
             'await client.connect();',
-            "const { rows } = await client.query('SHOW timezone');",
+            "const { rows } = await client.query(\"select current_setting('timezone') as tz, current_setting('fsync') as fsync, current_setting('full_page_writes') as fpw\");",
             'await client.end();',
-            'process.stdout.write(String(rows[0].TimeZone));',
+            'process.stdout.write(JSON.stringify(rows[0]));',
           ].join('\n'),
         ],
         { cwd: ROOT, encoding: 'utf8' },
       );
       expect(query.stderr).toBe('');
-      expect(query.stdout).toBe('UTC');
+      expect(JSON.parse(query.stdout)).toEqual({ tz: 'UTC', fsync: 'off', fpw: 'off' });
     } finally {
       child.stdin.end();
       await exited;

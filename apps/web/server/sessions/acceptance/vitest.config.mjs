@@ -12,7 +12,7 @@
  *
  * `apps/web/server/runs/acceptance/` solved the same problem by being a `.mjs` **script** that
  * nothing collects. This harness cannot be one: it drives the real route handlers and the real
- * `FileTranscriptStore`, which are TypeScript under `apps/web`, and `apps/web` has no importable
+ * in-memory transcript store, which are TypeScript under `apps/web`, and `apps/web` has no importable
  * build output. So it stays a Vitest file, is named `*.acceptance.ts` so the default
  * the default test-and-spec include never matches it, and is reached only by naming this config.
  *

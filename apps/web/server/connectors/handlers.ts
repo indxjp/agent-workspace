@@ -35,12 +35,18 @@
  * `serverName`/`serverVersion`/`toolCount` on success and a `kind`+`message` on failure — never the
  * credential either, because `test-connection.ts`'s own type has no field for one.
  */
-import { ConnectorUpdateRequestSchema } from '@indx-workspace/contracts/connectors';
+import {
+  ConnectorUpdateRequestSchema,
+  type ConnectorAuthType,
+  type ConnectorTransport,
+} from '@indx-workspace/contracts/connectors';
+import { isReservedConnectorName } from '@indx-workspace/contracts/tool-connectors';
 
 import {
   connectorKindOfBody,
   credentialFieldFor,
   credentialHeaderValue,
+  identityOf,
   KIND_ERROR,
   parseCreateConnectorBody,
   type ConnectorResource,
@@ -48,6 +54,7 @@ import {
   type ToolConnectorResource,
 } from './contract';
 import { restrictedBaseEnv } from './base-env';
+import { connectorIdentityUnsupported } from './identity';
 import {
   admitToolConnector,
   defaultCheckConnectorEgress,
@@ -64,33 +71,7 @@ import type {
   WorkspaceConnectorsProbeSource,
   WorkspaceConnectorsStore,
 } from './store';
-
-/** A status and a body, before either becomes an HTTP response. `body: null` means "no content". */
-export interface ApiResult {
-  readonly status: number;
-  readonly body: unknown;
-}
-
-export interface ApiProblem {
-  readonly error: {
-    readonly code: string;
-    readonly message: string;
-    readonly details?: readonly string[];
-  };
-}
-
-export function problem(
-  status: number,
-  code: string,
-  message: string,
-  details?: readonly string[],
-): ApiResult {
-  const error =
-    details === undefined || details.length === 0
-      ? { code, message }
-      : { code, message, details: [...details] };
-  return { status, body: { error } satisfies ApiProblem };
-}
+import { problem, type ApiResult } from '../http/result';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 
@@ -187,6 +168,11 @@ export async function createConnector(
       parsed.errors,
     );
   }
+  const reserved = reservedName(parsed.value.name);
+  if (reserved !== null) return reserved;
+  if (parsed.value.identity !== undefined && parsed.value.transport === 'stdio') {
+    return connectorIdentityUnsupported();
+  }
 
   if (isDryRunBody(rawBody)) {
     // `baseEnv` is REQUIRED and is never `process.env` — a caller-supplied stdio command must not
@@ -229,6 +215,11 @@ function ownerMissing(): ApiResult {
   );
 }
 
+/** The platform keeps `aw-control` (contracts `isReservedConnectorName`): answered as a taken name. */
+function reservedName(name: string | undefined): ApiResult | null {
+  return name !== undefined && isReservedConnectorName(name) ? nameConflict(name) : null;
+}
+
 function nameConflict(name: string): ApiResult {
   return problem(
     409,
@@ -250,6 +241,8 @@ async function createToolConnector(
 ): Promise<ApiResult> {
   const admitted = await admitToolConnector(rawBody, checkConnectorEgress);
   if (!admitted.ok) return admitted.result;
+  const reserved = reservedName(admitted.write.name);
+  if (reserved !== null) return reserved;
   if (admitted.dryRun) return admitted.dryRunResult;
   if (owner === null) return ownerMissing();
   const outcome = await store.createToolConnector(admitted.write, owner);
@@ -297,6 +290,8 @@ async function updateToolConnector(
     }
     const admitted = await admitToolConnector(body, checkConnectorEgress);
     if (!admitted.ok) return admitted.result;
+    const reserved = reservedName(admitted.write.name);
+    if (reserved !== null) return reserved;
     if (admitted.dryRun) return admitted.dryRunResult;
     return toolUpdateResult(await store.replaceToolConnector(existing.id, admitted.write));
   }
@@ -323,6 +318,8 @@ async function updateToolConnector(
           ],
     );
   }
+  const reserved = reservedName(name);
+  if (reserved !== null) return reserved;
   return toolUpdateResult(
     await store.replaceToolConnector(existing.id, {
       ...(name === undefined ? {} : { name }),
@@ -338,12 +335,13 @@ function toResource(record: {
   readonly id: string;
   readonly workspaceId: string;
   readonly name: string;
-  readonly transport: 'stdio' | 'http' | 'sse';
+  readonly transport: ConnectorTransport;
   readonly command: string | null;
   readonly args: readonly string[] | null;
   readonly url: string | null;
-  readonly authType: 'none' | 'api-key' | 'bearer' | 'oauth';
+  readonly authType: ConnectorAuthType;
   readonly credentialSecretId: string | null;
+  readonly identitySecretName: string | null;
   readonly enabled: boolean;
   readonly createdBy: string | null;
   readonly ownerPrincipalId: string;
@@ -365,6 +363,7 @@ function toResource(record: {
     ownerPrincipalId: record.ownerPrincipalId,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
+    ...identityOf(record.identitySecretName),
   };
 }
 
@@ -564,8 +563,12 @@ export async function updateConnector(
     ...(data.url === undefined ? {} : { url: data.url }),
     ...(data.authType === undefined ? {} : { authType: data.authType }),
     ...(data.credential === undefined ? {} : { credential: data.credential }),
+    ...(data.identity === undefined ? {} : { identity: data.identity }),
   };
   if (existing === null) return connectorNotFound();
+  const reserved = reservedName(data.name);
+  if (reserved !== null) return reserved;
+  if (data.identity && existing.transport === 'stdio') return connectorIdentityUnsupported();
   const refusal = patchRefusal(existing, patch);
   if (refusal?.kind === 'credential-not-configured') return credentialNotConfigured();
   if (refusal?.kind === 'credential-required-on-retarget') {

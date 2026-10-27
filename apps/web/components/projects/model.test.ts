@@ -15,7 +15,6 @@ import {
   isValidProjectName,
   parseProjectFilter,
   projectModelSaveTookEffect,
-  projectsListQuery,
   readAgentOptions,
   readConnectorOptions,
   readFileOptions,
@@ -294,21 +293,6 @@ describe('parseProjectFilter', () => {
     expect(parseProjectFilter('ARCHIVED')).toBe('active');
     expect(parseProjectFilter('everything')).toBe('active');
     expect(parseProjectFilter('')).toBe('active');
-  });
-});
-
-describe('projectsListQuery', () => {
-  it('always sends an explicit archived filter, never relying on the route default', () => {
-    expect(projectsListQuery('active')).toBe('/api/projects?archived=active');
-    expect(projectsListQuery('archived')).toBe('/api/projects?archived=archived');
-    expect(projectsListQuery('all')).toBe('/api/projects?archived=all');
-  });
-
-  it('produces a value the server would accept for every filter it parses', () => {
-    for (const raw of ['active', 'archived', 'all', 'nonsense', null]) {
-      const url = new URL(projectsListQuery(parseProjectFilter(raw)), 'https://example.invalid');
-      expect(['active', 'archived', 'all']).toContain(url.searchParams.get('archived'));
-    }
   });
 });
 

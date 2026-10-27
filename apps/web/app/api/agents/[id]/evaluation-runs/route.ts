@@ -5,6 +5,7 @@ import {
   startEvaluationRun,
 } from '../../../../../server/evaluations/runs';
 import { getRunApi } from '../../../../../server/runs/environment';
+import { route } from '../../../../../server/http/route';
 
 /**
  * `POST /api/agents/:id/evaluation-runs` (issue #799): store an evaluation of up to 200 cases that
@@ -14,24 +15,33 @@ import { getRunApi } from '../../../../../server/runs/environment';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-export async function POST(
+async function servePost(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  return serveAgentVersionRoute(request, context, async ({ agent, principal, store }) => {
-    const body = await readEvaluationRunBody(request);
-    if (!body.ok) return body.result;
-    return startEvaluationRun(body.value, agent.id, principal, { store, runs: getRunApi() });
-  });
+  return serveAgentVersionRoute(
+    request,
+    context,
+    'start-evaluation-run',
+    async ({ agent, principal, store }) => {
+      const body = await readEvaluationRunBody(request);
+      if (!body.ok) return body.result;
+      return startEvaluationRun(body.value, agent.id, principal, { store, runs: getRunApi() });
+    },
+  );
 }
 
-export async function GET(
+export const POST = route({ component: 'evaluations', operation: 'start-run' }, servePost);
+
+async function serveGet(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  return serveAgentVersionRoute(request, context, ({ agent, principal }) =>
+  return serveAgentVersionRoute(request, context, 'read', ({ agent, principal }) =>
     getEvaluationRun(agent.id, new URL(request.url).searchParams.get('evaluation'), principal, {
       runs: getRunApi(),
     }),
   );
 }
+
+export const GET = route({ component: 'evaluations', operation: 'get-run' }, serveGet);

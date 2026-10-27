@@ -133,6 +133,7 @@ describe('create — issue #126 "cannot leave an untracked credential"', () => {
       replace: () => Promise.reject(new Error('not used')),
       delete: () => Promise.reject(new Error('not used')),
       resolveByName: () => Promise.resolve(null),
+      resolveById: () => Promise.resolve(null),
       close: () => Promise.resolve(),
     };
     const scopes = createInMemoryWorkspaceScopeResolver([{ id: WORKSPACE_ID, slug: 'w' }]);

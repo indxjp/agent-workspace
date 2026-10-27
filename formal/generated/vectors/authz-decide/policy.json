@@ -175,6 +175,13 @@
    "id": "policy/owner/setup",
    "expected": {"write": "any", "run": "any", "read": "any"}},
   {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_storageConnections",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_role_policy_names_each_resource_once",
+    "AgentWorkspace.Theorems.Meta.AuthzDecide.owner_dominates_every_role"],
+   "input": {"role": "owner", "resource": "storage-connections"},
+   "id": "policy/owner/storage-connections",
+   "expected": {"write": "any", "run": "any", "read": "any"}},
+  {"witnesses":
    ["AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_toolBundles",
     "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_role_policy_names_each_resource_once",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.owner_dominates_every_role"],
@@ -187,6 +194,13 @@
     "AgentWorkspace.Theorems.Meta.AuthzDecide.owner_dominates_every_role"],
    "input": {"role": "owner", "resource": "tokens"},
    "id": "policy/owner/tokens",
+   "expected": {"write": "any", "run": "any", "read": "any"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_triggers",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_role_policy_names_each_resource_once",
+    "AgentWorkspace.Theorems.Meta.AuthzDecide.owner_dominates_every_role"],
+   "input": {"role": "owner", "resource": "triggers"},
+   "id": "policy/owner/triggers",
    "expected": {"write": "any", "run": "any", "read": "any"}},
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_users",
@@ -229,7 +243,7 @@
     "AgentWorkspace.Theorems.Meta.AuthzDecide.owner_dominates_every_role"],
    "input": {"role": "admin", "resource": "connectors"},
    "id": "policy/admin/connectors",
-   "expected": {"write": "any", "run": "none", "read": "any"}},
+   "expected": {"write": "any", "run": "any", "read": "any"}},
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_endpointClients",
     "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_role_policy_names_each_resource_once",
@@ -306,7 +320,7 @@
     "AgentWorkspace.Theorems.Meta.AuthzDecide.owner_dominates_every_role"],
    "input": {"role": "admin", "resource": "projects"},
    "id": "policy/admin/projects",
-   "expected": {"write": "none", "run": "none", "read": "none"}},
+   "expected": {"write": "any", "run": "none", "read": "any"}},
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_runs",
     "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_role_policy_names_each_resource_once",
@@ -378,6 +392,13 @@
    "id": "policy/admin/setup",
    "expected": {"write": "none", "run": "none", "read": "none"}},
   {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_storageConnections",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_role_policy_names_each_resource_once",
+    "AgentWorkspace.Theorems.Meta.AuthzDecide.owner_dominates_every_role"],
+   "input": {"role": "admin", "resource": "storage-connections"},
+   "id": "policy/admin/storage-connections",
+   "expected": {"write": "any", "run": "none", "read": "any"}},
+  {"witnesses":
    ["AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_toolBundles",
     "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_role_policy_names_each_resource_once",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.owner_dominates_every_role"],
@@ -391,6 +412,13 @@
    "input": {"role": "admin", "resource": "tokens"},
    "id": "policy/admin/tokens",
    "expected": {"write": "any", "run": "none", "read": "none"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_triggers",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_role_policy_names_each_resource_once",
+    "AgentWorkspace.Theorems.Meta.AuthzDecide.owner_dominates_every_role"],
+   "input": {"role": "admin", "resource": "triggers"},
+   "id": "policy/admin/triggers",
+   "expected": {"write": "any", "run": "any", "read": "any"}},
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_users",
     "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_role_policy_names_each_resource_once",
@@ -411,7 +439,7 @@
     "AgentWorkspace.Theorems.Meta.AuthzDecide.owner_dominates_every_role"],
    "input": {"role": "builder", "resource": "agents"},
    "id": "policy/builder/agents",
-   "expected": {"write": "own", "run": "own", "read": "any"}},
+   "expected": {"write": "own", "run": "permitted", "read": "any"}},
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_apiKeys",
     "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_role_policy_names_each_resource_once",
@@ -581,6 +609,13 @@
    "id": "policy/builder/setup",
    "expected": {"write": "none", "run": "none", "read": "none"}},
   {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_storageConnections",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_role_policy_names_each_resource_once",
+    "AgentWorkspace.Theorems.Meta.AuthzDecide.owner_dominates_every_role"],
+   "input": {"role": "builder", "resource": "storage-connections"},
+   "id": "policy/builder/storage-connections",
+   "expected": {"write": "none", "run": "none", "read": "any"}},
+  {"witnesses":
    ["AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_toolBundles",
     "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_role_policy_names_each_resource_once",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.owner_dominates_every_role"],
@@ -594,6 +629,13 @@
    "input": {"role": "builder", "resource": "tokens"},
    "id": "policy/builder/tokens",
    "expected": {"write": "own", "run": "none", "read": "none"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_triggers",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_role_policy_names_each_resource_once",
+    "AgentWorkspace.Theorems.Meta.AuthzDecide.owner_dominates_every_role"],
+   "input": {"role": "builder", "resource": "triggers"},
+   "id": "policy/builder/triggers",
+   "expected": {"write": "own", "run": "own", "read": "any"}},
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_users",
     "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_role_policy_names_each_resource_once",
@@ -784,6 +826,13 @@
    "id": "policy/viewer/setup",
    "expected": {"write": "none", "run": "none", "read": "none"}},
   {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_storageConnections",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_role_policy_names_each_resource_once",
+    "AgentWorkspace.Theorems.Meta.AuthzDecide.owner_dominates_every_role"],
+   "input": {"role": "viewer", "resource": "storage-connections"},
+   "id": "policy/viewer/storage-connections",
+   "expected": {"write": "none", "run": "none", "read": "none"}},
+  {"witnesses":
    ["AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_toolBundles",
     "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_role_policy_names_each_resource_once",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.owner_dominates_every_role"],
@@ -796,6 +845,13 @@
     "AgentWorkspace.Theorems.Meta.AuthzDecide.owner_dominates_every_role"],
    "input": {"role": "viewer", "resource": "tokens"},
    "id": "policy/viewer/tokens",
+   "expected": {"write": "none", "run": "none", "read": "none"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_triggers",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_role_policy_names_each_resource_once",
+    "AgentWorkspace.Theorems.Meta.AuthzDecide.owner_dominates_every_role"],
+   "input": {"role": "viewer", "resource": "triggers"},
+   "id": "policy/viewer/triggers",
    "expected": {"write": "none", "run": "none", "read": "none"}},
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_users",

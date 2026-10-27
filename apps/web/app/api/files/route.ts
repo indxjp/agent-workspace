@@ -8,20 +8,36 @@
  * alias is a bundler setting Vitest does not resolve, so a test cannot import a route file that
  * uses it.
  */
+import { log } from '../../../server/telemetry/logger';
+
 import { decodeResourcePathHeader, RESOURCE_PATH_ENCODING_HEADER } from '../../../contracts/files';
 import {
-  createFolder,
-  fileObjectExists,
-  listFiles,
+  attachmentsRefusal,
+  listCatalogFolder,
   problem,
-  uploadFile,
+  uploadInProgressRefusal,
 } from '../../../server/files/handlers';
-import {
-  readBoundedBodyBytes,
-  toResponse,
-  withWorkspaceObjectStore,
-} from '../../../server/files/http';
+import { storageContextOf, toResponse, withCatalogService } from '../../../server/files/http';
+import { createCatalogFolder, saveUpload } from '../../../server/files/upload-route';
+import { route } from '../../../server/http/route';
+import { ownershipOfWriteTarget } from '../../../server/files/ownership';
 import { requireResourceAccess } from '../../../server/resources/authorise';
+
+/**
+ * A failed catalog write is logged server-side and answered with this typed 500; the cause text
+ * (SQL, connection strings) never reaches the body. A write refused because an upload to the path
+ * is in flight is the caller's conflict, not an outage: `409 upload_in_progress`.
+ */
+function catalogUnavailable(error: unknown): ReturnType<typeof problem> {
+  const pending = uploadInProgressRefusal(error);
+  if (pending !== null) return pending;
+  log.error('[files] catalog write failed', { error });
+  return problem(
+    500,
+    'catalog_unavailable',
+    'The file catalog could not be updated; retry the request.',
+  );
+}
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -32,43 +48,32 @@ export const runtime = 'nodejs';
  * a location rather than naming one file, and query parameters are where an HTTP `GET` carries
  * that, exactly as the shape rule leaves `/api/files` itself with no dynamic segment for it.
  */
-export async function GET(request: Request): Promise<Response> {
+async function serveList(request: Request): Promise<Response> {
   const access = await requireResourceAccess(request, 'not-applicable');
   if (!access.ok) return access.response;
   const url = new URL(request.url);
   const path = url.searchParams.get('path');
-  const result = await withWorkspaceObjectStore(
+  const result = await withCatalogService(
     request,
-    async (store, catalog) => {
-      const listed = await listFiles(store, path);
-      if (catalog === null || listed.kind !== 'json' || listed.status !== 200) return listed;
-      const body = listed.body as {
-        files: Array<{
-          id: string;
-          path: string;
-          kind: 'file' | 'folder';
-          sizeBytes: number | null;
-          contentType: string | null;
-        }>;
-      };
-      // Resolved once per request, not once per file: `putFile`'s `created_by` is stamped only on
-      // the first sync of a path (issue #117 — its `onConflictDoUpdate` never touches the column
-      // again), so every later sync of the same row passes this and it is simply ignored.
-      const synced = await Promise.all(
-        body.files.map(async (file) => {
-          const row = await catalog.putFile({
-            path: file.path,
-            kind: file.kind,
-            storageKey: file.kind === 'file' ? file.path : null,
-            sizeBytes: file.sizeBytes ?? 0,
-            contentType: file.contentType,
-            ownerPrincipalId: access.principal.ownerPrincipalId,
-            createdBy: access.principal.userId,
-          });
-          return { ...file, id: row.id };
-        }),
+    async (storage, catalog) => {
+      const scope = access.principal.scope;
+      const concealed = attachmentsRefusal(scope, path ?? '', 'read');
+      if (concealed !== null) return concealed;
+      // @story US-STO-01
+      const listed = await listCatalogFolder(
+        storage,
+        catalog,
+        storageContextOf(access.principal),
+        path,
       );
-      return { ...listed, body: { files: synced } };
+      if (listed.kind !== 'json' || listed.status !== 200) return listed;
+      const body = listed.body as { files: Array<{ path: string }> };
+      return {
+        ...listed,
+        body: {
+          files: body.files.filter((file) => attachmentsRefusal(scope, file.path, 'read') === null),
+        },
+      };
     },
     access.principal.workspaceId,
   );
@@ -82,81 +87,56 @@ export async function GET(request: Request): Promise<Response> {
  * here — there is no JSON envelope to put them in without either base64-inflating every upload or
  * splitting one request into two round trips.
  */
-export async function POST(request: Request): Promise<Response> {
-  const access = await requireResourceAccess(request, 'not-applicable');
-  if (!access.ok) return access.response;
-  const result = await withWorkspaceObjectStore(
+async function serveUpload(request: Request): Promise<Response> {
+  const pathEncoding = request.headers.get(RESOURCE_PATH_ENCODING_HEADER);
+  const decodedFolderPath = decodeResourcePathHeader(
+    request.headers.get('x-folder-path'),
+    pathEncoding,
+  );
+  const decodedFilePath = decodeResourcePathHeader(
+    request.headers.get('x-file-path'),
+    pathEncoding,
+  );
+  // A file upload replaces whatever is at its path, so a Builder may write only its own file there
+  // (ADR-0031). Creating a folder replaces nothing. A malformed header is refused below, after the
+  // caller is known.
+  const uploadsFile =
+    decodedFolderPath.ok && decodedFolderPath.value === null && decodedFilePath.ok;
+  const access = await requireResourceAccess(
     request,
-    async (store, catalog) => {
-      const pathEncoding = request.headers.get(RESOURCE_PATH_ENCODING_HEADER);
-      const decodedFolderPath = decodeResourcePathHeader(
-        request.headers.get('x-folder-path'),
-        pathEncoding,
-      );
+    uploadsFile && decodedFilePath.value !== null
+      ? ownershipOfWriteTarget(decodedFilePath.value)
+      : 'not-applicable',
+  );
+  if (!access.ok) return access.response;
+  const result = await withCatalogService(
+    request,
+    async (storage) => {
       if (!decodedFolderPath.ok) {
         return problem(400, decodedFolderPath.code, 'The resource path encoding is invalid.');
       }
       const folderPath = decodedFolderPath.value;
-      if (folderPath !== null) {
-        const created = await createFolder(store, folderPath);
-        if (catalog === null || created.kind !== 'json' || created.status !== 201) return created;
-        try {
-          const row = await catalog.putFile({
-            path: folderPath,
-            kind: 'folder',
-            storageKey: null,
-            sizeBytes: 0,
-            contentType: null,
-            ownerPrincipalId: access.principal.ownerPrincipalId,
-            createdBy: access.principal.userId,
-          });
-          return {
-            ...created,
-            body: { file: { ...(created.body as { file: object }).file, id: row.id } },
-          };
-        } catch (error) {
-          await store.delete(`${folderPath}/.agent-workspace-empty-folder`);
-          throw error;
-        }
-      }
-      const decodedFilePath = decodeResourcePathHeader(
-        request.headers.get('x-file-path'),
-        pathEncoding,
-      );
-      if (!decodedFilePath.ok) {
-        return problem(400, decodedFilePath.code, 'The resource path encoding is invalid.');
-      }
-      const path = decodedFilePath.value;
-      if (path === null || path.trim() === '') {
-        return problem(400, 'missing_file_path', 'The "x-file-path" header is required.');
-      }
-      const bounded = await readBoundedBodyBytes(request);
-      if (!bounded.ok) return bounded.result;
-      const contentType = request.headers.get('content-type');
-      const existed = catalog === null ? false : await fileObjectExists(store, path);
-      const uploaded = await uploadFile(store, { path, contentType, body: bounded.bytes });
-      if (catalog === null || uploaded.kind !== 'json' || uploaded.status !== 201) return uploaded;
+      // @story US-STO-01
       try {
-        const row = await catalog.putFile({
-          path,
-          kind: 'file',
-          storageKey: path,
-          sizeBytes: bounded.bytes.byteLength,
-          contentType,
-          ownerPrincipalId: access.principal.ownerPrincipalId,
-          createdBy: access.principal.userId,
-        });
-        return {
-          ...uploaded,
-          body: { file: { ...(uploaded.body as { file: object }).file, id: row.id } },
-        };
+        if (folderPath !== null) {
+          return await createCatalogFolder(access.principal, storage, folderPath);
+        }
+        if (!decodedFilePath.ok) {
+          return problem(400, decodedFilePath.code, 'The resource path encoding is invalid.');
+        }
+        const filePath = decodedFilePath.value;
+        if (filePath === null || filePath.trim() === '') {
+          return problem(400, 'missing_file_path', 'The "x-file-path" header is required.');
+        }
+        return await saveUpload(request, access.principal, storage, filePath);
       } catch (error) {
-        // An overwrite is not undone: deleting would destroy the caller's file; the next list re-syncs the row.
-        if (!existed) await store.delete(path);
-        throw error;
+        return catalogUnavailable(error);
       }
     },
     access.principal.workspaceId,
   );
   return toResponse(result);
 }
+
+export const GET = route({ component: 'files', operation: 'list' }, serveList);
+export const POST = route({ component: 'files', operation: 'upload' }, serveUpload);

@@ -34,6 +34,7 @@ export const contextPaths = (/** @type {string} */ engine) => [
   'packages/core',
   'packages/engine',
   `packages/engine-${engine}`,
+  'packages/run-protocol',
   'packages/runtime',
   'scripts/engine-images.mjs',
   'infra/images/npx.mjs',

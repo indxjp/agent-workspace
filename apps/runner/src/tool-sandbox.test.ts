@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { RuntimeConfig, RuntimeHandle } from '@agent-workspace/runtime';
+import type { RuntimeConfig, RuntimeHandle } from '@agent-workspace/runtime/driver';
 
-import { createRunnerManagerServer, type ManagedRuntimeDriver } from './manager.js';
+import { createRunnerManagerServer } from './manager.js';
+import type { ManagedRuntimeDriver } from './manager-support.js';
 import {
   createToolSandboxes,
   parseToolSandboxRequest,
@@ -169,6 +170,74 @@ describe('tool sandboxes (ADR-0118 TS2, TS4, TS5)', () => {
       'the tool sandbox could not be prepared: envd answered 503',
     );
     expect(destroyed).toEqual(['tool-1']);
+  });
+
+  it('keeps both failures when the sandbox that stopped before it served cannot be removed', async () => {
+    const { driver } = fakeDriver({ live: false });
+    driver.destroy = () => Promise.reject(new Error('docker rm failed'));
+    const sandboxes = createToolSandboxes({ driver, origin, fetch: serving() });
+    const thrown = await sandboxes
+      .open(session, parseToolSandboxRequest(request()))
+      .catch((error: unknown) => error);
+    expect(thrown).toBeInstanceOf(AggregateError);
+    const [failure, cleanup] = (thrown as AggregateError).errors as Error[];
+    expect(failure).toBeInstanceOf(ToolSandboxUnavailableError);
+    expect(cleanup?.message).toBe('docker rm failed');
+  });
+
+  it('keeps the driver error as the cause when the manifest cannot be written', async () => {
+    const { driver } = fakeDriver();
+    const cause = new Error('envd answered 503');
+    driver.writeFile = () => Promise.reject(cause);
+    const sandboxes = createToolSandboxes({ driver, origin, fetch: serving() });
+    const thrown = await sandboxes
+      .open(session, parseToolSandboxRequest(request()))
+      .catch((error: unknown) => error);
+    expect(thrown).toBeInstanceOf(ToolSandboxUnavailableError);
+    expect((thrown as Error).cause).toBe(cause);
+  });
+
+  it('starts no new tool set while the sandbox holding the old secrets cannot be removed', async () => {
+    const { driver, created } = fakeDriver();
+    const sandboxes = createToolSandboxes({ driver, origin, fetch: serving() });
+    await sandboxes.open(session, parseToolSandboxRequest(request()));
+    const cause = new Error('docker rm failed');
+    driver.destroy = () => Promise.reject(cause);
+    const thrown = await sandboxes
+      .open(session, parseToolSandboxRequest(request({ key: 'tools-2' })))
+      .catch((error: unknown) => error);
+    expect(thrown).toBeInstanceOf(ToolSandboxUnavailableError);
+    expect((thrown as Error).cause).toBe(cause);
+    expect(created).toHaveLength(1);
+  });
+
+  it('keeps both failures when the sandbox just started cannot be removed after its run token failed', async () => {
+    const { driver } = fakeDriver();
+    driver.writeFile = (_handle, name) =>
+      name === 'tokens.json' ? Promise.reject(new Error('envd answered 502')) : Promise.resolve();
+    driver.destroy = () => Promise.reject(new Error('docker rm failed'));
+    const sandboxes = createToolSandboxes({ driver, origin, fetch: serving() });
+    const thrown = await sandboxes
+      .open(session, parseToolSandboxRequest(request()))
+      .catch((error: unknown) => error);
+    expect(thrown).toBeInstanceOf(AggregateError);
+    const [failure, cleanup] = (thrown as AggregateError).errors as Error[];
+    expect(failure?.message).toBe('the run token could not be registered: envd answered 502');
+    expect(cleanup?.message).toBe('docker rm failed');
+  });
+
+  it('keeps both failures when the sandbox outlives its close and its run token cannot be revoked', async () => {
+    const { driver } = fakeDriver();
+    const sandboxes = createToolSandboxes({ driver, origin, fetch: serving() });
+    await sandboxes.open(session, parseToolSandboxRequest(request()));
+    driver.destroy = () => Promise.reject(new Error('docker rm failed'));
+    driver.writeFile = () => Promise.reject(new Error('envd answered 502'));
+    const thrown = await sandboxes.close(session).catch((error: unknown) => error);
+    expect(thrown).toBeInstanceOf(AggregateError);
+    expect(((thrown as AggregateError).errors as Error[]).map((error) => error.message)).toEqual([
+      'docker rm failed',
+      'envd answered 502',
+    ]);
   });
 
   it('names the cause, and removes the sandbox it just started, when the run token cannot be written', async () => {
@@ -686,6 +755,28 @@ describe('runner manager allocation with a tool sandbox', () => {
       expect(response.status).toBe(503);
       expect(destroyed).toEqual(['handle-1']);
     });
+  });
+
+  it('keeps the 503 and logs the cleanup failure when the new runtime cannot be removed either', async () => {
+    const open = vi.fn(() => Promise.reject(new ToolSandboxUnavailableError('no image')));
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      await withManager(
+        { open, close: vi.fn(() => Promise.resolve()) },
+        async (post, destroyed) => {
+          const response = await post({ ...allocationBody, toolSandbox: request() });
+          expect(response.status).toBe(503);
+          expect(await response.json()).toMatchObject({ error: 'tool_sandbox_unavailable' });
+          expect(destroyed).toEqual(['handle-1']);
+        },
+        { destroyFails: true },
+      );
+      expect(stderr.mock.calls.map(([line]) => String(line)).join('')).toContain(
+        'docker rm failed',
+      );
+    } finally {
+      stderr.mockRestore();
+    }
   });
 
   it('serves a tool sandbox /mcp with the host token and the provider headers, not the manager token', async () => {

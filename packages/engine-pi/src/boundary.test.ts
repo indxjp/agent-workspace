@@ -595,6 +595,38 @@ describe('pi through the adapter, against a fake gateway', () => {
     expect(result(frames)).toMatchObject({ stopReason: 'cancelled' });
   });
 
+  it('fails the run, without an unhandled rejection, when pi refuses an abort', async () => {
+    const cwd = workspace();
+    writeFileSync(path.join(cwd, 'a.md'), 'x');
+    gateway.script([{ call: { name: 'read', args: { path: 'a.md' } } }]);
+    const unhandled: unknown[] = [];
+    const record = (reason: unknown): void => {
+      unhandled.push(reason);
+    };
+    process.on('unhandledRejection', record);
+    const { AgentSession } = await vi.importActual<{
+      AgentSession: { prototype: { abort: () => Promise<void> } };
+    }>('@earendil-works/pi-coding-agent');
+    const abort = vi
+      .spyOn(AgentSession.prototype, 'abort')
+      .mockRejectedValue(new Error('abort failed'));
+    try {
+      const failure = await run(baseRequest(cwd), undefined, (frame, interrupt) => {
+        if (frame.frame === 'agent.tool.call') void interrupt();
+      }).then(
+        () => null,
+        (error: unknown) => error,
+      );
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(abort).toHaveBeenCalled();
+      expect(failure).toMatchObject({ message: 'abort failed' });
+      expect(unhandled).toEqual([]);
+    } finally {
+      abort.mockRestore();
+      process.off('unhandledRejection', record);
+    }
+  });
+
   it("restates pi's own default Anthropic model", async () => {
     expect(await installedPiDefaultAnthropicModel()).toBe(PI_DEFAULT_ANTHROPIC_MODEL);
   });

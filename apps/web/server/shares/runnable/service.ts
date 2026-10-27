@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { AgentPermissions } from '@agent-workspace/core/db';
-import type { ShareRecord } from '@agent-workspace/core/db';
+import type { AgentPermissions, ShareRecord } from '../store';
 import type { WorkspaceSharing } from '../core/runtime';
 import { DomainError, type DomainErrorCategory } from '../../errors';
 

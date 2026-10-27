@@ -88,6 +88,10 @@ def forgeableReferences : List (TableName × ForeignKey × String) :=
       (k.pairs.find? (·.2 == "id")).map fun p => (t, k, p.1)
     else none
 
+/-- The sample state is consistent: checked once and shared by every generated witness. -/
+private theorem sample_is_consistent : Er.Current.Catalog.consistent Sample.state = true := by
+  decide +kernel
+
 section Generator
 
 open Lean Elab Command
@@ -123,22 +127,22 @@ elab "aw_catalog_forgery_theorems" : command => do
           (hs : s ∈ st (fk $tIdent $nameLit).refTable) (hid : s.get "id" = r.get $colLit) :
           tenantOf catalogue (fk $tIdent $nameLit).refTable s = tenantOf catalogue $tIdent r :=
         forged_id_names_a_row_of_the_writers_workspace catalogue st
-          (Bool.and_eq_true _ _ |>.mp hc).1 (by decide) (by decide) (by decide) (by decide) hr
+          (Bool.and_eq_true _ _ |>.mp hc).1 (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) hr
           (AgentWorkspace.Theorems.Invariants.ConceptCatalog.mandatory_reference_is_set catalogue
-            st (Bool.and_eq_true _ _ |>.mp hc).1 _ _ (by decide) hr) hs hid))
+            st (Bool.and_eq_true _ _ |>.mp hc).1 _ _ (by decide +kernel) hr) hs hid))
     elabCommand (← `(command|
       example : tenantOf catalogue (fk $tIdent $nameLit).refTable
             (Sample.parent $tIdent (fk $tIdent $nameLit)) =
           tenantOf catalogue $tIdent (Sample.child $tIdent (fk $tIdent $nameLit)) :=
-        $thm Sample.state (by decide +kernel) (by decide +kernel) (by decide +kernel)
+        $thm Sample.state sample_is_consistent (by decide +kernel) (by decide +kernel)
           (by decide +kernel)))
 
 end Generator
 
 aw_catalog_forgery_theorems
 
-/-- The generated forgery theorems cover every assignment, grant, version, project-link and owner
-reference to an id-keyed row: 23 references. -/
+/-- The generated forgery theorems cover every assignment, grant, version, revision, project-link and
+owner reference to an id-keyed row: 29 references. -/
 @[aw_spec (tier := T3) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
   (ts := "packages/core/src/db/schema/tenancy.test.ts#tenantPairingFault")]
 theorem forgery_theorems_cover_every_id_reference :
@@ -148,6 +152,10 @@ theorem forgery_theorems_cover_every_id_reference :
         ("agent_mcp_servers", "agent_id", "agents"),
         ("agent_mcp_servers", "mcp_server_id", "mcp_servers"),
         ("agent_skills", "agent_id", "agents"), ("agent_skills", "skill_id", "skills"),
+        ("agent_storage_grants", "agent_id", "agents"),
+        ("agent_storage_grants", "connection_id", "storage_connections"),
+        ("agent_version_storage_grants", "version_id", "agent_versions"),
+        ("agent_version_storage_grants", "connection_id", "storage_connections"),
         ("agent_pointer_moves", "agent_id", "agents"),
         ("agent_pointer_moves", "version_id", "agent_versions"),
         ("agent_version_evaluations", "version_id", "agent_versions"),
@@ -157,13 +165,15 @@ theorem forgery_theorems_cover_every_id_reference :
         ("agent_versions", "agent_id", "agents"),
         ("agent_versions", "created_by_principal_id", "workspace_principals"),
         ("agents", "owner_principal_id", "workspace_principals"),
+        ("file_texts", "file_id", "files"),
         ("files", "owner_principal_id", "workspace_principals"),
         ("mcp_servers", "owner_principal_id", "workspace_principals"),
         ("project_files", "project_id", "projects"), ("project_files", "file_id", "files"),
         ("project_mcp_servers", "project_id", "projects"),
         ("project_mcp_servers", "mcp_server_id", "mcp_servers"),
+        ("skill_revisions", "skill_id", "skills"),
         ("skills", "owner_principal_id", "workspace_principals")] := by
-  decide
+  decide +kernel
 
 /-! ## Grants -/
 
@@ -193,7 +203,7 @@ theorem grants_name_only_active_membership_principals (ps : List Grant.Principal
 
 example : ∀ r ∈ [(⟨"p2"⟩ : PrincipalId)], ∃ p ∈ [(⟨⟨"p2"⟩, some ⟨"u2"⟩, false⟩ : Grant.PrincipalView)],
     p.id = r ∧ p.user.isSome = true ∧ p.revoked = false :=
-  grants_name_only_active_membership_principals _ _ [⟨"u2"⟩] (by decide)
+  grants_name_only_active_membership_principals _ _ [⟨"u2"⟩] (by decide +kernel)
 
 private theorem mem_map_lower {l : List String} {x : String} (h : x ∈ l.map Grant.lowerAscii) :
     ∃ y ∈ l, x = Grant.lowerAscii y := by
@@ -231,7 +241,7 @@ theorem case_variant_duplicate_grant_ids_are_refused :
       "123e4567-e89b-12d3-a456-426614174000"] = none ∧
     Grant.grantsBody ["123E4567-E89B-12D3-A456-426614174000"] =
       some ["123e4567-e89b-12d3-a456-426614174000"] := by
-  decide
+  decide +kernel
 
 example : ["123e4567-e89b-12d3-a456-426614174000"].Nodup ∧
     ["123e4567-e89b-12d3-a456-426614174000"].length =
@@ -239,7 +249,7 @@ example : ["123e4567-e89b-12d3-a456-426614174000"].Nodup ∧
     ∀ x ∈ ["123e4567-e89b-12d3-a456-426614174000"],
       ∃ y ∈ ["123E4567-E89B-12D3-A456-426614174000"], Uuid.isCanonical y = true ∧
         x = Grant.lowerAscii y :=
-  grants_body_admits_only_distinct_uuids _ _ (by decide)
+  grants_body_admits_only_distinct_uuids _ _ (by decide +kernel)
 
 /-! ## Path handling -/
 
@@ -335,7 +345,7 @@ theorem sibling_sharing_leading_characters_is_not_under_the_prefix (pre suf : St
   rfl
 
 example : File.underPrefix "docs" ("docs" ++ "2/x.txt") = false :=
-  sibling_sharing_leading_characters_is_not_under_the_prefix _ _ (by decide) (by decide)
+  sibling_sharing_leading_characters_is_not_under_the_prefix _ _ (by decide +kernel) (by decide +kernel)
 
 /-! ## Running an agent without a grant -/
 
@@ -355,7 +365,7 @@ theorem no_grant_row_no_run_permission (i : Grant.RunOwnershipInput)
 
 example : Grant.runOwnership ⟨true, some ⟨"p1"⟩, true, ⟨"p2"⟩, some ⟨"u2"⟩, [⟨"u1"⟩]⟩ ≠
     .permitted :=
-  no_grant_row_no_run_permission _ (by decide)
+  no_grant_row_no_run_permission _ (by decide +kernel)
 example : Grant.runOwnership ⟨true, some ⟨"p1"⟩, true, ⟨"k1"⟩, none, [⟨"u1"⟩]⟩ ≠ .permitted :=
   no_grant_row_no_run_permission _ (by simp)
 

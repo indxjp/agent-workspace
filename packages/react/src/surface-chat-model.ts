@@ -124,6 +124,7 @@ export function reduceSurfaceRunFrame(
         ? state
         : { ...state, run: withAssistantResponse(state.run, assistant, response) };
     }
+    case 'run-warning':
     case 'stream-reset':
       return state;
     case 'done':
@@ -160,11 +161,16 @@ export interface SurfaceTurn {
   readonly runId: string;
   readonly answerIds: readonly string[];
   readonly tools: readonly SurfaceToolStep[];
+  /**
+   * Set when the run ended in `agent.handoff` (ADR-0145 D4). The reason is for the operator, not the
+   * visitor: a visitor's stream does not carry it, so it is `null` there.
+   */
+  readonly handoff: { readonly reason: string | null } | null;
 }
 
 /** A run's turn before any frame. */
 export function emptySurfaceTurn(runId: string): SurfaceTurn {
-  return { runId, answerIds: [], tools: [] };
+  return { runId, answerIds: [], tools: [], handoff: null };
 }
 
 /** The turn after one frame. A frame that is not an agent event, or breaks its contract, is skipped. */
@@ -201,6 +207,8 @@ export function reduceSurfaceTurnFrame(turn: SurfaceTurn, frame: RunEventFrame):
         ),
       };
     }
+    case 'agent.handoff':
+      return { ...turn, handoff: { reason: event.reason ?? null } };
     default: {
       const response = assistantResponseFromAgentEvent(event);
       if (response === null) return turn;

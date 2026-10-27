@@ -36,7 +36,7 @@ import { parse as parseYaml } from 'yaml';
 import { agentVersionNotFound } from '../agent-versions/problems';
 import { toAgentVersionResource } from '../agent-versions/contract';
 import type { WorkspaceAgentVersionStore } from '../agent-versions/store';
-import { problem, type ApiResult } from '../agents/handlers';
+import { problem, type ApiResult } from '../http/result';
 import type { AnyConnectorResource } from '../connectors/contract';
 import type { WorkspaceConnectorsStore } from '../connectors/store';
 

@@ -1,14 +1,25 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import {
+  MODEL_PROVIDER_CONFIG_RULES,
+  type ModelConnectionConfig,
+} from '@indx-workspace/contracts/models';
 import { MODEL_PROVIDERS } from '@indx-workspace/contracts/runs';
 
-import type { RequestContext, WireProtocolForwarder } from '../types.js';
-import { createProviderRegistry, PROVIDER_IDS, registryProviderId } from './registry.js';
+import { createRouter } from '../router.js';
+import type { ModelProvider, RequestContext, WireProtocolForwarder } from '../types.js';
+import {
+  createProviderRegistry,
+  ModelConnectionIncompleteError,
+  PROVIDER_IDS,
+  registryProviderId,
+  type RegisteredProviderId,
+} from './registry.js';
 import type { ScriptedModels } from './scripted.js';
 
 const context = (
-  providerId: string,
-  settings: Readonly<Record<string, unknown>>,
+  providerId: RegisteredProviderId,
+  settings: ModelConnectionConfig,
 ): RequestContext => ({
   providerId,
   credential: 'secret-from-run-resolution',
@@ -16,7 +27,10 @@ const context = (
   settings,
 });
 
-const providerOf = (id: string, options: Parameters<typeof createProviderRegistry>[0]) => {
+const providerOf = (
+  id: RegisteredProviderId,
+  options: Parameters<typeof createProviderRegistry>[0],
+) => {
   const provider = createProviderRegistry(options).find((row) => row.id === id);
   if (provider === undefined) throw new Error(`no registry row ${id}`);
   return provider;
@@ -75,7 +89,42 @@ describe('Wave 4 provider registry', () => {
     const compatible = registry.find((provider) => provider.id === 'openai-compatible');
     expect(() =>
       compatible!.createMessage({ model: 'model' }, context('openai-compatible', {})),
-    ).toThrow(/require config\.baseUrl/);
+    ).toThrow(ModelConnectionIncompleteError);
+  });
+
+  it('each registry row requires exactly the fields MODEL_PROVIDER_CONFIG_RULES requires', async () => {
+    const fixtureValues = {
+      baseUrl: 'http://localhost:9500',
+      deployment: 'deployment-fixture',
+      apiVersion: '2025-04-01-preview',
+    } satisfies Required<ModelConnectionConfig>;
+    const attempt = async (id: RegisteredProviderId, settings: ModelConnectionConfig) => {
+      const request = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ id: 'fixture' }));
+      const row = providerOf(id, { fetch: request, scripted: null });
+      await row.createMessage(
+        { model: 'model', max_tokens: 1, messages: [] },
+        context(id, settings),
+      );
+    };
+
+    for (const id of PROVIDER_IDS) {
+      const required = MODEL_PROVIDER_CONFIG_RULES[id].required;
+      for (const field of required) {
+        const without = Object.fromEntries(
+          required.filter((name) => name !== field).map((name) => [name, fixtureValues[name]]),
+        );
+        const error = await attempt(id, without).then(
+          () => undefined,
+          (rejection: unknown) => rejection,
+        );
+        expect(error).toBeInstanceOf(ModelConnectionIncompleteError);
+        expect(error).toMatchObject({ field });
+      }
+      const complete = Object.fromEntries(required.map((name) => [name, fixtureValues[name]]));
+      await attempt(id, complete).catch((error: unknown) => {
+        expect(error).not.toBeInstanceOf(ModelConnectionIncompleteError);
+      });
+    }
   });
 
   it('routes the mandatory token-count operation through the selected adapter', async () => {
@@ -109,6 +158,55 @@ describe('Wave 4 provider registry', () => {
         headers: { authorization: 'Bearer secret-from-run-resolution' },
       }),
     );
+  });
+});
+
+describe('an incomplete stored model connection through the router', () => {
+  // An Azure row saved before `apiVersion` became required.
+  const legacyAzure = context('azure-openai', {
+    baseUrl: 'http://localhost:9500',
+    deployment: 'selected-deployment',
+  });
+  const jsonRequest = (path: string) =>
+    new Request(`http://gateway.test${path}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'm', max_tokens: 1, messages: [] }),
+    });
+
+  it('answers a typed 409 naming the missing field and never calls upstream', async () => {
+    const upstream = vi.fn<typeof fetch>();
+    const router = createRouter(createProviderRegistry({ fetch: upstream, scripted: null }));
+    const requests = [
+      jsonRequest('/v1/messages'),
+      jsonRequest('/v1/messages/count_tokens'),
+      jsonRequest('/v1/responses'),
+      jsonRequest('/v1/chat/completions'),
+      new Request('http://gateway.test/v1/models'),
+    ];
+    for (const request of requests) {
+      const response = await router.fetch(request, legacyAzure);
+      expect(response.status).toBe(409);
+      const body = (await response.json()) as { error: { type: string; message: string } };
+      expect(body).toMatchObject({
+        type: 'error',
+        error: { type: 'model_connection_incomplete' },
+        request_id: 'registry-test',
+      });
+      expect(body.error.message).toContain('config.apiVersion');
+      expect(body.error.message).not.toContain('localhost');
+    }
+    expect(upstream).not.toHaveBeenCalled();
+  });
+
+  it('does not turn any other adapter failure into a 409', async () => {
+    const broken: ModelProvider = {
+      ...providerOf('anthropic', { scripted: null }),
+      createMessage: () => Promise.reject(new Error('upstream exploded')),
+    };
+    await expect(
+      createRouter([broken]).fetch(jsonRequest('/v1/messages'), context('anthropic', {})),
+    ).rejects.toThrow('upstream exploded');
   });
 });
 

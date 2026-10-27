@@ -4,6 +4,10 @@ import { RUN_START_PROBLEM_CODES } from './runs.js';
 import {
   SURFACE_AGENT_SWITCHER_MAX,
   SURFACE_ALLOWED_ORIGINS_MAX,
+  SURFACE_ATTACHMENT_MAX_BYTES,
+  SURFACE_ATTACHMENT_PROBLEM_CODES,
+  SURFACE_ATTACHMENTS_MAX_FILES,
+  SURFACE_ATTACHMENTS_MAX_TOTAL_BYTES,
   SURFACE_DENSITIES,
   SURFACE_LAYOUTS,
   SURFACE_LOCALES,
@@ -17,10 +21,12 @@ import {
   SURFACE_TOOL_RESULTS_MAX_ENTRIES,
   SURFACE_TOOL_TRACE_MODES,
   SURFACE_TURNS_PER_CONVERSATION_MAX,
+  SurfaceAttachmentResponseSchema,
   SurfaceDefinitionSchema,
   SurfaceLogoSchema,
   SurfaceSessionRequestSchema,
   SurfaceSessionResponseSchema,
+  toolResultFor,
   type SurfaceDefinition,
 } from './surfaces.js';
 import { BROWSER_TOKEN_MAX_TTL_SECONDS } from './tokens.js';
@@ -147,13 +153,12 @@ describe('SurfaceDefinitionSchema', () => {
     expect(paths({ ...minimal, parts: { toolTrace: 'verbose' } })).toEqual(['parts.toolTrace']);
   });
 
-  it('still refuses parts.attachments', () => {
-    expect(issuesOf({ ...minimal, parts: { attachments: true } })).toEqual([
-      expect.objectContaining({
-        code: 'unrecognized_keys',
-        path: ['parts'],
-        keys: ['attachments'],
-      }),
+  it('accepts parts.attachments (#1308) and refuses a non-boolean', () => {
+    const surface = { ...minimal, parts: { attachments: true } };
+    expect(SurfaceDefinitionSchema.parse(surface)).toEqual(surface);
+    expect(paths({ ...minimal, parts: { attachments: 'yes' } })).toEqual(['parts.attachments']);
+    expect(issuesOf({ ...minimal, parts: { attachments: true, uploads: true } })).toEqual([
+      expect.objectContaining({ code: 'unrecognized_keys', path: ['parts'], keys: ['uploads'] }),
     ]);
   });
 
@@ -210,6 +215,34 @@ describe('SurfaceDefinitionSchema', () => {
       Array.from({ length: SURFACE_TOOL_RESULTS_MAX_ENTRIES + 1 }, (_, i) => [`t${i}`, 'text']),
     );
     expect(paths({ ...minimal, toolResults: tooMany })).toEqual(['toolResults']);
+  });
+
+  describe('toolResultFor', () => {
+    it('prefers the exact key over the bare-name suffix', () => {
+      const toolResults = { mcp__x__find_files: 'card', find_files: 'table' } as const;
+      expect(toolResultFor('mcp__x__find_files', toolResults)).toBe('card');
+    });
+
+    it('matches the part after the last double underscore', () => {
+      expect(toolResultFor('mcp__x__find_files', { find_files: 'table' })).toBe('table');
+      expect(toolResultFor('mcp__connector-0b1c__find_files', { find_files: 'table' })).toBe(
+        'table',
+      );
+      expect(toolResultFor('find_files', { find_files: 'table' })).toBe('table');
+    });
+
+    it('matches neither a partial suffix nor a single-underscore prefix', () => {
+      expect(toolResultFor('find_files_v2', { files: 'table' })).toBeUndefined();
+      expect(toolResultFor('server_find_files', { find_files: 'table' })).toBeUndefined();
+      expect(toolResultFor('mcp__x__find_files', { files: 'table' })).toBeUndefined();
+    });
+
+    it('returns undefined for an empty suffix, an inherited name or no toolResults', () => {
+      expect(toolResultFor('mcp__x__', { x: 'table' })).toBeUndefined();
+      expect(toolResultFor('constructor', {})).toBeUndefined();
+      expect(toolResultFor('mcp__x__constructor', {})).toBeUndefined();
+      expect(toolResultFor('find_files', undefined)).toBeUndefined();
+    });
   });
 
   it('refuses locale fr', () => {
@@ -538,5 +571,35 @@ describe('SurfaceSessionResponseSchema (ADR-0105 slice 1; S1-17, #455)', () => {
     for (const [code, status] of Object.entries(RUN_START_PROBLEM_CODES)) {
       expect(SURFACE_SESSION_PROBLEM_CODES).toHaveProperty(code, status);
     }
+  });
+});
+
+describe('the attachment upload contract (ADR-0146, #1308)', () => {
+  const uploaded = { fileId: 'ZmlsZQ', path: '.attachments/s/u/a.pdf', size: 12 };
+
+  it('parses the 201 body strictly', () => {
+    expect(SurfaceAttachmentResponseSchema.parse(uploaded)).toEqual(uploaded);
+    expect(SurfaceAttachmentResponseSchema.safeParse({ ...uploaded, extra: 1 }).success).toBe(
+      false,
+    );
+    expect(SurfaceAttachmentResponseSchema.safeParse({ ...uploaded, size: -1 }).success).toBe(
+      false,
+    );
+    expect(SurfaceAttachmentResponseSchema.safeParse({ ...uploaded, fileId: '' }).success).toBe(
+      false,
+    );
+  });
+
+  it('fixes the limits and the problem codes', () => {
+    expect(SURFACE_ATTACHMENT_MAX_BYTES).toBe(10 * 1024 * 1024);
+    expect(SURFACE_ATTACHMENTS_MAX_FILES).toBe(20);
+    expect(SURFACE_ATTACHMENTS_MAX_TOTAL_BYTES).toBe(50 * 1024 * 1024);
+    expect(SURFACE_ATTACHMENT_PROBLEM_CODES).toEqual({
+      file_not_found: 404,
+      invalid_attachment_name: 400,
+      request_body_too_large: 413,
+      attachments_quota_exceeded: 413,
+      surface_rate_limited: 429,
+    });
   });
 });

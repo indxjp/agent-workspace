@@ -13,6 +13,6 @@ theorem indeterminate_done_diverges_from_settled_wait :
     Sse.outcomeFrames (.indeterminate "lost") =
       [Sse.controlFrame "run-failed" (.obj [("status", .str "unknown"),
         ("message", .str "lost")]), Sse.controlFrame "done" (.obj [])] ∧
-    waitOutcome true .running = some .contractViolation := by decide
+    waitOutcome true .running = some .contractViolation := by decide +kernel
 
 end AgentWorkspace.Theorems.Refinement.SdkRuns

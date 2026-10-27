@@ -22,7 +22,8 @@ export function parseProjectFile(text: string): ProjectRead {
 /**
  * Reads an `evals/<agent>.yaml` file (issue #618) with the project file's reader rules, then the
  * contract's `EvalCaseFileSchema`: 1 to 200 cases with unique names, each expecting some of
- * `contains`, `notContains`, `tool` (with optional `toolInput`) and `judge`. `label` is the file the refusals name.
+ * `contains`, `notContains`, `tool` (with optional `toolInput`), `output` (with the case's
+ * `outputSchema`), `judge` and `awaitsApproval`. `label` is the file the refusals name.
  *
  * @throws {ProjectFileError} as {@link parseProjectFile} does, its message beginning `<label> `.
  */

@@ -1,11 +1,7 @@
-import type {
-  AuditEventRepository,
-  ShareRepository,
-  ShareViewRepository,
-  ShareRecord,
-} from '@agent-workspace/core/db';
+import type { ShareRecord, WorkspaceSharing } from '../store';
 import type { Role } from '../../rbac/roles';
 import type { Ownership } from '../../rbac/decide';
+import type { SharedRun } from '../session-snapshot/snapshot';
 
 export type ShareActor =
   | {
@@ -23,11 +19,7 @@ export type ShareActor =
     }
   | { readonly kind: 'unauthenticated'; readonly reason: string }
   | { readonly kind: 'forbidden'; readonly reason: string };
-export interface WorkspaceSharing {
-  readonly shares: ShareRepository;
-  readonly views: ShareViewRepository;
-  readonly audit: AuditEventRepository;
-}
+export type { WorkspaceSharing };
 export interface SharesRuntime {
   resolveActor(request: Request): Promise<ShareActor>;
   forWorkspace(workspaceId: string): Promise<WorkspaceSharing>;
@@ -35,6 +27,14 @@ export interface SharesRuntime {
   sharingMaterials(
     workspaceId: string,
   ): Promise<{ values: readonly string[]; referenceIds: readonly string[] }>;
+  /**
+   * The workspace's runs named by `runIds`, index for index, `null` where it holds none: what a
+   * session share's transcript copies (ADR-0158).
+   */
+  sessionRuns(
+    workspaceId: string,
+    runIds: readonly string[],
+  ): Promise<readonly (SharedRun | null)[]>;
   subjectOwnership(input: {
     workspaceId: string;
     /** The caller's owner principal (`ShareActor.ownerPrincipalId`), compared with the subject's. */
@@ -48,17 +48,4 @@ export interface SharesRuntime {
     prompt: string;
     sessionId: string;
   }): Promise<{ output: unknown; runId: string }>;
-}
-interface Registry {
-  __agentWorkspaceSharesRuntime__?: SharesRuntime;
-}
-const registry = globalThis as typeof globalThis & Registry;
-export function configureSharesRuntime(runtime: SharesRuntime): void {
-  registry.__agentWorkspaceSharesRuntime__ = runtime;
-}
-export function clearSharesRuntime(): void {
-  delete registry.__agentWorkspaceSharesRuntime__;
-}
-export function currentSharesRuntime(): SharesRuntime | null {
-  return registry.__agentWorkspaceSharesRuntime__ ?? null;
 }

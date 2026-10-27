@@ -39,14 +39,25 @@ export interface QuotedFourM {
   readonly line: string;
 }
 
-export interface EightDDraft {
+/** A statement in D4 that needs a source: each なぜ, each bullet and the 根本原因 line. */
+export interface Claim {
+  readonly text: string;
+  readonly cites: readonly string[];
+}
+
+/** A draft read into parts, before any check: what `parseEightD` finds or a run returns. */
+export interface EightDStructure {
   readonly title: string | null;
   readonly sections: readonly EightDSection[];
   readonly whys: readonly Why[];
+  readonly claims: readonly Claim[];
   readonly rootCause: { readonly text: string; readonly cites: readonly string[] } | null;
   /** The 原因区分 written in D4, such as 金型摩耗. */
   readonly causeCode: string | null;
   readonly fourM: QuotedFourM | null;
+}
+
+export interface EightDDraft extends EightDStructure {
   /** Every Q-number cited anywhere in the draft. */
   readonly cites: readonly string[];
   readonly issues: readonly EightDIssue[];
@@ -57,4 +68,6 @@ export const DISCIPLINES: readonly Discipline[];
 export const FOUR_M: readonly FourM[];
 export const MIN_WHYS: number;
 export function citedCases(text: string): string[];
+/** The format checks, on a structure that was parsed or returned as data. */
+export function checkEightD(structure: EightDStructure): EightDDraft;
 export function parseEightD(markdown: string): EightDDraft;

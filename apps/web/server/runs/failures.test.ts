@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
+import { signIdentity } from '@indx-workspace/contracts/identity-assertion';
 
 import { DomainError, InfrastructureError } from '../errors';
 import { RuntimeManagerError } from '../compose/runtime-manager-client';
-import { redacted } from '../redact';
+import { redacted } from '@agent-workspace/core/telemetry';
 import {
   atStep,
   PreparationStepError,
@@ -141,6 +142,16 @@ describe('redacted', () => {
     const key = 'abcdefghijABCDEFGHIJ0123456789abcdefghij';
 
     expect(redacted(`agent ${id} rejected ${key}`, [])).toBe(`agent ${id} rejected [redacted]`);
+  });
+
+  it('masks an x-aw-identity assertion by shape, even for the shortest subject (ADR-0142)', async () => {
+    const assertion = await signIdentity(
+      { sub: 'u', principalKind: 'api-key', workspace: 'w', runId: 'r', aud: 'c', exp: 1 },
+      'identity-signing-key',
+    );
+    const logged = redacted(`connector refused x-aw-identity: ${assertion}`, []);
+
+    for (const segment of assertion.split('.')) expect(logged).not.toContain(segment);
   });
 });
 

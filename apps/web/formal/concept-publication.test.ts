@@ -26,21 +26,19 @@
 import type { CreateShareInput, ShareRecord } from '@agent-workspace/core/db';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { GET as listShares, toShareResource } from '../app/api/shares/route';
+import { GET as listShares } from '../app/api/shares/route';
 import { DomainError } from '../server/errors';
 import { createMemoryDirectory } from '../server/rbac/memory-directory';
 import { Principal } from '../server/rbac/principal';
 import { ROLES, type Role } from '../server/rbac/roles';
-import { clearRbacRuntime, configureRbacRuntime } from '../server/rbac/runtime';
 import { PublishShareRequestSchema, type PublishShareInput } from '../server/shares/core/input';
-import {
-  clearSharesRuntime,
-  configureSharesRuntime,
-  type WorkspaceSharing,
-} from '../server/shares/core/runtime';
+import { toShareResource } from '../server/shares/core/resource';
+import { type WorkspaceSharing } from '../server/shares/core/runtime';
 import { ShareService } from '../server/shares/core/service';
 import { RunnableShareService } from '../server/shares/runnable/service';
 import { asRecord, asString, loadVectors } from '../../../tests/formal/vectors';
+import { clearApplicationContext } from '../server/application-context';
+import { installTestDomains } from '../server/application-context-fixtures';
 
 const optionVectors = loadVectors('concept-publication', 'options.json');
 const fieldVectors = loadVectors('concept-publication', 'fields.json');
@@ -92,7 +90,9 @@ describe('publish options fit their subject type', () => {
       ...(mode === null ? {} : { mode }),
       ...(asBoolean(input['include'], vector.id) ? { include: { technicalDetails: true } } : {}),
       ...(asBoolean(input['budget'], vector.id) ? { budgetCapUsd: 5 } : {}),
-      ...(asBoolean(input['transcript'], vector.id) ? { transcript: [] } : {}),
+      ...(asBoolean(input['transcript'], vector.id)
+        ? { transcript: { runIds: ['00000000-0000-4000-8000-0000000000cc'] } }
+        : {}),
       ...(asBoolean(input['definition'], vector.id)
         ? { definition: { name: 'Agent', instructions: '' } }
         : {}),
@@ -211,17 +211,14 @@ function fakeSharing(options: FakeSharingOptions = {}) {
       getPublicSharingEnabled: vi.fn(() => Promise.resolve(options.publicSharingEnabled ?? true)),
       setPublicSharingEnabled: vi.fn(),
       revoke: vi.fn(),
-      setSuspended: vi.fn(),
       stop: vi.fn(),
       reserveVisitorMessage,
-      linkRun: vi.fn(),
     },
     views: {
       record: recordView,
       count: vi.fn(() => Promise.resolve(0)),
-      countVisitorSince: vi.fn(),
     },
-    audit: { write: vi.fn(() => Promise.resolve()), count: vi.fn(), list: vi.fn() },
+    audit: { write: vi.fn(() => Promise.resolve()) },
   };
   return { sharing, recordView, create, reserveVisitorMessage };
 }
@@ -415,8 +412,7 @@ describe('ShareService.resolve with a passphrase against the model', () => {
 
 describe('GET /api/shares lists against the model', () => {
   afterEach(() => {
-    clearSharesRuntime();
-    clearRbacRuntime();
+    clearApplicationContext();
   });
 
   it.each(listingVectors.map((v) => [v.id, v] as const))('%s', async (_id, vector) => {
@@ -426,36 +422,41 @@ describe('GET /api/shares lists against the model', () => {
     const role = asRole(input['role'], `${vector.id} role`);
     const viewer = asString(input['viewer'], `${vector.id} viewer`);
     const workspaceId = record.workspaceId;
-    configureRbacRuntime({
-      directory: createMemoryDirectory(),
-      identify: () =>
-        Promise.resolve(
-          Principal.fromApiKey({
-            principalId: viewer,
-            apiKeyId: '00000000-0000-4000-8000-0000000000bb',
-            workspaceId,
-            role,
-            label: 'Listing vector key',
-          }),
-        ),
+    installTestDomains({
+      rbac: {
+        directory: createMemoryDirectory(),
+        identify: () =>
+          Promise.resolve(
+            Principal.fromApiKey({
+              principalId: viewer,
+              apiKeyId: '00000000-0000-4000-8000-0000000000bb',
+              workspaceId,
+              role,
+              label: 'Listing vector key',
+            }),
+          ),
+      },
     });
     const { sharing } = fakeSharing({ listed: [record] });
-    configureSharesRuntime({
-      resolveActor: () =>
-        Promise.resolve({
-          kind: 'workspace',
-          workspaceId,
-          principalId: viewer,
-          ownerPrincipalId: viewer,
-          userId: null,
-          userLabel: 'Listing vector key',
-          role,
-        }),
-      forWorkspace: () => Promise.resolve(sharing),
-      resolvePublic: () => Promise.resolve(null),
-      sharingMaterials: () => Promise.resolve({ values: [], referenceIds: [] }),
-      subjectOwnership: () => Promise.resolve('unknown'),
-      runPublic: () => Promise.reject(new Error('not used')),
+    installTestDomains({
+      shares: {
+        resolveActor: () =>
+          Promise.resolve({
+            kind: 'workspace',
+            workspaceId,
+            principalId: viewer,
+            ownerPrincipalId: viewer,
+            userId: null,
+            userLabel: 'Listing vector key',
+            role,
+          }),
+        forWorkspace: () => Promise.resolve(sharing),
+        resolvePublic: () => Promise.resolve(null),
+        sharingMaterials: () => Promise.resolve({ values: [], referenceIds: [] }),
+        sessionRuns: () => Promise.reject(new Error('not used')),
+        subjectOwnership: () => Promise.resolve('unknown'),
+        runPublic: () => Promise.reject(new Error('not used')),
+      },
     });
     const response = await listShares(new Request('https://control-plane.test/api/shares'));
     expect(response.status).toBe(200);

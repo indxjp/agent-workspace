@@ -43,7 +43,7 @@ import {
   classifySdkEvent,
   toAgentFrames,
   type AgentFrame,
-} from '@agent-workspace/core';
+} from '@agent-workspace/run-protocol';
 import { isLegacyRelayedEventName } from '@indx-workspace/contracts/run-events';
 import { ENGINE_IDS, type EngineId } from '@indx-workspace/contracts/engines';
 
@@ -220,5 +220,70 @@ export async function* upgradeEventStream(
       continue;
     }
     yield* frames;
+  }
+}
+
+/**
+ * The platform's handoff tool as the Claude adapter names it (ADR-0145 D4). `apps/web` may not import
+ * the adapter; the adapter refuses a connector named `agent-workspace`, so the name is the platform's.
+ */
+const HANDOFF_TOOL_CALL = 'mcp__agent-workspace__handoff_to_person';
+
+/** What a visitor's stream has learned of the run's handoff so far. */
+interface HandoffSeen {
+  readonly calls: Set<string>;
+  /** Each reason as it appears inside JSON text, so a match in `raw` is a match in its encoding. */
+  readonly reasons: string[];
+}
+
+function rememberReason(seen: HandoffSeen, reason: unknown): void {
+  if (typeof reason === 'string' && reason !== '')
+    seen.reasons.push(JSON.stringify(reason).slice(1, -1));
+}
+
+function mentionsHandoff(value: unknown, seen: HandoffSeen): boolean {
+  if (value === null || value === undefined) return false;
+  // Encoded even for a string, so it is compared in the same JSON escaping as `seen.reasons`.
+  const text = JSON.stringify(value) ?? '';
+  return text.includes(HANDOFF_TOOL_CALL) || seen.reasons.some((reason) => text.includes(reason));
+}
+
+/** One frame as a visitor is served it; `seen` carries what earlier frames revealed. */
+function visitorFrame(data: Record<string, unknown>, seen: HandoffSeen): Record<string, unknown> {
+  const frame = { ...data };
+  if (frame['frame'] === 'agent.tool.call' && frame['name'] === HANDOFF_TOOL_CALL) {
+    rememberReason(seen, asRecord(frame['input'])?.['reason']);
+    if (typeof frame['toolCallId'] === 'string') seen.calls.add(frame['toolCallId']);
+    frame['input'] = {};
+  } else if (frame['frame'] === 'agent.handoff') {
+    rememberReason(seen, frame['reason']);
+    delete frame['reason'];
+  } else if (
+    frame['frame'] === 'agent.tool.result' &&
+    typeof frame['toolCallId'] === 'string' &&
+    seen.calls.has(frame['toolCallId']) &&
+    mentionsHandoff(frame['output'], seen)
+  ) {
+    frame['output'] = '';
+  }
+  // `raw` is the engine's own message: the assistant turn that called the tool carries its input.
+  if (mentionsHandoff(frame['raw'], seen)) frame['raw'] = null;
+  return frame;
+}
+
+/**
+ * A visitor's view of the stream (a session-scoped browser token: the widget, or an app's own end
+ * user). The handoff reason is the model's note to the operator (ADR-0145 D4), so it is removed here
+ * rather than merely left unrendered — a visitor can read the wire: `agent.handoff`'s `reason`, the
+ * `handoff_to_person` call's `input`, a result that echoes it, and any `raw` that names the tool or
+ * carries the reason. Everything else passes through unchanged.
+ */
+export async function* forVisitor(
+  source: AsyncIterable<SseWireEvent>,
+): AsyncGenerator<SseWireEvent> {
+  const seen: HandoffSeen = { calls: new Set(), reasons: [] };
+  for await (const event of source) {
+    const data = event.type.startsWith('agent.') ? asRecord(event.data) : null;
+    yield data === null ? event : { ...event, data: visitorFrame(data, seen) };
   }
 }

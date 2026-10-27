@@ -13,6 +13,20 @@ describe('renderValueList', () => {
     );
   });
 
+  it('renders an underscore-separated list only when asked, and then rejects hyphens', () => {
+    expect(renderValueList(['running', 'awaiting_approval'], { snake: true })).toBe(
+      "('running', 'awaiting_approval')",
+    );
+    expect(() => renderValueList(['awaiting_approval'])).toThrow(/not a lower-case slug/u);
+    expect(() => renderValueList(['openai-compatible'], { snake: true })).toThrow(
+      /not a lower-case slug/u,
+    );
+    expect(() => renderValueList(['awaiting_'], { snake: true })).toThrow(/not a lower-case slug/u);
+    expect(() => renderValueList(['awaiting__approval'], { snake: true })).toThrow(
+      /not a lower-case slug/u,
+    );
+  });
+
   it.each([
     ['a quote', "own'er"],
     ['a backslash', 'own\\er'],

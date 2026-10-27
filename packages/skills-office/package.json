@@ -1,0 +1,63 @@
+{
+  "name": "@agent-workspace/skills-office",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./src/index.mjs",
+  "types": "./src/index.d.mts",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.mts",
+      "default": "./src/index.mjs"
+    },
+    "./office-reader/scripts/dxf.mjs": {
+      "types": "./office-reader/scripts/dxf.d.mts",
+      "default": "./office-reader/scripts/dxf.mjs"
+    },
+    "./office-reader/scripts/ooxml.mjs": {
+      "types": "./office-reader/scripts/ooxml.d.mts",
+      "default": "./office-reader/scripts/ooxml.mjs"
+    },
+    "./office-reader/scripts/pdf.mjs": {
+      "types": "./office-reader/scripts/pdf.d.mts",
+      "default": "./office-reader/scripts/pdf.mjs"
+    },
+    "./office-reader/scripts/dxf.mjs": {
+      "types": "./office-reader/scripts/dxf.d.mts",
+      "default": "./office-reader/scripts/dxf.mjs"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@indx-workspace/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "@typescript/native": "npm:typescript@7.0.2",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
+    "vitest": "5.0.5"
+  },
+  "nx": {
+    "targets": {
+      "lint": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "eslint packages/skills-office --max-warnings 0"
+        }
+      },
+      "test": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "vitest run --project @agent-workspace/skills-office --reporter=default --reporter=json --outputFile={projectRoot}/.vitest-report.json",
+          "env": {
+            "NODE_OPTIONS": "--unhandled-rejections=strict",
+            "VITEST_MAX_WORKERS": "4"
+          }
+        }
+      }
+    }
+  }
+}

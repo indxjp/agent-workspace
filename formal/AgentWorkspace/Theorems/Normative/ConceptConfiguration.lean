@@ -34,7 +34,7 @@ def documentedConfigRules : List (Provider × List ConfigField × List ConfigFie
   (ts := "packages/contracts/src/models.ts#MODEL_PROVIDER_CONFIG_RULES")]
 theorem rule_is_the_documented_table :
     documentedConfigRules.map (·.1) = (WireEnum.all : List Provider) ∧
-      documentedConfigRules.all (fun (p, a, r) => rule p == ⟨a, r⟩) = true := by decide
+      documentedConfigRules.all (fun (p, a, r) => rule p == ⟨a, r⟩) = true := by decide +kernel
 
 section Generator
 
@@ -86,7 +86,7 @@ elab "aw_model_rule_cells" : command => do
         theorem $thm :
             ((rule $(mkIdent (providerCtor p))).allowed.contains $(mkIdent (fieldCtor f)),
               (rule $(mkIdent (providerCtor p))).required.contains $(mkIdent (fieldCtor f))) =
-              ($aT, $rT) := by decide))
+              ($aT, $rT) := by decide +kernel))
 
 end Generator
 
@@ -106,14 +106,14 @@ def fieldSets : List (List ConfigField) :=
   (ts := "apps/web/server/models/contract.ts#parseCreateModelConnection")]
 theorem optional_base_url_providers_accept_nothing_or_a_base_url :
     [Provider.anthropic, .anthropicCompatible, .openai].all
-      (fun p => fieldSets.filter (configAccepted p) == [[], [.baseUrl]]) = true := by decide
+      (fun p => fieldSets.filter (configAccepted p) == [[], [.baseUrl]]) = true := by decide +kernel
 
 /-- The OpenAI-compatible provider accepts exactly a config that is a lone `baseUrl`. -/
 @[aw_spec (tier := T1)
   (doc := "docs/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")
   (ts := "apps/web/server/models/contract.ts#parseCreateModelConnection")]
 theorem openai_compatible_accepts_exactly_a_base_url :
-    fieldSets.filter (configAccepted .openaiCompatible) = [[.baseUrl]] := by decide
+    fieldSets.filter (configAccepted .openaiCompatible) = [[.baseUrl]] := by decide +kernel
 
 /-- The Azure OpenAI provider accepts exactly the config with all three fields. -/
 @[aw_spec (tier := T1)
@@ -121,7 +121,7 @@ theorem openai_compatible_accepts_exactly_a_base_url :
   (ts := "apps/web/server/models/contract.ts#parseCreateModelConnection")]
 theorem azure_accepts_exactly_all_three_fields :
     fieldSets.filter (configAccepted .azureOpenai) = [[.baseUrl, .deployment, .apiVersion]] := by
-  decide
+  decide +kernel
 
 /-- An accepted config is complete: whatever the server accepts on create or update also passes
 `isModelConnectionConfigComplete`, so an accepted connection with a credential is ready. -/
@@ -131,7 +131,7 @@ theorem azure_accepts_exactly_all_three_fields :
 theorem accepted_config_is_complete :
     (WireEnum.all : List Provider).all (fun p => fieldSets.all fun fs =>
       !configAccepted p fs || ModelConnection.isComplete p (ModelConnection.Config.ofFields fs)) =
-      true := by decide
+      true := by decide +kernel
 
 /-- On configs whose fields carry non-blank values, the server's value-level parse and the rule
 table's key-level rule agree; a blank value is refused even where the field is allowed. -/
@@ -144,7 +144,7 @@ theorem blank_config_values_are_refused :
       = true ∧
     ModelConnection.configValuesAccepted .openaiCompatible { baseUrl := some "  " } = false ∧
     ModelConnection.configValuesAccepted .anthropic { baseUrl := some "\t" } = false := by
-  decide
+  decide +kernel
 
 /-- The code points ECMAScript's `String.prototype.trim` strips, transcribed from the language
 specification independently of `ModelConnection.isJsTrimmedCode`: *WhiteSpace* (TAB, VT, FF, SP,
@@ -177,7 +177,7 @@ theorem blank_values_by_character :
       ModelConnection.isBlank = true ∧
     ["\u200b", "\u0085", "\u180e", "a", " a ", "\u3000x"].all (!ModelConnection.isBlank ·) =
       true := by
-  decide
+  decide +kernel
 
 /-! ## Readiness -/
 
@@ -213,7 +213,7 @@ theorem incomplete_config_with_credential (p : Provider) (c : ModelConnection.Co
   (ts := "apps/web/server/models/contract.ts#toModelConnectionResource")]
 theorem azure_empty_readiness :
     ModelConnection.readiness false .azureOpenai {} = .noCredential ∧
-      ModelConnection.readiness true .azureOpenai {} = .incompleteConfig := by decide
+      ModelConnection.readiness true .azureOpenai {} = .incompleteConfig := by decide +kernel
 
 /-- With a credential, a provider that requires no config field is ready with any config. -/
 @[aw_spec (tier := T1)
@@ -242,7 +242,7 @@ theorem azure_ready_needs_all_three :
     ready true .azureOpenai (ModelConnection.Config.ofFields [.baseUrl, .deployment]) = false ∧
       ready true .azureOpenai ⟨some "https://a.example", some "d", some "  "⟩ = false ∧
       ready true .azureOpenai (ModelConnection.Config.ofFields [.baseUrl, .deployment, .apiVersion]) =
-        true := by decide
+        true := by decide +kernel
 
 /-! ## Write-only credentials and immutable fields -/
 
@@ -253,7 +253,7 @@ theorem azure_ready_needs_all_three :
   (ts := "packages/contracts/src/models.ts#ModelConnectionResourceSchema")]
 theorem model_connection_resource_has_no_credential_field :
     ModelConnection.resourceFields.all (fun f => !ModelConnection.credentialFields.contains f) &&
-      !ModelConnection.resourceFields.contains "workspaceId" = true := by decide
+      !ModelConnection.resourceFields.contains "workspaceId" = true := by decide +kernel
 
 /-- A model connection's provider is set once at creation: it is not a field `PATCH` accepts. -/
 @[aw_spec (tier := T1)
@@ -261,13 +261,13 @@ theorem model_connection_resource_has_no_credential_field :
   (ts := "apps/web/server/models/contract.ts#parseUpdateModelConnection")]
 theorem provider_is_not_patchable :
     ModelConnection.createFields.contains "provider" &&
-      !ModelConnection.updateFields.contains "provider" = true := by decide
+      !ModelConnection.updateFields.contains "provider" = true := by decide +kernel
 
 /-- The secret resource has no field that could carry the value or any part of its envelope. -/
 @[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#55-secrets--awsecrets")
   (ts := "packages/contracts/src/secrets.ts#SecretResourceSchema")]
 theorem secret_resource_has_no_value_field :
-    Secret.resourceFields.all (fun f => !Secret.valueFields.contains f) = true := by decide
+    Secret.resourceFields.all (fun f => !Secret.valueFields.contains f) = true := by decide +kernel
 
 /-- The runtime-connection resource carries neither the endpoint nor the credential. -/
 @[aw_spec (tier := T1)
@@ -276,7 +276,7 @@ theorem secret_resource_has_no_value_field :
 theorem runtime_connection_resource_has_no_endpoint_or_credential :
     RuntimeProfile.connectionCreateFields.all (fun f =>
       RuntimeProfile.connectionResourceFields.contains f == (f == "name" || f == "driver")) =
-      true := by decide
+      true := by decide +kernel
 
 /-- There is no column a plaintext value fits: every value-bearing column of `secrets` is a
 `NOT NULL` `bytea`, and the table has no `text` column besides the name, algorithm and
@@ -286,7 +286,7 @@ master-key id. -/
 theorem secret_values_are_bytea :
     (Secret.valueColumns.all (fun c => (catalogue .secrets).column? c == some ⟨c, .bytea, true⟩) &&
       (((catalogue .secrets).columns.filter (·.type == .text)).map (·.name) ==
-        ["name", "algorithm", "master_key_id"])) = true := by decide
+        ["name", "algorithm", "master_key_id"])) = true := by decide +kernel
 
 /-! ## Name shape and value bounds -/
 
@@ -295,7 +295,7 @@ theorem secret_values_are_bytea :
   (ts := "packages/contracts/src/secrets.ts#SECRET_NAME_PATTERN")]
 theorem spec_example_names_are_valid :
     ["ANTHROPIC_API_KEY", "AZURE_OPENAI_API_KEY", "GITHUB_TOKEN", "INTERNAL_DATABASE_TOKEN"].all
-      Secret.isValidName = true := by decide
+      Secret.isValidName = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 /-- A name that is empty, lower case, starts with a digit or underscore, contains a hyphen or
@@ -305,14 +305,14 @@ space, or exceeds 128 characters is refused; 128 characters are accepted. -/
 theorem secret_name_boundaries :
     ["", "anthropic_api_key", "1KEY", "_KEY", "API-KEY", "API KEY",
         String.ofList ('A' :: List.replicate 128 'B')].all (!Secret.isValidName ·) &&
-      Secret.isValidName (String.ofList ('A' :: List.replicate 127 'B')) = true := by decide
+      Secret.isValidName (String.ofList ('A' :: List.replicate 127 'B')) = true := by decide +kernel
 
 /-- A value is 1 to 65 536 code units: empty and 65 537 are refused, 1 and 65 536 accepted. -/
 @[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#55-secrets--awsecrets")
   (ts := "apps/web/server/secrets/contract.ts#parseSecretValue")]
 theorem secret_value_bounds :
     Secret.valueAccepted 0 = false ∧ Secret.valueAccepted 1 = true ∧
-      Secret.valueAccepted 65536 = true ∧ Secret.valueAccepted 65537 = false := by decide
+      Secret.valueAccepted 65536 = true ∧ Secret.valueAccepted 65537 = false := by decide +kernel
 
 /-- Secrets can be listed, created, replaced and removed today, which is exactly the documented
 target: the target is the three original operations plus removal and nothing else. -/
@@ -320,7 +320,7 @@ target: the target is the three original operations plus removal and nothing els
   (ts := "apps/web/server/secrets/store.ts#WorkspaceSecretsStore")]
 theorem secret_operations_today_and_target :
     Secret.operationsTarget = [.list, .create, .replace] ++ [.remove] ∧
-      Secret.operationsCurrent = Secret.operationsTarget := by decide
+      Secret.operationsCurrent = Secret.operationsTarget := by decide +kernel
 
 /-! ## Request bodies over key sets -/
 
@@ -330,7 +330,7 @@ the body carries. -/
   (doc := "docs/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")
   (ts := "apps/web/server/models/contract.ts#parseCreateModelConnection")
   (ts := "apps/web/server/secrets/contract.ts#parseCreateSecretBody")
-  (ts := "packages/core/src/schemas.ts#CreateRuntimeProfileInput")]
+  (ts := "packages/run-protocol/src/schemas.ts#CreateRuntimeProfileInput")]
 theorem closed_body_refuses_an_unknown_key (fields required keys : List String) (k : String)
     (hk : k ∈ keys) (hf : fields.contains k = false) :
     Secret.closedBodyAccepts fields required keys = false := by
@@ -341,7 +341,7 @@ theorem closed_body_refuses_an_unknown_key (fields required keys : List String) 
   · rw [List.all_eq_true] at h; rw [h k hk] at hf; contradiction
 
 example : Secret.closedBodyAccepts ModelConnection.createFields [] ["name", "bogus"] = false :=
-  closed_body_refuses_an_unknown_key _ _ _ "bogus" (by decide) (by decide)
+  closed_body_refuses_an_unknown_key _ _ _ "bogus" (by decide +kernel) (by decide +kernel)
 
 /-- An open request parser keeps accepting a body when keys are added to it. -/
 @[aw_spec (tier := T1)
@@ -357,7 +357,7 @@ theorem open_body_ignores_added_keys (required keys extra : List String)
 
 example : RuntimeProfile.connectionCreateAccepts
     (["name", "driver", "endpoint", "credential"] ++ ["bogus"]) = true :=
-  open_body_ignores_added_keys _ _ _ (by decide)
+  open_body_ignores_added_keys _ _ _ (by decide +kernel)
 
 /-- Creating a model connection requires a name, a provider and an API key and may carry a config:
 the body with the three is accepted, with the config too, and dropping any of the three or adding
@@ -371,7 +371,7 @@ theorem model_connection_create_requires_name_provider_and_api_key :
       ["name", "provider", "apiKey"].all (fun k =>
         !ModelConnection.createAccepts (["name", "provider", "apiKey", "config"].erase k)) = true ∧
       ModelConnection.createAccepts ["name", "provider", "apiKey", "workspaceId"] = false := by
-  decide
+  decide +kernel
 
 /-- A model-connection update may carry any subset of `name`, `config` and `apiKey`, including
 none, and a body naming the provider is refused. -/
@@ -382,7 +382,7 @@ theorem model_connection_update_is_name_config_and_key :
     [[], ["name"], ["config"], ["apiKey"], ["name", "config", "apiKey"]].all
         ModelConnection.updateAccepts = true ∧
       [["provider"], ["name", "provider"]].all (!ModelConnection.updateAccepts ·) = true := by
-  decide
+  decide +kernel
 
 /-- A secret's create body needs both its name and its value and its replace body exactly its value;
 each refuses a missing field and an unknown key. -/
@@ -393,23 +393,23 @@ theorem secret_bodies_are_closed :
     Secret.createAccepts ["name", "value"] = true ∧ Secret.createAccepts ["name"] = false ∧
       Secret.createAccepts ["value"] = false ∧ Secret.createAccepts ["name", "value", "id"] = false ∧
       Secret.replaceAccepts ["value"] = true ∧ Secret.replaceAccepts [] = false ∧
-      Secret.replaceAccepts ["value", "algorithm"] = false := by decide
+      Secret.replaceAccepts ["value", "algorithm"] = false := by decide +kernel
 
 /-- A secret's name is immutable: no replace body that carries a `name` is accepted. -/
 @[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#55-secrets--awsecrets")
   (ts := "apps/web/server/secrets/contract.ts#parseReplaceSecretBody")]
 theorem secret_name_is_not_replaceable (keys : List String) (h : "name" ∈ keys) :
     Secret.replaceAccepts keys = false :=
-  closed_body_refuses_an_unknown_key _ _ keys "name" h (by decide)
+  closed_body_refuses_an_unknown_key _ _ keys "name" h (by decide +kernel)
 
 example : Secret.replaceAccepts ["value", "name"] = false :=
-  secret_name_is_not_replaceable _ (by decide)
+  secret_name_is_not_replaceable _ (by decide +kernel)
 
 /-- A runtime profile is created from every member of spec §15.1's profile but the server-assigned
 id; the resource adds only the id, the workspace and the two timestamps; the four required members
 alone make an accepted body, and a body carrying the id is refused. -/
 @[aw_spec (tier := T1) (doc := "docs/spec.md#151-profile-schema")
-  (ts := "packages/core/src/schemas.ts#CreateRuntimeProfileInput")]
+  (ts := "packages/run-protocol/src/schemas.ts#CreateRuntimeProfileInput")]
 theorem profile_create_fields_are_the_resource_less_server_fields :
     RuntimeProfile.resourceFields.filter (!RuntimeProfile.createFields.contains ·) =
         ["id", "workspaceId", "createdAt", "updatedAt"] ∧
@@ -418,7 +418,7 @@ theorem profile_create_fields_are_the_resource_less_server_fields :
       RuntimeProfile.createAccepts RuntimeProfile.createFields = true ∧
       RuntimeProfile.createAccepts ["id", "name", "driver", "networkPolicy", "filesystem"] =
         false := by
-  decide
+  decide +kernel
 
 /-- Creating a runtime connection requires all four of its name, driver, endpoint and credential:
 the four are accepted and dropping any one is refused. -/
@@ -429,7 +429,7 @@ theorem runtime_connection_create_requires_every_field :
     RuntimeProfile.connectionCreateAccepts ["name", "driver", "endpoint", "credential"] = true ∧
       ["name", "driver", "endpoint", "credential"].all (fun k =>
         !RuntimeProfile.connectionCreateAccepts
-          (["name", "driver", "endpoint", "credential"].erase k)) = true := by decide
+          (["name", "driver", "endpoint", "credential"].erase k)) = true := by decide +kernel
 
 /-! ## Value rules -/
 
@@ -442,7 +442,7 @@ theorem model_connection_name_is_not_blank_and_api_key_not_empty :
     ["", " ", "\t", "\u3000", " \n "].all (!ModelConnection.nameAccepted ·) = true ∧
       ModelConnection.nameAccepted "Claude" = true ∧
       ModelConnection.apiKeyAccepted "" = false ∧ ModelConnection.apiKeyAccepted " " = true ∧
-      ModelConnection.apiKeyAccepted "sk-ant" = true := by decide
+      ModelConnection.apiKeyAccepted "sk-ant" = true := by decide +kernel
 
 /-- A runtime connection's name and endpoint must not be blank and its credential must not be
 empty; a credential of spaces is accepted. -/
@@ -453,7 +453,7 @@ theorem runtime_connection_values_are_not_blank :
     ["", "  ", "\u00a0"].all (!RuntimeProfile.connectionTextAccepted ·) = true ∧
       RuntimeProfile.connectionTextAccepted "https://cluster.example" = true ∧
       RuntimeProfile.connectionCredentialAccepted "" = false ∧
-      RuntimeProfile.connectionCredentialAccepted " " = true := by decide
+      RuntimeProfile.connectionCredentialAccepted " " = true := by decide +kernel
 
 /-! ## Runtime-profile updates -/
 
@@ -461,7 +461,7 @@ theorem runtime_connection_values_are_not_blank :
 is refused, except a field whose `null` is itself a value (`allowedDomains`, BH061-080). -/
 @[aw_spec (tier := T1)
   (doc := "docs/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")
-  (ts := "packages/core/src/schemas.ts#UpdateRuntimeProfileInput")]
+  (ts := "packages/run-protocol/src/schemas.ts#UpdateRuntimeProfileInput")]
 theorem patch_cannot_clear_a_field (k : String) (b : List (String × RuntimeProfile.PatchValue))
     (hk : RuntimeProfile.nullAsValueFields.contains k = false)
     (h : (k, .null) ∈ b) : RuntimeProfile.patchAcceptsCurrent b = false := by
@@ -470,23 +470,23 @@ theorem patch_cannot_clear_a_field (k : String) (b : List (String × RuntimeProf
   exact ⟨(k, .null), h, by simp [hk']⟩
 
 example : RuntimeProfile.patchAcceptsCurrent [("memoryMb", .null)] = false :=
-  patch_cannot_clear_a_field "memoryMb" _ (by decide) (by decide)
+  patch_cannot_clear_a_field "memoryMb" _ (by decide +kernel) (by decide +kernel)
 
-example : RuntimeProfile.patchAcceptsCurrent [("allowedDomains", .null)] = true := by decide
+example : RuntimeProfile.patchAcceptsCurrent [("allowedDomains", .null)] = true := by decide +kernel
 
 /-- A runtime-profile `PATCH` changes any subset of the creatable fields: each field with a value
 is accepted alone, all of them together are accepted, an empty body is accepted, and the id or an
 unknown key is refused. -/
 @[aw_spec (tier := T1)
   (doc := "docs/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")
-  (ts := "packages/core/src/schemas.ts#UpdateRuntimeProfileInput")]
+  (ts := "packages/run-protocol/src/schemas.ts#UpdateRuntimeProfileInput")]
 theorem patch_changes_any_creatable_field :
     RuntimeProfile.createFields.all (fun k => RuntimeProfile.patchAcceptsCurrent [(k, .value)]) =
         true ∧
       RuntimeProfile.patchAcceptsCurrent (RuntimeProfile.createFields.map (·, .value)) = true ∧
       RuntimeProfile.patchAcceptsCurrent [] = true ∧
       RuntimeProfile.patchAcceptsCurrent [("id", .value)] = false ∧
-      RuntimeProfile.patchAcceptsCurrent [("workspaceId", .value)] = false := by decide
+      RuntimeProfile.patchAcceptsCurrent [("workspaceId", .value)] = false := by decide +kernel
 
 /-! ## The pinned image rule on create -/
 
@@ -510,7 +510,7 @@ theorem sha256_pin_boundaries :
       RuntimeProfile.isSha256Pinned ("a@sha256:" ++ String.ofList (List.replicate 65 'a')) = false ∧
       RuntimeProfile.isSha256Pinned ("a\nb@sha256:" ++ sampleDigest) = false ∧
       RuntimeProfile.isSha256Pinned ("a@sha256:" ++ sampleDigest ++ "\n") = false ∧
-      RuntimeProfile.isSha256Pinned ("a@sha512:" ++ sampleDigest) = false := by decide
+      RuntimeProfile.isSha256Pinned ("a@sha512:" ++ sampleDigest) = false := by decide +kernel
 
 section ImageCells
 
@@ -552,7 +552,7 @@ elab "aw_image_pin_cells" : command => do
             RuntimeProfile.createImageAccepted $dI
               (.text ("ghcr.io/acme/agent@sha256:" ++ sampleDigest)) = true ∧
             RuntimeProfile.createImageAccepted $dI (.text "ghcr.io/acme/agent:1.0") = false ∧
-            RuntimeProfile.createImageAccepted $dI .nonText = false := by decide))
+            RuntimeProfile.createImageAccepted $dI .nonText = false := by decide +kernel))
 
 end ImageCells
 
@@ -568,7 +568,7 @@ accepted. -/
 theorem cpu_must_be_positive :
     RuntimeProfile.cpuAccepted ⟨0, 0⟩ = false ∧ RuntimeProfile.cpuAccepted ⟨-1, 0⟩ = false ∧
       RuntimeProfile.cpuAccepted ⟨5, 1⟩ = true ∧ RuntimeProfile.cpuAccepted ⟨1, 0⟩ = true := by
-  decide
+  decide +kernel
 
 /-- `memoryMb`, `diskMb`, `timeoutSeconds` and `idleTimeoutSeconds` are positive safe integers:
 0, -1, 0.5 and `MAX_SAFE_INTEGER + 1` are refused, 1 and `MAX_SAFE_INTEGER` accepted. -/
@@ -579,17 +579,17 @@ theorem profile_sizes_are_positive_safe_integers :
     RuntimeProfile.sizeAccepted ⟨0, 0⟩ = false ∧ RuntimeProfile.sizeAccepted ⟨-1, 0⟩ = false ∧
       RuntimeProfile.sizeAccepted ⟨5, 1⟩ = false ∧ RuntimeProfile.sizeAccepted ⟨1, 0⟩ = true ∧
       RuntimeProfile.sizeAccepted ⟨9007199254740991, 0⟩ = true ∧
-      RuntimeProfile.sizeAccepted ⟨9007199254740992, 0⟩ = false := by decide
+      RuntimeProfile.sizeAccepted ⟨9007199254740992, 0⟩ = false := by decide +kernel
 
 /-- A profile's driver, network policy and filesystem mode are required, explicit choices: the
 columns are `NOT NULL` and the create body must name them. -/
 @[aw_spec (tier := T1) (doc := "docs/sdk/site/concepts/data-plane.mdx#what-never-changes")
   (doc := "docs/spec.md#151-profile-schema")
-  (ts := "packages/core/src/schemas.ts#CreateRuntimeProfileInput")]
+  (ts := "packages/run-protocol/src/schemas.ts#CreateRuntimeProfileInput")]
 theorem driver_network_policy_and_filesystem_are_required :
     ["name", "driver", "network_policy", "filesystem"].all (catalogue .runtimeProfiles).isNotNull &&
       ["name", "driver", "networkPolicy", "filesystem"].all
-        RuntimeProfile.requiredCreateFields.contains = true := by decide
+        RuntimeProfile.requiredCreateFields.contains = true := by decide +kernel
 
 /-- Every other profile field is optional: the sizing, timeout, allowlist, persistence,
 connection and driver-config columns are nullable. -/
@@ -599,7 +599,7 @@ theorem other_profile_fields_are_optional :
     ["runtime_connection_id", "cpu", "memory_mb", "disk_mb", "allowed_domains", "persist_paths",
         "timeout_seconds", "idle_timeout_seconds", "driver_config"].all
       (fun c => (catalogue .runtimeProfiles).hasColumn c &&
-        !(catalogue .runtimeProfiles).isNotNull c) = true := by decide
+        !(catalogue .runtimeProfiles).isNotNull c) = true := by decide +kernel
 
 /-- A runtime connection is stored under its encoded name: `docker` and `primary` store
 `RUNTIME_CONNECTION__DOCKER__PRIMARY`. -/
@@ -609,7 +609,7 @@ theorem other_profile_fields_are_optional :
 theorem connection_name_is_stored_encoded :
     RuntimeProfile.encodeSecretName "docker" "primary" = some "RUNTIME_CONNECTION__DOCKER__PRIMARY" ∧
       RuntimeProfile.encodeSecretName "cloud-run-sandbox" "Primary Docker host" =
-        some "RUNTIME_CONNECTION__CLOUD_RUN_SANDBOX__PRIMARY_DOCKER_HOST" := by decide
+        some "RUNTIME_CONNECTION__CLOUD_RUN_SANDBOX__PRIMARY_DOCKER_HOST" := by decide +kernel
 
 /-- A runtime profile's connection is a `secrets` row: both keys over `runtime_connection_id`
 reference `secrets`, one of them paired with the workspace. -/
@@ -619,7 +619,7 @@ reference `secrets`, one of them paired with the workspace. -/
 theorem runtime_connection_is_a_secret_reference :
     ((catalogue .runtimeProfiles).foreignKeys.filter (·.columns.contains "runtime_connection_id")).map
         (fun fk => (fk.refTable, fk.onDelete)) = [(.secrets, .setNull), (.secrets, .noAction)] := by
-  decide
+  decide +kernel
 
 /-! ## Deleting connections and profiles -/
 
@@ -630,7 +630,7 @@ sibling), and every such `SET NULL` is executable. -/
   (doc := "docs/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")
   (ts := "packages/core/src/db/schema/agents.ts#agents")]
 theorem deleting_a_model_connection_is_never_blocked :
-    deleteNeverBlocked catalogue .modelConnections = true := by decide
+    deleteNeverBlocked catalogue .modelConnections = true := by decide +kernel
 
 /-- Deleting a runtime profile is never refused by a reference: the agents' reference is cleared
 (`ON DELETE SET NULL`). -/
@@ -638,7 +638,7 @@ theorem deleting_a_model_connection_is_never_blocked :
   (doc := "docs/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")
   (ts := "packages/core/src/db/schema/agents.ts#agents")]
 theorem deleting_a_runtime_profile_is_never_blocked :
-    deleteNeverBlocked catalogue .runtimeProfiles = true := by decide
+    deleteNeverBlocked catalogue .runtimeProfiles = true := by decide +kernel
 
 /-- The references into `model_connections` are exactly the agent, project, run and workspace
 pointers, each a `SET NULL` key with a `NO ACTION` tenant-paired sibling. -/
@@ -649,21 +649,22 @@ theorem model_connection_references :
     (inbound catalogue .modelConnections).map (fun (t, fk) => (t, fk.onDelete)) =
       [(.agents, .setNull), (.agents, .noAction), (.projects, .setNull), (.projects, .noAction),
         (.runs, .setNull), (.runs, .noAction), (.workspaces, .setNull),
-        (.workspaces, .noAction)] := by decide
+        (.workspaces, .noAction)] := by decide +kernel
 
 /-! ## Uniqueness and ownership -/
 
-/-- Model connections, runtime profiles and secrets are each named uniquely within a workspace (a
-total `(workspace_id, name)` unique index), and identified by `(id, workspace_id)` for composite
-references. -/
+/-- Model connections, runtime profiles, secrets and storage connections are each named uniquely
+within a workspace (a total `(workspace_id, name)` unique index), and identified by
+`(id, workspace_id)` for composite references. -/
 @[aw_spec (tier := T1)
   (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
   (ts := "packages/core/src/db/schema/runtime-profiles.ts#runtimeProfiles")
   (ts := "packages/core/src/db/schema/model-connections.ts#modelConnections")
-  (ts := "packages/core/src/db/schema/secrets.ts#secrets")]
+  (ts := "packages/core/src/db/schema/secrets.ts#secrets")
+  (ts := "packages/core/src/db/schema/storage-connections.ts#storageConnections")]
 theorem names_are_unique_per_workspace :
     clusterTables.all (fun t => (catalogue t).isKey ["workspace_id", "name"] &&
-      (catalogue t).isKey ["id", "workspace_id"]) = true := by decide
+      (catalogue t).isKey ["id", "workspace_id"]) = true := by decide +kernel
 
 /-- The configuration tables carry no owning principal: they are workspace-level configuration,
 not rows that can be "own" or "other". -/
@@ -672,6 +673,6 @@ not rows that can be "own" or "other". -/
 theorem configuration_rows_have_no_owner :
     clusterTables.all (fun t =>
       !(catalogue t).hasColumn "owner_principal_id" && !(catalogue t).hasColumn "created_by") =
-      true := by decide
+      true := by decide +kernel
 
 end AgentWorkspace.Theorems.Normative.ConceptConfiguration

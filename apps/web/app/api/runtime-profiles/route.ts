@@ -6,7 +6,8 @@
  * `apps/web/server/runtimes/routes.test.ts` needs to import this file directly.
  */
 import { createRuntimeProfile, listRuntimeProfiles } from '../../../server/runtimes/handlers';
-import { readJsonBody, toResponse, withWorkspaceProfileStore } from '../../../server/runtimes/http';
+import { readJsonBody, withWorkspaceProfileStore } from '../../../server/runtimes/http';
+import { apiResultResponse } from '../../../server/http/json-transport';
 import { enforceableNetworkPoliciesFromRegistry } from '../../../server/runtimes/registry';
 import { requireResourceAccess } from '../../../server/resources/authorise';
 
@@ -31,7 +32,7 @@ export async function GET(request: Request): Promise<Response> {
     (store) => listRuntimeProfiles(store),
     access.principal.workspaceId,
   );
-  return toResponse(result);
+  return apiResultResponse(result);
 }
 
 /** `POST /api/runtime-profiles` — create one profile in the caller's workspace (§15.1). */
@@ -47,5 +48,5 @@ export async function POST(request: Request): Promise<Response> {
     },
     access.principal.workspaceId,
   );
-  return toResponse(result);
+  return apiResultResponse(result);
 }

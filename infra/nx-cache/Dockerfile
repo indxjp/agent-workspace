@@ -1,7 +1,7 @@
 # INDX Nx remote cache — zero-dependency Node service (see README.md).
 # Build context: infra/nx-cache
 #   docker build -t nx-cache infra/nx-cache
-FROM node:22.20.0-alpine3.22
+FROM node:24.22.1-alpine3.23@sha256:0468540aa58203ff9e40c2aab3907c52644ab818af6176b1c70a026137dc92a2
 
 ENV NODE_ENV=production \
     PORT=8080

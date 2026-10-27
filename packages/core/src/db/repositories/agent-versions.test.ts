@@ -32,7 +32,9 @@ import { workspaces } from '../schema/workspaces.js';
 import {
   classifyReferenceMatches,
   narrowFileGrants,
+  narrowStorageGrants,
   resolveFromRows,
+  storageGrantChange,
 } from './agent-versions-resolution.js';
 import {
   createDatabaseAgentVersionRepositoryProvider,
@@ -148,6 +150,44 @@ describe('resolveFromRows', () => {
       missing: [],
       ambiguous: [{ kind: 'model-connection', name: 'default' }],
     });
+  });
+});
+
+describe('narrowStorageGrants and storageGrantChange', () => {
+  const folder = (connectionId: string, prefix: string, access: 'read' | 'read-write') => ({
+    connectionId,
+    prefix,
+    access,
+  });
+
+  // @story US-STO-12
+  it('[US-STO-12][contract][sdk] narrows read-write to read without writeFiles, and keeps the wider duplicate', () => {
+    const grants = [
+      folder('c1', 'reports', 'read'),
+      folder('c1', 'reports', 'read-write'),
+      folder('c2', 'archive', 'read'),
+    ];
+    expect(narrowStorageGrants(grants, READ_ONLY)).toEqual([
+      folder('c1', 'reports', 'read'),
+      folder('c2', 'archive', 'read'),
+    ]);
+    expect(narrowStorageGrants(grants, { ...READ_ONLY, writeFiles: true })).toEqual([
+      folder('c1', 'reports', 'read-write'),
+      folder('c2', 'archive', 'read'),
+    ]);
+  });
+
+  // @story US-STO-12
+  it('[US-STO-12][contract][sdk] describes a change by id, access and prefix, and none for equal sets', () => {
+    const one = folder('c1', 'reports', 'read');
+    const two = folder('c2', 'archive', 'read-write');
+    expect(storageGrantChange([one, two], [two, one])).toBeNull();
+    expect(storageGrantChange([], [])).toBeNull();
+    expect(storageGrantChange([one], [one, two])).toBe('c1 read reports; c2 read-write archive');
+    expect(storageGrantChange([one], [])).toBe('no storage grants');
+    expect(storageGrantChange([one], [folder('c1', 'reports', 'read-write')])).toBe(
+      'c1 read-write reports',
+    );
   });
 });
 
@@ -395,6 +435,20 @@ describe.skipIf(!hasDatabase)('AgentVersionRepository against real PostgreSQL', 
     ]);
   });
 
+  it("stores and lists a version with via 'builder' (#1847)", async () => {
+    const agentId = await seedAgent('builder-via');
+    const outcome = await repoA.create(agentId, {
+      summary: 'saved by the Builder',
+      via: 'builder',
+      body: bodyWith(),
+      createdByPrincipalId: principalA,
+    });
+    expect(outcome.kind).toBe('created');
+    const listed = await repoA.list(agentId);
+    expect(listed?.versions.map((row) => row.via)).toEqual(['builder']);
+    await expect(repoA.find(agentId, 1)).resolves.toMatchObject({ number: 1, via: 'builder' });
+  });
+
   it('numbers two concurrent versions 1 and 2', async () => {
     const agentId = await seedAgent('concurrent');
     const [first, second] = await Promise.all([version(agentId), version(agentId)]);
@@ -428,6 +482,8 @@ describe.skipIf(!hasDatabase)('AgentVersionRepository against real PostgreSQL', 
 
   it('applies a version and its assignments, narrowing read-write to read (#133)', async () => {
     const agentId = await seedAgent('applied');
+    const archivedAt = new Date('2026-01-02T03:04:05.000Z');
+    await isolated.db.update(agents).set({ archivedAt }).where(eq(agents.id, agentId));
     await version(agentId);
     const outcome = await repoA.applyAndPoint(agentId, {
       reason: 'set',
@@ -446,7 +502,7 @@ describe.skipIf(!hasDatabase)('AgentVersionRepository against real PostgreSQL', 
     });
     expect(outcome).toMatchObject({
       kind: 'applied',
-      agent: { id: agentId, instructions: 'Be helpful.' },
+      agent: { id: agentId, instructions: 'Be helpful.', archivedAt },
       pointer: { agentId, environment: 'local', number: 1 },
     });
     const rows = await snapshot(agentId);
@@ -652,6 +708,134 @@ describe.skipIf(!hasDatabase)('AgentVersionRepository against real PostgreSQL', 
     expect(await auditRows(agentId)).toEqual([]);
   });
 
+  describe('compare-and-set on a pointer move (#1847)', () => {
+    /** An agent with versions 1..3 and `local` pointed at version 1. */
+    async function agentAtVersionOne(name: string): Promise<string> {
+      const agentId = await seedAgent(name);
+      await version(agentId);
+      await version(agentId);
+      await version(agentId);
+      const seeded = await repoA.applyAndPoint(agentId, {
+        reason: 'set',
+        environment: 'local',
+        number: 1,
+        agent: materialise({ name }),
+        audit: auditBy(),
+      });
+      expect(seeded.kind).toBe('applied');
+      return agentId;
+    }
+
+    const moveLocal = (
+      agentId: string,
+      name: string,
+      number: number,
+      expectedVersion?: number | null,
+    ) =>
+      repoA.applyAndPoint(agentId, {
+        reason: 'set',
+        environment: 'local',
+        number,
+        agent: materialise({ name }),
+        audit: auditBy(),
+        ...(expectedVersion === undefined ? {} : { expectedVersion }),
+      });
+
+    it('moves local once when two moves both expect the same version', async () => {
+      const agentId = await agentAtVersionOne('cas-concurrent');
+      const [toTwo, toThree] = await Promise.all([
+        moveLocal(agentId, 'cas-concurrent', 2, 1),
+        moveLocal(agentId, 'cas-concurrent', 3, 1),
+      ]);
+
+      const outcomes = [toTwo, toThree];
+      const applied = outcomes.filter((outcome) => outcome.kind === 'applied');
+      expect(applied).toHaveLength(1);
+      const winner = applied[0];
+      if (winner?.kind !== 'applied') throw new Error('one move should have applied');
+      expect(outcomes.filter((outcome) => outcome.kind !== 'applied')).toEqual([
+        { kind: 'pointer-moved', current: winner.pointer.number },
+      ]);
+
+      const rows = await snapshot(agentId);
+      expect(rows.pointerRows.map((row) => row.versionId)).toEqual([winner.pointer.versionId]);
+      // The seed move plus the winner's: the refused move appended nothing.
+      expect(rows.moveRows).toHaveLength(2);
+      expect(await auditRows(agentId)).toHaveLength(2);
+    });
+
+    it('refuses a stale expectation, changes nothing, and leaves the new version unpointed', async () => {
+      const agentId = await agentAtVersionOne('cas-stale');
+      const before = await snapshot(agentId);
+      const auditsBefore = await auditRows(agentId);
+
+      await expect(moveLocal(agentId, 'cas-stale', 3, 2)).resolves.toEqual({
+        kind: 'pointer-moved',
+        current: 1,
+      });
+
+      expect(await snapshot(agentId)).toEqual(before);
+      expect(await auditRows(agentId)).toEqual(auditsBefore);
+      // §08 Data rule 2: the version a refused move was about to point at stays saved, unpointed.
+      const listed = await repoA.list(agentId);
+      expect(listed?.versions.map((row) => row.number)).toEqual([1, 2, 3]);
+      expect(listed?.pointers.map((row) => row.number)).toEqual([1]);
+    });
+
+    it('applies when the expectation holds, and when it is absent', async () => {
+      const agentId = await agentAtVersionOne('cas-holds');
+      await expect(moveLocal(agentId, 'cas-holds', 2, 1)).resolves.toMatchObject({
+        kind: 'applied',
+        pointer: { number: 2 },
+      });
+      await expect(moveLocal(agentId, 'cas-holds', 3)).resolves.toMatchObject({
+        kind: 'applied',
+        pointer: { number: 3 },
+      });
+    });
+
+    it('reads null as "the pointer must be unset"', async () => {
+      const unset = await seedAgent('cas-null-unset');
+      await version(unset);
+      await expect(moveLocal(unset, 'cas-null-unset', 1, null)).resolves.toMatchObject({
+        kind: 'applied',
+      });
+      await expect(moveLocal(unset, 'cas-null-unset', 1, null)).resolves.toEqual({
+        kind: 'pointer-moved',
+        current: 1,
+      });
+    });
+
+    it('checks the environment being moved, not local', async () => {
+      const agentId = await agentAtVersionOne('cas-production');
+      const promote = (expectedVersion: number | null) =>
+        repoA.applyAndPoint(agentId, {
+          reason: 'promote',
+          environment: 'production',
+          number: 1,
+          agent: materialise({ name: 'cas-production' }),
+          audit: auditBy(),
+          expectedVersion,
+        });
+      await expect(promote(1)).resolves.toEqual({ kind: 'pointer-moved', current: null });
+      await expect(promote(null)).resolves.toMatchObject({ kind: 'applied' });
+    });
+
+    it('answers not-found for another workspace’s agent before comparing', async () => {
+      const agentId = await agentAtVersionOne('cas-scoped');
+      await expect(
+        repoB.applyAndPoint(agentId, {
+          reason: 'set',
+          environment: 'local',
+          number: 1,
+          agent: materialise({}),
+          audit: auditBy({ actorPrincipalId: principalB, actorUserId: userB }),
+          expectedVersion: 2,
+        }),
+      ).resolves.toEqual({ kind: 'not-found' });
+    });
+  });
+
   it('appends one history row per move, newest first, scoped to the workspace (#615)', async () => {
     const agentId = await seedAgent('history');
     await version(agentId);
@@ -733,6 +917,77 @@ describe.skipIf(!hasDatabase)('AgentVersionRepository against real PostgreSQL', 
       ],
       ambiguous: [],
     });
+  });
+
+  // @story US-STO-02
+  it('[US-STO-02][contract][sdk] does not resolve a pending upload by path or id', async () => {
+    const pendingId = crypto.randomUUID();
+    await isolated.db.insert(files).values({
+      id: pendingId,
+      workspaceId: workspaceA,
+      path: 'pending-upload.pdf',
+      kind: 'file',
+      storageKey: 'pending-upload.pdf',
+      status: 'pending',
+      ownerPrincipalId: principalA,
+      createdBy: userA,
+    });
+    const result = await repoA.resolveDefinition({
+      modelConnectionName: null,
+      runtimeProfileName: null,
+      skills: [],
+      connectors: [],
+      files: [{ path: 'pending-upload.pdf', access: 'read' }],
+    });
+    expect(result.kind).toBe('unresolved');
+    expect(JSON.stringify(result)).toContain('pending-upload.pdf');
+    // The id lookup (`namesOf`) is the other branch of the same file query.
+    const byId = await repoA.namesOf({ file: [pendingId] });
+    expect(byId.file.has(pendingId)).toBe(false);
+  });
+
+  it('resolves a skill revision pin only once that revision is published, and writes it with the assignment (SDK-19, N-1)', async () => {
+    const references = {
+      modelConnectionName: null,
+      runtimeProfileName: null,
+      skills: ['reviewer'],
+      skillRevisions: { reviewer: 1 },
+      connectors: [],
+      files: [],
+    };
+    await expect(repoA.resolveDefinition(references)).resolves.toEqual({
+      kind: 'unresolved',
+      missing: [{ kind: 'skill', name: 'reviewer@1' }],
+      ambiguous: [],
+    });
+
+    await catalogA.publishSkillRevision('reviewer', {
+      fileCount: 1,
+      write: () => Promise.resolve(undefined),
+    });
+    await expect(repoA.resolveDefinition(references)).resolves.toMatchObject({
+      kind: 'resolved',
+      references: { skillIds: [skillId], skillRevisions: { [skillId]: 1 } },
+    });
+    // Another workspace has no such skill, so it has no such revision either.
+    await expect(repoB.resolveDefinition(references)).resolves.toMatchObject({
+      kind: 'unresolved',
+    });
+
+    const agentId = await seedAgent('pins-a-revision');
+    await version(agentId);
+    const applied = await repoA.applyAndPoint(agentId, {
+      reason: 'set',
+      audit: auditBy(),
+      environment: 'local',
+      number: 1,
+      agent: materialise({
+        name: 'pins-a-revision',
+        references: { ...NO_REFERENCES, skillIds: [skillId], skillRevisions: { [skillId]: 1 } },
+      }),
+    });
+    expect(applied.kind).toBe('applied');
+    expect((await snapshot(agentId)).skillRows).toMatchObject([{ skillId, revision: 1 }]);
   });
 
   it('resolves a files() grant on a folder that only has a file uploaded under it (#899)', async () => {
@@ -1515,6 +1770,53 @@ describe.skipIf(!hasDatabase)('AgentVersionRepository against real PostgreSQL', 
     );
   });
 
+  it('does not resolve a skill being deleted and refuses to assign it, as a conflict and not a missing name', async () => {
+    const deletingId = crypto.randomUUID();
+    await isolated.db.insert(skills).values({
+      id: deletingId,
+      workspaceId: workspaceA,
+      name: 'being-deleted',
+      skillMd: '# Gone',
+      ownerPrincipalId: principalA,
+      createdBy: userA,
+      pendingDelete: { ownerPrincipalId: principalA, revisions: [] },
+    });
+    await expect(
+      repoA.resolveDefinition({
+        modelConnectionName: null,
+        runtimeProfileName: null,
+        skills: ['being-deleted', 'nope'],
+        connectors: [],
+        files: [],
+      }),
+    ).resolves.toEqual({
+      kind: 'unresolved',
+      missing: [{ kind: 'skill', name: 'nope' }],
+      ambiguous: [],
+      deleting: [{ kind: 'skill', name: 'being-deleted' }],
+    });
+    // Marked between resolve and write: a typed outcome, not an escaped rollback.
+    await expect(
+      repoA.createAgentWithFirstVersion({
+        agent: {
+          ...materialise({
+            name: 'born-with-deleting',
+            references: { ...NO_REFERENCES, skillIds: [deletingId] },
+          }),
+          ownerPrincipalId: principalA,
+          createdBy: userA,
+        },
+        version: {
+          summary: 'first',
+          via: 'aw-push',
+          body: bodyWith('born'),
+          createdByPrincipalId: principalA,
+        },
+        environment: 'local',
+      }),
+    ).resolves.toEqual({ kind: 'reference-gone', referenceKind: 'skill' });
+  });
+
   it('creates an agent with its first version atomically', async () => {
     const created = await repoA.createAgentWithFirstVersion({
       agent: {
@@ -1586,6 +1888,141 @@ describe.skipIf(!hasDatabase)('AgentVersionRepository against real PostgreSQL', 
       .from(agentVersions)
       .where(eq(agentVersions.summary, 'clash'));
     expect(orphanVersions).toEqual([]);
+  });
+
+  describe('agentCreatedAudit', () => {
+    const created = (name: string) => ({
+      agent: { ...materialise({ name }), ownerPrincipalId: principalA, createdBy: userA },
+      version: {
+        summary: name,
+        via: 'builder' as const,
+        body: bodyWith(name),
+        createdByPrincipalId: principalA,
+      },
+      environment: 'local' as const,
+    });
+    const audit = (overrides: { actorLabel?: string } = {}) => ({
+      actorPrincipalId: principalA,
+      actorUserId: userA,
+      actorLabel: 'Owner A',
+      details: { builderRunId: 'run-1' },
+      ...overrides,
+    });
+    const createdRows = (name: string) =>
+      isolated.db
+        .select()
+        .from(auditEvents)
+        .where(
+          and(
+            eq(auditEvents.workspaceId, workspaceA),
+            eq(auditEvents.action, 'agent-created'),
+            eq(auditEvents.subjectLabel, name),
+          ),
+        );
+    const pointerCount = async () =>
+      (
+        await isolated.db
+          .select({ id: agentVersionPointers.agentId })
+          .from(agentVersionPointers)
+          .where(eq(agentVersionPointers.workspaceId, workspaceA))
+      ).length;
+
+    it('leaves no agent, version, pointer or audit row when the audit row is refused', async () => {
+      const name = 'born-audit-refused';
+      const pointersBefore = await pointerCount();
+
+      const violations = await violationsOf(
+        repoA.createAgentWithFirstVersion({
+          ...created(name),
+          agentCreatedAudit: audit({ actorLabel: '   ' }),
+        }),
+      );
+
+      expect(violations).toContainEqual({
+        code: '23514',
+        constraint: 'audit_events_actor_label_not_blank',
+      });
+      expect(
+        await isolated.db
+          .select({ id: agents.id })
+          .from(agents)
+          .where(and(eq(agents.workspaceId, workspaceA), eq(agents.name, name))),
+      ).toEqual([]);
+      expect(
+        await isolated.db
+          .select({ id: agentVersions.id })
+          .from(agentVersions)
+          .where(eq(agentVersions.summary, name)),
+      ).toEqual([]);
+      expect(await pointerCount()).toBe(pointersBefore);
+      expect(await createdRows(name)).toEqual([]);
+    });
+
+    it('writes exactly one agent-created row naming the agent, version 1 and the run', async () => {
+      const name = 'born-audited';
+
+      const result = await repoA.createAgentWithFirstVersion({
+        ...created(name),
+        agentCreatedAudit: audit(),
+      });
+
+      if (result.kind !== 'created') throw new Error(`expected created, got ${result.kind}`);
+      expect(await createdRows(name)).toMatchObject([
+        {
+          subjectId: result.agent.id,
+          actorPrincipalId: principalA,
+          actorUserId: userA,
+          actorLabel: 'Owner A',
+          details: { agentId: result.agent.id, version: 1, via: 'builder', builderRunId: 'run-1' },
+        },
+      ]);
+    });
+
+    it('writes no agent-created row without the input', async () => {
+      const name = 'born-unaudited';
+
+      const result = await repoA.createAgentWithFirstVersion(created(name));
+
+      expect(result.kind).toBe('created');
+      expect(await createdRows(name)).toEqual([]);
+    });
+  });
+
+  it('answers unknown-creator-agent, writing nothing, when the lineage names no agent or is half set (#1851)', async () => {
+    const creatorId = await seedAgent('lineage-creator');
+    const lineage = { agentId: creatorId, version: 1, runId: 'run-1' };
+    const cases = [
+      { label: 'no-agent', createdByAgent: { ...lineage, agentId: crypto.randomUUID() } },
+      // The run id missing while the version is set: only agents_created_by_agent_lineage_check refuses it.
+      {
+        label: 'half-set',
+        createdByAgent: { ...lineage, runId: undefined } as unknown as typeof lineage,
+      },
+    ];
+    for (const { label, createdByAgent } of cases) {
+      await expect(
+        repoA.createAgentWithFirstVersion({
+          agent: {
+            ...materialise({ name: `lineage-${label}` }),
+            ownerPrincipalId: principalA,
+            createdBy: userA,
+            createdByAgent,
+          },
+          version: {
+            summary: `lineage-${label}`,
+            via: 'builder',
+            body: bodyWith(`lineage-${label}`),
+            createdByPrincipalId: principalA,
+          },
+          environment: 'local',
+        }),
+      ).resolves.toEqual({ kind: 'unknown-creator-agent' });
+      const left = await isolated.db
+        .select({ id: agents.id })
+        .from(agents)
+        .where(and(eq(agents.workspaceId, workspaceA), eq(agents.name, `lineage-${label}`)));
+      expect(left).toEqual([]);
+    }
   });
 
   it('answers unknown-principal, writing nothing, when the owner or the author is not of this workspace', async () => {

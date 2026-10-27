@@ -1,3 +1,8 @@
+import {
+  OBJECT_METADATA_MARKER,
+  toObjectKey,
+  UnsafeObjectKeyError,
+} from '@agent-workspace/core/storage';
 import { SKILL_FILE_PATH_MAX_BYTES } from '@indx-workspace/contracts/skills';
 import { describe, expect, it } from 'vitest';
 
@@ -7,10 +12,17 @@ import {
   isValidSkillName,
   SKILL_FILES_PREFIX,
   SKILL_META_PREFIX,
+  SKILL_REVISIONS_PREFIX,
+  skillDeleteMarkerKey,
   skillFileKey,
   skillFilesPrefix,
   skillMetaKey,
   skillNameFromMetaKey,
+  skillRevisionKey,
+  skillRevisionPrefix,
+  skillRevisionRowFolder,
+  skillRevisionsPrefix,
+  skillRowFolder,
 } from './keys';
 
 describe('isValidSkillName', () => {
@@ -89,6 +101,18 @@ describe('isAdmissibleRelativePath — ADR-0044, the grammar that replaced round
       '日本語.md', // non-ASCII segment entirely
     ]) {
       expect(isAdmissibleRelativePath(path), JSON.stringify(path)).toBe(false);
+    }
+  });
+
+  // @story US-STO-08
+  it('[US-STO-08][unit][sdk] a skill path key-safety refuses is not admissible', () => {
+    for (const path of [
+      'a%2e%2e',
+      `a${OBJECT_METADATA_MARKER}`,
+      `docs/x${OBJECT_METADATA_MARKER.toUpperCase()}.md`,
+    ]) {
+      expect(() => toObjectKey(path), path).toThrow(UnsafeObjectKeyError);
+      expect(isAdmissibleRelativePath(path), path).toBe(false);
     }
   });
 
@@ -224,5 +248,31 @@ describe('createCaseFoldGuard — round 4, ADR-0048 (B2-PATCH)', () => {
     // It performs no Unicode-aware folding itself; this test pins that `.toLowerCase()` is all it does.
     const guard = createCaseFoldGuard(['a.txt']);
     expect(guard.check('A.txt')).toBe('a.txt');
+  });
+});
+
+describe('published revision keys (SDK-19, N-1)', () => {
+  it('live under a prefix no mutable builder can produce', () => {
+    expect(skillRevisionKey('demo', 2, 'SKILL.md')).toBe('skill-revisions/demo/2/SKILL.md');
+    expect(skillRevisionPrefix('demo', 2)).toBe('skill-revisions/demo/2');
+    expect(skillRevisionsPrefix('demo')).toBe('skill-revisions/demo');
+    // A legal supporting file called `2/x.md` stays inside the skill's own prefix.
+    const mutable = [
+      skillFileKey('demo', '2/x.md'),
+      skillFileKey('demo', 'skill-revisions/demo/2/SKILL.md'),
+      skillMetaKey('demo'),
+      skillDeleteMarkerKey('demo'),
+    ];
+    for (const key of mutable) {
+      expect(key.startsWith(`${SKILL_REVISIONS_PREFIX}/`), key).toBe(false);
+    }
+  });
+});
+
+describe('skill row folders', () => {
+  it('keep a revision beside its skill, in a folder no skill name can be', () => {
+    expect(skillRowFolder('demo')).toBe('.skills/demo');
+    expect(skillRevisionRowFolder('demo', 2)).toBe('.skills/demo@2');
+    expect(isValidSkillName('demo@2')).toBe(false);
   });
 });

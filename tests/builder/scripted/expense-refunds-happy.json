@@ -1,0 +1,17 @@
+{
+  "turns": [
+    {
+      "toolUses": [
+        { "name": "mcp__aw-control__catalog_list", "input": { "kinds": ["connectors"] } }
+      ]
+    },
+    { "toolUses": [{ "name": "mcp__aw-control__examples_get", "input": {} }] },
+    { "toolUses": [{ "name": "mcp__aw-control__draft_check", "input": { "body": "@draft:erp" } }] },
+    { "text": "Refunds need the erp connector, which this workspace lacks. Use crm instead?" },
+    { "toolUses": [{ "name": "mcp__aw-control__draft_check", "input": { "body": "@draft:crm" } }] },
+    { "toolUses": [{ "name": "mcp__aw-control__draft_save", "input": { "body": "@draft:crm" } }] },
+    {
+      "text": "Saved the refund desk as version 1 on local. Try it, or open its history to promote it."
+    }
+  ]
+}

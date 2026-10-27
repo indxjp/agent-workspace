@@ -37,7 +37,7 @@ private def granted : List (String × List String) :=
 theorem claude_places_every_skill_inside_its_own_directory :
     skillPlacementVerdict
       (skillsUnderConfigDirectory claudeProtectedConfigDirectory granted) grants
-      claudeProtectedConfigDirectory = .accepted 3 := by decide
+      claudeProtectedConfigDirectory = .accepted 3 := by decide +kernel
 
 /-- The same rule, with a **different** engine's directory: the invariant is about the declaration,
 not about `.claude`. -/
@@ -48,7 +48,7 @@ theorem a_second_engines_directory_is_accepted_the_same_way :
       scriptedProtectedConfigDirectory = .accepted 3 ∧
     skillPlacementVerdict
       (skillsUnderConfigDirectory scriptedProtectedConfigDirectory granted) grants
-      claudeProtectedConfigDirectory = .refused .outsideConfigDirectory := by decide
+      claudeProtectedConfigDirectory = .refused .outsideConfigDirectory := by decide +kernel
 
 /-- A placement at the sandbox root is refused: tenant content beside the agent's working files. -/
 @[aw_spec (tier := T2) (ts := "packages/engine/src/skills.ts#skillPlacementVerdict")]
@@ -56,7 +56,7 @@ theorem a_placement_outside_the_declared_directory_is_refused :
     skillPlacementVerdict
       [{ skill := "document-writer", path := "skills/document-writer/SKILL.md" }]
       [{ name := "document-writer", files := 1 }] claudeProtectedConfigDirectory =
-      .refused .outsideConfigDirectory := by decide
+      .refused .outsideConfigDirectory := by decide +kernel
 
 /-- A sibling directory whose name merely *starts with* the declared one is refused, because the
 comparison is by segment and not by string prefix. -/
@@ -65,14 +65,14 @@ theorem a_sibling_directory_is_not_inside_it :
     skillPlacementVerdict
       [{ skill := "document-writer", path := ".claude-backup/SKILL.md" }]
       [{ name := "document-writer", files := 1 }] claudeProtectedConfigDirectory =
-      .refused .outsideConfigDirectory := by decide
+      .refused .outsideConfigDirectory := by decide +kernel
 
 /-- The declared directory itself is not inside itself: a file written *at* it is not a skill. -/
 @[aw_spec (tier := T2) (ts := "packages/engine/src/skills.ts#skillPlacementVerdict")]
 theorem the_directory_itself_is_refused :
     skillPlacementVerdict [{ skill := "document-writer", path := ".claude" }]
       [{ name := "document-writer", files := 1 }] claudeProtectedConfigDirectory =
-      .refused .outsideConfigDirectory := by decide
+      .refused .outsideConfigDirectory := by decide +kernel
 
 /-- A path that climbs out of the workspace is refused as unusable, before anything about the
 configuration directory is asked. -/
@@ -81,7 +81,7 @@ theorem a_placement_that_climbs_out_is_refused :
     skillPlacementVerdict
       [{ skill := "document-writer", path := ".claude/../../etc/SKILL.md" }]
       [{ name := "document-writer", files := 1 }] claudeProtectedConfigDirectory =
-      .refused .unusablePath := by decide
+      .refused .unusablePath := by decide +kernel
 
 /-- A placement for a skill nobody granted is refused: those bytes came from somewhere else. -/
 @[aw_spec (tier := T2) (ts := "packages/engine/src/skills.ts#skillPlacementVerdict")]
@@ -89,7 +89,7 @@ theorem a_placement_for_an_ungranted_skill_is_refused :
     skillPlacementVerdict
       [{ skill := "not-assigned", path := ".claude/skills/not-assigned/SKILL.md" }]
       [{ name := "document-writer", files := 1 }] claudeProtectedConfigDirectory =
-      .refused .unknownSkill := by decide
+      .refused .unknownSkill := by decide +kernel
 
 /-- Two placements on one path are refused: the second write wins silently, and the run would then
 use a skill whose contents nobody chose. -/
@@ -99,7 +99,7 @@ theorem two_placements_on_one_path_are_refused :
       [{ skill := "document-writer", path := ".claude/skills/w/SKILL.md" },
        { skill := "document-writer", path := ".claude/skills/w/./SKILL.md" }]
       [{ name := "document-writer", files := 1 }] claudeProtectedConfigDirectory =
-      .refused .duplicatePath := by decide
+      .refused .duplicatePath := by decide +kernel
 
 /-- The vacuity control. An adapter that places nothing must not pass a check about where its
 skills land — so a granted skill with no placement is a refusal, and a request that grants nothing
@@ -107,6 +107,6 @@ is accepted with zero files. -/
 @[aw_spec (tier := T2) (ts := "packages/engine/src/skills.ts#skillPlacementVerdict")]
 theorem a_dropped_skill_is_refused_and_an_empty_request_is_not :
     skillPlacementVerdict [] grants claudeProtectedConfigDirectory = .refused .skillDropped ∧
-    skillPlacementVerdict [] [] claudeProtectedConfigDirectory = .accepted 0 := by decide
+    skillPlacementVerdict [] [] claudeProtectedConfigDirectory = .accepted 0 := by decide +kernel
 
 end AgentWorkspace.Theorems.Invariants.EngineSkills

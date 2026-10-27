@@ -25,17 +25,27 @@ page for what the pieces mean, those pages for how to call them.
 the run already exists, with `status: 'queued'`, and the body also carries `events`, the relative
 path to stream it from (`StartRunResponseSchema` in `packages/contracts/src/runs.ts`).
 
-A run's `status` is one of five values, `RUN_STATUSES` in `packages/contracts/src/runs.ts`:
+A run's `status` is one of six values, `RUN_STATUSES` in `packages/contracts/src/runs.ts`:
 
 ```ts title="illustrative" claim="illustrative"
-export const RUN_STATUSES = ['queued', 'running', 'completed', 'failed', 'cancelled'] as const;
+export const RUN_STATUSES = [
+  'queued',
+  'running',
+  'awaiting_approval',
+  'completed',
+  'failed',
+  'cancelled',
+] as const;
 export const TERMINAL_RUN_STATUSES = ['completed', 'failed', 'cancelled'] as const;
 ```
 
-The contract's own comment is the state machine as documented: _"`queued` and `running` are live;
-the other three are terminal, and a terminal run's event stream replays and ends rather than
-follows."_ `isTerminalRunStatus(status)` is the exported predicate — use it instead of comparing
-against the array yourself, since a fifth status would only need one place to change.
+The contract's own comment is the state machine as documented: _"`queued` and `running` are live.
+`awaiting_approval` is a pause: the run stopped before a tool call its agent requires approval for
+(ADR-0145) and is not live, yet not final either — a decision starts a continuation run and
+completes it, an interrupt cancels it. The other three are terminal, and a terminal run's event
+stream replays and ends rather than follows."_ `isTerminalRunStatus(status)` is the exported
+predicate — use it instead of comparing against the array yourself, since a new status would only
+need one place to change. `isStoppedRunStatus(status)` also counts the `awaiting_approval` pause.
 
 ```mermaid
 stateDiagram-v2
@@ -44,9 +54,12 @@ stateDiagram-v2
   queued --> completed
   queued --> failed
   queued --> cancelled
+  running --> awaiting_approval
   running --> completed
   running --> failed
   running --> cancelled
+  awaiting_approval --> completed: approve / reject
+  awaiting_approval --> cancelled: interrupt
   completed --> [*]
   failed --> [*]
   cancelled --> [*]
@@ -139,7 +152,8 @@ kinds (API specification §4; the per-frame schemas are at
    replayable, appended whenever the run's `status` changes. Its `id:` is a resume cursor.
 3. **Neutral agent frames** (`AGENT_FRAME_NAMES`: `agent.session`, `agent.message`,
    `agent.message.delta`, `agent.tool.call`, `agent.tool.result`, `agent.usage`, `agent.result`,
-   `agent.native`, `agent.malformed`) — **one engine-neutral vocabulary**, produced once by the
+   `agent.native`, `agent.malformed`, `agent.approval.requested`, `agent.handoff`) — **one
+   engine-neutral vocabulary**, produced once by the
    engine's adapter in the runner rather than re-derived by each client. Every frame
    names its `engine` and carries the engine-native message in `raw`. These also carry a resume
    `id:`. `aw.runs.events` surfaces them as `kind: 'runtime'` frames, and `toAgentEvent` parses one

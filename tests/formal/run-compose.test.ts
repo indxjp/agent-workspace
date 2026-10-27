@@ -1,4 +1,4 @@
-import { RunRequest } from '@agent-workspace/core';
+import { RunRequest } from '@agent-workspace/run-protocol';
 // ENG-04 (#303): `compileRunRequest` is one engine's compile step and moved into that engine's
 // adapter. ENG-04b (#325) moved the Claude *tool mapping* and the tenant session scope's
 // `configDir` in after it, so two more of this family's vector files are replayed here rather than
@@ -9,7 +9,7 @@ import {
   claudeSessionScope,
   compileClaudeToolPolicy,
   compileRunRequest,
-} from '@agent-workspace/engine-claude-agent-sdk';
+} from '@agent-workspace/engine-claude-agent-sdk/testing';
 import { AgentPermissionsSchema, AgentPolicyLimitsSchema } from '@indx-workspace/contracts/agents';
 import { EngineIdSchema } from '@indx-workspace/contracts/engines';
 import {

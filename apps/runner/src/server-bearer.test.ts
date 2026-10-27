@@ -1,6 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 
+import { installedEngines } from './engines.js';
 import { createRunnerServer } from './server.js';
+
+// `/healthz` lists the installed engines, so its first request imports every adapter package; pay
+// that once here rather than inside a test's own budget.
+beforeAll(async () => {
+  await installedEngines();
+}, 60_000);
 
 async function withBearer<T>(
   bearer: string | undefined,

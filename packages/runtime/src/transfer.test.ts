@@ -7,6 +7,8 @@ import { spawn } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 
 import {
+  ArchiveTooLargeError,
+  ArchiveValidationError,
   archiveWorkspacePaths,
   bytesToStream,
   decodeUstar,
@@ -224,5 +226,84 @@ describe('POSIX ustar transfer', () => {
     'a/%2500b',
   ])('refuses unsafe path %s', (unsafe) => {
     expect(() => normalizeArchivePath(unsafe)).toThrow(/unsafe archive path/u);
+    expect(() => normalizeArchivePath(unsafe)).toThrow(ArchiveValidationError);
+  });
+
+  // @story US-STO-06
+  it.each([
+    ['a path encoded four times', '%2525252e%2525252e/x'],
+    ['a drive letter exposed by ./', './C:/x'],
+    ['a lower-case drive letter exposed by ./', './c:/'],
+  ])('[US-STO-06][unit][run] refuses %s (%s)', (_name, unsafe) => {
+    expect(() => normalizeArchivePath(unsafe)).toThrow(ArchiveValidationError);
+  });
+
+  it.each(['%00', '%2e%2e/x', 'a/%2500b', '%252e%252e/x', '../x', '/abs'])(
+    'refuses the archive member %s on encode and decode',
+    (unsafe) => {
+      expect(() => encodeUstar([{ path: unsafe, type: 'file', mode: 0o600 }])).toThrow(
+        ArchiveValidationError,
+      );
+      const forged = Buffer.from(encodeUstar([{ path: 'placeholder', type: 'file', mode: 0o600 }]));
+      forged.fill(0, 0, 100);
+      forged.write(unsafe, 0);
+      forged.fill(0x20, 148, 156);
+      const checksum = forged.subarray(0, 512).reduce((sum, byte) => sum + byte, 0);
+      forged.write(`${checksum.toString(8).padStart(6, '0')}\0 `, 148);
+      expect(() => decodeUstar(forged)).toThrow(ArchiveValidationError);
+    },
+  );
+
+  it('reports a malformed header as an ArchiveValidationError', () => {
+    const archive = encodeUstar([{ path: 'a.txt', type: 'file', mode: 0o600 }]);
+    archive[148] = 0x39;
+    expect(() => decodeUstar(archive)).toThrow(ArchiveValidationError);
+  });
+
+  it('keeps percent signs, percent escapes and backslashes in real names', async () => {
+    const names = ['50%.txt', 'a%2Eb', ...(process.platform === 'win32' ? [] : ['a\\b'])];
+    const decoded = decodeUstar(
+      encodeUstar(names.map((name) => ({ path: `dir/${name}`, type: 'file', mode: 0o600 }))),
+    );
+    expect(decoded.map((entry) => entry.path)).toEqual(names.map((name) => `dir/${name}`));
+
+    const root = await mkdtemp(path.join(tmpdir(), 'w3-literal-names-'));
+    const source = path.join(root, 'source');
+    const target = path.join(root, 'target');
+    try {
+      await mkdir(path.join(source, 'dir'), { recursive: true });
+      for (const name of names) await writeFile(path.join(source, 'dir', name), `data ${name}`);
+      const archive = await readStream(await archiveWorkspacePaths(source, ['dir']));
+      expect(decodeUstar(archive).map((entry) => entry.path)).toEqual([
+        'dir',
+        ...names.map((name) => `dir/${name}`).sort(),
+      ]);
+      await extractUstar(bytesToStream(archive), target);
+      expect((await readdir(path.join(target, 'dir'))).sort()).toEqual([...names].sort());
+      for (const name of names) {
+        expect(await readFile(path.join(target, 'dir', name), 'utf8')).toBe(`data ${name}`);
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses to collect more than the byte budget and accepts exactly the budget', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'w3-collect-cap-'));
+    try {
+      await writeFile(path.join(root, 'four.txt'), '1234');
+      await writeFile(path.join(root, 'five.txt'), '12345');
+      await expect(
+        archiveWorkspacePaths(root, ['four.txt'], { maxBytes: 4 }),
+      ).resolves.toBeDefined();
+      await expect(archiveWorkspacePaths(root, ['five.txt'], { maxBytes: 4 })).rejects.toThrow(
+        ArchiveTooLargeError,
+      );
+      await expect(
+        archiveWorkspacePaths(root, ['four.txt', 'four.txt'], { maxBytes: 7 }),
+      ).rejects.toThrow(ArchiveTooLargeError);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });

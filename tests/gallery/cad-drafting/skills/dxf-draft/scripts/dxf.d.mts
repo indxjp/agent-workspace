@@ -49,11 +49,17 @@ export class DraftRefused extends Error {
   public readonly problems: readonly string[];
 }
 
-export function parseDxf(text: string): {
-  header: Record<string, string>;
-  entities: DxfEntity[];
-};
-export function summarise(text: string): DrawingSummary;
+/** What the office-reader skill's `readDxf` returns: the script reads the coordinates it needs from it. */
+export interface DxfDrawing {
+  readonly version: string | null;
+  readonly counts: Readonly<Record<string, number>>;
+  readonly blocks: readonly string[];
+  readonly lines: readonly object[];
+  readonly circles: readonly object[];
+  readonly texts: readonly object[];
+}
+
+export function summarise(drawing: DxfDrawing): DrawingSummary;
 export function holeProblems(width: number, height: number, holes: readonly Hole[]): string[];
 /**
  * `changes`: `高さ 80 → 90`, `穴 (15,65)φ9 → (15,75)φ9`, `品名 ブラケット を追加`;
@@ -64,7 +70,7 @@ export function describeChanges(
   next: DrawingSummary,
 ): { changes: string[]; kept: string[] };
 export function draft(
-  baseText: string,
+  baseDrawing: DxfDrawing,
   changes: ChangeSet,
 ): {
   dxf: string;
@@ -74,7 +80,4 @@ export function draft(
   changes: string[];
   kept: string[];
 };
-export function writeDxf(drawing: {
-  readonly header?: Readonly<Record<string, string>>;
-  readonly entities: readonly DxfEntity[];
-}): string;
+export function writeDxf(entities: readonly DxfEntity[]): string;

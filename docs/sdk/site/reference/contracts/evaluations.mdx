@@ -59,7 +59,9 @@ cases, up to `EVALUATION_RUN_CASE_LIMIT`. Nothing runs until the run is advanced
 | `name` | `string` | Yes |  |
 | `input` | `string` | Yes |  |
 | `expect` | `EvalExpect` | Yes |  |
+| `outputSchema` | `undefined \| EvalExpect` | No |  |
 | `fromRun` | `undefined \| string` | No |  |
+| `tags` | `undefined \| readonly string[]` | No |  |
 
 ## EvalCaseFile
 
@@ -79,15 +81,21 @@ names. `aw eval` runs them as an evaluation run; up to `EVALUATION_CASE_LIMIT` a
 ## EvalCaseSchema
 
 One case: a name, the input its run is started with, and what the answer must satisfy.
-`fromRun` names the rated run the case was made from (`aw eval add-case`, issue #620); it is
-kept for traceability and never scored.
+`outputSchema` (issue #1289) is the JSON Schema the case's run answers with (ADR-0143); it must
+satisfy `outputSchemaViolation`, and an engine that cannot honour it refuses the case with
+`engine_capability_unsupported`. `expect.output` needs it. `fromRun` names the rated run the
+case was made from (`aw eval add-case`, issue #620); it is kept for traceability and never
+scored. `tags` are labels such as `injection`, never scored; a gate over a report reads them
+(the Builder's, issue #1848).
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `name` | `string` | Yes |  |
 | `input` | `string` | Yes |  |
 | `expect` | `EvalExpect` | Yes |  |
+| `outputSchema` | `undefined \| EvalExpect` | No |  |
 | `fromRun` | `undefined \| string` | No |  |
+| `tags` | `undefined \| readonly string[]` | No |  |
 
 ## EvalExpect
 
@@ -97,16 +105,32 @@ kept for traceability and never scored.
 | `notContains` | `undefined \| readonly string[]` | No |  |
 | `tool` | `undefined \| string` | No |  |
 | `toolInput` | `undefined \| Record<string, unknown>` | No |  |
+| `output` | `undefined \| Record<string, unknown>` | No |  |
 | `judge` | `undefined \| string` | No |  |
+| `awaitsApproval` | `undefined \| true` | No |  |
 
 ## EvalExpectSchema
 
-What a case's answer must satisfy (issue #618). Four checks and nothing else: `contains` and
+What a case's answer must satisfy (issue #618). Six checks and nothing else: `contains` and
 `notContains` are case-sensitive substrings of the final answer, `tool` is the exact name of a
-tool the run called, and `judge` is a rubric a model grades the answer against. At least one.
+tool the run called, `output` is a part of the run's structured output, `judge` is a rubric a
+model grades the answer against, and `awaitsApproval` says the run must stop at an approval
+pause. At least one.
+
+`awaitsApproval` (issue #1569, ADR-0145) is `true` or absent. With it, a run that ends at
+`awaiting_approval` passes the status check instead of failing `run_awaiting_approval`, and the
+other checks run against what the run did up to the pause: `tool` and `toolInput` also match the
+paused call, and `contains`, `notContains` and `judge` read the answer so far. A run that
+completes without pausing fails `run_not_awaiting_approval`. The evaluation never approves: it
+cancels the paused run after scoring. It is refused with `output`, since a paused run has no
+structured output yet.
 
 `toolInput` (issue #799) narrows `tool`: some call to that tool must pass every key listed here
 with an equal value (a subset match; keys the call also passes are ignored). It needs `tool`.
+
+`output` (issue #1289) is matched the same way against `RunResource.output.structured`: every key
+listed must be present with an equal value, extra keys are ignored, arrays must be equal and in
+order. The case needs an `outputSchema`, so its run has a structured output to match.
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -114,16 +138,19 @@ with an equal value (a subset match; keys the call also passes are ignored). It 
 | `notContains` | `undefined \| readonly string[]` | No |  |
 | `tool` | `undefined \| string` | No |  |
 | `toolInput` | `undefined \| EvalExpect` | No |  |
+| `output` | `undefined \| EvalExpect` | No |  |
 | `judge` | `undefined \| string` | No |  |
+| `awaitsApproval` | `undefined \| true` | No |  |
 
 ## EVALUATION_CASE_FAILURE_CODES
 
 The machine-readable case failures the server mints itself (issue #618): the case ran out of
 the request's deadline, its run's stream could not be read, or its judge could not be reached or
-read.
+read, or a case that expects an approval pause (issue #1569) ended without one.
 
 - `'deadline_exceeded'`
 - `'run_stream_failed'`
+- `'run_not_awaiting_approval'`
 - `'judge_unavailable'`
 - `'judge_unparseable'`
 
@@ -149,6 +176,18 @@ Value: `200`
 The most strings one `contains` or `notContains` check lists, and the longest of them.
 
 Value: `10`
+
+## EVALUATION_OUTPUT_MAX_LENGTH
+
+The longest `expect.output`, as JSON text, in characters.
+
+Value: `2048`
+
+## EVALUATION_OUTPUT_SCHEMA_MAX_LENGTH
+
+The longest case `outputSchema`, as JSON text, in characters (inside ADR-0143's own limit).
+
+Value: `4096`
 
 ## EVALUATION_PROBLEM_CODES
 
@@ -202,6 +241,7 @@ Value: `2048`
 
 - `"deadline_exceeded"`
 - `"run_stream_failed"`
+- `"run_not_awaiting_approval"`
 - `"judge_unavailable"`
 - `"judge_unparseable"`
 
@@ -220,10 +260,11 @@ One case's outcome. `runId` is the run the case started, or `null` when none was
 start was refused, or the deadline had passed). `failures` is empty exactly when `passed`.
 
 A failure is one of `EVALUATION_CASE_FAILURE_CODES`; `run_<status>` for a run that ended
-other than `completed` (`run_failed`, `run_cancelled`, …); the code a failed run's error carries,
-when it carries one (`model_credential_rejected`, …), in place of `run_failed`; a refused start's
-problem code, verbatim (`model_unavailable`, …); or a sentence: `contains: …`, `notContains: …`,
-`tool: …` or `judge: <the judge's reason>`.
+other than `completed` (`run_failed`, `run_cancelled`, `run_awaiting_approval`, …); the code a
+failed run's error carries, when it carries one (`model_credential_rejected`, …), in place of
+`run_failed`; a refused start's problem code, verbatim (`model_unavailable`, …); or a sentence:
+`contains: …`, `notContains: …`, `tool: …`, `toolInput: …`, `output: …` or
+`judge: <the judge's reason>`.
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |

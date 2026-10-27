@@ -9,6 +9,6 @@ open AgentWorkspace AgentWorkspace.Cli.Runs
   (ts := "packages/aw/src/commands/runs.ts#runs wait")]
 theorem failed_wait_exit_diverges :
     waitExitCurrent .failed = 0 ∧ waitExitCurrent .cancelled = 0 ∧
-    waitExitTarget .failed = 1 ∧ waitExitTarget .cancelled = 1 := by decide
+    waitExitTarget .failed = 1 ∧ waitExitTarget .cancelled = 1 := by decide +kernel
 
 end AgentWorkspace.Theorems.Refinement.CliRuns

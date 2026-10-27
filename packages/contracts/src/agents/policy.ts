@@ -1,7 +1,11 @@
 import { z } from 'zod';
 
 import { AGENT_PERMISSION_KEYS, type AgentPermissions } from './permissions.js';
-import { AgentToolPolicySchema } from './tool-rules.js';
+import {
+  AgentToolPolicySchema,
+  RequireApprovalRuleSchema,
+  conflictingApprovalRules,
+} from './tool-rules.js';
 import {
   ENGINE_CATALOGUE,
   isWithholdingEngine,
@@ -38,7 +42,7 @@ export const AgentSkillPolicySchema = z.discriminatedUnion('mode', [
 ]);
 export type AgentSkillPolicy = z.infer<typeof AgentSkillPolicySchema>;
 
-/** `maxTurns` / `maxBudgetUsd`, transcribed from `packages/core/src/schemas.ts`'s `AgentConfig`. */
+/** `maxTurns` / `maxBudgetUsd`, transcribed from `packages/run-protocol/src/schemas.ts`'s `AgentConfig`. */
 export const AgentPolicyLimitsSchema = z
   .object({
     /** `null` means "the SDK's own default", not "unlimited". */
@@ -76,6 +80,16 @@ function toolRulesArm<const E extends ToolRulesEngineId>(engine: E) {
       ...settings,
       /** Engine-native: the Claude Agent SDK's own tool grammar. No other arm may reuse it. */
       tools: AgentToolPolicySchema,
+      /**
+       * Tools whose every call waits for a human's approval (ADR-0145 D3). A tool that also matches
+       * `tools.autoApprove` is refused: it could not both skip and wait. Absent means none.
+       */
+      requireApproval: z.array(RequireApprovalRuleSchema).readonly().optional(),
+      /**
+       * Offers the platform tool `handoff_to_person({ reason })`, which ends the run `completed`
+       * after an `agent.handoff` frame (ADR-0145 D4). Absent means the tool is not offered.
+       */
+      handoff: z.literal(true).optional(),
       ...PORTABLE_POLICY_FIELDS,
     })
     .strict()
@@ -135,12 +149,24 @@ const [claudeAgentSdk, openAiAgents, pi, mastra] = ENGINE_IDS;
  * the full set a run ends up with; reading `autoApprove: []` does not mean no tool is
  * auto-approved at run time.
  */
-export const AgentPolicySchema = z.discriminatedUnion('engine', [
-  toolRulesArm(claudeAgentSdk),
-  withholdingArm(openAiAgents),
-  withholdingArm(pi),
-  withholdingArm(mastra),
-]);
+export const AgentPolicySchema = z
+  .discriminatedUnion('engine', [
+    toolRulesArm(claudeAgentSdk),
+    withholdingArm(openAiAgents),
+    withholdingArm(pi),
+    withholdingArm(mastra),
+  ])
+  .superRefine((policy, ctx) => {
+    if (!('requireApproval' in policy)) return;
+    const required = policy.requireApproval ?? [];
+    for (const index of conflictingApprovalRules(policy.tools.autoApprove, required)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['requireApproval', index],
+        message: `${JSON.stringify(required[index])} matches a tool in tools.autoApprove; a tool cannot both skip and wait for approval`,
+      });
+    }
+  });
 
 /** `true` when `A` and `B` are the same union of ids, else `never`. */
 type SameSet<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;

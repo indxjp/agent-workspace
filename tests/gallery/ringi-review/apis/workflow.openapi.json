@@ -1,0 +1,102 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "稟議ワークフロー API",
+    "version": "1.0.0",
+    "description": "稟議へのコメント投稿、承認、否決。レビューエージェントに許すのはコメント投稿だけ。"
+  },
+  "servers": [{ "url": "https://workflow.example.co.jp/api/v1" }],
+  "security": [{ "bearer": [] }],
+  "components": {
+    "securitySchemes": { "bearer": { "type": "http", "scheme": "bearer" } },
+    "schemas": {
+      "NewComment": {
+        "type": "object",
+        "required": ["revision", "body"],
+        "properties": {
+          "revision": { "type": "integer", "description": "コメントする稟議の版" },
+          "body": { "type": "string", "description": "コメント本文（レビューシート）" }
+        }
+      },
+      "Decision": {
+        "type": "object",
+        "required": ["revision"],
+        "properties": { "revision": { "type": "integer" }, "reason": { "type": "string" } }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["error"],
+        "properties": { "error": { "type": "string" } }
+      }
+    }
+  },
+  "paths": {
+    "/requests/{requestId}/comments": {
+      "post": {
+        "operationId": "postComment",
+        "summary": "稟議にコメントを投稿する（担当者が承認した呼び出しだけが実行される）",
+        "parameters": [
+          { "name": "requestId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/NewComment" } }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "投稿した",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["commentId"],
+                  "properties": { "commentId": { "type": "string" } }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "その稟議はない",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Error" } }
+            }
+          }
+        }
+      }
+    },
+    "/requests/{requestId}/approve": {
+      "post": {
+        "operationId": "approveRequest",
+        "summary": "稟議を承認する（エージェントには許可しない）",
+        "parameters": [
+          { "name": "requestId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/Decision" } }
+          }
+        },
+        "responses": { "200": { "description": "承認した" } }
+      }
+    },
+    "/requests/{requestId}/reject": {
+      "post": {
+        "operationId": "rejectRequest",
+        "summary": "稟議を否決する（エージェントには許可しない）",
+        "parameters": [
+          { "name": "requestId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/Decision" } }
+          }
+        },
+        "responses": { "200": { "description": "否決した" } }
+      }
+    }
+  }
+}

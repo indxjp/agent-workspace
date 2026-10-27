@@ -6,23 +6,10 @@ import {
   parseUpdateModelConnection,
   type ModelConnectionResource,
 } from './contract';
+import { problem, type ApiResult } from '../http/result';
 import type { ModelDiscovery } from './discovery';
 import type { TestConnectionResult } from './probe';
 import type { WorkspaceModelsStore } from './store';
-
-export type ApiResult = { readonly status: number; readonly body: unknown };
-
-export function problem(
-  status: number,
-  code: string,
-  message: string,
-  details?: readonly string[],
-): ApiResult {
-  return {
-    status,
-    body: { error: { code, message, ...(details === undefined ? {} : { details }) } },
-  };
-}
 
 function id(raw: unknown): { ok: true; value: string } | { ok: false; result: ApiResult } {
   return isUuid(raw)

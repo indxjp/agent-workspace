@@ -10,7 +10,8 @@ import { createInMemoryAgentStoreProvider } from '../../agents/memory-store';
 import { FIXTURE_PERMISSIONS } from '../../agent-versions/fixtures';
 import { createInMemoryAgentVersionStoreProvider } from '../../agent-versions/memory-store';
 import { createSurfaceSessionsRuntime } from '../public/composition';
-import { configureSurfaceSessionsRuntime, type SurfaceModelRefusal } from '../public/runtime';
+import { type SurfaceModelRefusal } from '../public/runtime';
+import { installTestDomains } from '../../application-context-fixtures';
 
 const WORKSPACE_ID = '66666666-6666-4666-8666-666666666666';
 export const WIDGET_WORKSPACE_SLUG = 'widget-loader';
@@ -70,42 +71,45 @@ export async function installWidgetSurfaceRuntime(
     updatedAt: new Date('2026-10-02T00:00:00.000Z'),
   });
 
-  configureSurfaceSessionsRuntime(
-    createSurfaceSessionsRuntime({
-      env: () => process.env,
-      scopes: createInMemoryWorkspaceScopeResolver([
-        { id: WORKSPACE_ID, slug: WIDGET_WORKSPACE_SLUG },
-      ]),
-      agentVersions: {
-        forScope: (scope) => ({
-          findById: unreachable,
-          findPointedSurface: async (environment, name) => {
-            const scoped = await versions.forWorkspace(scope.workspaceId);
-            return scoped === null ? null : scoped.findPointedSurface(environment, name);
-          },
-          list: async (agentId) => {
-            const scoped = await versions.forWorkspace(scope.workspaceId);
-            return scoped === null ? null : scoped.list(agentId);
-          },
-          listPointedSurfaceNames: unreachable,
-        }),
-      },
-      agents,
-      principalById: (_workspaceId, principalId) =>
-        Promise.resolve({
-          principalId,
-          kind: 'membership',
-          role: 'owner',
-          label: 'Owner',
-          userId: null,
-          apiKeyId: null,
-          actsForPrincipalId: null,
-        }),
-      sessions: { forScope: unreachable },
-      surfaceSessionKeys: { forScope: unreachable },
-      runGate: { isUsable: () => Promise.resolve(true) },
-      preflight: () => Promise.resolve(modelRefusal),
-      tokens: unreachable,
-    }),
-  );
+  installTestDomains({
+    surfaces: {
+      kind: 'serving',
+      runtime: createSurfaceSessionsRuntime({
+        env: () => process.env,
+        scopes: createInMemoryWorkspaceScopeResolver([
+          { id: WORKSPACE_ID, slug: WIDGET_WORKSPACE_SLUG },
+        ]),
+        agentVersions: {
+          forScope: (scope) => ({
+            findById: unreachable,
+            findPointedSurface: async (environment, name) => {
+              const scoped = await versions.forWorkspace(scope.workspaceId);
+              return scoped === null ? null : scoped.findPointedSurface(environment, name);
+            },
+            list: async (agentId) => {
+              const scoped = await versions.forWorkspace(scope.workspaceId);
+              return scoped === null ? null : scoped.list(agentId);
+            },
+            listPointedSurfaceNames: unreachable,
+          }),
+        },
+        agents,
+        principalById: (_workspaceId, principalId) =>
+          Promise.resolve({
+            principalId,
+            kind: 'membership',
+            role: 'owner',
+            label: 'Owner',
+            userId: null,
+            apiKeyId: null,
+            actsForPrincipalId: null,
+          }),
+        sessions: { forScope: unreachable },
+        surfaceSessionKeys: { forScope: unreachable },
+        runGate: { isUsable: () => Promise.resolve(true) },
+        preflight: () => Promise.resolve(modelRefusal),
+        tokens: unreachable,
+      }),
+    },
+  });
 }

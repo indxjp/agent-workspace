@@ -17,10 +17,9 @@
  * `{ code, detail }`. It prefers `message` when present. Accepting only the earlier spelling would
  * read every refusal as "no envelope", so a `401` would no longer trigger session recovery.
  */
+import { MEMBERSHIP_ROLES, type MembershipRoleName } from '@indx-workspace/contracts/team';
 
-type WorkspaceRole = 'owner' | 'admin' | 'builder' | 'viewer';
-
-const ROLES: ReadonlySet<string> = new Set<WorkspaceRole>(['owner', 'admin', 'builder', 'viewer']);
+const ROLES: ReadonlySet<string> = new Set<string>(MEMBERSHIP_ROLES);
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 const UTC_MILLISECOND_TIMESTAMP =
@@ -37,12 +36,8 @@ const RESOURCE_KEYS = [
 ] as const;
 const MEMBERSHIP_KEYS = [...RESOURCE_KEYS, 'role'] as const;
 const LIST_KEYS = ['workspaces'] as const;
-const ITEM_KEYS = ['workspace'] as const;
-const ERROR_OUTER_KEYS = ['error'] as const;
-const ERROR_KEYS = ['code', 'message', 'detail'] as const;
-const LEGACY_ERROR_KEYS = ['code', 'detail'] as const;
 
-function isRole(value: unknown): value is WorkspaceRole {
+function isRole(value: unknown): value is MembershipRoleName {
   return typeof value === 'string' && ROLES.has(value);
 }
 
@@ -97,7 +92,7 @@ export interface WorkspaceResource {
 
 /** A collection/item membership view. Unlike a mutation response, it also carries the caller's role. */
 export interface WorkspaceMembership extends WorkspaceResource {
-  readonly role: WorkspaceRole;
+  readonly role: MembershipRoleName;
 }
 
 function parseWorkspaceFields(
@@ -119,11 +114,6 @@ function parseWorkspaceFields(
     createdAt: row['createdAt'],
     updatedAt: row['updatedAt'],
   };
-}
-
-function asWorkspaceResource(value: unknown): WorkspaceResource | null {
-  const row = exactRecord(value, RESOURCE_KEYS);
-  return row === null ? null : parseWorkspaceFields(row);
 }
 
 function asWorkspaceMembership(value: unknown): WorkspaceMembership | null {
@@ -152,23 +142,6 @@ export function parseWorkspaceList(body: unknown): readonly WorkspaceMembership[
   return out;
 }
 
-/** `GET /api/workspaces/:id`'s `{ workspace: {...} }` body. */
-export function parseWorkspaceItem(body: unknown): WorkspaceMembership | null {
-  const outer = exactRecord(body, ITEM_KEYS);
-  return outer === null ? null : asWorkspaceMembership(outer.workspace);
-}
-
-/**
- * A successful `PATCH /api/workspaces/:id` body. The landed handler intentionally serialises the
- * workspace row without a membership role; callers retain the role from the authorised row they
- * patched. Keeping this parser separate prevents a successful mutation from being mislabeled as
- * a malformed response merely because it does not invent a role the server did not return.
- */
-export function parseWorkspaceMutation(body: unknown): WorkspaceResource | null {
-  const outer = exactRecord(body, ITEM_KEYS);
-  return outer === null ? null : asWorkspaceResource(outer.workspace);
-}
-
 /** What a screen knows about a failed `/api/workspaces` request, at any moment. */
 export type WorkspacesProblem =
   | {
@@ -178,65 +151,6 @@ export type WorkspacesProblem =
       readonly detail: string;
     }
   | { readonly kind: 'transport'; readonly reason: string };
-
-/**
- * The code and wording of a `/api/workspaces` error envelope, or `null` when `body` is not one.
- * Accepts exactly `{ code, message, detail }` (the standard envelope; `message` is the wording) or
- * exactly the earlier `{ code, detail }`; any other key set, or a non-string field, is refused.
- */
-function readWorkspacesErrorEnvelope(
-  body: unknown,
-): { readonly code: string; readonly detail: string } | null {
-  const outer = exactRecord(body, ERROR_OUTER_KEYS);
-  if (outer === null) return null;
-  const current = exactRecord(outer.error, ERROR_KEYS);
-  if (current !== null) {
-    return typeof current.code === 'string' &&
-      typeof current.message === 'string' &&
-      typeof current.detail === 'string'
-      ? { code: current.code, detail: current.message }
-      : null;
-  }
-  const legacy = exactRecord(outer.error, LEGACY_ERROR_KEYS);
-  return legacy !== null && typeof legacy.code === 'string' && typeof legacy.detail === 'string'
-    ? { code: legacy.code, detail: legacy.detail }
-    : null;
-}
-
-/** Turn a non-ok `Response` into a {@link WorkspacesProblem}. `parseJson` is injected so a test can
- * supply a body without constructing a real `Response` — `apps/web/components/agents/model.ts`'s
- * `describeRequestFailure` does the same for the same reason. */
-export async function describeWorkspacesFailure(
-  response: Response,
-  parseJson: () => Promise<unknown>,
-): Promise<WorkspacesProblem> {
-  let body: unknown;
-  try {
-    body = await parseJson();
-  } catch {
-    return {
-      kind: 'transport',
-      reason: `The server answered ${String(response.status)} with a body that was not JSON.`,
-    };
-  }
-  const envelope = readWorkspacesErrorEnvelope(body);
-  if (envelope !== null) {
-    return { kind: 'api', status: response.status, code: envelope.code, detail: envelope.detail };
-  }
-  return {
-    kind: 'transport',
-    reason: `The server answered ${String(response.status)} without the usual error envelope.`,
-  };
-}
-
-/** A rejected `fetch()` promise, turned into the same shape — a reset connection, a DNS failure, a
- * client-side abort — before the server could answer at all. */
-export function describeTransportRejection(error: unknown): WorkspacesProblem {
-  return {
-    kind: 'transport',
-    reason: `The request failed before the server could answer: ${error instanceof Error ? error.message : String(error)}`,
-  };
-}
 
 /**
  * Whether the caller may rename, archive or restore this membership's workspace — issue #119's

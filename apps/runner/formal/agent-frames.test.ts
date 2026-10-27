@@ -21,7 +21,7 @@ import {
   claudeToolKind,
   classifySdkEvent,
   toAgentFrames,
-} from '@agent-workspace/core';
+} from '@agent-workspace/run-protocol';
 import { describe, expect, it } from 'vitest';
 
 import { asRecord, loadVectors } from '../../../tests/formal/vectors.js';

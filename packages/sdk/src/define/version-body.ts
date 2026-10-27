@@ -143,7 +143,7 @@ function isWithholdingSettings(
  * The policy and its source. The engine is the agent's own `engine`, else `defaultEngine` (the
  * project's `engine`, contract C12), else `claude-agent-sdk`. Compiled — exactly what the server
  * compiles from the permissions and skills — when that engine is `claude-agent-sdk` and no limit
- * has a value and no `autoApprove` is declared; stored otherwise, because the server compiles
+ * has a value and no `autoApprove`, `requireApproval` or `handoff` is declared; stored otherwise, because the server compiles
  * only for its default engine, with no limits and no pre-approval. A `limits` object whose limits
  * are all left out (`{}`, `{ maxTurns: undefined }`) gives no limit.
  */
@@ -171,14 +171,21 @@ function policyOf(
     return { policy: { engine, ...native, skills, limits }, policySource: 'stored' };
   }
   const autoApprove = [...new Set(settings.autoApprove ?? [])].sort();
+  const requireApproval = [...new Set(settings.requireApproval ?? [])].sort();
+  const handoff = settings.handoff === true;
   return {
     policy: {
       engine: settings.id,
       tools: { ...claudeBaseToolPolicyFor(permissions), autoApprove },
+      ...(requireApproval.length > 0 ? { requireApproval } : {}),
+      ...(handoff ? { handoff } : {}),
       skills,
       limits,
     },
-    policySource: limitGiven || autoApprove.length > 0 ? 'stored' : 'compiled',
+    policySource:
+      limitGiven || autoApprove.length > 0 || requireApproval.length > 0 || handoff
+        ? 'stored'
+        : 'compiled',
   };
 }
 
@@ -204,14 +211,18 @@ function policyOf(
  *   keys, each absent when the agent leaves it out. Every `files` knowledge path the agent does
  *   not already grant is appended to `resources.files` with `read` access; a path it grants keeps
  *   its access. A `connector` source is already in `resources.connectors` through its `mcp()` tool.
+ * - `engine.requireApproval` is stored as the policy's `requireApproval`, sorted and without
+ *   duplicates; an empty list changes nothing.
+ * - `engine.handoff: true` is stored as the policy's `handoff: true` and forces the stored policy;
+ *   left out changes nothing.
  * - `engine` left out → `options.defaultEngine` (the project's `engine`, contract C12), else
  *   `claude-agent-sdk`.
  * - The policy is **compiled** (`policySource: 'compiled'`) when the engine is `claude-agent-sdk`
  *   and no limit has a value (`limits` left out, `{}` or every limit `undefined`) and no
- *   `autoApprove` rule is declared: it is then exactly the policy the server compiles from the
- *   permissions and skills, and follows later changes to them. It is **stored** otherwise — any
- *   limit with a value, any `autoApprove` rule (the policy's `tools.autoApprove`, nothing else
- *   changed), or any other engine, even with no settings, since the server compiles a policy only
+ *   `autoApprove` or `requireApproval` rule is declared: it is then exactly the policy the server
+ *   compiles from the permissions and skills, and follows later changes to them. It is **stored**
+ *   otherwise — any limit with a value, any `autoApprove` rule (the policy's `tools.autoApprove`,
+ *   nothing else changed), any `requireApproval` rule, `handoff: true`, or any other engine, even with no settings, since the server compiles a policy only
  *   for its default engine.
  *
  * @throws {DefinitionError} when the agent or a surface was not made by `defineAgent()` or
@@ -231,6 +242,11 @@ export function toAgentVersionBody(
 
   const permissions = permissionsOf(definition);
   const skillNames = (definition.skills ?? []).map((entry) => entry.name);
+  const skillRevisions = Object.fromEntries(
+    (definition.skills ?? []).flatMap((entry) =>
+      entry.revision === undefined ? [] : [[entry.name, entry.revision] as const],
+    ),
+  );
   const files = (definition.files ?? []).map((grant) => ({
     path: grant.path,
     access: grant.access,
@@ -258,6 +274,7 @@ export function toAgentVersionBody(
       resources: {
         files,
         skills: skillNames,
+        ...(Object.keys(skillRevisions).length === 0 ? {} : { skillRevisions }),
         connectors: [...new Set((definition.tools ?? []).map(toolNameOf))],
       },
     },
@@ -297,6 +314,8 @@ export interface OpenApiToolDefinition {
   readonly baseUrl?: string;
   /** The secret the credential is read from; present exactly when `auth` is not `none`. */
   readonly credential?: ToolCredentialReference;
+  /** The secret that signs the identity assertion (ADR-0142 D1); absent when not opted in. */
+  readonly identity?: ToolCredentialReference;
 }
 
 /**
@@ -341,6 +360,7 @@ function openApiDefinition(tool: OpenApiTool): OpenApiToolDefinition {
     allow: Object.freeze([...tool.allow]),
     ...openApiAuthFields(tool.auth),
     ...(tool.baseUrl === undefined ? {} : { baseUrl: tool.baseUrl }),
+    ...(tool.identity === undefined ? {} : { identity: credentialOf(tool.identity) }),
   });
 }
 

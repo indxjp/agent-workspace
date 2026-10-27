@@ -4,14 +4,15 @@
  *
  * The shape is `./engine-migration.test.ts`'s: migrate to the state before the change, write the
  * rows a live deployment already holds (files and folders without their parent folders), then apply the rest.
- * 0051 changes no table, so the seed uses today's typed schema.
+ * The seed is raw SQL over the columns that exist at that state: the typed `files` schema now
+ * names columns (such as `status`) that a later migration adds.
  */
 import crypto from 'node:crypto';
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { resolveMigrationsDir, runMigrations } from '../migrate.js';
@@ -26,6 +27,8 @@ const databaseUrl = process.env['TEST_DATABASE_URL'];
 const hasDatabase = Boolean(databaseUrl?.trim());
 
 const BACKFILL_MIGRATION = '0051_backfill_parent_folder_rows';
+// By suffix: `pnpm migrations:renumber` may change the number.
+const LEGACY_STORAGE_GUARD_SUFFIX = '_lively_nomad';
 
 describe.skipIf(!hasDatabase)('0051 backfill of parent folder rows', () => {
   let isolated: IsolatedTestDatabase;
@@ -38,15 +41,14 @@ describe.skipIf(!hasDatabase)('0051 backfill of parent folder rows', () => {
   const existingFolderId = crypto.randomUUID();
   const fileAtParentPathId = crypto.randomUUID();
 
-  const fileRow = (id: string, workspace: string, owner: string, filePath: string) => ({
-    id,
-    workspaceId: workspace,
-    path: filePath,
-    kind: 'file' as const,
-    storageKey: filePath,
-    sizeBytes: 1,
-    ownerPrincipalId: owner,
-  });
+  const seedRow = (
+    id: string,
+    workspace: string,
+    owner: string,
+    rowPath: string,
+    kind: 'file' | 'folder' = 'file',
+  ) =>
+    sql`(${id}::uuid, ${workspace}::uuid, ${rowPath}, ${kind}, ${kind === 'file' ? rowPath : null}, ${kind === 'file' ? 1 : 0}, ${owner}::uuid)`;
 
   beforeAll(async () => {
     const migrationsDir = resolveMigrationsDir();
@@ -99,32 +101,45 @@ describe.skipIf(!hasDatabase)('0051 backfill of parent folder rows', () => {
     };
     principalId = await principalOf(workspaceId);
     otherPrincipalId = await principalOf(otherWorkspaceId);
-    await isolated.db.insert(files).values([
-      fileRow(crypto.randomUUID(), workspaceId, principalId, 'manuals/hydraulics/unit.md'),
-      fileRow(crypto.randomUUID(), workspaceId, principalId, 'manuals/other.md'),
-      fileRow(crypto.randomUUID(), workspaceId, principalId, 'top-level.md'),
-      {
-        id: existingFolderId,
-        workspaceId,
-        path: 'kept',
-        kind: 'folder',
-        storageKey: null,
-        ownerPrincipalId: principalId,
-      },
-      fileRow(crypto.randomUUID(), workspaceId, principalId, 'kept/a.md'),
-      fileRow(fileAtParentPathId, workspaceId, principalId, 'shadowed'),
-      fileRow(crypto.randomUUID(), workspaceId, principalId, 'shadowed/b.md'),
-      fileRow(crypto.randomUUID(), otherWorkspaceId, otherPrincipalId, 'elsewhere/x.md'),
-      {
-        id: crypto.randomUUID(),
-        workspaceId,
-        path: 'contracts/2026',
-        kind: 'folder',
-        storageKey: null,
-        ownerPrincipalId: principalId,
-      },
-    ]);
+    await isolated.db.execute(sql`
+      insert into files (id, workspace_id, path, kind, storage_key, size_bytes, owner_principal_id)
+      values ${sql.join(
+        [
+          seedRow(crypto.randomUUID(), workspaceId, principalId, 'manuals/hydraulics/unit.md'),
+          seedRow(crypto.randomUUID(), workspaceId, principalId, 'manuals/other.md'),
+          seedRow(crypto.randomUUID(), workspaceId, principalId, 'top-level.md'),
+          seedRow(existingFolderId, workspaceId, principalId, 'kept', 'folder'),
+          seedRow(crypto.randomUUID(), workspaceId, principalId, 'kept/a.md'),
+          seedRow(fileAtParentPathId, workspaceId, principalId, 'shadowed'),
+          seedRow(crypto.randomUUID(), workspaceId, principalId, 'shadowed/b.md'),
+          seedRow(crypto.randomUUID(), otherWorkspaceId, otherPrincipalId, 'elsewhere/x.md'),
+          seedRow(crypto.randomUUID(), workspaceId, principalId, 'contracts/2026', 'folder'),
+        ],
+        sql`, `,
+      )}
+    `);
 
+    // The storage guard refuses rows without an object id, so apply the migrations before it, give
+    // the rows the id the storage migration would, then apply the rest.
+    const guard = journal.entries.findIndex((entry) =>
+      entry.tag.endsWith(LEGACY_STORAGE_GUARD_SUFFIX),
+    );
+    expect(guard).toBeGreaterThan(0);
+    const beforeGuard = journal.entries.slice(0, guard);
+    await writeFile(
+      path.join(priorMigrationsDir, 'meta', '_journal.json'),
+      JSON.stringify({ ...journal, entries: beforeGuard }),
+    );
+    await Promise.all(
+      beforeGuard.map((entry) =>
+        cp(
+          path.join(migrationsDir, `${entry.tag}.sql`),
+          path.join(priorMigrationsDir, `${entry.tag}.sql`),
+        ),
+      ),
+    );
+    await runMigrations({ url: isolated.url, maxConnections: 4 }, priorMigrationsDir);
+    await isolated.db.execute(sql`update files set object_id = id where kind = 'file'`);
     await runMigrations({ url: isolated.url, maxConnections: 4 }, migrationsDir);
   }, 180_000);
 

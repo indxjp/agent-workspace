@@ -7,6 +7,7 @@
 import { EngineImageConfigurationError } from '../engine-images.js';
 import type { EngineImageMap } from '../engine-images.js';
 import type { RuntimeCapabilities } from '../driver.js';
+import { RUN_FILES_MAX_BYTES } from '../transfer.js';
 import type {
   ExternalFileTarget,
   ExternalProvider,
@@ -39,6 +40,7 @@ export function e2bRuntimeCapabilities(tier: E2bPlanTier = 'hobby'): RuntimeCapa
     gpu: false,
     managedByProvider: true,
     typicalStartMs: null,
+    fileTransfer: 'push-archive',
   };
 }
 
@@ -79,7 +81,6 @@ const TOOL_HOST_ENTRY = '/app/packages/tool-host/dist/main.js';
 const TOOL_HOST_CWD = '/app';
 /** The image's root file system is writable in a microVM; the host's workspace is a private directory. */
 const TOOL_HOST_DIR = '/tmp/tool-host';
-const MAX_FILE_BYTES = 134_217_728;
 const MAX_REASON_LENGTH = 160;
 const MAX_START_FRAMES = 8;
 const MAX_FRAME_BYTES = 1_048_576;
@@ -526,7 +527,7 @@ export function createE2bProvider(
         throw failure(operation);
       }
       const bytes = new TextEncoder().encode(content);
-      if (bytes.length > MAX_FILE_BYTES) throw failure(operation);
+      if (bytes.length > RUN_FILES_MAX_BYTES) throw failure(operation);
       const query = new URLSearchParams({
         path: `${TOOL_HOST_DIR}/${name}`,
         username: RUNNER_USER,

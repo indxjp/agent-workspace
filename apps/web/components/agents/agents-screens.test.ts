@@ -312,7 +312,7 @@ describe('AgentEngineSection (issue #319, ENG-02c)', () => {
       ...CLAUDE,
       id: 'openai-agents' as const,
       displayName: 'OpenAI Agents SDK',
-      version: '0.20.0',
+      version: '0.21.0',
       capabilities: { ...CLAUDE.capabilities, skills: false },
     };
     const html = renderToStaticMarkup(
@@ -622,7 +622,7 @@ describe('AgentResourcesEditor', () => {
     const html = renderToStaticMarkup(
       createElement(AgentResourcesEditor, {
         agentId: 'a1',
-        assignments: { files: [], skillIds: [], connectorIds: [] },
+        assignments: { files: [], skillIds: [], connectorIds: [], storageGrants: [] },
         permissions: WRITE_ALLOWED,
         catalogsState: { kind: 'loading' },
         projectsState: { kind: 'loading' },
@@ -641,7 +641,12 @@ describe('AgentResourcesEditor', () => {
     const html = renderToStaticMarkup(
       createElement(AgentResourcesEditor, {
         agentId: 'a1',
-        assignments: { files: [{ fileId: 'f1', access: 'read' }], skillIds: [], connectorIds: [] },
+        assignments: {
+          files: [{ fileId: 'f1', access: 'read' }],
+          skillIds: [],
+          connectorIds: [],
+          storageGrants: [],
+        },
         permissions: WRITE_DENIED,
         catalogsState: { kind: 'failed', reason: 'Resource names could not be loaded: boom' },
         projectsState: { kind: 'loading' },

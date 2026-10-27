@@ -7,7 +7,12 @@ import crypto from 'node:crypto';
 
 import { describe, expect, it } from 'vitest';
 
-import { MASTER_KEY_ENV_VAR, loadMasterKey, masterKeyFromBytes } from './master-key.js';
+import {
+  MASTER_KEY_ENV_VAR,
+  MalformedMasterKeyError,
+  loadMasterKey,
+  masterKeyFromBytes,
+} from './master-key.js';
 
 const VALID_KEY_HEX = crypto.randomBytes(32).toString('hex');
 
@@ -39,6 +44,26 @@ describe('loadMasterKey', () => {
   it('throws when MASTER_ENCRYPTION_KEY decodes to the wrong length (too long)', () => {
     const tooLong = crypto.randomBytes(64).toString('hex'); // 64 bytes, not 32
     expect(() => loadMasterKey({ [MASTER_KEY_ENV_VAR]: tooLong })).toThrow(/32/);
+  });
+
+  it.each([
+    ['unset', {}],
+    ['empty', { [MASTER_KEY_ENV_VAR]: '' }],
+    ['whitespace only', { [MASTER_KEY_ENV_VAR]: '   ' }],
+  ])('throws a plain Error, not MalformedMasterKeyError, when the key is %s', (_case, env) => {
+    // Issue #1562: an unset key is "secrets not configured", not a misconfiguration.
+    expect(() => loadMasterKey(env)).toThrow(Error);
+    expect(() => loadMasterKey(env)).not.toThrow(MalformedMasterKeyError);
+  });
+
+  it.each([
+    ['not hex', 'not-a-hex-key'],
+    ['too short', crypto.randomBytes(16).toString('hex')],
+    ['too long', crypto.randomBytes(64).toString('hex')],
+  ])('throws MalformedMasterKeyError when the key is set but %s', (_case, value) => {
+    // Issue #1562 (owner decision D9): a set-but-malformed key is typed, so readiness can name it.
+    expect(() => loadMasterKey({ [MASTER_KEY_ENV_VAR]: value })).toThrow(MalformedMasterKeyError);
+    expect(() => loadMasterKey({ [MASTER_KEY_ENV_VAR]: value })).toThrow(/64 hex characters/u);
   });
 
   it('never echoes the malformed value in its error message', () => {

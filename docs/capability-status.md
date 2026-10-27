@@ -16,7 +16,7 @@ Release verdict: **blocked**.
 | Kubernetes runtime lifecycle and isolation | partial | blocker | `packages/runtime/src/kubernetes.ts`<br>`scripts/dev-cluster/verify-chart-lifecycle.sh` |
 | Managed-cloud runtime drivers | unsupported | none | `docs/runtime-driver-matrix.md` |
 | Production operations controls | partial | required | `infra/helm/agent-workspace`<br>`docs/operations/runbook.md` |
-| Browser and accessibility automation | partial | required | `tests/browser`<br>`.github/workflows/quality.yml` |
+| Browser and accessibility automation | partial | required | `tests/browser`<br>`.github/workflows/ci.yml` |
 | Published CLI and signed release images | deferred | blocker | `infra/release` |
 | Independent usability approval | deferred | blocker | `docs/walkthrough` |
 | Residual-risk owner acceptance | deferred | blocker | `docs/release/security-review-0.1.0.md` |

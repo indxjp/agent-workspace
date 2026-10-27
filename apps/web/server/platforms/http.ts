@@ -5,17 +5,14 @@
  * only changes how the files travel.
  */
 import { PLATFORM_EXPORT_REQUEST_MAX_BYTES } from '@indx-workspace/contracts/platforms';
-import { encodeUstar } from '@agent-workspace/runtime';
+import { encodeUstar } from '@agent-workspace/runtime/transfer';
 
 import { authoriseAgentVersionRoute } from '../agent-versions/http';
-import { problem, type ApiResult } from '../agents/handlers';
-import { toResponse } from '../agents/http';
-import { currentConnectorsRuntime } from '../connectors/runtime';
-import { currentEndpointClientsRuntime } from '../endpoint-clients/runtime';
+import { applicationContext } from '../application-context';
+import { problem, type ApiResult } from '../http/result';
+import { apiResultResponse } from '../http/json-transport';
 import { readPublicUrl } from '../endpoints/public-url';
-import { currentFilesRuntime } from '../files/runtime';
 import { readBoundedJson } from '../http/json-transport';
-import { currentSkillsRuntime } from '../skills/runtime';
 import { skillFilesPrefix } from '../skills/keys';
 import { walkFiles } from '../skills/tree';
 import { exportAgentVersion, exportFileBytes } from './export';
@@ -45,7 +42,11 @@ export async function servePlatformExport(
   context: { params: Promise<{ id: string }> },
   format: 'json' | 'tar',
 ): Promise<Response> {
-  const authorised = await authoriseAgentVersionRoute(request, context);
+  const authorised = await authoriseAgentVersionRoute(
+    request,
+    context,
+    format === 'json' ? 'export' : 'export-archive',
+  );
   if (!authorised.ok) return authorised.response;
   const { agent, principal, store } = authorised.scope;
 
@@ -53,17 +54,18 @@ export async function servePlatformExport(
     maxBytes: PLATFORM_EXPORT_REQUEST_MAX_BYTES,
     problem,
   });
-  if (!read.ok) return toResponse(read.result);
+  if (!read.ok) return apiResultResponse(read.result);
 
-  const connectors = currentConnectorsRuntime();
-  if (connectors === null) return toResponse(notConfigured('Connectors'));
-  const skills = currentSkillsRuntime();
-  if (skills === null) return toResponse(notConfigured('Skills'));
+  const app = applicationContext();
+  const connectors = app?.connectors.kind === 'serving' ? app.connectors.runtime : null;
+  if (connectors === null) return apiResultResponse(notConfigured('Connectors'));
+  const skills = app?.skills.kind === 'serving' ? app.skills.runtime : null;
+  if (skills === null) return apiResultResponse(notConfigured('Skills'));
   const skillStore = skills.store.forWorkspace(principal.workspaceId);
-  const filesRuntime = currentFilesRuntime();
-  if (filesRuntime === null) return toResponse(notConfigured('Files'));
+  const filesRuntime = app?.files.kind === 'serving' ? app.files.runtime : null;
+  if (filesRuntime === null) return apiResultResponse(notConfigured('Files'));
   const fileStore = filesRuntime.store.forWorkspace(principal.workspaceId);
-  const endpointClients = currentEndpointClientsRuntime();
+  const endpointClients = app?.endpointClients ?? null;
   const publicUrl = readPublicUrl(process.env);
 
   const sources: PortableProjectSources = {
@@ -89,8 +91,8 @@ export async function servePlatformExport(
   };
 
   const outcome = await exportAgentVersion(agent.id, read.value, sources);
-  if (!outcome.ok) return toResponse(outcome.result);
-  if (format === 'json') return toResponse({ status: 200, body: outcome.response });
+  if (!outcome.ok) return apiResultResponse(outcome.result);
+  if (format === 'json') return apiResultResponse({ status: 200, body: outcome.response });
 
   const { files, platform, version } = outcome.response;
   const archive = encodeUstar(
@@ -106,6 +108,7 @@ export async function servePlatformExport(
     headers: {
       'content-type': 'application/x-tar',
       'content-disposition': `attachment; filename="${archiveName(outcome.agentName, platform, version)}"`,
+      'x-content-type-options': 'nosniff',
       'cache-control': 'no-store',
     },
   });

@@ -14,16 +14,15 @@
  * disagreement is a failing test, and the fix is never to edit a vector
  * (`docs/formal/00-orchestrator-prompt.md` §10).
  */
+import { createDockerDriver, type DockerCommand } from '@agent-workspace/runtime/driver/docker';
 import {
   EngineImageConfigurationError,
-  createDockerDriver,
   engineImageInstalled,
   parseEngineImageMap,
   readEngineImageMap,
   resolveEngineImage,
-  type DockerCommand,
   type EngineImageMap,
-} from '@agent-workspace/runtime';
+} from '@agent-workspace/runtime/engine-images';
 import { describe, expect, it } from 'vitest';
 
 import { asRecord, asString, loadVectors } from './vectors.js';

@@ -102,7 +102,11 @@ export async function handleToolRequest(
         connector.credential,
         params.name,
         params.arguments,
-        dependencies.options,
+        {
+          ...dependencies.options,
+          ...(connector.approval === undefined ? {} : { approval: connector.approval }),
+          ...(connector.identity === undefined ? {} : { identity: connector.identity }),
+        },
       );
     } catch {
       // The SDK would answer a thrown error with its message, which may name a secret or a host.

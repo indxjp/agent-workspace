@@ -8,10 +8,10 @@ import { randomBytes } from 'node:crypto';
 
 import {
   createDockerDriver,
-  createKubernetesDriver,
   dockerEgressNetworkName,
   dockerEgressOutNetworkName,
-} from '../../../packages/runtime/dist/index.js';
+} from '../../../packages/runtime/dist/docker.js';
+import { createKubernetesDriver } from '../../../packages/runtime/dist/kubernetes.js';
 
 const ENGINE = 'claude-agent-sdk';
 const stubCommand = (port) => ['httpd', '-f', '-p', String(port), '-h', '/www'];

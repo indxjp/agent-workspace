@@ -1,4 +1,5 @@
-import { redacted } from '../redact';
+import { log } from '../telemetry/logger';
+import { redacted } from '@agent-workspace/core/telemetry';
 import type { SetupInput, SetupResult } from './runtime';
 
 /** The part of first-run setup that threw; the public message names it and nothing else. */
@@ -37,7 +38,7 @@ export function setupStepFailure(
   const name = error instanceof Error ? error.name : 'non-error thrown';
   const errno = errnoOf(error);
   const message = error instanceof Error ? redacted(error.message, secrets) : '';
-  console.error(`[setup] the ${step} step failed (${name}): ${message}`);
+  log.error(`[setup] the ${step} step failed`, { errorName: name, message });
   const unavailable = step === 'secrets store';
   return {
     ok: false,

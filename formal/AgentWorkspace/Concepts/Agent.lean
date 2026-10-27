@@ -44,7 +44,7 @@ def permissionKeys : List String := ["readFiles", "writeFiles", "runCommands", "
   (ts := "packages/contracts/src/agents.ts#AGENT_MODEL_MAX_LENGTH")]
 def bounds : Nat × Nat × Nat := (200, 100000, 200)
 
-/-! ## The HTTP field parsers (`apps/web/server/agents/contract.ts`) -/
+/-! ## The HTTP field parsers (`packages/contracts/src/agents/resource.ts`) -/
 
 /-- A raw JSON value as the field parsers see it: a string, `null`, or another value, carried as
 the text `describe()` renders for it (`a number`, `a boolean`, `an array`, `an object`,
@@ -70,9 +70,9 @@ def jsTrim (s : String) : String :=
 def utf16Length (s : String) : Nat :=
   s.toList.foldr (fun c n => (if 0x10000 ≤ c.toNat then 2 else 1) + n) 0
 
-/-- `parseAgentName`: a string, trimmed, not blank, at most `AGENT_NAME_MAX_LENGTH` code units
+/-- `AgentNameRequestSchema`: a string, trimmed, not blank, at most `AGENT_NAME_MAX_LENGTH` code units
 after trimming; the trimmed value, or the one error message. -/
-@[aw_spec (ts := "apps/web/server/agents/contract.ts#parseAgentName")
+@[aw_spec (ts := "packages/contracts/src/agents/resource.ts#AgentNameRequestSchema")
   (ts := "packages/contracts/src/agents.ts#AGENT_NAME_MAX_LENGTH")]
 def parseName : RawField → Except String String
   | .str s =>
@@ -83,9 +83,9 @@ def parseName : RawField → Except String String
     else .ok t
   | r => .error s!"name must be a string; received {r.describe}."
 
-/-- `parseAgentInstructions`: any string, empty included and not trimmed, of at most
+/-- `AgentInstructionsRequestSchema`: any string, empty included and not trimmed, of at most
 `AGENT_INSTRUCTIONS_MAX_LENGTH` code units. -/
-@[aw_spec (ts := "apps/web/server/agents/contract.ts#parseAgentInstructions")
+@[aw_spec (ts := "packages/contracts/src/agents/resource.ts#AgentInstructionsRequestSchema")
   (ts := "packages/contracts/src/agents.ts#AGENT_INSTRUCTIONS_MAX_LENGTH")]
 def parseInstructions : RawField → Except String String
   | .str s =>
@@ -94,9 +94,9 @@ def parseInstructions : RawField → Except String String
     else .ok s
   | r => .error s!"instructions must be a string; received {r.describe}."
 
-/-- `parseAgentModel`: `null` (the workspace default model), or a string, trimmed, not blank, at
+/-- `AgentModelRequestSchema`: `null` (the workspace default model), or a string, trimmed, not blank, at
 most `AGENT_MODEL_MAX_LENGTH` code units after trimming. -/
-@[aw_spec (ts := "apps/web/server/agents/contract.ts#parseAgentModel")
+@[aw_spec (ts := "packages/contracts/src/agents/resource.ts#AgentModelRequestSchema")
   (ts := "packages/contracts/src/agents.ts#AGENT_MODEL_MAX_LENGTH")]
 def parseModel : RawField → Except String (Option String)
   | .null => .ok none
@@ -159,7 +159,8 @@ def StateCurrent.toTarget : StateCurrent → StateTarget
 def dbColumns : List String :=
   ["id", "workspace_id", "name", "instructions", "model_connection_id", "model",
     "runtime_profile_id", "permissions", "policy", "created_by", "owner_principal_id",
-    "setup_configured_at", "materialised_version_id", "created_at", "updated_at"]
+    "builtin_key", "setup_configured_at", "materialised_version_id", "created_by_agent_id",
+    "created_by_agent_version", "created_by_run_id", "archived_at", "created_at", "updated_at"]
 
 /-- The keys of `AgentResourceSchema`, in declaration order. The policy and the assignments are
 separate resources (`/policy`, `/resources`), and so are the grants (`/grants`). -/
@@ -167,7 +168,8 @@ separate resources (`/policy`, `/resources`), and so are the grants (`/grants`).
   (doc := "docs/sdk/04-api-specification.md#59-agents--awagents")]
 def wireFields : List String :=
   ["id", "workspaceId", "name", "instructions", "modelConnectionId", "model", "runtimeProfileId",
-    "permissions", "createdBy", "ownerPrincipalId", "createdAt", "updatedAt"]
+    "permissions", "createdBy", "ownerPrincipalId", "builtin", "createdByAgent", "archivedAt",
+    "createdAt", "updatedAt"]
 
 /-- `AGENT_MUTABLE_FIELDS`: what `PATCH` accepts and `POST` requires. -/
 @[aw_spec (ts := "packages/contracts/src/agents.ts#AGENT_MUTABLE_FIELDS")]

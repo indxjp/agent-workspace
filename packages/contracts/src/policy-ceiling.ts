@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   AGENT_DEFINITION_MAX_REFERENCES,
   AGENT_MODEL_MAX_LENGTH,
+  AGENT_NAME_MAX_LENGTH,
   AGENT_PERMISSION_KEYS,
   type AgentPermissionKey,
   type AgentPermissions,
@@ -32,6 +33,9 @@ export const POLICY_CEILING_MODELS_MAX = 64;
  * not only one the project file declares (issue #524).
  */
 export const POLICY_CEILING_TOOL_NAME_MAX_LENGTH = 200;
+
+/** The largest `maxCostPerDayUsd` a ceiling may set: a sanity bound, not a recommendation. */
+const POLICY_CEILING_MAX_COST_PER_DAY_USD = 100_000;
 
 /** No C0 control, DEL or C1 control: `\p{Cc}` is exactly that set. */
 const NO_CONTROL_CHARACTER_PATTERN = /^\P{Cc}*$/u;
@@ -87,6 +91,35 @@ export const ProjectPolicyPromotionSchema = z
 export type ProjectPolicyPromotion = z.infer<typeof ProjectPolicyPromotionSchema>;
 
 /**
+ * An agent name in `builder.allow`. Agent names are stored trimmed (`CreateAgentInputSchema`), so a
+ * name with whitespace at either edge could never match one and is refused instead of normalised.
+ */
+const BuilderAgentNameSchema = z
+  .string()
+  .min(1)
+  .max(AGENT_NAME_MAX_LENGTH, { abort: true })
+  .regex(NO_CONTROL_CHARACTER_PATTERN, 'must not contain a control character')
+  .refine((name) => name.trim() === name, 'must not start or end with whitespace');
+
+/**
+ * Which agents may build agents (issue #1851): the names of the agents whose runs may use the
+ * Builder's `aw-control` tools. It judges no agent configuration, so neither
+ * {@link policyWidenings} nor {@link meetPolicyCeiling} reads it, and no widening check is needed:
+ * unlike the narrowing keys above, a longer list grants more rather than capping an agent.
+ */
+export const ProjectPolicyBuilderSchema = z
+  .object({
+    allow: z
+      .array(BuilderAgentNameSchema)
+      .max(AGENT_DEFINITION_MAX_REFERENCES)
+      .readonly()
+      .refine(isDistinct, DISTINCT_MESSAGE),
+  })
+  .strict()
+  .readonly();
+export type ProjectPolicyBuilder = z.infer<typeof ProjectPolicyBuilderSchema>;
+
+/**
  * A project's policy ceiling (ADR-0102 SD6, C13, C14, issue #524). Every key is optional, and an
  * absent key caps nothing:
  *
@@ -99,10 +132,16 @@ export type ProjectPolicyPromotion = z.infer<typeof ProjectPolicyPromotionSchema
  * - `tools` — the connector names an agent may use, none twice. An empty list means no tools.
  * - `promotion` — `minEvalScore`, the bar promotion to `production` must reach (issue #619). It is
  *   not a widening of any agent: unset, promotion needs no evaluation.
+ * - `maxCostPerDayUsd` — the model spend, in USD, a workspace may run up per UTC day (issue #1851).
+ *   Like `promotion` it is not a widening of any agent: a run start over it is refused
+ *   `daily_cost_cap_reached`.
+ * - `builder` — `allow`, the names of the agents that may build agents (issue #1851). It is not a
+ *   widening of any agent either. An absent `builder` allows no agent (fail closed), and an empty
+ *   `allow` says the same.
  *
- * `maxCostPerDayUsd`, `network` and `approval` are not built yet and are each refused at their own
- * path. `connections` has no field: an allowlist of connections is out of scope in slice 2, so the
- * strict object refuses it as an unknown key.
+ * `network` and `approval` are not built yet and are each refused at their own path. `connections`
+ * has no field: an allowlist of connections is out of scope in slice 2, so the strict object
+ * refuses it as an unknown key.
  */
 export const ProjectPolicySchema = z
   .object({
@@ -140,7 +179,8 @@ export const ProjectPolicySchema = z
       .refine(isDistinct, DISTINCT_MESSAGE)
       .optional(),
     promotion: ProjectPolicyPromotionSchema.optional(),
-    maxCostPerDayUsd: notBuilt('maxCostPerDayUsd'),
+    maxCostPerDayUsd: z.number().positive().max(POLICY_CEILING_MAX_COST_PER_DAY_USD).optional(),
+    builder: ProjectPolicyBuilderSchema.optional(),
     network: notBuilt('network'),
     approval: notBuilt('approval'),
   })
@@ -149,6 +189,17 @@ export const ProjectPolicySchema = z
 
 /** A parsed {@link ProjectPolicySchema} (ADR-0102 SD6, issue #524). */
 export type ProjectPolicy = z.infer<typeof ProjectPolicySchema>;
+
+/**
+ * Whether `ceiling` lets the agent named `agentName` build agents (issue #1851). Fails closed: an
+ * absent or `null` ceiling, an absent `builder` or an unlisted name allows nothing. Pure.
+ */
+export function builderAllows(
+  ceiling: ProjectPolicy | null | undefined,
+  agentName: string,
+): boolean {
+  return ceiling?.builder?.allow.includes(agentName) ?? false;
+}
 
 /**
  * The configuration a ceiling judges at one step (C14, issue #524): an agent's permissions and

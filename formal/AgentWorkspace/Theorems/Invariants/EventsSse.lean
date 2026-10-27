@@ -7,7 +7,7 @@ open AgentWorkspace AgentWorkspace.Events
 
 /-- Every successful append allocates the next sequence number, independent of retention. -/
 @[aw_spec (tier := T2) (doc := "docs/sdk/site/concepts/run-lifecycle.mdx#the-event-stream")
-  (ts := "apps/web/server/runs/store.ts#RunEventLog")]
+  (ts := "apps/web/server/runs/memory-store.ts#RunEventLog")]
 theorem append_allocates_next_id (limit : Nat) (log next : RunLog.Log) (event : RunLog.Event)
     (name : String) (data : JValue)
     (h : RunLog.append limit log name data = some (next, event)) :
@@ -20,7 +20,7 @@ theorem append_allocates_next_id (limit : Nat) (log next : RunLog.Log) (event : 
 
 /-- Successful append keeps exactly the newest `limit` rows of the previous retained log plus
 the new event. This states the retention suffix, not merely its size. -/
-@[aw_spec (tier := T2) (ts := "apps/web/server/runs/store.ts#RunEventLog")]
+@[aw_spec (tier := T2) (ts := "apps/web/server/runs/memory-store.ts#RunEventLog")]
 theorem append_retains_newest_suffix (limit : Nat) (log next : RunLog.Log)
     (event : RunLog.Event) (name : String) (data : JValue)
     (h : RunLog.append limit log name data = some (next, event)) :
@@ -33,14 +33,14 @@ theorem append_retains_newest_suffix (limit : Nat) (log next : RunLog.Log)
 
 /-- A closed event log refuses every subsequent append. -/
 @[aw_spec (tier := T2) (doc := "docs/sdk/site/concepts/run-lifecycle.mdx#the-event-stream")
-  (ts := "apps/web/server/runs/store.ts#RunEventLog")]
+  (ts := "apps/web/server/runs/memory-store.ts#RunEventLog")]
 theorem closed_log_refuses_append (limit : Nat) (log : RunLog.Log) (name : String)
     (data : JValue) : RunLog.append limit (RunLog.close log) name data = none := by
   simp [RunLog.append, RunLog.close]
 
 /-- Resume selects only retained events strictly later than the cursor. -/
 @[aw_spec (tier := T2) (doc := "docs/sdk/site/concepts/run-lifecycle.mdx#resuming")
-  (ts := "apps/web/server/runs/store.ts#RunEventLog")]
+  (ts := "apps/web/server/runs/memory-store.ts#RunEventLog")]
 theorem pending_is_strictly_after (log : RunLog.Log) (cursor : Nat)
     (event : RunLog.Event) (h : event ∈ RunLog.pending log cursor) :
     event.id > cursor := by
@@ -48,7 +48,7 @@ theorem pending_is_strictly_after (log : RunLog.Log) (cursor : Nat)
 
 /-- The in-memory stream cannot end before its cursor reaches the latest produced event. -/
 @[aw_spec (tier := T2) (doc := "docs/sdk/site/concepts/run-lifecycle.mdx#the-event-stream")
-  (ts := "apps/web/server/runs/store.ts#RunEventLog")]
+  (ts := "apps/web/server/runs/memory-store.ts#RunEventLog")]
 theorem memory_follow_does_not_skip_tail (log : RunLog.Log) (cursor : Nat)
     (h : RunLog.memoryMayEnd log cursor = true) : cursor ≥ log.lastId := by
   by_cases hc : cursor ≥ log.lastId
@@ -56,7 +56,7 @@ theorem memory_follow_does_not_skip_tail (log : RunLog.Log) (cursor : Nat)
   · simp [RunLog.memoryMayEnd, hc] at h
 
 /-- Catching up to the latest id is insufficient while the run remains open. -/
-@[aw_spec (tier := T2) (ts := "apps/web/server/runs/store.ts#RunEventLog")]
+@[aw_spec (tier := T2) (ts := "apps/web/server/runs/memory-store.ts#RunEventLog")]
 theorem memory_follow_waits_for_terminal (log : RunLog.Log) (cursor : Nat)
     (h : RunLog.memoryMayEnd log cursor = true) : log.closed = true := by
   by_cases hc : log.closed = true
@@ -74,6 +74,6 @@ example : ∃ next event, RunLog.append 2 RunLog.empty "system" (.obj []) = some
   ⟨_, _, rfl⟩
 
 example : RunLog.pending ⟨2, [⟨1, "system", .null⟩, ⟨2, "result", .null⟩], true⟩ 1 =
-    [⟨2, "result", .null⟩] := by decide
+    [⟨2, "result", .null⟩] := by decide +kernel
 
 end AgentWorkspace.Theorems.Invariants.EventsSse

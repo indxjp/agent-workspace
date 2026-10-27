@@ -99,7 +99,7 @@
       "area": "Browser and accessibility automation",
       "status": "partial",
       "releaseImpact": "required",
-      "evidence": ["tests/browser", ".github/workflows/quality.yml"],
+      "evidence": ["tests/browser", ".github/workflows/ci.yml"],
       "evidenceRequirement": { "id": "browser-accessibility", "maxAgeDays": 14, "approval": "none" }
     },
     {

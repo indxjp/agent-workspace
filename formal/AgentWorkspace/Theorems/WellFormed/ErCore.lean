@@ -1,3 +1,4 @@
+import ErSnapshot
 import AgentWorkspace.Er.Core
 
 /-!
@@ -87,7 +88,7 @@ elab "aw_er_catalogue_theorems" : command => do
     elabCommand (← `(command|
       $doc:docComment
       @[aw_spec (tier := $(mkIdent `T0)) (doc := $(Syntax.mkStrLit tablesDoc)) (ts := $tableTs)]
-      theorem $thm : tableWellFormed catalogue $tIdent = true := by decide))
+      theorem $thm : tableWellFormed catalogue $tIdent = true := by decide +kernel))
     for fk in s.foreignKeys do
       let cls := classify catalogue t fk
       let fkTs := Syntax.mkStrLit (path ++ "#" ++ (if fk.inline then s.tsExport else fk.name))
@@ -101,7 +102,7 @@ elab "aw_er_catalogue_theorems" : command => do
           (ts := $(Syntax.mkStrLit clsTs))]
         theorem $thm :
             fkVerdict catalogue $tIdent $(Syntax.mkStrLit fk.name) =
-              some (true, $(mkIdent (classTerm cls))) := by decide))
+              some (true, $(mkIdent (classTerm cls))) := by decide +kernel))
 
 /-! ### The catalogue against the `drizzle-kit` snapshot
 
@@ -121,7 +122,7 @@ private structure SnapTable where
   columns : List Column
   primaryKey : List String
   foreignKeys : List (String × List String × TableName × List String × OnDelete)
-  uniques : List (String × List String × UniqueKind × List String)
+  uniques : List (String × List String × UniqueKind × List String × List String)
   checks : List (String × Option (String × List String))
 
 private def objEntries (j : Json) (what : String) : Except String (List (String × Json)) :=
@@ -195,22 +196,28 @@ private def parseTable (j : Json) : Except String SnapTable := do
   let constraints ← ucs.mapM fun (_, u) => do
     let n ← u.getObjValAs? String "name"
     let cols ← strList (u.getObjValD "columns") n
-    pure (n, cols, UniqueKind.constraint, ([] : List String))
+    pure (n, cols, UniqueKind.constraint, ([] : List String), ([] : List String))
   let idxs ← objEntries (j.getObjValD "indexes") s!"{name}.indexes"
   let indexes ← idxs.filterMapM fun (_, ix) => do
     if !(← ix.getObjValAs? Bool "isUnique") then return none
     let n ← ix.getObjValAs? String "name"
     let cs ← (← ix.getObjValAs? (Array Json) "columns").toList.mapM
       (·.getObjValAs? String "expression")
-    let partialNull ← match ix.getObjValD "where" with
+    -- Each clause is `"t"."c" is null` or `"t"."c" is not null`; `true` marks `is not null`.
+    let filter ← match ix.getObjValD "where" with
       | .str w => (w.splitOn " and ").mapM fun clause =>
-          match clause.splitOn " is null" with
-          | [c, ""] => match columnRef name c with
-            | some c => pure c
-            | none => throw s!"{n}: WHERE clause {clause}"
-          | _ => throw s!"{n}: WHERE clause {clause}"
+          let (body, notNull) := match clause.splitOn " is not null" with
+            | [c, ""] => (some c, true)
+            | _ => match clause.splitOn " is null" with
+              | [c, ""] => (some c, false)
+              | _ => (none, false)
+          match body.bind (columnRef name) with
+          | some c => pure (c, notNull)
+          | none => throw s!"{n}: WHERE clause {clause}"
       | _ => pure []
-    pure (some (n, cs, UniqueKind.index, partialNull))
+    let partialNull := filter.filterMap fun (c, notNull) => if notNull then none else some c
+    let partialNotNull := filter.filterMap fun (c, notNull) => if notNull then some c else none
+    pure (some (n, cs, UniqueKind.index, partialNull, partialNotNull))
   let cks ← objEntries (j.getObjValD "checkConstraints") s!"{name}.checkConstraints"
   let checks ← cks.mapM fun (_, c) => do
     let n ← c.getObjValAs? String "name"
@@ -241,6 +248,7 @@ private def sqlTypeTerm : SqlType → CommandElabM Term
   | .timestamptz => `(SqlType.timestamptz)
   | .uuidArray => `(SqlType.uuidArray)
   | .textArray => `(SqlType.textArray)
+  | .tsvector => `(SqlType.tsvector)
 
 private def onDeleteTerm : OnDelete → CommandElabM Term
   | .noAction => `(OnDelete.noAction)
@@ -300,7 +308,7 @@ elab "aw_er_snapshot_theorems" : command => do
             (catalogue $tT).primaryKey = $(← strsTerm st.primaryKey) ∧
             (catalogue $tT).foreignKeys.length = $(quote st.foreignKeys.length) ∧
             (catalogue $tT).uniques.length = $(quote st.uniques.length) ∧
-            (catalogue $tT).checks.length = $(quote st.checks.length) := by decide))
+            (catalogue $tT).checks.length = $(quote st.checks.length) := by decide +kernel))
     for (n, cols, ref, refCols, od) in st.foreignKeys do
       let thm := mkIdent (Name.mkSimple s!"{n}_matches_snapshot")
       let doc := mkDocComment s!"The foreign key `{n}` of `{sql}` has the columns, target and \
@@ -311,8 +319,8 @@ elab "aw_er_snapshot_theorems" : command => do
         theorem $thm :
             (catalogue $tT).foreignKeySignature? $(Syntax.mkStrLit n) =
               some ($(← strsTerm cols), $(tableTerm ref), $(← strsTerm refCols),
-                $(← onDeleteTerm od)) := by decide))
-    for (n, cols, kind, partialNull) in st.uniques do
+                $(← onDeleteTerm od)) := by decide +kernel))
+    for (n, cols, kind, partialNull, partialNotNull) in st.uniques do
       let thm := mkIdent (Name.mkSimple s!"{n}_matches_snapshot")
       let doc := mkDocComment s!"The unique key `{n}` of `{sql}` has the columns, kind and partial \
         filter that `drizzle-kit` records for it."
@@ -321,8 +329,9 @@ elab "aw_er_snapshot_theorems" : command => do
         @[aw_spec (tier := $(mkIdent `T0)) (doc := $(Syntax.mkStrLit tablesDoc)) (ts := $(cite n))]
         theorem $thm :
             (catalogue $tT).uniqueSignature? $(Syntax.mkStrLit n) =
-              some ($(← strsTerm cols), $(← uniqueKindTerm kind), $(← strsTerm partialNull)) := by
-          decide))
+              some ($(← strsTerm cols), $(← uniqueKindTerm kind), $(← strsTerm partialNull),
+                $(← strsTerm partialNotNull)) := by
+          decide +kernel))
     for (n, closed) in st.checks do
       let thm := mkIdent (Name.mkSimple s!"{n}_matches_snapshot")
       match closed with
@@ -335,7 +344,7 @@ elab "aw_er_snapshot_theorems" : command => do
             (ts := $(cite n)) (ts := "packages/core/src/db/schema/one-of.ts#oneOf")]
           theorem $thm :
               (catalogue $tT).oneOfCheck? $(Syntax.mkStrLit n) =
-                some ($(Syntax.mkStrLit c), $(← strsTerm vs)) := by decide))
+                some ($(Syntax.mkStrLit c), $(← strsTerm vs)) := by decide +kernel))
       | none =>
         let doc := mkDocComment s!"The check `{n}` of `{sql}` is recorded, and not as a closed \
           set, because the body `drizzle-kit` records for it is not `column IN (…)`."
@@ -344,7 +353,7 @@ elab "aw_er_snapshot_theorems" : command => do
           @[aw_spec (tier := $(mkIdent `T0)) (doc := $(Syntax.mkStrLit tablesDoc)) (ts := $(cite n))]
           theorem $thm :
               (catalogue $tT).check? $(Syntax.mkStrLit n) =
-                some (Check.other $(Syntax.mkStrLit n)) := by decide))
+                some (Check.other $(Syntax.mkStrLit n)) := by decide +kernel))
 
 end Generator
 
@@ -375,7 +384,7 @@ theorem unknown_table_name_is_rejected (s : String) (h : s ∉ WireEnum.wires Ta
   (WireEnum.ofWire?_eq_none_iff s).mpr h
 
 example : WireEnum.ofWire? (α := TableName) "agent" = none :=
-  unknown_table_name_is_rejected "agent" (by decide)
+  unknown_table_name_is_rejected "agent" (by decide +kernel)
 
 /-- Every table's specification describes that table. -/
 @[aw_spec (tier := T0) (ts := "packages/core/src/db/schema/index.ts")]
@@ -386,14 +395,14 @@ theorem catalogue_describes_each_table (t : TableName) : (catalogue t).table = t
 @[aw_spec (tier := T0) (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
   (ts := "packages/core/src/db/schema/index.ts")]
 theorem every_table_is_well_formed (t : TableName) : tableWellFormed catalogue t = true := by
-  cases t <;> decide
+  cases t <;> decide +kernel
 
 /-- No foreign key of the catalogue is unpaired: every reference between two tenant-carrying
 tables is tenant-paired, by itself or by a sibling. -/
 @[aw_spec (tier := T0) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
   (ts := "packages/core/src/db/schema/tenancy.test.ts#tenantPairingFault")]
 theorem catalogue_pairing_is_complete : pairingComplete catalogue = true := by
-  decide
+  decide +kernel
 
 /-- Every constraint name (foreign key, unique key, check) is unique across the whole schema. -/
 @[aw_spec (tier := T0) (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
@@ -416,7 +425,7 @@ theorem catalogue_constraint_counts :
 @[aw_spec (tier := T0) (ts := "packages/core/src/db/schema/columns.ts#primaryKeyId")]
 theorem id_kind_iff_id_primary_key (t : TableName) :
     (TableName.idKind? t).isSome = ((catalogue t).primaryKey == ["id"]) := by
-  cases t <;> decide
+  cases t <;> decide +kernel
 
 /-- Distinct tables have distinct identifier kinds, so a typed id names one table. -/
 @[aw_spec (tier := T0) (ts := "packages/core/src/db/schema/columns.ts#primaryKeyId")]
@@ -437,15 +446,18 @@ theorem every_id_kind_names_a_table (k : IdKind) : ∃ t, TableName.idKind? t = 
     | exact ⟨.invitations, rfl⟩ | exact ⟨.browserTokens, rfl⟩ | exact ⟨.cliSessions, rfl⟩
     | exact ⟨.agents, rfl⟩
     | exact ⟨.agentFiles, rfl⟩ | exact ⟨.agentGrants, rfl⟩ | exact ⟨.agentMcpServers, rfl⟩
-    | exact ⟨.agentSkills, rfl⟩ | exact ⟨.agentVersions, rfl⟩
+    | exact ⟨.agentSkills, rfl⟩ | exact ⟨.agentStorageGrants, rfl⟩ | exact ⟨.agentVersions, rfl⟩
+    | exact ⟨.agentVersionStorageGrants, rfl⟩
     | exact ⟨.agentVersionEvaluations, rfl⟩ | exact ⟨.agentPointerMoves, rfl⟩
     | exact ⟨.endpointClients, rfl⟩ | exact ⟨.oauthTokens, rfl⟩ | exact ⟨.skills, rfl⟩
-    | exact ⟨.files, rfl⟩
+    | exact ⟨.skillRevisions, rfl⟩ | exact ⟨.files, rfl⟩ | exact ⟨.fileTexts, rfl⟩
     | exact ⟨.mcpServers, rfl⟩ | exact ⟨.modelConnections, rfl⟩ | exact ⟨.runtimeProfiles, rfl⟩
     | exact ⟨.runtimeVerifications, rfl⟩ | exact ⟨.secrets, rfl⟩ | exact ⟨.projects, rfl⟩ | exact ⟨.sessions, rfl⟩
     | exact ⟨.runs, rfl⟩ | exact ⟨.runTokens, rfl⟩ | exact ⟨.runUsageRecords, rfl⟩
     | exact ⟨.runFeedback, rfl⟩
     | exact ⟨.shares, rfl⟩ | exact ⟨.shareViews, rfl⟩ | exact ⟨.auditEvents, rfl⟩
+    | exact ⟨.triggers, rfl⟩ | exact ⟨.triggerDeliveries, rfl⟩
+    | exact ⟨.builderToolCalls, rfl⟩ | exact ⟨.storageConnections, rfl⟩ | exact ⟨.storageMigrationRuns, rfl⟩
 
 /-- Every closed-set check constrains a `text` column. -/
 @[aw_spec (tier := T0) (ts := "packages/core/src/db/schema/one-of.ts#oneOf")]
@@ -453,7 +465,7 @@ theorem closed_set_checks_constrain_text_columns :
     allTables.all (fun t => (catalogue t).checks.all fun
       | .oneOf _ c _ => ((catalogue t).column? c).map (·.type) == some .text
       | .other _ => true) = true := by
-  decide
+  decide +kernel
 
 /-- `renderValueList` accepts a list exactly when it is non-empty, duplicate-free and made of
 safe slugs. -/
@@ -464,13 +476,22 @@ theorem render_value_list_accepts_iff (vs : List String) :
   by_cases h1 : vs = [] <;> by_cases h2 : vs.all isSafeValue = true <;> by_cases h3 : vs.Nodup <;>
     simp [h1, h2, h3]
 
-example : renderValueList? ["read", "read-write"] = some "('read', 'read-write')" := by decide
+example : renderValueList? ["read", "read-write"] = some "('read', 'read-write')" := by decide +kernel
+
+/-- The snake gate admits `awaiting_approval` and refuses a hyphen, a doubled or trailing
+underscore, and a mix of the two shapes. -/
+example : renderSnakeValueList? ["running", "awaiting_approval"] =
+      some "('running', 'awaiting_approval')" ∧
+    renderSnakeValueList? ["openai-compatible"] = none ∧
+    isSafeSnakeValue "awaiting_" = false ∧ isSafeSnakeValue "awaiting__approval" = false ∧
+    renderOneOf? "runs_status_valid" ["awaiting_approval"] = some "('awaiting_approval')" ∧
+    renderOneOf? "runs_provider_valid" ["awaiting_approval"] = none := by decide +kernel
 
 /-- A 64-character slug is exactly at `MAX_VALUE_LENGTH`, and the gate accepts it. -/
 @[aw_spec (tier := T0) (ts := "packages/core/src/db/schema/one-of.ts#MAX_VALUE_LENGTH")]
 theorem slug_of_64_characters_is_safe :
     isSafeValue (String.ofList (List.replicate 64 'a')) = true := by
-  decide
+  decide +kernel
 
 /-- A 65-character slug is one over `MAX_VALUE_LENGTH`, and the gate refuses it although every
 character is allowed. -/
@@ -478,7 +499,7 @@ character is allowed. -/
 theorem slug_of_65_characters_is_refused :
     isSafeValue (String.ofList (List.replicate 65 'a')) = false ∧
       (String.ofList (List.replicate 65 'a')).toList.all isSafeValueChar = true := by
-  decide
+  decide +kernel
 
 /-- A foreign key to a global identity table that includes `workspace_id` is a fault: the target
 has no tenant column to pair it with, so `classify` calls it unpaired. -/
@@ -495,7 +516,7 @@ example : classify catalogue .agents
     { name := "agents_creator_user_fk", columns := ["created_by", "workspace_id"],
       refTable := .users, refColumns := ["id", "id"], onDelete := .noAction, inline := false } =
       .unpaired :=
-  global_reference_with_workspace_column_is_unpaired _ _ _ rfl (by decide)
+  global_reference_with_workspace_column_is_unpaired _ _ _ rfl (by decide +kernel)
 
 /-- Every `*_id` column of the schema is covered by a foreign key or is one of the five declared
 non-references (`NON_REFERENCE_ID_COLUMNS`) with the type the declaration pins, and no declared
@@ -504,37 +525,43 @@ column is also covered by a foreign key. -/
   (ts := "packages/core/src/db/schema/tenancy.test.ts#NON_REFERENCE_ID_COLUMNS")]
 theorem every_id_column_is_a_reference_or_declared :
     idColumnsCovered catalogue nonReferenceIdColumns = true := by
-  decide
+  decide +kernel
 
 /-- The `*_id` columns no foreign key covers are exactly the declared non-references, all `text`
-but one: the provider's response id, the two polymorphic subject ids, the deployment master-key
-id, the SDK's resume id, the runtime driver a verification is for, and the `uuid` that groups the
-codes and tokens of one OAuth grant. -/
+but three: the provider's response id, the two polymorphic subject ids, the deployment master-key
+id, the SDK's resume id, the run that made an agent, the runtime driver a verification is for,
+and the `uuid` that groups the codes and tokens of one OAuth grant, and the `uuid` a file's, or a
+session-state blob's, object is stored under. -/
 @[aw_spec (tier := T0) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
   (ts := "packages/core/src/db/schema/tenancy.test.ts#NON_REFERENCE_ID_COLUMNS")]
 theorem uncovered_id_columns :
     allTables.flatMap (fun t => ((catalogue t).columns.filter fun c =>
         isIdColumn c.name && !(catalogue t).foreignKeys.any (·.columns.contains c.name)).map
           fun c => (t, c.name, c.type)) =
-      [(.auditEvents, "subject_id", .text), (.oauthTokens, "family_id", .uuid),
+      [(.agents, "created_by_run_id", .text),
+        (.auditEvents, "subject_id", .text), (.builderToolCalls, "run_id", .text),
+        (.builderToolCalls, "call_id", .text), (.builderToolCalls, "trace_id", .text),
+        (.builderToolCalls, "model_id", .text), (.files, "object_id", .uuid),
+        (.oauthTokens, "family_id", .uuid),
         (.runUsageRecords, "provider_response_id", .text),
-        (.runtimeVerifications, "driver_id", .text), (.secrets, "master_key_id", .text), (.sessions, "engine_session_id", .text),
+        (.runtimeVerifications, "driver_id", .text), (.secrets, "master_key_id", .text),
+        (.sessionStateBlobs, "object_id", .uuid), (.sessions, "engine_session_id", .text),
         (.shares, "subject_id", .text)] := by
-  decide
+  decide +kernel
 
 private theorem hex_digit_is_ascii (c : Char) (h : Uuid.isHexDigit c = true) : c.toNat < 128 := by
   simp only [Uuid.isHexDigit, Bool.or_eq_true, Bool.and_eq_true, decide_eq_true_eq] at h
   have : c.toNat ≤ 'f'.toNat := by
     rcases h with (⟨_, h⟩ | ⟨_, h⟩) | ⟨_, h⟩
-    · exact Nat.le_trans h (by decide)
+    · exact Nat.le_trans h (by decide +kernel)
     · exact h
-    · exact Nat.le_trans h (by decide)
+    · exact Nat.le_trans h (by decide +kernel)
   have hf : 'f'.toNat = 102 := rfl
   omega
 
 private theorem ascii_hex_digits : ∀ n, n < 128 → Uuid.isHexDigit (Char.ofNat n) = true →
     Char.ofNat n ∈ "0123456789abcdefABCDEF".toList := by
-  decide
+  decide +kernel
 
 private theorem hex_digit_mem (c : Char) (h : Uuid.isHexDigit c = true) :
     c ∈ "0123456789abcdefABCDEF".toList := by
@@ -558,15 +585,15 @@ theorem canonical_uuid_is_hex_and_hyphens (s : String) (h : Uuid.isCanonical s =
   split at this
   · have hm := hex_digit_mem _ this
     have hsub : ∀ x, x ∈ "0123456789abcdefABCDEF".toList → x ∈ "0123456789abcdefABCDEF-".toList := by
-      decide
+      decide +kernel
     exact hsub _ hm
   · simp only [beq_iff_eq] at this
     rw [this]
-    decide
+    decide +kernel
 
 example : ∀ c ∈ "123e4567-e89b-12d3-a456-426614174000".toList,
     c ∈ "0123456789abcdefABCDEF-".toList :=
-  canonical_uuid_is_hex_and_hyphens _ (by decide)
+  canonical_uuid_is_hex_and_hyphens _ (by decide +kernel)
 
 /-- A string of the canonical shape with a `g` in a digit position, at the start or at the end,
 is not a canonical UUID. -/
@@ -576,7 +603,7 @@ theorem uuid_with_a_non_hex_digit_is_refused :
     Uuid.isCanonical "g23e4567-e89b-12d3-a456-426614174000" = false ∧
       Uuid.isCanonical "123e4567-e89b-12d3-a456-42661417400g" = false ∧
       Uuid.isCanonical "123e4567-e89b-12d3-a456-426614174000" = true := by
-  decide
+  decide +kernel
 
 /-! ## The wire spellings of the catalogue's closed unions -/
 
@@ -588,12 +615,12 @@ theorem uuid_with_a_non_hex_digit_is_refused :
 theorem fk_class_wires :
     WireEnum.wires FkClass =
       ["root-reference", "global-reference", "tenant-paired", "sibling-paired", "unpaired"] := by
-  decide
+  decide +kernel
 
 /-- The tenancy classes are spelled `root`, `global` and `scoped`. -/
 @[aw_spec (tier := T0) (ts := "packages/core/src/db/schema/tenancy.test.ts#TENANT_EXEMPT")]
 theorem tenancy_wires : WireEnum.wires Tenancy = ["root", "global", "scoped"] := by
-  decide
+  decide +kernel
 
 /-- The `ON DELETE` actions are spelled as `drizzle-kit` records them: `no action`, `restrict`,
 `cascade` and `set null`. -/
@@ -601,14 +628,14 @@ theorem tenancy_wires : WireEnum.wires Tenancy = ["root", "global", "scoped"] :=
   (ts := "migrations/meta/0039_snapshot.json#onDelete")]
 theorem on_delete_wires :
     WireEnum.wires OnDelete = ["no action", "restrict", "cascade", "set null"] := by
-  decide
+  decide +kernel
 
 /-- The unique-key kinds are spelled `constraint` (an entry of the snapshot's `uniqueConstraints`) and
 `index` (an index the snapshot marks `isUnique`). -/
 @[aw_spec (tier := T0) (ts := "migrations/meta/0039_snapshot.json#uniqueConstraints")
   (ts := "migrations/meta/0039_snapshot.json#isUnique")]
 theorem unique_kind_wires : WireEnum.wires UniqueKind = ["constraint", "index"] := by
-  decide
+  decide +kernel
 
 /-! ## Tenancy facts of the catalogue -/
 
@@ -619,7 +646,7 @@ theorem scoped_tables_reference_the_root_once (t : TableName)
     (h : (catalogue t).tenancy = .scoped) :
     ((catalogue t).foreignKeys.filter fun fk => classify catalogue t fk == .rootReference).length
       = 1 := by
-  cases t <;> first | (exfalso; revert h; decide) | decide
+  cases t <;> first | (exfalso; revert h; decide +kernel) | decide +kernel
 
 example : (catalogue .agents).tenancy = .scoped := rfl
 
@@ -630,7 +657,7 @@ its rows (a schema fact `tenancy.test.ts` does not check). -/
 theorem every_root_reference_cascades :
     allTables.all (fun t => (catalogue t).foreignKeys.all fun fk =>
       classify catalogue t fk != .rootReference || fk.onDelete == .cascade) = true := by
-  decide
+  decide +kernel
 
 /-! ## Negative well-formedness: each rule refuses the fault it names
 
@@ -690,17 +717,23 @@ def repeatedFkColumn : Schema :=
 /-- `agent_files` with a unique key over a column it lacks. -/
 def uniqueOverMissingColumn : Schema :=
   catalogue.update .agentFiles fun s =>
-    { s with uniques := s.uniques ++ [⟨"agent_files_nope_key", ["nope"], .constraint, []⟩] }
+    { s with uniques := s.uniques ++ [⟨"agent_files_nope_key", ["nope"], .constraint, [], []⟩] }
 
 /-- `agent_files` with a unique key over no columns. -/
 def emptyUnique : Schema :=
   catalogue.update .agentFiles fun s =>
-    { s with uniques := s.uniques ++ [⟨"agent_files_empty_key", [], .constraint, []⟩] }
+    { s with uniques := s.uniques ++ [⟨"agent_files_empty_key", [], .constraint, [], []⟩] }
 
 /-- `agent_files` with a partial unique key filtered on a column it lacks. -/
 def partialOverMissingColumn : Schema :=
   catalogue.update .agentFiles fun s =>
-    { s with uniques := s.uniques ++ [⟨"agent_files_partial_key", ["agent_id"], .index, ["nope"]⟩] }
+    { s with uniques := s.uniques ++ [⟨"agent_files_partial_key", ["agent_id"], .index, ["nope"], []⟩] }
+
+/-- `agent_files` with a partial unique key whose `IS NOT NULL` filter names a column outside the
+key. -/
+def notNullFilterOutsideKey : Schema :=
+  catalogue.update .agentFiles fun s =>
+    { s with uniques := s.uniques ++ [⟨"agent_files_set_key", ["agent_id"], .index, [], ["file_id"]⟩] }
 
 /-- `agent_files_access_valid` over a column the table lacks. -/
 def checkOverMissingColumn : Schema :=
@@ -764,7 +797,7 @@ theorem fk_type_mismatch_is_ill_formed :
     fkVerdict Mutant.fileIdAsText .agentFiles "agent_files_file_workspace_fk" =
         some (false, .tenantPaired) ∧
       tableWellFormed Mutant.fileIdAsText .agentFiles = false := by
-  decide
+  decide +kernel
 
 /-- A foreign key whose target columns are not a primary or total unique key of the parent is
 ill formed. -/
@@ -774,7 +807,7 @@ theorem fk_to_a_non_key_is_ill_formed :
     fkVerdict Mutant.nonKeyTarget .agentFiles "agent_files_agent_workspace_fk" =
         some (false, .tenantPaired) ∧
       tableWellFormed Mutant.nonKeyTarget .agentFiles = false := by
-  decide
+  decide +kernel
 
 /-- An inline (column-level) foreign key over two columns is ill formed. -/
 @[aw_spec (tier := T0)
@@ -783,7 +816,7 @@ theorem inline_composite_fk_is_ill_formed :
     fkVerdict Mutant.inlineComposite .agentFiles "agent_files_agent_workspace_fk" =
         some (false, .tenantPaired) ∧
       tableWellFormed Mutant.inlineComposite .agentFiles = false := by
-  decide
+  decide +kernel
 
 /-- A foreign key with more child columns than parent columns, or naming a child column twice,
 is ill formed. -/
@@ -796,14 +829,14 @@ theorem fk_arity_and_repetition_are_ill_formed :
         some false ∧
       tableWellFormed Mutant.arityMismatch .agentFiles = false ∧
       tableWellFormed Mutant.repeatedFkColumn .agentFiles = false := by
-  decide
+  decide +kernel
 
 /-- A table whose primary key is nullable, or empty, is ill formed. -/
 @[aw_spec (tier := T0) (ts := "packages/core/src/db/schema/columns.ts#primaryKeyId")]
 theorem nullable_or_empty_primary_key_is_ill_formed :
     tableWellFormed Mutant.nullableId .agentFiles = false ∧
       tableWellFormed Mutant.emptyPrimaryKey .agentFiles = false := by
-  decide
+  decide +kernel
 
 /-- A table with two columns, or two constraints, of the same name is ill formed, and so is a
 specification filed under another table's name. -/
@@ -813,17 +846,18 @@ theorem duplicate_names_are_ill_formed :
     tableWellFormed Mutant.duplicateColumn .agentFiles = false ∧
       tableWellFormed Mutant.duplicateConstraint .agentFiles = false ∧
       tableWellFormed Mutant.wrongTable .agentFiles = false := by
-  decide
+  decide +kernel
 
-/-- A unique key over no columns, over a column the table lacks, or filtered on a column the
-table lacks is ill formed. -/
+/-- A unique key over no columns, over a column the table lacks, filtered on a column the table
+lacks, or with an `IS NOT NULL` filter outside its columns is ill formed. -/
 @[aw_spec (tier := T0) (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
-  (ts := "packages/core/src/db/schema/invitations.ts#uniqueIndex")]
+  (ts := "packages/core/src/db/schema/invitations.ts#invitations_workspace_email_pending_key")]
 theorem malformed_unique_keys_are_ill_formed :
     tableWellFormed Mutant.uniqueOverMissingColumn .agentFiles = false ∧
       tableWellFormed Mutant.emptyUnique .agentFiles = false ∧
-      tableWellFormed Mutant.partialOverMissingColumn .agentFiles = false := by
-  decide
+      tableWellFormed Mutant.partialOverMissingColumn .agentFiles = false ∧
+      tableWellFormed Mutant.notNullFilterOutsideKey .agentFiles = false := by
+  decide +kernel
 
 /-- A closed-set check over a column the table lacks, with no values, or with a repeated value
 is ill formed. -/
@@ -832,7 +866,7 @@ theorem malformed_closed_set_checks_are_ill_formed :
     tableWellFormed Mutant.checkOverMissingColumn .agentFiles = false ∧
       tableWellFormed Mutant.checkWithoutValues .agentFiles = false ∧
       tableWellFormed Mutant.checkWithRepeatedValue .agentFiles = false := by
-  decide
+  decide +kernel
 
 /-- A scoped table breaks the tenancy rule when its `workspace_id` is nullable, is not `uuid`,
 or when it has no reference, or two, to the tenant root. -/
@@ -844,7 +878,7 @@ theorem scoped_tenancy_faults_are_refused :
       tenancyWellFormed Mutant.noRootReference .agentFiles = false ∧
       tenancyWellFormed Mutant.twoRootReferences .agentFiles = false ∧
       tableWellFormed Mutant.noRootReference .agentFiles = false := by
-  decide
+  decide +kernel
 
 /-- An exempt table breaks the tenancy rule when it carries a `workspace_id`, and the root does
 when it is keyed by anything other than `id`. -/
@@ -854,7 +888,7 @@ theorem exempt_tenancy_faults_are_refused :
     tenancyWellFormed Mutant.rootWithWorkspaceColumn .workspaces = false ∧
       tenancyWellFormed Mutant.rootKeyedBySlug .workspaces = false ∧
       tenancyWellFormed Mutant.globalWithWorkspaceColumn .users = false := by
-  decide
+  decide +kernel
 
 
 /-! ## Boundaries the positive theorems cannot notice -/
@@ -882,7 +916,7 @@ theorem composite_root_reference_is_unpaired :
         "agent_files_workspace_id_workspaces_id_fk").map (·.2) = some .unpaired ∧
       tenancyWellFormed Mutant.compositeRootReference .agentFiles = false ∧
       pairingComplete Mutant.compositeRootReference = false := by
-  decide
+  decide +kernel
 
 /-- Rule 3 says "covered by a foreign key or declared, never both": declaring
 `agents.model_connection_id`, which two foreign keys cover, as a non-reference fails the gate,
@@ -894,7 +928,7 @@ theorem declared_reference_column_is_refused :
         some ⟨"model_connection_id", .uuid, false⟩ ∧
       idColumnsCovered catalogue ((.agents, "model_connection_id", .uuid) :: nonReferenceIdColumns)
         = false := by
-  decide
+  decide +kernel
 
 /-- `SAFE_VALUE` at its edges: a trailing hyphen, a double hyphen, a leading digit or hyphen, an
 underscore and the empty string are refused; single hyphens between runs of letters and digits,
@@ -904,6 +938,6 @@ theorem safe_value_boundaries :
     isSafeValue "a-" = false ∧ isSafeValue "a--b" = false ∧ isSafeValue "1a" = false ∧
       isSafeValue "-a" = false ∧ isSafeValue "a_b" = false ∧ isSafeValue "" = false ∧
       isSafeValue "a" = true ∧ isSafeValue "a-b" = true ∧ isSafeValue "a1-b2-c3" = true := by
-  decide
+  decide +kernel
 
 end AgentWorkspace.Theorems.WellFormed.ErCore

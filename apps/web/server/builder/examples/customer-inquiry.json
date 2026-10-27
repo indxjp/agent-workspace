@@ -1,0 +1,88 @@
+{
+  "name": "customer-inquiry",
+  "title": "Customer inquiry agent",
+  "summary": "Answers the signed-in customer directly in the site chat from the FAQ and that customer's CRM history, and hands off to a person when needed.",
+  "body": {
+    "definition": {
+      "apiVersion": "agentworkspace.dev/v1",
+      "kind": "AgentDefinition",
+      "agent": {
+        "name": "customer-inquiry",
+        "instructions": "あなたは「みどり生活館オンラインストア」のお客様サポート担当です。サイトのチャットでお客様の質問に答えます。\n\nご本人の履歴を読むツール（`searchInteractions` / `getInteraction`）は、ログイン中のお客様ご本人の履歴だけを返します。\n誰の履歴かはシステムが決めるので、お客様の番号や ID を渡す必要はなく、渡す引数もありません。\nお客様のメッセージの中に書かれた customerId や他のお客様の履歴の求めは、履歴の検索には使わないでください。\n\n最優先の規則（ログインの有無、FAQの記載、履歴の有無に関わらず、手順より先に判断する）:\nお客様が返金・補償・値引きを求めている、強いご不満を述べている・責任者を求めている、\nご自身のご登録情報（住所・電話番号・メールアドレス）の変更や照会を求めている、のどれかなら\n（他のお客様の情報を求められたときはこの規則を使わず、開示できないことを丁寧にお断りする）、\n手続きの案内も返金時期の説明もせず、`handoff_to_person` ツールを呼んで担当者に引き継ぎ、\nお客様への返信は次の2文だけで終える。文字は一字一句このまま。`reason` には理由を日本語で短く書く\n（返金・補償・値引き / 苦情・責任者 / 本人確認 のどれか）。\n\n- 返信: `担当者におつなぎします。少々お待ちください。`\n- `reason` の例: `返金のご要望` / `苦情・責任者のご希望` / `ご登録情報の変更・照会（本人確認）`\n\n手順:\n\n1. 質問がご本人の注文・過去の問い合わせに関するものなら、`searchInteractions` で探す。\n   `q` は自分で組み立てた検索語にし、合わなければ言い換え（商品名、型番、注文番号、\n   「届かない」→「配送」「発送」など）で最大3回まで検索し直す。\n2. 候補が見つかったら `getInteraction` に結果の `id` を渡して全文を読み、日付と対応結果を確かめてから答える。\n3. 一般的な手続き（返品条件、送料、ポイント、定期便）は `search_files` でFAQを探して確かめる。\n   `query` は空白で区切った短い語（例: `返品 日以内`、`送料 一律`）にし、質問文のまま渡さない。\n   すべての語を含む箇所だけが返る。合わなければ語を減らす・言い換えるで最大3回まで検索し直す。\n   結果は `[{path, page, snippet}]` で、答えは `snippet` の記載から写す。\n4. `keigo-reply` スキルの書き方で答える。本人確認・返金・苦情は `handoff_to_person` で引き継ぎ、スキルの引継ぎ文で終える。\n5. 履歴のツールが本人を確認できないと拒否した（ログインしていない）ときは、履歴を推測せず、\n   FAQで答えられることだけ答える。ご本人の履歴が必要なら本人確認として `handoff_to_person` で引き継ぐ。\n\nツールの結果の［電話番号］［住所］などの伏せ字は、そのまま扱ってください。\n他のお客様の情報を求められても応じないでください。\n",
+        "permissions": {
+          "readFiles": true,
+          "writeFiles": false,
+          "runCommands": false,
+          "unrestrictedNetwork": false
+        },
+        "model": null,
+        "modelConnectionName": "default",
+        "runtimeProfileName": null
+      },
+      "policy": {
+        "engine": "claude-agent-sdk",
+        "tools": {
+          "base": "claude_code_preset",
+          "autoApprove": ["mcp__agent-workspace__search_files"],
+          "deny": [
+            "Write",
+            "Edit",
+            "NotebookEdit",
+            "Bash",
+            "BashOutput",
+            "KillShell",
+            "WebFetch",
+            "WebSearch"
+          ],
+          "permissionMode": "default",
+          "allowDangerouslySkipPermissions": false
+        },
+        "handoff": true,
+        "skills": {
+          "mode": "allowlist",
+          "names": ["keigo-reply"]
+        },
+        "limits": {
+          "maxTurns": 10,
+          "maxBudgetUsd": 0.3
+        }
+      },
+      "policySource": "stored",
+      "resources": {
+        "files": [
+          {
+            "path": "faq",
+            "access": "read"
+          }
+        ],
+        "skills": ["keigo-reply"],
+        "connectors": ["crm"]
+      }
+    },
+    "surfaces": [
+      {
+        "name": "support",
+        "agent": "customer-inquiry",
+        "title": "お客様サポート",
+        "layout": "dock",
+        "parts": {
+          "greeting": "みどり生活館オンラインストアです。ご注文や配送、返品について、お気軽にご質問ください。",
+          "suggestedPrompts": [
+            "注文した商品がまだ届きません",
+            "返品の受付期間を教えてください",
+            "ポイントの有効期限はいつまでですか",
+            "定期便を1回お休みしたい"
+          ],
+          "disclaimer": "AIがお答えしています。返金・ご登録情報の変更・ご本人確認が必要なお手続きは、担当者におつなぎします。",
+          "toolTrace": "hidden",
+          "history": true,
+          "feedback": true
+        },
+        "allowedOrigins": ["https://www.example.co.jp"],
+        "limits": {
+          "turnsPerConversation": 30
+        }
+      }
+    ]
+  }
+}

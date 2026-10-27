@@ -37,6 +37,7 @@
  * Like `repository.ts`, this reads `../db/**` by relative path from inside the package that owns
  * the database layer — permitted, and for the same reason; see `repository.ts`'s header.
  */
+import { isUuid } from '@indx-workspace/contracts';
 import { and, eq } from 'drizzle-orm';
 
 import type { Database } from '../db/client.js';
@@ -89,8 +90,41 @@ export async function resolveSecretByName(
     .where(and(eq(secrets.workspaceId, checked.workspaceId), eq(secrets.name, name)))
     .limit(1);
   const row = rows[0];
-  if (row === undefined) return null;
+  return row === undefined ? null : openRow(masterKey, row);
+}
 
+/**
+ * Read one secret's envelope by id, scoped to `scope`'s workspace, and decrypt it.
+ *
+ * Answers `null` for an id this workspace has no secret under — including an id that exists in a
+ * *different* workspace and an id that is not a UUID at all (the column is `uuid`, so PostgreSQL
+ * would otherwise raise `22P02` instead of answering "not found"). Same "not found rather than
+ * forbidden" choice as {@link resolveSecretByName}.
+ *
+ * Propagates {@link ../secrets/envelope.js!MasterKeyMismatchError} and any AES-GCM authentication
+ * failure rather than catching either (ADR-0015).
+ */
+export async function resolveSecretById(
+  db: Database,
+  scope: WorkspaceScope,
+  masterKey: MasterKey,
+  id: string,
+): Promise<ResolvedSecret | null> {
+  const checked = requireWorkspaceScope(scope, 'resolveSecretById');
+  if (!isUuid(id)) return null;
+  const rows = await db
+    .select(ENVELOPE_COLUMNS)
+    .from(secrets)
+    .where(and(eq(secrets.workspaceId, checked.workspaceId), eq(secrets.id, id)))
+    .limit(1);
+  const row = rows[0];
+  return row === undefined ? null : openRow(masterKey, row);
+}
+
+function openRow(
+  masterKey: MasterKey,
+  row: SecretEnvelope & { readonly name: string },
+): ResolvedSecret {
   const envelope: SecretEnvelope = {
     algorithm: row.algorithm,
     masterKeyId: row.masterKeyId,

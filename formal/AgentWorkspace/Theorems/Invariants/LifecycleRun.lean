@@ -50,7 +50,7 @@ private theorem sequence_preserves_invariant (s : RunState) (h : lifecycleInvari
 revoked gateway run tokens at the same transition. -/
 @[aw_spec (tier := T2)
   (doc := "docs/sdk/site/concepts/run-lifecycle.mdx#from-start-to-a-terminal-status")
-  (ts := "apps/web/server/runs/store.ts#InMemoryRunStore")
+  (ts := "apps/web/server/runs/memory-store.ts#InMemoryRunStore")
   (ts := "packages/core/src/db/repositories/runs.ts#finish")]
 theorem every_sequence_closes_at_terminal (actions : List RunAction) :
     let s := runActions ({} : RunState) actions

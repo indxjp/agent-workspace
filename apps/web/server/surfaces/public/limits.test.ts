@@ -10,11 +10,9 @@ import {
   SURFACE_RATE_LIMITS,
   turnsPerConversation,
 } from './limits';
-import {
-  clearSurfaceSessionsRuntime,
-  configureSurfaceSessionsRuntime,
-  type VisitorSurface,
-} from './runtime';
+import { type VisitorSurface } from './runtime';
+import { installTestDomains } from '../../application-context-fixtures';
+import { clearApplicationContext } from '../../application-context';
 
 const WORKSPACE = '33333333-3333-4333-8333-333333333333';
 const SESSION = '11111111-1111-4111-8111-111111111111';
@@ -30,7 +28,7 @@ const client = (address: string): Headers => new Headers({ 'x-forwarded-for': ad
 
 afterEach(() => {
   resetSurfaceLimits();
-  clearSurfaceSessionsRuntime();
+  clearApplicationContext();
 });
 
 describe('a surface visitor’s turn cap (issue #622)', () => {
@@ -73,15 +71,46 @@ describe('a surface visitor’s turn cap (issue #622)', () => {
   });
 });
 
+describe('a surface visitor’s upload rate (issue #1308)', () => {
+  const upload = (session: string) =>
+    admitVisitorWrite(PLAIN, session, 'attachment', client('203.0.113.7'), NOW, PROXIED);
+
+  it('admits ten a minute per visitor session, then answers a typed 429 with Retry-After', () => {
+    for (let sent = 0; sent < SURFACE_RATE_LIMITS.attachmentsPerSession; sent += 1) {
+      expect(upload(SESSION)).toBeNull();
+    }
+    expect(upload(SESSION)).toMatchObject({ code: 'surface_rate_limited', retryAfterSeconds: 60 });
+    expect(upload(OTHER_SESSION)).toBeNull();
+  });
+
+  it('counts against the per-client limit too, and never against the turn cap', () => {
+    const sessionsLeft =
+      SURFACE_RATE_LIMITS.attachmentsPerClient - SURFACE_RATE_LIMITS.attachmentsPerSession;
+    for (let sent = 0; sent < SURFACE_RATE_LIMITS.attachmentsPerSession; sent += 1) upload(SESSION);
+    for (let sent = 0; sent < sessionsLeft; sent += 1) {
+      expect(upload(crypto.randomUUID())).toBeNull();
+    }
+    expect(upload(OTHER_SESSION)).toMatchObject({ code: 'surface_rate_limited' });
+    expect(
+      admitVisitorWrite(PLAIN, 'turn-only', 'turn', client('198.51.100.9'), NOW, PROXIED),
+    ).toBeNull();
+  });
+});
+
 describe('admitSurfaceVisitorWrite, the run API hook (issue #622)', () => {
   function install(visitor: VisitorSurface | null): void {
-    configureSurfaceSessionsRuntime({
-      resolve: () => Promise.reject(new Error('the hook never resolves a name')),
-      open: () => Promise.reject(new Error('the hook never opens a session')),
-      checkModel: () => Promise.reject(new Error('the hook never checks a model')),
-      visitorSurface: (workspaceId, sessionId) =>
-        Promise.resolve(workspaceId === WORKSPACE && sessionId === SESSION ? visitor : null),
-      servedSurfaces: () => Promise.reject(new Error('the limits never list surfaces')),
+    installTestDomains({
+      surfaces: {
+        kind: 'serving',
+        runtime: {
+          resolve: () => Promise.reject(new Error('the hook never resolves a name')),
+          open: () => Promise.reject(new Error('the hook never opens a session')),
+          checkModel: () => Promise.reject(new Error('the hook never checks a model')),
+          visitorSurface: (workspaceId, sessionId) =>
+            Promise.resolve(workspaceId === WORKSPACE && sessionId === SESSION ? visitor : null),
+          servedSurfaces: () => Promise.reject(new Error('the limits never list surfaces')),
+        },
+      },
     });
   }
 

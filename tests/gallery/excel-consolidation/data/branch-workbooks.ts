@@ -2,7 +2,7 @@
  * The branch sales workbooks corporate planning receives every month, as they really arrive: five
  * branches, five layouts, none of them designed to be consolidated. The .xlsx files beside this
  * one are written from it with the office-reader skill's writer (`GALLERY_WRITE=1` regenerates
- * them), so the install-live harness's `FILE_ROOT=<project>/data` finds them.
+ * them), so the harness's `search_files` double reads them from `<project>/data` like uploaded files.
  *
  * | Branch | Sheet | Header | Date | Unit | Traps |
  * | --- | --- | --- | --- | --- | --- |
@@ -17,7 +17,10 @@
 import { mkdirSync, utimesSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
-import { writeXlsx, type CellValue } from '../../shared/skills/office-reader/scripts/ooxml.mjs';
+import {
+  writeXlsx,
+  type CellValue,
+} from '@agent-workspace/skills-office/office-reader/scripts/ooxml.mjs';
 
 type Rows = (CellValue | null)[][];
 
@@ -28,7 +31,7 @@ interface Sheet {
 }
 
 export interface BranchFile {
-  /** Relative to the file server's root, as `find_files` returns it. */
+  /** The workspace path (relative to `data/`), as `search_files` returns it. */
   readonly path: string;
   readonly modified: string;
   readonly sheets: readonly Sheet[];

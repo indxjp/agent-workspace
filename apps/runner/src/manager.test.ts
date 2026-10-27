@@ -2,9 +2,11 @@ import { createServer } from 'node:http';
 
 import { describe, expect, it, vi } from 'vitest';
 
-import type { RuntimeHandle } from '@agent-workspace/runtime';
+import type { RuntimeHandle } from '@agent-workspace/runtime/driver';
+import { RUN_FILES_MAX_BYTES } from '@agent-workspace/runtime/transfer';
 
-import { createRunnerManagerServer, type ManagedRuntimeDriver } from './manager.js';
+import { createRunnerManagerServer } from './manager.js';
+import type { ManagedRuntimeDriver } from './manager-support.js';
 
 const TOKEN = 'runner-manager-fixture-token-more-than-32-characters';
 
@@ -195,6 +197,55 @@ describe('runner manager Docker lifecycle', () => {
       ).toBe(404);
     });
   });
+
+  it(
+    '[US-STO-06][unit][run] passes a /files archive whose tar framing exceeds the payload limit',
+    { timeout: 120_000 },
+    async () => {
+      await withManager(async (base, _fixture, proxy) => {
+        let received = 0;
+        proxy.mockImplementation(async (input, init) => {
+          const upstreamBody = init?.body;
+          const url = new URL(input instanceof Request ? input.url : String(input));
+          if (url.pathname !== '/files' || !(upstreamBody instanceof ReadableStream)) {
+            return Response.json({ status: 'ok' });
+          }
+          for await (const chunk of upstreamBody as AsyncIterable<Uint8Array>) {
+            received += chunk.byteLength;
+          }
+          return new Response(null, { status: 204 });
+        });
+        const created = await fetch(`${base}/runtimes`, {
+          method: 'POST',
+          headers: authenticated,
+          body: JSON.stringify(allocationBody),
+        });
+        const value = (await created.json()) as { runnerUrl: string };
+        // One RUN_FILES_MAX_BYTES file: its header and the trailer are on top of the payload.
+        const archiveBytes = RUN_FILES_MAX_BYTES + 512 + 1024;
+        let sent = 0;
+        const body = new ReadableStream<Uint8Array>({
+          pull(controller) {
+            if (sent >= archiveBytes) {
+              controller.close();
+              return;
+            }
+            const size = Math.min(1024 * 1024, archiveBytes - sent);
+            sent += size;
+            controller.enqueue(new Uint8Array(size));
+          },
+        });
+        const answer = await fetch(`${value.runnerUrl}/files`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/x-tar' },
+          body,
+          duplex: 'half',
+        });
+        expect(answer.status).toBe(204);
+        expect(received).toBe(archiveBytes);
+      });
+    },
+  );
 
   it('refuses caller-controlled path segments and non-Docker profiles', async () => {
     await withManager(async (base) => {

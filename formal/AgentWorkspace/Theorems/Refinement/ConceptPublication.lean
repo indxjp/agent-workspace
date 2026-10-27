@@ -75,7 +75,7 @@ theorem current_admits_a_budget_on_a_definition_share :
 /-- A share whose subject id names no row is consistent today but refused by the Target:
 `shares.subject_id` is polymorphic text with no foreign key. -/
 @[aw_spec (tier := T4) (ts := "packages/core/src/db/schema/shares.ts#shares")
-  (ts := "apps/web/server/composition/register.ts#subjectOwnership")
+  (ts := "apps/web/server/composition/wiring/projects.ts#subjectOwnership")
   (doc := "docs/sdk/site/concepts/ownership-and-sharing.mdx#beyond-one-workspace")]
 theorem current_admits_a_dangling_subject :
     let st := stateWith [{ Invariants.ConceptPublication.Witness.share with
@@ -111,7 +111,7 @@ private def crossState (rows : List Row) : State
 refused by the Target: nothing ties `subject_id` to a subject of the share's own workspace, so the
 Target's same-workspace conjunct is what refuses it. -/
 @[aw_spec (tier := T4) (ts := "packages/core/src/db/schema/shares.ts#shares")
-  (ts := "apps/web/server/composition/register.ts#subjectOwnership")
+  (ts := "apps/web/server/composition/wiring/projects.ts#subjectOwnership")
   (doc := "docs/sdk/site/concepts/ownership-and-sharing.mdx#beyond-one-workspace")]
 theorem current_admits_a_cross_workspace_subject :
     let st := crossState [{ Invariants.ConceptPublication.Witness.share with
@@ -127,6 +127,6 @@ example : Publication.consistent Invariants.ConceptPublication.Witness.state = t
 
 example : Publication.Target.agentHasMode Invariants.ConceptPublication.Witness.share.toRow = true ∧
     Publication.Target.budgetOnlyRunnable Invariants.ConceptPublication.Witness.share.toRow = true :=
-  well_published_share_meets_the_target_checks _ (by decide)
+  well_published_share_meets_the_target_checks _ (by decide +kernel)
 
 end AgentWorkspace.Theorems.Refinement.ConceptPublication

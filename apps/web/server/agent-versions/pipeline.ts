@@ -18,6 +18,14 @@
  *    would otherwise fail the materialisation as a `500`).
  * 2. **Engine** registered → `400 unsupported_engine`, `details: [<engine>]`.
  * 3. **Permission mode** not `bypassPermissions` → `400 dangerous_permission_mode_refused`.
+ * 4a. **Storage grants** (`storage://<connection>/<folder>` file paths, run before step 4, which
+ *    would read them as workspace files): the connection must be this workspace's →
+ *    `422 agent_definition_references_missing`, the folder under one of its `allowedPrefixes` →
+ *    `403 storage_connection_prefix_not_allowed`, and `read-write` needs the connection's
+ *    `writeAllowed` → `403 storage_connection_write_not_allowed` (`storage-grants.ts`). An accepted
+ *    grant leaves in `references.storageGrants` with the connection id the lookup resolved, and step 4
+ *    does not read it as a file. Skipped without a `storageConnections` lookup, when step 4
+ *    refuses the path as it always did.
  * 4. **Resolution** of every name in this workspace → `422 agent_definition_references_missing`
  *    (`<kind>:<name>` each), else `409 agent_definition_reference_ambiguous`. Missing is reported
  *    before ambiguous, deterministically. C7 (`null`/`'default'` is never missing) is the store's
@@ -47,8 +55,8 @@
  *    and engine (the default arm and no limits when compiled), the explicit model or else the
  *    deployment default for the resolved connection's provider (SD6, no discovery), and the
  *    connector names. It ignores the role. A refusal writes one audit row unless it is a dry run.
- * 8. **The #133 write ceiling** narrows and never refuses: a `read-write` file grant on an agent
- *    whose `writeFiles` is off is accepted here and narrowed to `read` when the store materialises
+ * 8. **The #133 write ceiling** narrows and never refuses: a `read-write` file or storage grant on
+ *    an agent whose `writeFiles` is off is accepted here and narrowed to `read` when the store materialises
  *    the version (core's `writeAssignments`, S1-06). The pipeline does not restate that narrowing.
  *
  * {@link validateAgentVersion} is the one function that runs steps 2–7 and the blank-name half of
@@ -61,7 +69,7 @@
  * - `PUT /api/agents/:id/pointers` (S1-06): a stored body, re-checked against the agent as it is
  *   now, so a pointer move never materialises what a save would refuse today.
  */
-import type { DefinitionReferences, ResolvedReferences } from '@agent-workspace/core/db';
+import type { DefinitionReferences, ResolvedReferences, WorkspaceAgentVersionStore } from './store';
 import {
   AGENT_VERSION_PROBLEM_CODES,
   type AgentVersionBody,
@@ -71,7 +79,7 @@ import type { z } from 'zod';
 
 import type { AgentPolicy } from '../../contracts/agents';
 import type { AgentRecord } from '../agents/contract';
-import { problem, type ApiResult } from '../agents/handlers';
+import { formatIssues, problem, type ApiResult } from '../http/result';
 import {
   carryEngineSwitch,
   connectorNamesOf,
@@ -86,12 +94,16 @@ import { registeredEngineIds } from '../engines/registry';
 import { ceilingStep, type RequestCeiling } from '../policy-ceiling/ceiling';
 import type { ToolBundleLookup } from '../tool-bundles/handlers';
 import {
+  resolveStorageGrants,
+  storageGrantPaths,
+  type StorageConnectionLookup,
+} from './storage-grants';
+import {
   codeToolNeedsHost,
   networkPolicyUnsupported,
   resolutionRefusal,
   subagentNestingRefusal,
 } from './problems';
-import type { WorkspaceAgentVersionStore } from './store';
 
 /** Whose version this is: an agent that exists, or one S1-06 is about to create. */
 export type AgentVersionSubject =
@@ -117,6 +129,8 @@ export interface AgentVersionContext {
   readonly ceiling?: RequestCeiling | null;
   /** The caller's tool bundles (issue #790); absent or `null` when the deployment keeps none. */
   readonly toolBundles?: ToolBundleLookup | null;
+  /** The caller's storage connections (step 4a); absent or `null` when the deployment keeps none. */
+  readonly storageConnections?: StorageConnectionLookup | null;
   /**
    * Whether the deployment has a tool sandbox. `false` refuses a body that pins tool bundles
    * (step 3b); absent skips the check, as for a stored body being re-validated.
@@ -178,13 +192,6 @@ function parseRefusal(
   );
 }
 
-/** One `<dotted.path>: <message>` per parse issue, `(root)` for the body itself. */
-function issueLines(
-  issues: readonly { readonly path: readonly PropertyKey[]; readonly message: string }[],
-): string[] {
-  return issues.map((issue) => `${issue.path.map(String).join('.') || '(root)'}: ${issue.message}`);
-}
-
 const UNPAIRED_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
 
 /**
@@ -240,7 +247,7 @@ const AGENT_NAME_PATH = 'definition.agent.name';
  * this a dry run answered `200` for a body whose save — or whose later pointer move — failed in
  * the insert or update as a `500`. JavaScript's `trim` strips every whitespace character, not only
  * the spaces `btrim` strips, so a tab-only name is refused too: it is as blank to a reader. The
- * legacy routes refuse the same names (`parseAgentName`).
+ * legacy routes refuse the same names (`CreateAgentInputSchema`).
  */
 function blankNameRefusal(definition: AgentDefinition, bodyPath: BodyPath): ApiResult | null {
   if (definition.agent.name.trim().length > 0) return null;
@@ -252,14 +259,22 @@ function blankNameRefusal(definition: AgentDefinition, bodyPath: BodyPath): ApiR
   );
 }
 
-/** The references a definition names, in the shape `resolveDefinition` takes. */
-export function definitionReferences(definition: AgentDefinition): DefinitionReferences {
+/**
+ * The references a definition names, in the shape `resolveDefinition` takes. A `storage://` grant
+ * is not a workspace file: `storagePaths` (default: every well-formed one) are left out. The pipeline
+ * passes only what step 4a took over, so with no connection lookup step 4 still refuses the path.
+ */
+export function definitionReferences(
+  definition: AgentDefinition,
+  storagePaths: ReadonlySet<string> = storageGrantPaths(definition.resources.files),
+): DefinitionReferences {
   return {
     modelConnectionName: definition.agent.modelConnectionName,
     runtimeProfileName: definition.agent.runtimeProfileName,
     skills: definition.resources.skills,
+    skillRevisions: definition.resources.skillRevisions,
     connectors: definition.resources.connectors,
-    files: definition.resources.files,
+    files: definition.resources.files.filter((file) => !storagePaths.has(file.path)),
   };
 }
 
@@ -333,7 +348,7 @@ export function parseVersionRequest<Request>(
   const parsed = schema.safeParse(raw);
   if (!parsed.success) {
     const enginePath = [...bodyPath.split('.'), 'definition', 'policy', 'engine'];
-    const issues = issueLines(parsed.error.issues);
+    const issues = formatIssues(parsed.error.issues);
     return { ok: false, result: parseRefusal(raw, enginePath, issues, registered) };
   }
   const unstorable = unstorableRefusal(parsed.data);
@@ -385,8 +400,17 @@ export async function validateAgentVersion(
     }
   }
 
-  // 4. Resolution (C7 is the store's).
-  const resolution = await context.store.resolveDefinition(definitionReferences(definition));
+  // 4a. Storage grants, before step 4 reads their paths as workspace files.
+  const storage = await resolveStorageGrants(
+    definition.resources.files,
+    context.storageConnections ?? null,
+  );
+  if ('refusal' in storage) return { ok: false, result: storage.refusal };
+
+  // 4. Resolution (C7 is the store's). A grant step 4a took over is not a workspace file.
+  const resolution = await context.store.resolveDefinition(
+    definitionReferences(definition, storage.paths),
+  );
   if (resolution.kind === 'unresolved') return { ok: false, result: resolutionRefusal(resolution) };
 
   // 4b. Pinned tool bundles (issue #790): every digest the body names is stored in this workspace.
@@ -441,5 +465,9 @@ export async function validateAgentVersion(
   if (refused !== null) return { ok: false, result: refused };
 
   // 8. The #133 write ceiling narrows at materialisation and never refuses: nothing to do here.
-  return { ok: true, references: resolution.references, policyToStore };
+  return {
+    ok: true,
+    references: { ...resolution.references, storageGrants: storage.grants },
+    policyToStore,
+  };
 }

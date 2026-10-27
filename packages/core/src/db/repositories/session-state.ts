@@ -22,7 +22,20 @@
  * does, so two control-plane replicas appending to one stream are serialised by PostgreSQL rather
  * than by a promise chain that is only one process wide.
  */
-import { and, asc, desc, eq, gt, inArray, isNotNull, lt, max, sql, type SQL } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  max,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
 
 import type { Database } from '../client.js';
 import type { EngineId } from '../schema/agents.js';
@@ -64,6 +77,18 @@ export interface StoredSessionStateStream {
 export interface StoredSessionStateBlob {
   readonly blobKey: string;
   readonly storageKey: string;
+  /** `null` for a blob written before object IDs: its bytes are at `storageKey`. */
+  readonly objectId: string | null;
+  readonly sizeBytes: number;
+  readonly sha256: string;
+}
+
+/** A blob still in the old naming: its bytes are at `storageKey` in the session-state store. */
+export interface LegacySessionStateBlob {
+  readonly sessionId: string;
+  readonly engine: EngineId;
+  readonly blobKey: string;
+  readonly storageKey: string;
   readonly sizeBytes: number;
   readonly sha256: string;
 }
@@ -73,6 +98,8 @@ export interface SessionStateBlobInput {
   readonly engine: EngineId;
   readonly blobKey: string;
   readonly storageKey: string;
+  /** Absent for a blob in the old naming, whose bytes are at `storageKey`. */
+  readonly objectId?: string | null;
   readonly sizeBytes: number;
   readonly sha256: string;
 }
@@ -103,16 +130,45 @@ export interface SessionStateRepository {
   deleteStream(key: SessionStateStreamKey): Promise<void>;
   /** Every stream of one session, newest write first. */
   listStreams(sessionId: string): Promise<readonly StoredSessionStateStream[]>;
-  /** Record one blob's location and digest, replacing any previous record under the same key. */
-  putBlob(sessionId: string, blob: SessionStateBlobInput): Promise<void>;
-  /** What is recorded about one blob, or `null`. */
+  /**
+   * Record one blob's location and digest as `ready`, replacing any previous record under the same
+   * key, and answer where the replaced blob's bytes were so the caller can delete them.
+   */
+  putBlob(
+    sessionId: string,
+    blob: SessionStateBlobInput,
+  ): Promise<{
+    readonly replaced: { readonly objectId: string | null; readonly storageKey: string } | null;
+  }>;
+  /** What is recorded about one `ready` blob, or `null`. */
   getBlob(
     sessionId: string,
     engine: EngineId,
     blobKey: string,
   ): Promise<StoredSessionStateBlob | null>;
-  /** Every blob of one session, for cleanup. */
+  /** Every `ready` blob of one session, for cleanup. */
   listBlobs(sessionId: string): Promise<readonly StoredSessionStateBlob[]>;
+  // storage-bridge(#1699): the naming migration reads and switches blobs still in the old naming
+  /** Every `ready` blob of this workspace with no object id yet, for the naming migration. */
+  listLegacyBlobs(): Promise<readonly LegacySessionStateBlob[]>;
+  /**
+   * Point a `ready` blob with no object id and `expectedStorageKey` at `objectId`. `false`, nothing
+   * changed, when the blob was replaced, removed or switched meanwhile: the caller deletes its copy.
+   */
+  switchBlobObject(
+    blob: { readonly sessionId: string; readonly engine: EngineId; readonly blobKey: string },
+    expectedStorageKey: string,
+    objectId: string,
+  ): Promise<boolean>;
+  // storage-bridge(#1699): the finalize stage of the naming migration
+  /** Blob rows in any status still without an object id: the work the copy stage has left. */
+  countLegacyBlobs(): Promise<number>;
+  /** Every `ready` blob of this workspace that has an object id, for the finalize check. */
+  listObjectBlobs(): Promise<readonly (StoredSessionStateBlob & { readonly objectId: string })[]>;
+  /** Which of `keys` a blob row in any status without an object id holds as its bytes. */
+  legacyBlobKeysHeld(keys: readonly string[]): Promise<readonly string[]>;
+  /** Which of `objectIds` a blob row in any status holds, for the cleanup job. */
+  referencedObjectIds(objectIds: readonly string[]): Promise<readonly string[]>;
   /**
    * Retention: remove every stream (with its entries) and every blob record of this workspace whose
    * last write is before `before`. The same rule the legacy `session_transcripts` purge applies, over
@@ -129,11 +185,21 @@ interface SessionStatePurge {
   readonly entries: number;
   /** The blob records removed. The caller deletes their bytes from the object store. */
   readonly blobs: readonly StoredSessionStateBlob[];
+  /** The sessions this pass left with no stream at all: their conversation is purged. */
+  readonly sessionIds: readonly string[];
 }
 
 export interface SessionStateRepositoryProvider {
   forScope(scope: WorkspaceScope): SessionStateRepository;
 }
+
+const readableColumns = {
+  blobKey: sessionStateBlobs.blobKey,
+  storageKey: sessionStateBlobs.storageKey,
+  objectId: sessionStateBlobs.objectId,
+  sizeBytes: sessionStateBlobs.sizeBytes,
+  sha256: sessionStateBlobs.sha256,
+};
 
 function every(...predicates: readonly SQL[]): SQL {
   const combined = and(...predicates);
@@ -187,6 +253,14 @@ export function createDatabaseSessionStateRepositoryProvider(
           eq(sessionStateEntries.sessionId, key.sessionId),
           eq(sessionStateEntries.engine, key.engine),
           eq(sessionStateEntries.streamKey, key.streamKey),
+        );
+
+      const blobWhere = (sessionId: string, engine: EngineId, blobKey: string): SQL =>
+        every(
+          eq(sessionStateBlobs.workspaceId, checked.workspaceId),
+          eq(sessionStateBlobs.sessionId, sessionId),
+          eq(sessionStateBlobs.engine, engine),
+          eq(sessionStateBlobs.blobKey, blobKey),
         );
 
       const row = (key: SessionStateStreamKey) => ({
@@ -438,49 +512,59 @@ export function createDatabaseSessionStateRepositoryProvider(
         },
 
         async putBlob(sessionId, blob) {
-          await db
-            .insert(sessionStateBlobs)
-            .values({
-              workspaceId: checked.workspaceId,
+          return db.transaction(async (tx) => {
+            // Two writers of one blob key would each read the other's row as the one they replace.
+            const lockKey = JSON.stringify([
+              checked.workspaceId,
               sessionId,
-              engine: blob.engine,
-              blobKey: blob.blobKey,
+              blob.engine,
+              'blob',
+              blob.blobKey,
+            ]);
+            await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`);
+            const previous = await tx
+              .select({
+                objectId: sessionStateBlobs.objectId,
+                storageKey: sessionStateBlobs.storageKey,
+              })
+              .from(sessionStateBlobs)
+              .where(blobWhere(sessionId, blob.engine, blob.blobKey))
+              .limit(1);
+            const values = {
               storageKey: blob.storageKey,
+              objectId: blob.objectId ?? null,
+              status: 'ready',
               sizeBytes: blob.sizeBytes,
               sha256: blob.sha256,
-            })
-            .onConflictDoUpdate({
-              target: [
-                sessionStateBlobs.workspaceId,
-                sessionStateBlobs.sessionId,
-                sessionStateBlobs.engine,
-                sessionStateBlobs.blobKey,
-              ],
-              set: {
-                storageKey: blob.storageKey,
-                sizeBytes: blob.sizeBytes,
-                sha256: blob.sha256,
-                updatedAt: sql`now()`,
-              },
-            });
+            } as const;
+            await tx
+              .insert(sessionStateBlobs)
+              .values({
+                workspaceId: checked.workspaceId,
+                sessionId,
+                engine: blob.engine,
+                blobKey: blob.blobKey,
+                ...values,
+              })
+              .onConflictDoUpdate({
+                target: [
+                  sessionStateBlobs.workspaceId,
+                  sessionStateBlobs.sessionId,
+                  sessionStateBlobs.engine,
+                  sessionStateBlobs.blobKey,
+                ],
+                set: { ...values, updatedAt: sql`now()` },
+              });
+            return { replaced: previous[0] ?? null };
+          });
         },
 
         async getBlob(sessionId, engine, blobKey) {
           const rows = await db
-            .select({
-              blobKey: sessionStateBlobs.blobKey,
-              storageKey: sessionStateBlobs.storageKey,
-              sizeBytes: sessionStateBlobs.sizeBytes,
-              sha256: sessionStateBlobs.sha256,
-            })
+            .select(readableColumns)
             .from(sessionStateBlobs)
             .where(
-              every(
-                eq(sessionStateBlobs.workspaceId, checked.workspaceId),
-                eq(sessionStateBlobs.sessionId, sessionId),
-                eq(sessionStateBlobs.engine, engine),
-                eq(sessionStateBlobs.blobKey, blobKey),
-              ),
+              every(blobWhere(sessionId, engine, blobKey), eq(sessionStateBlobs.status, 'ready')),
             )
             .limit(1);
           return rows[0] ?? null;
@@ -488,7 +572,24 @@ export function createDatabaseSessionStateRepositoryProvider(
 
         async listBlobs(sessionId) {
           return db
+            .select(readableColumns)
+            .from(sessionStateBlobs)
+            .where(
+              every(
+                eq(sessionStateBlobs.workspaceId, checked.workspaceId),
+                eq(sessionStateBlobs.sessionId, sessionId),
+                eq(sessionStateBlobs.status, 'ready'),
+              ),
+            )
+            .orderBy(asc(sessionStateBlobs.blobKey));
+        },
+
+        // storage-bridge(#1699): the naming migration
+        async listLegacyBlobs() {
+          return db
             .select({
+              sessionId: sessionStateBlobs.sessionId,
+              engine: sessionStateBlobs.engine,
               blobKey: sessionStateBlobs.blobKey,
               storageKey: sessionStateBlobs.storageKey,
               sizeBytes: sessionStateBlobs.sizeBytes,
@@ -498,10 +599,94 @@ export function createDatabaseSessionStateRepositoryProvider(
             .where(
               every(
                 eq(sessionStateBlobs.workspaceId, checked.workspaceId),
-                eq(sessionStateBlobs.sessionId, sessionId),
+                eq(sessionStateBlobs.status, 'ready'),
+                isNull(sessionStateBlobs.objectId),
               ),
             )
-            .orderBy(asc(sessionStateBlobs.blobKey));
+            .orderBy(asc(sessionStateBlobs.sessionId), asc(sessionStateBlobs.blobKey));
+        },
+
+        // storage-bridge(#1699): the naming migration
+        async switchBlobObject(blob, expectedStorageKey, objectId) {
+          const switched = await db
+            .update(sessionStateBlobs)
+            .set({ objectId })
+            .where(
+              every(
+                blobWhere(blob.sessionId, blob.engine, blob.blobKey),
+                eq(sessionStateBlobs.status, 'ready'),
+                isNull(sessionStateBlobs.objectId),
+                eq(sessionStateBlobs.storageKey, expectedStorageKey),
+              ),
+            )
+            .returning({ blobKey: sessionStateBlobs.blobKey });
+          return switched.length === 1;
+        },
+
+        // storage-bridge(#1699): the finalize stage of the naming migration
+        async countLegacyBlobs() {
+          const [found] = await db
+            .select({ value: sql<number>`count(*)::int` })
+            .from(sessionStateBlobs)
+            .where(
+              every(
+                eq(sessionStateBlobs.workspaceId, checked.workspaceId),
+                isNull(sessionStateBlobs.objectId),
+              ),
+            );
+          return found?.value ?? 0;
+        },
+
+        async listObjectBlobs() {
+          const found = await db
+            .select({
+              blobKey: sessionStateBlobs.blobKey,
+              storageKey: sessionStateBlobs.storageKey,
+              objectId: sessionStateBlobs.objectId,
+              sizeBytes: sessionStateBlobs.sizeBytes,
+              sha256: sessionStateBlobs.sha256,
+            })
+            .from(sessionStateBlobs)
+            .where(
+              every(
+                eq(sessionStateBlobs.workspaceId, checked.workspaceId),
+                eq(sessionStateBlobs.status, 'ready'),
+                isNotNull(sessionStateBlobs.objectId),
+              ),
+            )
+            .orderBy(asc(sessionStateBlobs.sessionId), asc(sessionStateBlobs.blobKey));
+          return found.flatMap((blob) =>
+            blob.objectId === null ? [] : [{ ...blob, objectId: blob.objectId }],
+          );
+        },
+
+        async legacyBlobKeysHeld(keys) {
+          if (keys.length === 0) return [];
+          const found = await db
+            .select({ storageKey: sessionStateBlobs.storageKey })
+            .from(sessionStateBlobs)
+            .where(
+              every(
+                eq(sessionStateBlobs.workspaceId, checked.workspaceId),
+                isNull(sessionStateBlobs.objectId),
+                inArray(sessionStateBlobs.storageKey, [...keys]),
+              ),
+            );
+          return found.map((blob) => blob.storageKey);
+        },
+
+        async referencedObjectIds(objectIds) {
+          if (objectIds.length === 0) return [];
+          const rows = await db
+            .select({ objectId: sessionStateBlobs.objectId })
+            .from(sessionStateBlobs)
+            .where(
+              every(
+                eq(sessionStateBlobs.workspaceId, checked.workspaceId),
+                inArray(sessionStateBlobs.objectId, [...objectIds]),
+              ),
+            );
+          return rows.flatMap((found) => (found.objectId === null ? [] : [found.objectId]));
         },
 
         async purgeBefore(before) {
@@ -528,7 +713,24 @@ export function createDatabaseSessionStateRepositoryProvider(
             const streams = await tx
               .delete(sessionStateStreams)
               .where(stale)
-              .returning({ streamKey: sessionStateStreams.streamKey });
+              .returning({ sessionId: sessionStateStreams.sessionId });
+            // A session whose every stream went is gone from this store: its conversation was
+            // purged, so the caller removes what lives as long as it (ADR-0146 D6 attachments).
+            const touched = [...new Set(streams.map((row) => row.sessionId))];
+            const kept =
+              touched.length === 0
+                ? []
+                : await tx
+                    .selectDistinct({ sessionId: sessionStateStreams.sessionId })
+                    .from(sessionStateStreams)
+                    .where(
+                      every(
+                        eq(sessionStateStreams.workspaceId, checked.workspaceId),
+                        inArray(sessionStateStreams.sessionId, touched),
+                      ),
+                    );
+            const keptIds = new Set(kept.map((row) => row.sessionId));
+            const sessionIds = touched.filter((id) => !keptIds.has(id));
             const blobs = await tx
               .delete(sessionStateBlobs)
               .where(
@@ -537,13 +739,8 @@ export function createDatabaseSessionStateRepositoryProvider(
                   lt(sessionStateBlobs.updatedAt, before),
                 ),
               )
-              .returning({
-                blobKey: sessionStateBlobs.blobKey,
-                storageKey: sessionStateBlobs.storageKey,
-                sizeBytes: sessionStateBlobs.sizeBytes,
-                sha256: sessionStateBlobs.sha256,
-              });
-            return { streams: streams.length, entries: counted[0]?.value ?? 0, blobs };
+              .returning(readableColumns);
+            return { streams: streams.length, entries: counted[0]?.value ?? 0, blobs, sessionIds };
           });
         },
       };

@@ -53,6 +53,85 @@ describe('aw files', () => {
     expect(missing.code).toBe(EXIT_CODE.usage);
   });
 
+  // @story US-STO-01
+  it('[US-STO-01][api][cli] aw files upload shows the catalog row it created, which carries no modification time', async () => {
+    const local = await tempFile(directory, 'catalog.md', 'hello');
+    const created = { ...FIXTURES.file, id: crypto.randomUUID(), lastModified: null };
+    const run = await runCli(['files', 'upload', 'docs/readme.md', local, '--json'], {
+      route: () => json(201, { file: created }),
+    });
+    expect(run.code).toBe(EXIT_CODE.ok);
+    expect(FileResourceSchema.parse(stdoutJson(run))).toEqual(created);
+    expect(await (run.calls[0]?.body as Blob).text()).toBe('hello');
+  });
+
+  describe('upload --direct (#251)', () => {
+    const PRESIGNED = {
+      url: ['https://store.example.com/bucket/.attachments/s1/a.bin?sig', 'abc'].join('='),
+      method: 'PUT',
+      headers: { 'content-length': '5', 'x-amz-meta-test': 'yes' },
+      expiresAt: '2026-09-21T10:05:00.000Z',
+      path: '.attachments/s1/a.bin',
+    };
+
+    // @story US-STO-02
+    it('[US-STO-02][api][cli] aw files upload --direct makes three calls: mint, PUT, complete', async () => {
+      const local = await tempFile(directory, 'a.bin', 'hello');
+      const run = await runCli(
+        ['files', 'upload', '.attachments/s1/a.bin', local, '--direct', '--json'],
+        {
+          route: (request) => {
+            if (request.url.host === 'store.example.com')
+              return new Response(null, { status: 200 });
+            return request.url.pathname.endsWith('/upload-complete')
+              ? json(200, { file: FIXTURES.file })
+              : json(201, PRESIGNED);
+          },
+        },
+      );
+      expect(run.code).toBe(EXIT_CODE.ok);
+      const [mint, put, complete] = run.calls;
+      expect(run.calls).toHaveLength(3);
+      expect(mint?.url.host).toBe('aw.example.com');
+      expect(mint?.url.pathname).toMatch(/\/upload-urls$/u);
+      expect(mint?.json).toEqual({ sizeBytes: 5 });
+      expect(mint?.body).not.toBeInstanceOf(Blob);
+      expect(put?.url.host).toBe('store.example.com');
+      expect(put?.method).toBe('PUT');
+      expect(put?.headers.get('x-amz-meta-test')).toBe('yes');
+      expect(put?.headers.has('authorization')).toBe(false);
+      expect(complete?.method).toBe('POST');
+      expect(complete?.url.pathname).toMatch(/\/upload-complete$/u);
+      expect(FileResourceSchema.parse(stdoutJson(run))).toEqual(FIXTURES.file);
+    });
+
+    it('fails when the object store refuses the bytes', async () => {
+      const local = await tempFile(directory, 'b.bin', 'hello');
+      const run = await runCli(['files', 'upload', 'b.bin', local, '--direct'], {
+        route: (request) =>
+          request.url.host === 'store.example.com'
+            ? new Response(null, { status: 403 })
+            : json(201, PRESIGNED),
+      });
+      expect(run.code).not.toBe(EXIT_CODE.ok);
+      expect(run.stderr).toContain('403');
+      expect(run.stderr).toContain('object store');
+    });
+
+    it('surfaces 501 when the store cannot sign, without sending any bytes', async () => {
+      const local = await tempFile(directory, 'c.bin', 'hello');
+      const run = await runCli(['files', 'upload', 'c.bin', local, '--direct'], {
+        route: () =>
+          json(501, {
+            error: { code: 'direct_transfer_unsupported', message: 'No direct transfer.' },
+          }),
+      });
+      expect(run.code).not.toBe(EXIT_CODE.ok);
+      expect(run.calls).toHaveLength(1);
+      expect(run.stderr).toContain('direct_transfer_unsupported');
+    });
+  });
+
   it('mkdir sends the folder header', async () => {
     const run = await runCli(['files', 'mkdir', 'docs'], {
       route: () => json(201, { file: FIXTURES.folder }),
@@ -135,28 +214,155 @@ describe('aw files', () => {
     expect(FileResourceSchema.parse(stdoutJson(folder))).toEqual(FIXTURES.folder);
   });
 
-  it('move and remove, with --recursive for a folder', async () => {
-    const move = await runCli(['files', 'move', 'docs', 'archive/docs', '--json'], {
-      route: () => json(200, { status: 'ok', moved: 2 }),
+  // @story US-STO-01
+  it('[US-STO-01][api][cli] aw files ls (list) shows catalog rows, which carry no modification time', async () => {
+    const catalogFile = { ...FIXTURES.file, lastModified: null };
+    const run = await runCli(['files', 'list', '--path', 'docs', '--json'], {
+      route: () => json(200, { files: [catalogFile] }),
     });
-    expect(move.calls[0]?.method).toBe('PATCH');
-    expect(move.calls[0]?.json).toEqual({ newPath: 'archive/docs' });
-    expect(stdoutJson(move)).toEqual({ status: 'ok', moved: 2 });
+    expect(run.code).toBe(EXIT_CODE.ok);
+    expect(FileResourceSchema.array().parse(stdoutJson(run))).toEqual([catalogFile]);
+    const table = await runCli(['files', 'list', '--path', 'docs'], {
+      route: () => json(200, { files: [catalogFile] }),
+    });
+    expect(table.code).toBe(EXIT_CODE.ok);
+    expect(table.stdout).toMatch(/^docs\/readme\.md\s+file\s+5\s+text\/markdown/mu);
+  });
 
+  // @story US-STO-05
+  it('[US-STO-05][api][cli] aw files download saves a streamed attachment byte for byte', async () => {
+    const target = path.join(directory, 'streamed.bin');
+    const bytes = Uint8Array.from({ length: 4096 }, (_, index) => index % 251);
+    const run = await runCli(['files', 'download', 'blobs/streamed.bin', target, '--json'], {
+      route: () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(bytes.slice(0, 1000));
+              controller.enqueue(bytes.slice(1000));
+              controller.close();
+            },
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/octet-stream',
+              'content-length': String(bytes.byteLength),
+              'content-disposition': 'attachment; filename="streamed.bin"',
+              'x-content-type-options': 'nosniff',
+            },
+          },
+        ),
+    });
+    expect(run.code).toBe(EXIT_CODE.ok);
+    expect(new Uint8Array(await readFile(target))).toEqual(bytes);
+    expect(stdoutJson(run)).toMatchObject({
+      kind: 'file',
+      filename: 'streamed.bin',
+      sizeBytes: bytes.byteLength,
+      savedTo: target,
+    });
+  });
+
+  // @story US-STO-05
+  it('[US-STO-05][api][cli] aw files download --link', async () => {
+    const signed = {
+      url: ['https://store.example.com/bucket/obj?sig', 'abc'].join('='),
+      method: 'GET',
+      headers: {},
+      expiresAt: '2026-09-21T10:10:00.000Z',
+      path: 'docs/readme.md',
+    };
+    const target = path.join(directory, 'linked.md');
+    const run = await runCli(
+      ['files', 'download', 'docs/readme.md', target, '--link', '--ttl', '600', '--json'],
+      { route: () => json(201, signed) },
+    );
+    expect(run.code).toBe(EXIT_CODE.ok);
+    expect(run.calls).toHaveLength(1);
+    expect(run.calls[0]?.method).toBe('POST');
+    expect(run.calls[0]?.url.pathname).toBe(
+      `/api/files/${fileRouteId('docs/readme.md')}/download-urls`,
+    );
+    expect(run.calls[0]?.json).toEqual({ ttlSeconds: 600 });
+    await expect(readFile(target)).rejects.toThrow();
+    expect(stdoutJson(run)).toEqual({ url: signed.url, expiresAt: signed.expiresAt });
+    expect(run.stderr).not.toContain(signed.url);
+
+    const fallback = await runCli(['files', 'download', 'docs/readme.md', '--link', '--json'], {
+      route: () => json(201, signed),
+    });
+    expect(fallback.calls[0]?.json).toEqual({});
+  });
+
+  // @story US-STO-03
+  it('[US-STO-03][api][cli] aw files move prints the count of rows the server moved', async () => {
+    const run = await runCli(['files', 'move', 'big', 'archive/big', '--json'], {
+      route: () => json(200, { status: 'ok', moved: 10001 }),
+    });
+    expect(run.code).toBe(EXIT_CODE.ok);
+    expect(run.calls).toHaveLength(1);
+    expect(run.calls[0]?.method).toBe('PATCH');
+    expect(run.calls[0]?.json).toEqual({ newPath: 'archive/big' });
+    expect(stdoutJson(run)).toEqual({ status: 'ok', moved: 10001 });
+  });
+
+  // @story US-STO-04
+  it('[US-STO-04][api][cli] aw files remove sends recursive only when asked and treats 204 as done', async () => {
     const file = await runCli(['files', 'remove', 'docs/readme.md'], {
       route: () => json(204, null),
     });
     expect(file.code).toBe(EXIT_CODE.ok);
+    expect(file.calls[0]?.method).toBe('DELETE');
     expect(file.calls[0]?.url.search).toBe('');
     expect(file.stdout).toBe('');
 
     const folder = await runCli(['files', 'remove', 'docs', '--recursive', '--json'], {
-      route: () => json(200, { status: 'ok', deleted: ['docs/readme.md', 'docs'] }),
+      route: () => json(200, { status: 'ok', deleted: ['docs/a.txt'] }),
     });
+    expect(folder.code).toBe(EXIT_CODE.ok);
     expect(folder.calls[0]?.url.search).toBe('?recursive=true');
     expect(RemoveFileResponseSchema.parse(stdoutJson(folder))).toEqual({
       status: 'ok',
-      deleted: ['docs/readme.md', 'docs'],
+      deleted: ['docs/a.txt'],
     });
+  });
+
+  it('a partial move or remove prints what remains to stderr and exits non-zero (FX-10)', async () => {
+    const removed = await runCli(['files', 'remove', 'docs', '--recursive', '--json'], {
+      route: () => json(200, { status: 'partial', deleted: ['docs/a'], remaining: ['docs/b'] }),
+    });
+    expect(removed.code).toBe(EXIT_CODE.problem);
+    expect(stdoutJson(removed)).toMatchObject({ status: 'partial', remaining: ['docs/b'] });
+    expect(removed.stderr).toContain('docs/b');
+
+    const moved = await runCli(['files', 'move', 'docs', 'archive', '--json'], {
+      route: () =>
+        json(200, {
+          status: 'partial',
+          phase: 'catalog',
+          moved: 1,
+          total: 1,
+          remaining: ['docs/a'],
+        }),
+    });
+    expect(moved.code).toBe(EXIT_CODE.problem);
+    expect(moved.stderr).toContain('docs/a');
+    expect(moved.stderr).toContain('repeat the same command');
+
+    // After the delete phase a retry answers 409, so the CLI asks for the leftovers to be deleted.
+    const leftover = await runCli(['files', 'move', 'docs', 'archive', '--json'], {
+      route: () =>
+        json(200, {
+          status: 'partial',
+          phase: 'delete',
+          moved: 1,
+          total: 1,
+          remaining: ['docs/a'],
+        }),
+    });
+    expect(leftover.code).toBe(EXIT_CODE.problem);
+    expect(leftover.stderr).toContain('delete these leftover source keys:\n  docs/a');
+    expect(leftover.stderr).not.toContain('repeat the same command');
   });
 });

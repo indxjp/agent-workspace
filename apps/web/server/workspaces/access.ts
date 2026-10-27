@@ -28,12 +28,9 @@
  * `vanished-membership.test.ts`, which removes the caller's Membership between reads and asserts
  * that every route fails closed.
  */
-import {
-  problem,
-  type ApiResult,
-  type OwnershipOutcome,
-  type OwnershipResolver,
-} from '../rbac/http';
+import { problemWithDetail as problem } from '../http/result';
+import type { OwnershipOutcome, OwnershipResolver } from '../rbac/http';
+import type { ApiResult } from '../http/result';
 import { resolveSessionActorUserId } from '../rbac/ownership';
 import type { Principal } from '../rbac/principal';
 import type { WorkspaceRepositoryPort } from './runtime';

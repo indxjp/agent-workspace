@@ -240,17 +240,17 @@ private theorem splitSlash_no_slash : ∀ xs : List Char, xs.contains '/' = fals
 private theorem fullKey_segments (ws rel : String) (hws : ws.toList.contains '/' = false) :
     ∃ R, Authz.Surface.splitSlash (fullKey ws rel).toList = "workspaces".toList :: ws.toList :: R := by
   unfold fullKey joinPrefixed workspaceKeyPrefix
-  have hw : "workspaces/".toList = "workspaces".toList ++ ['/'] := by decide
+  have hw : "workspaces/".toList = "workspaces".toList ++ ['/'] := by decide +kernel
   split
   · refine ⟨[], ?_⟩
     rw [String.toList_append, hw, List.append_assoc, List.singleton_append,
-      splitSlash_append_slash, splitSlash_no_slash _ hws, splitSlash_no_slash _ (by decide)]
+      splitSlash_append_slash, splitSlash_no_slash _ hws, splitSlash_no_slash _ (by decide +kernel)]
     rfl
   · refine ⟨Authz.Surface.splitSlash rel.toList, ?_⟩
-    have h2 : "/".toList = ['/'] := by decide
+    have h2 : "/".toList = ['/'] := by decide +kernel
     simp only [String.toList_append, hw, h2, List.append_assoc, List.nil_append,
       List.cons_append]
-    rw [splitSlash_append_slash, splitSlash_no_slash _ (by decide), splitSlash_append_slash,
+    rw [splitSlash_append_slash, splitSlash_no_slash _ (by decide +kernel), splitSlash_append_slash,
       splitSlash_no_slash _ hws]
     rfl
 
@@ -353,13 +353,13 @@ private def twoAgents : State
   | _ => []
 
 example : scopedSelect twoAgents ⟨"w1"⟩ .agents (fun _ => true) =
-    [⟨[("id", "a1"), ("workspace_id", "w1")]⟩] := by decide
+    [⟨[("id", "a1"), ("workspace_id", "w1")]⟩] := by decide +kernel
 
 example : isScopedTable (RepoWrite.delete .agents (fun _ => true)).table = true ∧
-    rowTenant .agents ⟨[("id", "a1"), ("workspace_id", "w1")]⟩ ≠ some "w2" := by decide
+    rowTenant .agents ⟨[("id", "a1"), ("workspace_id", "w1")]⟩ ≠ some "w2" := by decide +kernel
 
 example : (RepoWrite.insert .agents ⟨[("id", "a3"), ("workspace_id", "w1")]⟩).compile twoAgents ⟨"w2"⟩ =
-    [.insert .agents ⟨[("workspace_id", "w2"), ("id", "a3")]⟩] := by decide
+    [.insert .agents ⟨[("workspace_id", "w2"), ("id", "a3")]⟩] := by decide +kernel
 
 /- An audit event has no dependent rows. Deleting `w1`'s event in the fully consistent ER
 witness exercises a committed write while the agent of `w2` remains present. -/
@@ -388,10 +388,10 @@ private def directory : State
   | _ => []
 
 example : (principalById directory "w1" "p1" 1000).isSome = true ∧
-    (principalById directory "w1" "p3" 1000).isSome = true := by decide
+    (principalById directory "w1" "p3" 1000).isSome = true := by decide +kernel
 
 example : scopedObjectOpTarget "w1" (.put "docs/a.md") = .backend ["workspaces/w1/docs/a.md"] ∧
     scopedObjectOpTarget "w2" (.list "") = .backend ["workspaces/w2"] ∧
-    ("w1".toList.contains '/') = false := by decide
+    ("w1".toList.contains '/') = false := by decide +kernel
 
 end AgentWorkspace.Theorems.Invariants.AuthzTenancy

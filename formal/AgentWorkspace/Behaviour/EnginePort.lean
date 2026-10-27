@@ -195,7 +195,7 @@ def runTokenFor (request : Request) : String :=
 def assembledEnv (request : Request) (projectKey configDir : String) : List (String × String) :=
   let derived := derivedEnv request projectKey configDir
   let names := derived.map Prod.fst
-  request.env.filter (fun kv => !names.contains kv.1) ++ derived
+  (RunCompose.withDefaults request.env).filter (fun kv => !names.contains kv.1) ++ derived
 
 /-- **The target compile**: parse the engine arm, check the capability, assemble, then check A.11.
 

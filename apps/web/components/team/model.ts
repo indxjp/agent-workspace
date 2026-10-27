@@ -15,18 +15,16 @@
  * {@link isCurrentUser} and {@link soleOwnerUserId}. Neither names a role's powers.
  */
 import {
-  MembershipListResponseSchema,
   type MembershipCapability,
   type MembershipResource,
   type MembershipRoleName,
 } from '../../contracts/team';
-import { describeRequestFailure, type RequestProblem } from '../agents/model';
+import type { RequestProblem } from '../agents/model';
 
-// `describeRequestFailure` and `RequestProblem` are not reimplemented here: they are
-// `../agents/model.ts`'s own, generic over any route answering this platform's error envelope, and
-// #185 is the change that taught that reader the membership routes' `detail` spelling. Re-exported
-// so the team components have one import for the whole model, as `../projects/model.ts` does.
-export { describeRequestFailure, type RequestProblem };
+// `RequestProblem` is `../agents/model.ts`'s own, generic over any route answering this platform's
+// error envelope. Re-exported so the team components have one import for the whole model, as
+// `../projects/model.ts` does.
+export type { RequestProblem };
 export type { MembershipCapability, MembershipResource, MembershipRoleName };
 
 /** §21's four roles, as a members table shows them. Display only; nothing is decided from this. */
@@ -54,18 +52,6 @@ export function formatTeamDate(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
   return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-}
-
-/**
- * `GET /api/memberships` → the rows this screen may trust, or `null` for a body it cannot read.
- *
- * `null` rather than a throw, and rather than an empty list: an empty members table is a claim
- * ("this workspace has nobody in it") that a malformed response is no evidence for, and this screen
- * has a refusal state for exactly that reason.
- */
-export function readMemberList(body: unknown): readonly MembershipResource[] | null {
-  const parsed = MembershipListResponseSchema.safeParse(body);
-  return parsed.success ? parsed.data.memberships : null;
 }
 
 /** Is this row the signed-in caller's own? A fact about the request, not a permission. */
@@ -153,60 +139,9 @@ export interface RemovalImpactCounts {
   readonly projects: number;
 }
 
-function rowsOf(body: unknown, listKey: string): readonly Record<string, unknown>[] | null {
-  if (typeof body !== 'object' || body === null || Array.isArray(body)) return null;
-  const list = (body as Record<string, unknown>)[listKey];
-  if (!Array.isArray(list)) return null;
-  const rows: Record<string, unknown>[] = [];
-  for (const entry of list) {
-    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) return null;
-    rows.push(entry as Record<string, unknown>);
-  }
-  return rows;
-}
-
-/**
- * Count the rows of a list response whose `field` names this user, or `null` when the response
- * cannot answer the question.
- *
- * A row missing the field is `null` for the whole read, never a row that "does not match".
- * `GET /api/sessions` has a second response shape for a deployment with no sessions repository
- * configured (`server/sessions/api.ts`'s store fallback) whose rows carry **no `userId` at all**;
- * counting those would report a confident `0` for a member who owns many, and a confident zero in
- * a removal confirmation is worse than admitting the count could not be made.
- */
-function countRowsNaming(
-  body: unknown,
-  listKey: string,
-  field: string,
-  userId: string,
-): number | null {
-  const rows = rowsOf(body, listKey);
-  if (rows === null) return null;
-  let total = 0;
-  for (const row of rows) {
-    const value = row[field];
-    // A machine-owned row deliberately has no legacy human attribution. It is known not to name
-    // this member; only a missing or otherwise malformed field makes the count unknowable.
-    if (value !== null && typeof value !== 'string') return null;
-    if (value === userId) total += 1;
-  }
-  return total;
-}
-
-/** `GET /api/sessions` → how many sessions this member owns, or `null` if the shape cannot say. */
-export function readMemberSessionCount(body: unknown, userId: string): number | null {
-  return countRowsNaming(body, 'sessions', 'userId', userId);
-}
-
-/** `GET /api/projects?archived=all` → how many projects this member created, or `null`. */
-export function readMemberProjectCount(body: unknown, userId: string): number | null {
-  return countRowsNaming(body, 'projects', 'createdBy', userId);
-}
-
 /**
  * The two impact reads reduced to the counts the confirmation renders, with `null` when **either**
- * is missing. A failed read is not a zero — see {@link countRowsNaming}.
+ * is missing. A failed read is not a zero — the reads in `./team-requests-model.ts` return `null` for it.
  */
 export function removalImpactFromReads(
   sessions: number | null,

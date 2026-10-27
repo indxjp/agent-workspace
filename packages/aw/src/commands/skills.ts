@@ -1,8 +1,9 @@
+import { openAsBlob } from 'node:fs';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import type { SkillFile } from '@indx-workspace/contracts/skills';
-import type { AgentWorkspaceClient } from '@indx-workspace/sdk';
+import type { AgentWorkspaceClient, SkillImportFile } from '@indx-workspace/sdk';
 
 import {
   command,
@@ -18,31 +19,53 @@ import { notice } from '../output.js';
 
 const SKILL_COLUMNS = ['name', 'enabled', 'description', 'fileCount', 'updatedAt'];
 
-/** Every file under `directory`, path relative to it with forward slashes, bytes as base64. */
-export async function readSkillDirectory(directory: string): Promise<SkillFile[]> {
+/** Every file under `directory`, sorted by relative path (forward slashes); at least one. */
+async function skillDirectoryPaths(
+  directory: string,
+): Promise<{ readonly path: string; readonly absolute: string }[]> {
   let entries;
   try {
     entries = await readdir(directory, { withFileTypes: true, recursive: true });
   } catch {
     throw new UsageError(`could not read directory ${directory}`);
   }
-  const files: SkillFile[] = [];
-  for (const entry of entries) {
-    if (!entry.isFile()) continue;
-    const absolute = path.join(entry.parentPath, entry.name);
-    const relative = path.relative(directory, absolute).split(path.sep).join('/');
-    files.push({ path: relative, contentBase64: (await readFile(absolute)).toString('base64') });
-  }
+  const files = entries
+    .filter((entry) => entry.isFile())
+    .map((entry) => {
+      const absolute = path.join(entry.parentPath, entry.name);
+      return { path: path.relative(directory, absolute).split(path.sep).join('/'), absolute };
+    });
   if (files.length === 0) throw new UsageError(`${directory} holds no files`);
   return files.sort((left, right) =>
     left.path < right.path ? -1 : left.path > right.path ? 1 : 0,
   );
 }
 
+/** Every file under `directory`, path relative to it with forward slashes, bytes as base64. */
+export async function readSkillDirectory(directory: string): Promise<SkillFile[]> {
+  const files = await skillDirectoryPaths(directory);
+  return Promise.all(
+    files.map(async (file) => ({
+      path: file.path,
+      contentBase64: (await readFile(file.absolute)).toString('base64'),
+    })),
+  );
+}
+
+// @story US-STO-08
+/** The same files as `Blob`s, for the multipart import: no base64, no second copy of the bytes. */
+async function readSkillBlobs(directory: string): Promise<SkillImportFile[]> {
+  const files = await skillDirectoryPaths(directory);
+  return Promise.all(
+    files.map(async (file) => ({ path: file.path, body: await openAsBlob(file.absolute) })),
+  );
+}
+
 /**
  * Make the workspace skill `name` hold `files`: import it when `existing` (its files now) is
  * absent, else one patch that writes every file and removes the ones `files` no longer has.
- * `aw skills import` and the `skills/` folders `aw dev` and `aw push` sync both upload through it.
+ * The `skills/` folders `aw dev` and `aw push` sync upload through it; a new skill is imported
+ * with each file's decoded bytes as `body`, never the SDK's deprecated `contentBase64` form.
  */
 export async function uploadSkill(
   client: AgentWorkspaceClient,
@@ -54,7 +77,13 @@ export async function uploadSkill(
   signal: AbortSignal,
 ): Promise<unknown> {
   const { name, files, existing } = upload;
-  if (existing === undefined) return client.skills.import({ name, files }, { signal });
+  if (existing === undefined) {
+    const bodies = files.map((file) => ({
+      path: file.path,
+      body: new Uint8Array(Buffer.from(file.contentBase64, 'base64')),
+    }));
+    return client.skills.import({ name, files: bodies }, { signal });
+  }
   const kept = new Set(files.map((file) => file.path));
   const removeFiles = existing.map((file) => file.path).filter((file) => !kept.has(file));
   return client.skills.update(name, { files, removeFiles }, { signal });
@@ -104,13 +133,24 @@ export const skillCommands: readonly Command[] = [
       const directory = positional(context, 0, 'dir');
       const name = value(context, 'name') ?? path.basename(path.resolve(directory));
       return {
-        value: await uploadSkill(
-          context.client,
-          { name, files: await readSkillDirectory(directory) },
-          context.signal,
+        value: await context.client.skills.import(
+          { name, files: await readSkillBlobs(directory) },
+          { signal: context.signal },
         ),
       };
     },
+  ),
+  command(
+    'skills publish',
+    '<name> <dir>',
+    "Replace a skill's files with a directory and freeze them as the next numbered revision",
+    async (context) => ({
+      value: await context.client.skills.publish(
+        positional(context, 0, 'name'),
+        { files: await readSkillDirectory(positional(context, 1, 'dir')) },
+        { signal: context.signal },
+      ),
+    }),
   ),
   command(
     'skills export',

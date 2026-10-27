@@ -1,5 +1,193 @@
 {"vectors":
  [{"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null, "role": "owner", "path": "/api/builder/mcp", "owner": "BLD-3-BUILDER-MCP-1846", "method": "POST"},
+   "id": "route/owner/POST /api/builder/mcp",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null, "role": "admin", "path": "/api/builder/mcp", "owner": "BLD-3-BUILDER-MCP-1846", "method": "POST"},
+   "id": "route/admin/POST /api/builder/mcp",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null, "role": "builder", "path": "/api/builder/mcp", "owner": "BLD-3-BUILDER-MCP-1846", "method": "POST"},
+   "id": "route/builder/POST /api/builder/mcp",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null, "role": "viewer", "path": "/api/builder/mcp", "owner": "BLD-3-BUILDER-MCP-1846", "method": "POST"},
+   "id": "route/viewer/POST /api/builder/mcp",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.public_allowed_page_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null, "role": "owner", "path": "/mcp/builder", "owner": "BLD-5B-BUILDER-EXTERNAL-1846", "method": "POST"},
+   "id": "route/owner/POST /mcp/builder",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is a browser page"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.public_allowed_page_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null, "role": "admin", "path": "/mcp/builder", "owner": "BLD-5B-BUILDER-EXTERNAL-1846", "method": "POST"},
+   "id": "route/admin/POST /mcp/builder",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is a browser page"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.public_allowed_page_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "builder",
+    "path": "/mcp/builder",
+    "owner": "BLD-5B-BUILDER-EXTERNAL-1846",
+    "method": "POST"},
+   "id": "route/builder/POST /mcp/builder",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is a browser page"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.public_allowed_page_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null, "role": "viewer", "path": "/mcp/builder", "owner": "BLD-5B-BUILDER-EXTERNAL-1846", "method": "POST"},
+   "id": "route/viewer/POST /mcp/builder",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is a browser page"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.public_allowed_page_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "owner",
+    "path": "/.well-known/oauth-protected-resource/mcp/builder",
+    "owner": "BLD-5B-BUILDER-EXTERNAL-1846",
+    "method": "GET"},
+   "id": "route/owner/GET /.well-known/oauth-protected-resource/mcp/builder",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is a browser page"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.public_allowed_page_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "admin",
+    "path": "/.well-known/oauth-protected-resource/mcp/builder",
+    "owner": "BLD-5B-BUILDER-EXTERNAL-1846",
+    "method": "GET"},
+   "id": "route/admin/GET /.well-known/oauth-protected-resource/mcp/builder",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is a browser page"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.public_allowed_page_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "builder",
+    "path": "/.well-known/oauth-protected-resource/mcp/builder",
+    "owner": "BLD-5B-BUILDER-EXTERNAL-1846",
+    "method": "GET"},
+   "id": "route/builder/GET /.well-known/oauth-protected-resource/mcp/builder",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is a browser page"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.public_allowed_page_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "viewer",
+    "path": "/.well-known/oauth-protected-resource/mcp/builder",
+    "owner": "BLD-5B-BUILDER-EXTERNAL-1846",
+    "method": "GET"},
+   "id": "route/viewer/GET /.well-known/oauth-protected-resource/mcp/builder",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is a browser page"}}},
+  {"witnesses":
    ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
     "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
     "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_agents",
@@ -2012,6 +2200,295 @@
      "code": null,
      "because": null}}},
   {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input": {"scope": null, "role": "owner", "path": "/api/readyz", "owner": "ENG-D9-READINESS-1562", "method": "GET"},
+   "id": "route/owner/GET /api/readyz",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input": {"scope": null, "role": "admin", "path": "/api/readyz", "owner": "ENG-D9-READINESS-1562", "method": "GET"},
+   "id": "route/admin/GET /api/readyz",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null, "role": "builder", "path": "/api/readyz", "owner": "ENG-D9-READINESS-1562", "method": "GET"},
+   "id": "route/builder/GET /api/readyz",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/readyz", "owner": "ENG-D9-READINESS-1562", "method": "GET"},
+   "id": "route/viewer/GET /api/readyz",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_sessions",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "owner",
+    "path": "/api/sessions/:engineSessionId/attachments",
+    "owner": "P7-2-SURFACE-ATTACHMENTS-1308",
+    "method": "POST"},
+   "id": "route/owner/POST /api/sessions/:engineSessionId/attachments",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "sessions", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_sessions",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "admin",
+    "path": "/api/sessions/:engineSessionId/attachments",
+    "owner": "P7-2-SURFACE-ATTACHMENTS-1308",
+    "method": "POST"},
+   "id": "route/admin/POST /api/sessions/:engineSessionId/attachments",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "sessions", "operation": "write", "grant": "own"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "allow", "other": "deny", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_sessions",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "builder",
+    "path": "/api/sessions/:engineSessionId/attachments",
+    "owner": "P7-2-SURFACE-ATTACHMENTS-1308",
+    "method": "POST"},
+   "id": "route/builder/POST /api/sessions/:engineSessionId/attachments",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "sessions", "operation": "write", "grant": "own"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "allow", "other": "deny", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_sessions",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "viewer",
+    "path": "/api/sessions/:engineSessionId/attachments",
+    "owner": "P7-2-SURFACE-ATTACHMENTS-1308",
+    "method": "POST"},
+   "id": "route/viewer/POST /api/sessions/:engineSessionId/attachments",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "sessions", "operation": "write", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_files",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null, "role": "owner", "path": "/api/files/search", "owner": "P8-4-FILE-SEARCH-1314", "method": "GET"},
+   "id": "route/owner/GET /api/files/search",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "files", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_files",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null, "role": "admin", "path": "/api/files/search", "owner": "P8-4-FILE-SEARCH-1314", "method": "GET"},
+   "id": "route/admin/GET /api/files/search",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "files", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_files",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null, "role": "builder", "path": "/api/files/search", "owner": "P8-4-FILE-SEARCH-1314", "method": "GET"},
+   "id": "route/builder/GET /api/files/search",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "files", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_files",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null, "role": "viewer", "path": "/api/files/search", "owner": "P8-4-FILE-SEARCH-1314", "method": "GET"},
+   "id": "route/viewer/GET /api/files/search",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "files", "operation": "read", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_sessions",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "owner",
+    "path": "/api/sessions/:engineSessionId/file-search",
+    "owner": "P8-4-FILE-SEARCH-1314",
+    "method": "GET"},
+   "id": "route/owner/GET /api/sessions/:engineSessionId/file-search",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "sessions", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_sessions",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "admin",
+    "path": "/api/sessions/:engineSessionId/file-search",
+    "owner": "P8-4-FILE-SEARCH-1314",
+    "method": "GET"},
+   "id": "route/admin/GET /api/sessions/:engineSessionId/file-search",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "sessions", "operation": "read", "grant": "own"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "allow", "other": "deny", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_sessions",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "builder",
+    "path": "/api/sessions/:engineSessionId/file-search",
+    "owner": "P8-4-FILE-SEARCH-1314",
+    "method": "GET"},
+   "id": "route/builder/GET /api/sessions/:engineSessionId/file-search",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "sessions", "operation": "read", "grant": "own"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "allow", "other": "deny", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_sessions",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "viewer",
+    "path": "/api/sessions/:engineSessionId/file-search",
+    "owner": "P8-4-FILE-SEARCH-1314",
+    "method": "GET"},
+   "id": "route/viewer/GET /api/sessions/:engineSessionId/file-search",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "sessions", "operation": "read", "grant": "own"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "allow", "other": "deny", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
    ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
     "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
     "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_endpointClients",
@@ -2513,6 +2990,90 @@
    {"outcomes":
     {"facts": {"resource": "endpoint-clients", "operation": "write", "grant": "none"},
      "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_runs",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "owner",
+    "path": "/api/runs/:id/approval",
+    "owner": "P5-4-RUN-APPROVAL-1301",
+    "method": "POST"},
+   "id": "route/owner/POST /api/runs/:id/approval",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "runs", "operation": "run", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_runs",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "admin",
+    "path": "/api/runs/:id/approval",
+    "owner": "P5-4-RUN-APPROVAL-1301",
+    "method": "POST"},
+   "id": "route/admin/POST /api/runs/:id/approval",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "runs", "operation": "run", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_runs",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "builder",
+    "path": "/api/runs/:id/approval",
+    "owner": "P5-4-RUN-APPROVAL-1301",
+    "method": "POST"},
+   "id": "route/builder/POST /api/runs/:id/approval",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "runs", "operation": "run", "grant": "own"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "allow", "other": "deny", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_runs",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "viewer",
+    "path": "/api/runs/:id/approval",
+    "owner": "P5-4-RUN-APPROVAL-1301",
+    "method": "POST"},
+   "id": "route/viewer/POST /api/runs/:id/approval",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "runs", "operation": "run", "grant": "own"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "allow", "other": "deny", "not-applicable": "allow"},
      "code": null,
      "because": null}}},
   {"witnesses":
@@ -3207,6 +3768,536 @@
      {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
      "code": null,
      "because": "is a browser page"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_triggers",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input": {"scope": null, "role": "owner", "path": "/api/triggers", "owner": "PT-TRIGGERS-1293", "method": "GET"},
+   "id": "route/owner/GET /api/triggers",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "triggers", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_triggers",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input": {"scope": null, "role": "admin", "path": "/api/triggers", "owner": "PT-TRIGGERS-1293", "method": "GET"},
+   "id": "route/admin/GET /api/triggers",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "triggers", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_triggers",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input": {"scope": null, "role": "builder", "path": "/api/triggers", "owner": "PT-TRIGGERS-1293", "method": "GET"},
+   "id": "route/builder/GET /api/triggers",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "triggers", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_triggers",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/triggers", "owner": "PT-TRIGGERS-1293", "method": "GET"},
+   "id": "route/viewer/GET /api/triggers",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "triggers", "operation": "read", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_triggers",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input": {"scope": null, "role": "owner", "path": "/api/triggers", "owner": "PT-TRIGGERS-1293", "method": "POST"},
+   "id": "route/owner/POST /api/triggers",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "triggers", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_triggers",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input": {"scope": null, "role": "admin", "path": "/api/triggers", "owner": "PT-TRIGGERS-1293", "method": "POST"},
+   "id": "route/admin/POST /api/triggers",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "triggers", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_triggers",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input": {"scope": null, "role": "builder", "path": "/api/triggers", "owner": "PT-TRIGGERS-1293", "method": "POST"},
+   "id": "route/builder/POST /api/triggers",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "triggers", "operation": "write", "grant": "own"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "allow", "other": "deny", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_triggers",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/triggers", "owner": "PT-TRIGGERS-1293", "method": "POST"},
+   "id": "route/viewer/POST /api/triggers",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "triggers", "operation": "write", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_triggers",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input": {"scope": null, "role": "owner", "path": "/api/triggers/:id", "owner": "PT-TRIGGERS-1293", "method": "GET"},
+   "id": "route/owner/GET /api/triggers/:id",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "triggers", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_triggers",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input": {"scope": null, "role": "admin", "path": "/api/triggers/:id", "owner": "PT-TRIGGERS-1293", "method": "GET"},
+   "id": "route/admin/GET /api/triggers/:id",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "triggers", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_triggers",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null, "role": "builder", "path": "/api/triggers/:id", "owner": "PT-TRIGGERS-1293", "method": "GET"},
+   "id": "route/builder/GET /api/triggers/:id",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "triggers", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_triggers",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null, "role": "viewer", "path": "/api/triggers/:id", "owner": "PT-TRIGGERS-1293", "method": "GET"},
+   "id": "route/viewer/GET /api/triggers/:id",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "triggers", "operation": "read", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_triggers",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null, "role": "owner", "path": "/api/triggers/:id", "owner": "PT-TRIGGERS-1293", "method": "PATCH"},
+   "id": "route/owner/PATCH /api/triggers/:id",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "triggers", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_triggers",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null, "role": "admin", "path": "/api/triggers/:id", "owner": "PT-TRIGGERS-1293", "method": "PATCH"},
+   "id": "route/admin/PATCH /api/triggers/:id",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "triggers", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_triggers",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null, "role": "builder", "path": "/api/triggers/:id", "owner": "PT-TRIGGERS-1293", "method": "PATCH"},
+   "id": "route/builder/PATCH /api/triggers/:id",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "triggers", "operation": "write", "grant": "own"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "allow", "other": "deny", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_triggers",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null, "role": "viewer", "path": "/api/triggers/:id", "owner": "PT-TRIGGERS-1293", "method": "PATCH"},
+   "id": "route/viewer/PATCH /api/triggers/:id",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "triggers", "operation": "write", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_triggers",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null, "role": "owner", "path": "/api/triggers/:id", "owner": "PT-TRIGGERS-1293", "method": "DELETE"},
+   "id": "route/owner/DELETE /api/triggers/:id",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "triggers", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_triggers",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null, "role": "admin", "path": "/api/triggers/:id", "owner": "PT-TRIGGERS-1293", "method": "DELETE"},
+   "id": "route/admin/DELETE /api/triggers/:id",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "triggers", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_triggers",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null, "role": "builder", "path": "/api/triggers/:id", "owner": "PT-TRIGGERS-1293", "method": "DELETE"},
+   "id": "route/builder/DELETE /api/triggers/:id",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "triggers", "operation": "write", "grant": "own"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "allow", "other": "deny", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_triggers",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null, "role": "viewer", "path": "/api/triggers/:id", "owner": "PT-TRIGGERS-1293", "method": "DELETE"},
+   "id": "route/viewer/DELETE /api/triggers/:id",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "triggers", "operation": "write", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_triggers",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null, "role": "owner", "path": "/api/triggers/:id/secret", "owner": "PT-TRIGGERS-1293", "method": "POST"},
+   "id": "route/owner/POST /api/triggers/:id/secret",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "triggers", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_triggers",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null, "role": "admin", "path": "/api/triggers/:id/secret", "owner": "PT-TRIGGERS-1293", "method": "POST"},
+   "id": "route/admin/POST /api/triggers/:id/secret",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "triggers", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_triggers",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "builder",
+    "path": "/api/triggers/:id/secret",
+    "owner": "PT-TRIGGERS-1293",
+    "method": "POST"},
+   "id": "route/builder/POST /api/triggers/:id/secret",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "triggers", "operation": "write", "grant": "own"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "allow", "other": "deny", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_triggers",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null, "role": "viewer", "path": "/api/triggers/:id/secret", "owner": "PT-TRIGGERS-1293", "method": "POST"},
+   "id": "route/viewer/POST /api/triggers/:id/secret",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "triggers", "operation": "write", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.path_deeper_than_sub_is_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "owner",
+    "path": "/api/triggers/:id/fire/:secret",
+    "owner": "PT-TRIGGERS-1293",
+    "method": "POST"},
+   "id": "route/owner/POST /api/triggers/:id/fire/:secret",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is deeper than"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.path_deeper_than_sub_is_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "admin",
+    "path": "/api/triggers/:id/fire/:secret",
+    "owner": "PT-TRIGGERS-1293",
+    "method": "POST"},
+   "id": "route/admin/POST /api/triggers/:id/fire/:secret",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is deeper than"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.path_deeper_than_sub_is_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "builder",
+    "path": "/api/triggers/:id/fire/:secret",
+    "owner": "PT-TRIGGERS-1293",
+    "method": "POST"},
+   "id": "route/builder/POST /api/triggers/:id/fire/:secret",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is deeper than"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.path_deeper_than_sub_is_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "viewer",
+    "path": "/api/triggers/:id/fire/:secret",
+    "owner": "PT-TRIGGERS-1293",
+    "method": "POST"},
+   "id": "route/viewer/POST /api/triggers/:id/fire/:secret",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is deeper than"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null, "role": "owner", "path": "/api/cron/triggers", "owner": "PT-TRIGGERS-1293", "method": "GET"},
+   "id": "route/owner/GET /api/cron/triggers",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null, "role": "admin", "path": "/api/cron/triggers", "owner": "PT-TRIGGERS-1293", "method": "GET"},
+   "id": "route/admin/GET /api/cron/triggers",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null, "role": "builder", "path": "/api/cron/triggers", "owner": "PT-TRIGGERS-1293", "method": "GET"},
+   "id": "route/builder/GET /api/cron/triggers",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null, "role": "viewer", "path": "/api/cron/triggers", "owner": "PT-TRIGGERS-1293", "method": "GET"},
+   "id": "route/viewer/GET /api/cron/triggers",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
   {"witnesses":
    ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
     "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
@@ -4448,6 +5539,1074 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
     "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_files",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "owner",
+    "path": "/api/files/:id/upload-urls",
+    "owner": "SDK-19-PRESIGNED-FILES-251",
+    "method": "POST"},
+   "id": "route/owner/POST /api/files/:id/upload-urls",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "files", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_files",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "admin",
+    "path": "/api/files/:id/upload-urls",
+    "owner": "SDK-19-PRESIGNED-FILES-251",
+    "method": "POST"},
+   "id": "route/admin/POST /api/files/:id/upload-urls",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "files", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_files",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "builder",
+    "path": "/api/files/:id/upload-urls",
+    "owner": "SDK-19-PRESIGNED-FILES-251",
+    "method": "POST"},
+   "id": "route/builder/POST /api/files/:id/upload-urls",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "files", "operation": "write", "grant": "own"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "allow", "other": "deny", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_files",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "viewer",
+    "path": "/api/files/:id/upload-urls",
+    "owner": "SDK-19-PRESIGNED-FILES-251",
+    "method": "POST"},
+   "id": "route/viewer/POST /api/files/:id/upload-urls",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "files", "operation": "write", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_files",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "owner",
+    "path": "/api/files/:id/upload-complete",
+    "owner": "SDK-19-PRESIGNED-FILES-251",
+    "method": "POST"},
+   "id": "route/owner/POST /api/files/:id/upload-complete",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "files", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_files",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "admin",
+    "path": "/api/files/:id/upload-complete",
+    "owner": "SDK-19-PRESIGNED-FILES-251",
+    "method": "POST"},
+   "id": "route/admin/POST /api/files/:id/upload-complete",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "files", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_files",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "builder",
+    "path": "/api/files/:id/upload-complete",
+    "owner": "SDK-19-PRESIGNED-FILES-251",
+    "method": "POST"},
+   "id": "route/builder/POST /api/files/:id/upload-complete",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "files", "operation": "write", "grant": "own"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "allow", "other": "deny", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_files",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "viewer",
+    "path": "/api/files/:id/upload-complete",
+    "owner": "SDK-19-PRESIGNED-FILES-251",
+    "method": "POST"},
+   "id": "route/viewer/POST /api/files/:id/upload-complete",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "files", "operation": "write", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_files",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "owner",
+    "path": "/api/files/:id/download-urls",
+    "owner": "SDK-19-PRESIGNED-FILES-251",
+    "method": "POST"},
+   "id": "route/owner/POST /api/files/:id/download-urls",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "files", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_files",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "admin",
+    "path": "/api/files/:id/download-urls",
+    "owner": "SDK-19-PRESIGNED-FILES-251",
+    "method": "POST"},
+   "id": "route/admin/POST /api/files/:id/download-urls",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "files", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_files",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "builder",
+    "path": "/api/files/:id/download-urls",
+    "owner": "SDK-19-PRESIGNED-FILES-251",
+    "method": "POST"},
+   "id": "route/builder/POST /api/files/:id/download-urls",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "files", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_files",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "viewer",
+    "path": "/api/files/:id/download-urls",
+    "owner": "SDK-19-PRESIGNED-FILES-251",
+    "method": "POST"},
+   "id": "route/viewer/POST /api/files/:id/download-urls",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "files", "operation": "read", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_skills",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "owner",
+    "path": "/api/skills/:name/revisions",
+    "owner": "SDK-19-SKILL-REVISIONS-251",
+    "method": "POST"},
+   "id": "route/owner/POST /api/skills/:name/revisions",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "skills", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_skills",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "admin",
+    "path": "/api/skills/:name/revisions",
+    "owner": "SDK-19-SKILL-REVISIONS-251",
+    "method": "POST"},
+   "id": "route/admin/POST /api/skills/:name/revisions",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "skills", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_skills",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "builder",
+    "path": "/api/skills/:name/revisions",
+    "owner": "SDK-19-SKILL-REVISIONS-251",
+    "method": "POST"},
+   "id": "route/builder/POST /api/skills/:name/revisions",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "skills", "operation": "write", "grant": "own"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "allow", "other": "deny", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_skills",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "viewer",
+    "path": "/api/skills/:name/revisions",
+    "owner": "SDK-19-SKILL-REVISIONS-251",
+    "method": "POST"},
+   "id": "route/viewer/POST /api/skills/:name/revisions",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "skills", "operation": "write", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_storageConnections",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "owner",
+    "path": "/api/storage-connections",
+    "owner": "STO-503-STORAGE-CONNECTIONS-1690",
+    "method": "GET"},
+   "id": "route/owner/GET /api/storage-connections",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "storage-connections", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_storageConnections",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "admin",
+    "path": "/api/storage-connections",
+    "owner": "STO-503-STORAGE-CONNECTIONS-1690",
+    "method": "GET"},
+   "id": "route/admin/GET /api/storage-connections",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "storage-connections", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_storageConnections",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "builder",
+    "path": "/api/storage-connections",
+    "owner": "STO-503-STORAGE-CONNECTIONS-1690",
+    "method": "GET"},
+   "id": "route/builder/GET /api/storage-connections",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "storage-connections", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_storageConnections",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "viewer",
+    "path": "/api/storage-connections",
+    "owner": "STO-503-STORAGE-CONNECTIONS-1690",
+    "method": "GET"},
+   "id": "route/viewer/GET /api/storage-connections",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "storage-connections", "operation": "read", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_storageConnections",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "owner",
+    "path": "/api/storage-connections",
+    "owner": "STO-503-STORAGE-CONNECTIONS-1690",
+    "method": "POST"},
+   "id": "route/owner/POST /api/storage-connections",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "storage-connections", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_storageConnections",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "admin",
+    "path": "/api/storage-connections",
+    "owner": "STO-503-STORAGE-CONNECTIONS-1690",
+    "method": "POST"},
+   "id": "route/admin/POST /api/storage-connections",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "storage-connections", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_storageConnections",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "builder",
+    "path": "/api/storage-connections",
+    "owner": "STO-503-STORAGE-CONNECTIONS-1690",
+    "method": "POST"},
+   "id": "route/builder/POST /api/storage-connections",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "storage-connections", "operation": "write", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_storageConnections",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "viewer",
+    "path": "/api/storage-connections",
+    "owner": "STO-503-STORAGE-CONNECTIONS-1690",
+    "method": "POST"},
+   "id": "route/viewer/POST /api/storage-connections",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "storage-connections", "operation": "write", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_storageConnections",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "owner",
+    "path": "/api/storage-connections/:id",
+    "owner": "STO-503-STORAGE-CONNECTIONS-1690",
+    "method": "GET"},
+   "id": "route/owner/GET /api/storage-connections/:id",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "storage-connections", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_storageConnections",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "admin",
+    "path": "/api/storage-connections/:id",
+    "owner": "STO-503-STORAGE-CONNECTIONS-1690",
+    "method": "GET"},
+   "id": "route/admin/GET /api/storage-connections/:id",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "storage-connections", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_storageConnections",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "builder",
+    "path": "/api/storage-connections/:id",
+    "owner": "STO-503-STORAGE-CONNECTIONS-1690",
+    "method": "GET"},
+   "id": "route/builder/GET /api/storage-connections/:id",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "storage-connections", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_storageConnections",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "viewer",
+    "path": "/api/storage-connections/:id",
+    "owner": "STO-503-STORAGE-CONNECTIONS-1690",
+    "method": "GET"},
+   "id": "route/viewer/GET /api/storage-connections/:id",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "storage-connections", "operation": "read", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_storageConnections",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "owner",
+    "path": "/api/storage-connections/:id",
+    "owner": "STO-503-STORAGE-CONNECTIONS-1690",
+    "method": "PATCH"},
+   "id": "route/owner/PATCH /api/storage-connections/:id",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "storage-connections", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_storageConnections",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "admin",
+    "path": "/api/storage-connections/:id",
+    "owner": "STO-503-STORAGE-CONNECTIONS-1690",
+    "method": "PATCH"},
+   "id": "route/admin/PATCH /api/storage-connections/:id",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "storage-connections", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_storageConnections",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "builder",
+    "path": "/api/storage-connections/:id",
+    "owner": "STO-503-STORAGE-CONNECTIONS-1690",
+    "method": "PATCH"},
+   "id": "route/builder/PATCH /api/storage-connections/:id",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "storage-connections", "operation": "write", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_storageConnections",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "viewer",
+    "path": "/api/storage-connections/:id",
+    "owner": "STO-503-STORAGE-CONNECTIONS-1690",
+    "method": "PATCH"},
+   "id": "route/viewer/PATCH /api/storage-connections/:id",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "storage-connections", "operation": "write", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_storageConnections",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "owner",
+    "path": "/api/storage-connections/:id/credential",
+    "owner": "STO-503-STORAGE-CONNECTIONS-1690",
+    "method": "PUT"},
+   "id": "route/owner/PUT /api/storage-connections/:id/credential",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "storage-connections", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_storageConnections",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "admin",
+    "path": "/api/storage-connections/:id/credential",
+    "owner": "STO-503-STORAGE-CONNECTIONS-1690",
+    "method": "PUT"},
+   "id": "route/admin/PUT /api/storage-connections/:id/credential",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "storage-connections", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_storageConnections",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "builder",
+    "path": "/api/storage-connections/:id/credential",
+    "owner": "STO-503-STORAGE-CONNECTIONS-1690",
+    "method": "PUT"},
+   "id": "route/builder/PUT /api/storage-connections/:id/credential",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "storage-connections", "operation": "write", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_storageConnections",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "viewer",
+    "path": "/api/storage-connections/:id/credential",
+    "owner": "STO-503-STORAGE-CONNECTIONS-1690",
+    "method": "PUT"},
+   "id": "route/viewer/PUT /api/storage-connections/:id/credential",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "storage-connections", "operation": "write", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_storageConnections",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "owner",
+    "path": "/api/storage-connections/:id",
+    "owner": "STO-503-STORAGE-CONNECTIONS-1690",
+    "method": "DELETE"},
+   "id": "route/owner/DELETE /api/storage-connections/:id",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "storage-connections", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_storageConnections",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "admin",
+    "path": "/api/storage-connections/:id",
+    "owner": "STO-503-STORAGE-CONNECTIONS-1690",
+    "method": "DELETE"},
+   "id": "route/admin/DELETE /api/storage-connections/:id",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "storage-connections", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_storageConnections",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "builder",
+    "path": "/api/storage-connections/:id",
+    "owner": "STO-503-STORAGE-CONNECTIONS-1690",
+    "method": "DELETE"},
+   "id": "route/builder/DELETE /api/storage-connections/:id",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "storage-connections", "operation": "write", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_storageConnections",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "viewer",
+    "path": "/api/storage-connections/:id",
+    "owner": "STO-503-STORAGE-CONNECTIONS-1690",
+    "method": "DELETE"},
+   "id": "route/viewer/DELETE /api/storage-connections/:id",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "storage-connections", "operation": "write", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_storageConnections",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "owner",
+    "path": "/api/storage-connections/:id/test",
+    "owner": "STO-503-STORAGE-CONNECTIONS-1690",
+    "method": "POST"},
+   "id": "route/owner/POST /api/storage-connections/:id/test",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "storage-connections", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_storageConnections",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "admin",
+    "path": "/api/storage-connections/:id/test",
+    "owner": "STO-503-STORAGE-CONNECTIONS-1690",
+    "method": "POST"},
+   "id": "route/admin/POST /api/storage-connections/:id/test",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "storage-connections", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_storageConnections",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "builder",
+    "path": "/api/storage-connections/:id/test",
+    "owner": "STO-503-STORAGE-CONNECTIONS-1690",
+    "method": "POST"},
+   "id": "route/builder/POST /api/storage-connections/:id/test",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "storage-connections", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_storageConnections",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "viewer",
+    "path": "/api/storage-connections/:id/test",
+    "owner": "STO-503-STORAGE-CONNECTIONS-1690",
+    "method": "POST"},
+   "id": "route/viewer/POST /api/storage-connections/:id/test",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "storage-connections", "operation": "read", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_storageConnections",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "owner",
+    "path": "/api/storage-connections/:id/browse",
+    "owner": "STO-503-STORAGE-CONNECTIONS-1690",
+    "method": "GET"},
+   "id": "route/owner/GET /api/storage-connections/:id/browse",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "storage-connections", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_storageConnections",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "admin",
+    "path": "/api/storage-connections/:id/browse",
+    "owner": "STO-503-STORAGE-CONNECTIONS-1690",
+    "method": "GET"},
+   "id": "route/admin/GET /api/storage-connections/:id/browse",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "storage-connections", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_storageConnections",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "builder",
+    "path": "/api/storage-connections/:id/browse",
+    "owner": "STO-503-STORAGE-CONNECTIONS-1690",
+    "method": "GET"},
+   "id": "route/builder/GET /api/storage-connections/:id/browse",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "storage-connections", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_storageConnections",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "viewer",
+    "path": "/api/storage-connections/:id/browse",
+    "owner": "STO-503-STORAGE-CONNECTIONS-1690",
+    "method": "GET"},
+   "id": "route/viewer/GET /api/storage-connections/:id/browse",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "storage-connections", "operation": "read", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null, "role": "owner", "path": "/api/cron/storage-cleanup", "owner": "STO-CLEANUP-1674", "method": "GET"},
+   "id": "route/owner/GET /api/cron/storage-cleanup",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null, "role": "admin", "path": "/api/cron/storage-cleanup", "owner": "STO-CLEANUP-1674", "method": "GET"},
+   "id": "route/admin/GET /api/cron/storage-cleanup",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null,
+    "role": "builder",
+    "path": "/api/cron/storage-cleanup",
+    "owner": "STO-CLEANUP-1674",
+    "method": "GET"},
+   "id": "route/builder/GET /api/cron/storage-cleanup",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_resource_is_refused_first",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided"],
+   "input":
+   {"scope": null, "role": "viewer", "path": "/api/cron/storage-cleanup", "owner": "STO-CLEANUP-1674", "method": "GET"},
+   "id": "route/viewer/GET /api/cron/storage-cleanup",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not a resource"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
     "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_agents",
     "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
     "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
@@ -4489,8 +6648,8 @@
    "id": "route/builder/POST /api/agents/:id/runs",
    "expected":
    {"outcomes":
-    {"facts": {"resource": "agents", "operation": "run", "grant": "own"},
-     "effects": {"unknown": "deny", "permitted": "deny", "own": "allow", "other": "deny", "not-applicable": "allow"},
+    {"facts": {"resource": "agents", "operation": "run", "grant": "permitted"},
+     "effects": {"unknown": "deny", "permitted": "allow", "own": "allow", "other": "deny", "not-applicable": "deny"},
      "code": null,
      "because": null}}},
   {"witnesses":
@@ -4506,7 +6665,7 @@
    "expected":
    {"outcomes":
     {"facts": {"resource": "agents", "operation": "run", "grant": "permitted"},
-     "effects": {"unknown": "deny", "permitted": "allow", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "effects": {"unknown": "deny", "permitted": "allow", "own": "allow", "other": "deny", "not-applicable": "deny"},
      "code": null,
      "because": null}}},
   {"witnesses":
@@ -8434,8 +10593,8 @@
    "id": "route/admin/GET /api/projects",
    "expected":
    {"outcomes":
-    {"facts": {"resource": "projects", "operation": "read", "grant": "none"},
-     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+    {"facts": {"resource": "projects", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
      "code": null,
      "because": null}}},
   {"witnesses":
@@ -8498,8 +10657,8 @@
    "id": "route/admin/POST /api/projects",
    "expected":
    {"outcomes":
-    {"facts": {"resource": "projects", "operation": "write", "grant": "none"},
-     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+    {"facts": {"resource": "projects", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
      "code": null,
      "because": null}}},
   {"witnesses":
@@ -8562,8 +10721,8 @@
    "id": "route/admin/GET /api/projects/:id",
    "expected":
    {"outcomes":
-    {"facts": {"resource": "projects", "operation": "read", "grant": "none"},
-     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+    {"facts": {"resource": "projects", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
      "code": null,
      "because": null}}},
   {"witnesses":
@@ -8626,8 +10785,8 @@
    "id": "route/admin/PATCH /api/projects/:id",
    "expected":
    {"outcomes":
-    {"facts": {"resource": "projects", "operation": "write", "grant": "none"},
-     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+    {"facts": {"resource": "projects", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
      "code": null,
      "because": null}}},
   {"witnesses":
@@ -8692,8 +10851,8 @@
    "id": "route/admin/POST /api/projects/:id/sessions",
    "expected":
    {"outcomes":
-    {"facts": {"resource": "projects", "operation": "write", "grant": "none"},
-     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+    {"facts": {"resource": "projects", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
      "code": null,
      "because": null}}},
   {"witnesses":
@@ -9702,8 +11861,8 @@
    "id": "route/admin/POST /api/projects/:id/archive",
    "expected":
    {"outcomes":
-    {"facts": {"resource": "projects", "operation": "write", "grant": "none"},
-     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+    {"facts": {"resource": "projects", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
      "code": null,
      "because": null}}},
   {"witnesses":
@@ -9770,8 +11929,8 @@
    "id": "route/admin/POST /api/projects/:id/restore",
    "expected":
    {"outcomes":
-    {"facts": {"resource": "projects", "operation": "write", "grant": "none"},
-     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+    {"facts": {"resource": "projects", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
      "code": null,
      "because": null}}},
   {"witnesses":

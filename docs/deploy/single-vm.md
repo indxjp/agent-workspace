@@ -93,6 +93,12 @@ also this deployment's secrets, which is why the generated
 project ignores it in version control and writes it `0600`. The field reference is
 `packages/cli/README.md`.
 
+## Before you start
+
+The disk that holds the Compose volumes (the bundled SeaweedFS's `seaweedfs-data`, or the directory
+a `file://` URL names) must be encrypted: LUKS, BitLocker or an encrypted cloud volume. Agent Workspace writes those files unencrypted; see
+[Protect stored files](../sdk/site/features/self-host-securely.mdx#protect-stored-files).
+
 ## Install
 
 Install Docker Engine with the Compose plugin, clone the repository, then create local settings:

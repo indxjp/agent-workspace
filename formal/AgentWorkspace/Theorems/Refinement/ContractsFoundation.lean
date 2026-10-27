@@ -41,7 +41,7 @@ theorem uuid_v4_target_refines_current (s : String) (h : isUuidV4Target s = true
 
 example : uuidCodec.decode (.str "123e4567-e89b-42d3-a456-426614174000") =
     some "123e4567-e89b-42d3-a456-426614174000" :=
-  (uuid_v4_target_refines_current _ (by decide)).1
+  (uuid_v4_target_refines_current _ (by decide +kernel)).1
 
 /-- Today's rule and the documented v4 rule diverge: the nil UUID, a v7 id and a v1 id are
 accepted today although none is v4, and an upper-case v4 id is accepted by both. -/
@@ -55,7 +55,7 @@ theorem uuid_current_diverges_from_v4_target :
       isUuidCurrent "c232ab00-9414-11ec-b3c8-9f6bdeced846" = true ∧
       isUuidV4Target "c232ab00-9414-11ec-b3c8-9f6bdeced846" = false ∧
       isUuidV4Target "123E4567-E89B-42D3-A456-426614174000" = true := by
-  decide
+  decide +kernel
 
 /-- The v4 target reads the variant nibble too: an id with version `4` but a variant nibble outside
 `8`–`b` (here `c`, the reserved Microsoft variant) is accepted today and is not v4 text. -/
@@ -65,7 +65,7 @@ theorem uuid_current_accepts_a_non_rfc_variant :
     isUuidCurrent "123e4567-e89b-42d3-c456-426614174000" = true ∧
       isUuidV4Target "123e4567-e89b-42d3-c456-426614174000" = false ∧
       isUuidV4Target "123e4567-e89b-42d3-b456-426614174000" = true := by
-  decide
+  decide +kernel
 
 /-- One id has two accepted spellings: the lower- and upper-case forms are both accepted, are
 different strings, and name the same UUID. -/
@@ -77,7 +77,7 @@ theorem uuid_accepts_two_spellings_of_one_id :
       "123e4567-e89b-12d3-a456-426614174000" ≠ "123E4567-E89B-12D3-A456-426614174000" ∧
       lowerAscii "123E4567-E89B-12D3-A456-426614174000" =
         "123e4567-e89b-12d3-a456-426614174000" := by
-  decide
+  decide +kernel
 
 /-! ## Error envelopes -/
 
@@ -92,7 +92,7 @@ theorem normalise_target_refines_current (j : JValue) (b : ApiProblemBody)
   simp [normaliseCurrent, Codec.firstOf, h]
 
 example : normaliseCurrent (apiProblemCodec.encode ⟨⟨"x", "y", none, none⟩⟩) = some ⟨"x", "y", none, none⟩ :=
-  normalise_target_refines_current _ _ (by decide)
+  normalise_target_refines_current _ _ (by decide +kernel)
 
 /-- Today's reader and the single-envelope target give different answers on exactly the bodies
 that parse as the RBAC `detail` envelope or the bare-code envelope; on every other body, standard
@@ -112,11 +112,11 @@ theorem normalise_current_differs_from_target_iff (j : JValue) :
 example : normaliseCurrent (apiProblemCodec.encode ⟨⟨"x", "y", none, none⟩⟩) =
     normaliseTarget (apiProblemCodec.encode ⟨⟨"x", "y", none, none⟩⟩) :=
   Classical.not_not.mp fun h => by
-    rcases (normalise_current_differs_from_target_iff _).mp h with h' | h' <;> revert h' <;> decide
+    rcases (normalise_current_differs_from_target_iff _).mp h with h' | h' <;> revert h' <;> decide +kernel
 
 example : normaliseCurrent (.obj [("error", .str "invalid_limit")]) ≠
     normaliseTarget (.obj [("error", .str "invalid_limit")]) :=
-  (normalise_current_differs_from_target_iff _).mpr (Or.inr (by decide))
+  (normalise_current_differs_from_target_iff _).mpr (Or.inr (by decide +kernel))
 
 /-- Today's reader and the target diverge exactly on the two legacy spellings: the RBAC `detail`
 envelope and the bare-code envelope are read today and refused by the target. -/
@@ -130,7 +130,7 @@ theorem normalise_current_diverges_on_legacy_spellings :
         some ⟨"last_owner", "x", none, none⟩ ∧
       normaliseTarget (.obj [("error", .str "invalid_limit")]) = none ∧
       normaliseCurrent (.obj [("error", .str "invalid_limit")]) = some ⟨"invalid_limit", "", none, none⟩ := by
-  decide
+  decide +kernel
 
 /-! ## The Phase-1 copies of the string predicates -/
 

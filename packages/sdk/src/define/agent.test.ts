@@ -21,7 +21,7 @@ const MINIMAL = { name: 'assistant', instructions: 'Answer briefly.' } as const;
 describe('DefineAgentInputSchema engine', () => {
   // Captured before AgentPolicySchema was built from the engine catalogue (ADR-0136); the
   // compact serialisation pins key order as well as content. The Claude arm has since gained the
-  // SDK-only `autoApprove`; the catalogue-derived keys of every arm are unchanged.
+  // SDK-only `autoApprove` and `requireApproval`; the catalogue-derived keys of every arm are unchanged.
   it('keeps the JSON Schema of the engine field', () => {
     const golden = readFileSync(
       new URL('../../../contracts/src/__golden__/engine-settings.schema.json', import.meta.url),
@@ -45,6 +45,81 @@ function pathsOf(run: () => unknown): readonly string[] {
   }
   throw new Error('expected a DefinitionError');
 }
+
+describe('defineAgent engine.requireApproval', () => {
+  const claude = (requireApproval: readonly string[], autoApprove: readonly string[] = []) => ({
+    ...MINIMAL,
+    engine: { id: 'claude-agent-sdk', requireApproval, autoApprove } as const,
+  });
+
+  it('accepts a tool name and an MCP glob', () => {
+    expect(defineAgent(claude(['mcp__gh__create_issue', 'mcp__jira__*'])).engine).toMatchObject({
+      requireApproval: ['mcp__gh__create_issue', 'mcp__jira__*'],
+    });
+  });
+
+  it('refuses a tool that is also in autoApprove, in either direction', () => {
+    expect(
+      pathsOf(() => defineAgent(claude(['mcp__gh__create_issue'], ['mcp__gh__create_issue']))),
+    ).toStrictEqual(['engine.requireApproval.0']);
+    expect(
+      pathsOf(() => defineAgent(claude(['mcp__gh__create_issue'], ['mcp__gh__*']))),
+    ).toStrictEqual(['engine.requireApproval.0']);
+    expect(
+      pathsOf(() => defineAgent(claude(['mcp__gh__*'], ['mcp__gh__create_issue']))),
+    ).toStrictEqual(['engine.requireApproval.0']);
+  });
+
+  it('refuses a rule for a tool the permissions turn off', () => {
+    expect(pathsOf(() => defineAgent(claude(['Write', 'Bash'])))).toStrictEqual([
+      'engine.requireApproval.0',
+      'engine.requireApproval.1',
+    ]);
+    expect(
+      defineAgent({ ...claude(['Bash']), permissions: { runCommands: true } }).engine,
+    ).toMatchObject({ requireApproval: ['Bash'] });
+  });
+
+  it('refuses a scoped rule and an unanchored wildcard', () => {
+    expect(
+      pathsOf(() =>
+        defineAgent({ ...claude(['Bash(git *)', '*']), permissions: { runCommands: true } }),
+      ),
+    ).toStrictEqual(['engine.requireApproval.0', 'engine.requireApproval.1']);
+  });
+
+  it('is refused on an engine that has no such setting', () => {
+    expect(
+      pathsOf(() =>
+        defineAgent({
+          ...MINIMAL,
+          engine: { id: 'openai-agents', requireApproval: ['Write'] } as never,
+        }),
+      ),
+    ).toStrictEqual(['engine']);
+  });
+});
+
+describe('defineAgent engine.handoff', () => {
+  it('accepts true on the Claude arm and refuses false', () => {
+    expect(
+      defineAgent({ ...MINIMAL, engine: { id: 'claude-agent-sdk', handoff: true } }).engine,
+    ).toMatchObject({ handoff: true });
+    expect(
+      pathsOf(() =>
+        defineAgent({ ...MINIMAL, engine: { id: 'claude-agent-sdk', handoff: false } as never }),
+      ),
+    ).toStrictEqual(['engine']);
+  });
+
+  it('is refused on an engine that has no such setting', () => {
+    expect(
+      pathsOf(() =>
+        defineAgent({ ...MINIMAL, engine: { id: 'openai-agents', handoff: true } as never }),
+      ),
+    ).toStrictEqual(['engine']);
+  });
+});
 
 describe('defineAgent', () => {
   it('returns the input as written, frozen and branded', () => {
@@ -284,6 +359,16 @@ describe('references', () => {
     expect(Object.isFrozen(grant)).toBe(true);
     expect(mcp('github')).toStrictEqual({ connector: 'github' });
     expect(skill('triage')).toStrictEqual({ name: 'triage' });
+  });
+
+  // @story US-STO-12
+  it('[US-STO-12][unit][sdk] files() accepts storage:// paths', () => {
+    const grant = files('storage://acme-data/reports/2026');
+
+    expect(grant).toStrictEqual({ path: 'storage://acme-data/reports/2026', access: 'read' });
+    expect(defineAgent({ ...MINIMAL, files: [grant] }).files).toStrictEqual([grant]);
+    expect(pathsOf(() => files('storage://acme-data/reports/'))).toStrictEqual(['path']);
+    expect(pathsOf(() => files('storage://acme-data/reports/../secrets'))).toStrictEqual(['path']);
   });
 
   it('refuses names and paths outside the contract bounds', () => {

@@ -1,11 +1,14 @@
 import { checkEgress, loadEgressPolicyFromEnv } from '@agent-workspace/core';
-import type { ModelConnectionRecord } from '@agent-workspace/core/db';
+import {
+  MODEL_CONNECTION_CONFIG_FIELDS,
+  MODEL_PROVIDER_CONFIG_RULES,
+  type ModelConnectionConfigField,
+} from '@indx-workspace/contracts/models';
 import { MODEL_PROVIDERS, type ModelProvider } from '@indx-workspace/contracts/runs';
 
-// The three fields are typed `T | undefined`, not the shorthand `T`, because this must accept
-// `ModelConnectionRecord['config']` as-is: that type comes from `packages/core`'s Zod schema,
-// where `exactOptionalPropertyTypes` makes an `.optional()` field's inferred type `T | undefined`,
-// not merely omittable.
+// The three fields are typed `T | undefined`, not the shorthand `T`, because a repository record's
+// `config` must stay assignable to this structural type: under `exactOptionalPropertyTypes` a Zod
+// `.optional()` field is inferred as `T | undefined`, not merely omittable.
 export type ModelConnectionConfigInput = {
   readonly baseUrl?: string | undefined;
   readonly deployment?: string | undefined;
@@ -30,7 +33,7 @@ export type ModelConnectionResource = {
   readonly id: string;
   readonly name: string;
   readonly provider: ModelProvider;
-  readonly config: ModelConnectionRecord['config'];
+  readonly config: ModelConnectionConfigInput;
   readonly hasCredential: boolean;
   /**
    * #126's derived readiness: `hasCredential` plus every config field this provider requires
@@ -55,34 +58,14 @@ function object(value: unknown): Record<string, unknown> | null {
 
 // ── The provider-discriminated config schema ────────────────────────────────────────────────────
 //
-// §126's Minimum implementation, verbatim: "Anthropic and OpenAI require nothing beyond an
-// optional base URL, OpenAI-compatible requires baseUrl, Azure requires baseUrl + apiVersion +
-// deployment. Unknown keys rejected, errors field-level." `anthropic-compatible` follows the same
-// rule as `anthropic` — `probe.ts`'s `endpoint()` already treats the two identically, and the
-// issue's only reason to distinguish "Anthropic-compatible" at all is a UI choice (`#128`'s job,
-// per this task's "Deliberately not built").
-type ConfigField = 'baseUrl' | 'deployment' | 'apiVersion';
-const CONFIG_FIELDS: readonly ConfigField[] = ['baseUrl', 'deployment', 'apiVersion'];
-
-type ProviderConfigSpec = {
-  readonly allowed: readonly ConfigField[];
-  readonly required: readonly ConfigField[];
-};
-
-const PROVIDER_CONFIG_SPEC: Readonly<Record<ModelProvider, ProviderConfigSpec>> = {
-  anthropic: { allowed: ['baseUrl'], required: [] },
-  'anthropic-compatible': { allowed: ['baseUrl'], required: [] },
-  openai: { allowed: ['baseUrl'], required: [] },
-  'openai-compatible': { allowed: ['baseUrl'], required: ['baseUrl'] },
-  'azure-openai': {
-    allowed: ['baseUrl', 'apiVersion', 'deployment'],
-    required: ['baseUrl', 'apiVersion', 'deployment'],
-  },
-};
+// The per-provider rules are the published `MODEL_PROVIDER_CONFIG_RULES`; unknown keys are rejected
+// and errors are field-level.
 
 /** Every config field this provider must have for the connection to be usable, computed once. */
-export function requiredConfigFields(provider: ModelProvider): readonly ConfigField[] {
-  return PROVIDER_CONFIG_SPEC[provider].required;
+export function requiredConfigFields(
+  provider: ModelProvider,
+): readonly ModelConnectionConfigField[] {
+  return MODEL_PROVIDER_CONFIG_RULES[provider].required;
 }
 
 /** Whether `config` has every field this provider requires — the non-credential half of readiness. */
@@ -117,13 +100,15 @@ async function parseProviderConfig(
 ): Promise<ParseResult<ModelConnectionConfigInput>> {
   const raw = value === undefined ? {} : object(value);
   if (raw === null) return { ok: false, errors: ['config must be an object.'] };
-  const spec = PROVIDER_CONFIG_SPEC[provider];
+  const spec = MODEL_PROVIDER_CONFIG_RULES[provider];
   const errors: string[] = [];
 
   for (const key of Object.keys(raw)) {
-    if (!CONFIG_FIELDS.includes(key as ConfigField)) errors.push(`config.${key} is not supported.`);
+    if (!MODEL_CONNECTION_CONFIG_FIELDS.includes(key as ModelConnectionConfigField)) {
+      errors.push(`config.${key} is not supported.`);
+    }
   }
-  for (const field of CONFIG_FIELDS) {
+  for (const field of MODEL_CONNECTION_CONFIG_FIELDS) {
     const present = raw[field] !== undefined;
     if (!present) continue;
     if (!spec.allowed.includes(field)) {
@@ -226,8 +211,18 @@ export async function parseUpdateModelConnection(
   return { ok: true, value: { ...fields, config: parsedConfig.value } };
 }
 
+/** What {@link toModelConnectionResource} reads of a stored connection; a repository record satisfies it. */
+export interface ModelConnectionRow {
+  readonly id: string;
+  readonly name: string;
+  readonly provider: ModelProvider;
+  readonly config: ModelConnectionConfigInput;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+}
+
 export function toModelConnectionResource(
-  connection: ModelConnectionRecord,
+  connection: ModelConnectionRow,
   hasCredential: boolean,
 ): ModelConnectionResource {
   return {

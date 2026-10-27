@@ -27,18 +27,14 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState, type FormEvent } from 'react';
 
-import { ProjectListResponseSchema, type ProjectResource } from '../../contracts/projects';
-import { fetchJson } from '../../lib/fetch-json';
+import type { ProjectResource } from '../../contracts/projects';
+import { browserClient } from '../../lib/browser-client';
 import {
   PROJECT_FILTERS,
-  buildCreateProjectInput,
   describeEmptyProjectList,
-  describeRequestFailure,
   isProjectArchived,
   isValidProjectName,
   parseProjectFilter,
-  projectsListQuery,
-  readAgentOptions,
   type CatalogOption,
   type ProjectDraft,
   type ProjectFilter,
@@ -54,6 +50,7 @@ import {
   confirmDiscard,
   useProjectCatalogs,
 } from './project-form';
+import { createProject, loadAgentOptions, loadProjects } from './project-requests-model';
 
 const EMPTY_DRAFT: ProjectDraft = {
   name: '',
@@ -126,19 +123,14 @@ export function ProjectsScreen() {
   const load = () => {
     setProjects(null);
     setProblem(null);
-    void fetchJson(projectsListQuery(filter), ProjectListResponseSchema, {
-      headers: { accept: 'application/json' },
-    })
-      .then((body) => setProjects(body.projects))
+    void loadProjects(browserClient(), filter)
+      .then(setProjects)
       .catch((e: unknown) => setProblem(e instanceof Error ? e.message : String(e)));
   };
   // Refetches when the filter changes, because the filter is the URL and the URL is what is read.
   useEffect(load, [filter]);
   useEffect(() => {
-    void fetch('/api/agents', { headers: { accept: 'application/json' } })
-      .then((r) => (r.ok ? (r.json() as Promise<unknown>) : Promise.resolve({ agents: [] })))
-      .then((body) => setAgents(readAgentOptions(body)))
-      .catch(() => setAgents([]));
+    void loadAgentOptions(browserClient()).then(setAgents);
   }, []);
 
   return (
@@ -230,30 +222,11 @@ function ProjectCreateForm({
     if (!canSubmit) return;
     setSubmitting(true);
     setProblem(null);
-    void (async () => {
-      let response: Response;
-      try {
-        response = await fetch('/api/projects', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json', accept: 'application/json' },
-          body: JSON.stringify(buildCreateProjectInput(draft)),
-        });
-      } catch (error) {
-        setSubmitting(false);
-        setProblem({
-          kind: 'transport',
-          reason: `The request to create this project failed: ${error instanceof Error ? error.message : String(error)}`,
-        });
-        return;
-      }
-      if (!response.ok) {
-        setProblem(await describeRequestFailure(response, () => response.json()));
-        setSubmitting(false);
-        return;
-      }
+    void createProject(browserClient(), draft).then((failure) => {
+      setProblem(failure);
       setSubmitting(false);
-      onCreated();
-    })();
+      if (failure === null) onCreated();
+    });
   }
 
   return (

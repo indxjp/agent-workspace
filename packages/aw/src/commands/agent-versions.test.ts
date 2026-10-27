@@ -126,6 +126,17 @@ describe('aw agents versions list', () => {
     expect(lines).toContain('local -> 1');
   });
 
+  it('[US-BLD-03][api][cli] shows a Builder save as source builder', async () => {
+    const items = [{ ...versionResource(1, 'Saved by the Builder'), via: 'builder' }];
+    const run = await runCli(['agents', 'versions', 'list', IDS.agent], {
+      route: () => json(200, { ...LIST, items }),
+    });
+
+    expect(run.stdout).toMatch(
+      /Saved by the Builder.*\bbuilder\b|\bbuilder\b.*Saved by the Builder/u,
+    );
+  });
+
   it("shows each version's newest score, and — when it has none (issue #736)", async () => {
     const evaluations = [{ version: 2, score: 0.5, passed: 1, total: 2 }];
     const run = await runCli(['agents', 'versions', 'list', IDS.agent], {

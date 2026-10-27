@@ -99,6 +99,8 @@ that produced it and carries the engine-native message in `raw`.
 | `agent.result`        | How the engine's turn ended, as one of ACP's stop reasons. The _run's_ outcome is `run.status`, written by the control plane.                                                 |
 | `agent.native`        | Everything the engine emitted that has no neutral meaning. Never dropped, never interpreted. This is what makes the closed set safe: an adapter forwards rather than invents. |
 | `agent.malformed`     | The engine produced something its adapter could not parse — reported by name, not forwarded as though it had been understood.                                                 |
+| `agent.approval.requested` | The engine stopped before a tool call the agent requires approval for; the run waits for a person to decide.                                                           |
+| `agent.handoff`       | The agent handed the conversation to a person. Its `reason` is for the operator and is omitted from a visitor's stream.                                                       |
 
 `@indx-workspace/sdk/events` exports `toAgentEvent(frame)`, which **parses** a `kind: 'runtime'`
 `RunEventFrame` against the contract and answers the typed frame. It knows nothing about any engine:
@@ -128,7 +130,8 @@ for await (const frame of aw.runs.follow(runId, { signal })) {
     case 'agent.tool.call':
       showToolCall(event.name, event.kind, event.input);
       break;
-    // agent.session, agent.tool.result, agent.usage, agent.result, agent.native, agent.malformed …
+    // agent.session, agent.tool.result, agent.usage, agent.result, agent.native, agent.malformed,
+    // agent.approval.requested, agent.handoff …
   }
 }
 ```
@@ -205,7 +208,7 @@ entry per line, so a later run on the same session resumes it.
 
 ## The fourth engine: Mastra
 
-`engine: 'mastra'` runs an agent as a plain Mastra `Agent` (`@mastra/core`, pinned at 1.76.0)
+`engine: 'mastra'` runs an agent as a plain Mastra `Agent` (`@mastra/core`, pinned at 1.79.0)
 over a `Workspace`, in process, through `packages/engine-mastra/src/boundary.ts`.
 No Mastra server, `Harness`, workflow or wrapper of another engine is used:
 

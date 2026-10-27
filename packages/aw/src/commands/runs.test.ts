@@ -1,4 +1,5 @@
-import { rm } from 'node:fs/promises';
+import { readFile, rm } from 'node:fs/promises';
+import path from 'node:path';
 
 import { RunListResponseSchema, RunResourceSchema } from '@indx-workspace/contracts/runs';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -206,6 +207,146 @@ describe('aw runs start', () => {
   });
 });
 
+describe('aw runs start --file-scope (issue #1539)', () => {
+  it('sends each --file-scope as the run file scope, and nothing when absent', async () => {
+    const scoped = await runCli(
+      [
+        'runs',
+        'start',
+        IDS.agent,
+        '--prompt',
+        'x',
+        '--file-scope',
+        'docs/alice',
+        '--file-scope',
+        'a.md',
+      ],
+      { route: runRoutes },
+    );
+    expect(scoped.code).toBe(EXIT_CODE.ok);
+    expect(scoped.calls[0]?.json).toMatchObject({ fileScope: ['docs/alice', 'a.md'] });
+    const without = await runCli(['runs', 'start', IDS.agent, '--prompt', 'x'], {
+      route: runRoutes,
+    });
+    expect(without.calls[0]?.json).not.toHaveProperty('fileScope');
+  });
+});
+
+describe('aw runs start --output-schema and aw runs get output (ADR-0143)', () => {
+  const INVOICE_SCHEMA = {
+    type: 'object',
+    properties: { total: { type: 'number' }, currency: { type: 'string' } },
+    required: ['total', 'currency'],
+  };
+  const OUTPUT = { text: 'Total 120 USD', structured: { total: 120, currency: 'USD' } };
+  const completedWithOutput = { ...runFixture('completed'), output: OUTPUT };
+  const outputRoutes: Route = (request) => {
+    if (request.method === 'POST')
+      return json(202, { run: runFixture('queued'), events: `/api/runs/${IDS.run}/events` });
+    if (request.url.pathname.endsWith('/events')) return eventStream(STREAM);
+    return json(200, { run: completedWithOutput });
+  };
+
+  it('sends the schema file as outputSchema, and nothing when the flag is absent', async () => {
+    const schemaFile = await tempFile(
+      directory,
+      'invoice.schema.json',
+      JSON.stringify(INVOICE_SCHEMA),
+    );
+    const withSchema = await runCli(
+      ['runs', 'start', IDS.agent, '--prompt', 'x', '--output-schema', schemaFile],
+      { route: runRoutes },
+    );
+    expect(withSchema.code).toBe(EXIT_CODE.ok);
+    expect(withSchema.calls[0]?.json).toMatchObject({ outputSchema: INVOICE_SCHEMA });
+
+    const without = await runCli(['runs', 'start', IDS.agent, '--prompt', 'x'], {
+      route: runRoutes,
+    });
+    expect(without.calls[0]?.json).not.toHaveProperty('outputSchema');
+  });
+
+  it('refuses an unreadable, malformed, non-object or over-limit schema before any request', async () => {
+    const malformed = await tempFile(directory, 'malformed.schema.json', '{ not json');
+    const array = await tempFile(directory, 'array.schema.json', '[]');
+    const stringRoot = await tempFile(directory, 'string.schema.json', '{"type":"string"}');
+    const external = await tempFile(
+      directory,
+      'external.schema.json',
+      '{"type":"object","properties":{"a":{"$ref":"https://example.com/a.json"}}}',
+    );
+    for (const [schemaFile, message] of [
+      [path.join(directory, 'missing.schema.json'), 'could not read'],
+      [malformed, 'must be a JSON file'],
+      [array, 'root_type'],
+      [stringRoot, 'root_type'],
+      [external, 'ref'],
+    ] as const) {
+      const refused = await runCli(
+        ['runs', 'start', IDS.agent, '--prompt', 'x', '--output-schema', schemaFile],
+        { route: runRoutes },
+      );
+      expect(refused.code, schemaFile).toBe(EXIT_CODE.usage);
+      expect(refused.stderr, schemaFile).toContain(message);
+      expect(refused.calls, schemaFile).toHaveLength(0);
+    }
+  });
+
+  it('reports the code of a server refusal for an engine without structured output', async () => {
+    const schemaFile = await tempFile(
+      directory,
+      'unsupported.schema.json',
+      JSON.stringify(INVOICE_SCHEMA),
+    );
+    const run = await runCli(
+      ['runs', 'start', IDS.agent, '--prompt', 'x', '--output-schema', schemaFile],
+      {
+        route: () =>
+          json(422, {
+            error: {
+              code: 'engine_capability_unsupported',
+              message: 'engine "pi" cannot produce structured output.',
+            },
+          }),
+      },
+    );
+    expect(run.code).toBe(EXIT_CODE.problem);
+    expect(run.stderr).toContain('error: engine_capability_unsupported: ');
+  });
+
+  it('runs get shows the output for a human and round-trips it with --json', async () => {
+    const route: Route = () => json(200, { run: completedWithOutput });
+    const human = await runCli(['runs', 'get', IDS.run], { route });
+    expect(human.stdout).toMatch(/^output\s+.*"structured":\{"total":120,"currency":"USD"\}/mu);
+    const raw = await runCli(['runs', 'get', IDS.run, '--json'], { route });
+    expect(RunResourceSchema.parse(stdoutJson(raw)).output?.structured).toEqual(OUTPUT.structured);
+  });
+
+  it('--wait prints the settled record with its output', async () => {
+    const schemaFile = await tempFile(
+      directory,
+      'wait.schema.json',
+      JSON.stringify(INVOICE_SCHEMA),
+    );
+    const run = await runCli(
+      [
+        'runs',
+        'start',
+        IDS.agent,
+        '--prompt',
+        'x',
+        '--output-schema',
+        schemaFile,
+        '--wait',
+        '--json',
+      ],
+      { route: outputRoutes },
+    );
+    expect(run.code).toBe(EXIT_CODE.ok);
+    expect(RunResourceSchema.parse(stdoutJson(run)).output).toEqual(OUTPUT);
+  });
+});
+
 describe('aw runs start: typed refusals and --fail-on-error (issue #393)', () => {
   const FAILED_ERROR = 'model_connection_unresolved: no workspace default is configured.';
   const FAILED_STREAM =
@@ -287,6 +428,20 @@ describe('aw runs get / list / events / follow / wait', () => {
       route: () => json(200, { run: unpriced }),
     });
     expect(RunResourceSchema.parse(stdoutJson(raw)).cost.amount).toBe('0.000000');
+  });
+
+  it('runs get names the agent version the run executed, and --json keeps the wire field', async () => {
+    const versioned = { ...runFixture('completed'), agentVersion: 3 };
+    const route = () => json(200, { run: versioned });
+    const human = await runCli(['runs', 'get', IDS.run], { route });
+    expect(human.stdout).toMatch(/^version\s+3$/mu);
+    expect(human.stdout).not.toContain('agentVersion');
+    const raw = await runCli(['runs', 'get', IDS.run, '--json'], { route });
+    expect(RunResourceSchema.parse(stdoutJson(raw)).agentVersion).toBe(3);
+    const legacy = await runCli(['runs', 'get', IDS.run], {
+      route: () => json(200, { run: runFixture('completed') }),
+    });
+    expect(legacy.stdout).toMatch(/^version\s*$/mu);
   });
 
   it('get and list round-trip; list renders the page for a human with a next-page hint', async () => {
@@ -404,6 +559,26 @@ describe('aw runs rate (issue #665)', () => {
   });
 });
 
+describe('aw runs approve and reject (ADR-0145, P5-4)', () => {
+  it.each([
+    ['approve', ['--comment', 'go ahead'], { decision: 'approve', comment: 'go ahead' }],
+    ['reject', [], { decision: 'reject' }],
+  ])('%s posts the decision and prints the continuation run', async (verb, flags, body) => {
+    const bodies: unknown[] = [];
+    const response = await runCli(['runs', verb, IDS.run, ...flags, '--json'], {
+      route: (request) => {
+        expect(request.method).toBe('POST');
+        expect(request.url.pathname).toBe(`/api/runs/${IDS.run}/approval`);
+        bodies.push(request.json);
+        return json(202, { run: runFixture('queued'), events: `/api/runs/${IDS.run}/events` });
+      },
+    });
+    expect(response.code).toBe(EXIT_CODE.ok);
+    expect(bodies).toEqual([body]);
+    expect(stdoutJson(response)).toMatchObject({ run: { status: 'queued' } });
+  });
+});
+
 describe('aw runs follow --interrupt-on-cancel (issue #235, S-14, spec §7.3)', () => {
   /** A stream that stays open until `close()` is called — the fetch double's route holds it. */
   function openStream(): {
@@ -496,5 +671,96 @@ describe('aw runs follow --interrupt-on-cancel (issue #235, S-14, spec §7.3)', 
     const result = await promise;
     expect(result.code).toBe(EXIT_CODE.interrupted);
     expect(interrupts).toBe(0);
+  });
+});
+
+describe('aw runs outputs', () => {
+  const root = `runs/${IDS.run}/outputs`;
+  const entry = (
+    name: string,
+    kind: 'file' | 'folder' = 'file',
+    contentType: string | null = null,
+  ) => ({
+    id: `id:${name}`,
+    path: `${root}/${name}`,
+    kind,
+    sizeBytes: kind === 'file' ? 5 : null,
+    contentType,
+    lastModified: kind === 'file' ? '2026-10-17T10:00:00.000Z' : null,
+  });
+  const bytes = (body: string): Response =>
+    new Response(body, {
+      status: 200,
+      headers: { 'content-disposition': 'attachment; filename="x"' },
+    });
+  const route =
+    (names: Record<string, readonly unknown[]>): Route =>
+    (request) => {
+      if (request.url.pathname === '/api/files') {
+        return json(200, { files: names[request.url.searchParams.get('path') ?? ''] ?? [] });
+      }
+      return bytes(`bytes:${request.url.pathname.split('/').pop() ?? ''}`);
+    };
+  const tree = {
+    [root]: [
+      entry('BRK-1101.dxf'),
+      entry('report.pdf', 'file', 'application/pdf'),
+      entry('reports', 'folder'),
+    ],
+    [`${root}/reports`]: [entry('reports/summary.md')],
+  };
+
+  // @story US-STO-07
+  it('[US-STO-07][api][cli] aw runs outputs prints the files a run wrote, and the list under --json', async () => {
+    const human = await runCli(['runs', 'outputs', IDS.run], { route: route(tree) });
+    expect(human.code).toBe(EXIT_CODE.ok);
+    expect(human.stdout).toMatch(/^BRK-1101\.dxf\s+5\s/mu);
+    expect(human.stdout).toMatch(/^report\.pdf\s+5\s+application\/pdf\s/mu);
+    expect(human.stdout).toMatch(/^reports\/summary\.md\s+5\s/mu);
+    const machine = await runCli(['runs', 'outputs', IDS.run, '--json'], { route: route(tree) });
+    expect(
+      (stdoutJson(machine) as { name: string; contentType: string | null }[]).map((f) => [
+        f.name,
+        f.contentType,
+      ]),
+    ).toEqual([
+      ['BRK-1101.dxf', null],
+      ['report.pdf', 'application/pdf'],
+      ['reports/summary.md', null],
+    ]);
+  });
+
+  it('--download saves every file byte for byte under the directory, nested ones too', async () => {
+    const target = path.join(directory, 'outputs-saved');
+    const run = await runCli(['runs', 'outputs', IDS.run, '--download', target, '--json'], {
+      route: route(tree),
+    });
+    expect(run.code).toBe(EXIT_CODE.ok);
+    expect(await readFile(path.join(target, 'BRK-1101.dxf'), 'utf8')).toMatch(/^bytes:/u);
+    expect(await readFile(path.join(target, 'reports', 'summary.md'), 'utf8')).toMatch(/^bytes:/u);
+    expect(stdoutJson(run)).toMatchObject([
+      { name: 'BRK-1101.dxf', savedTo: path.join(target, 'BRK-1101.dxf') },
+      { name: 'report.pdf', savedTo: path.join(target, 'report.pdf') },
+      { name: 'reports/summary.md', savedTo: path.join(target, 'reports', 'summary.md') },
+    ]);
+  });
+
+  it('refuses a name that would leave the directory, before anything is written', async () => {
+    const target = path.join(directory, 'outputs-refused');
+    const escaping = {
+      [root]: [entry('ok.txt'), { ...entry('x'), path: `${root}/../../escape.txt` }],
+    };
+    const run = await runCli(['runs', 'outputs', IDS.run, '--download', target], {
+      route: route(escaping),
+    });
+    expect(run.code).not.toBe(EXIT_CODE.ok);
+    expect(run.stderr).toContain('refusing to write');
+    expect(run.calls.some((call) => call.url.pathname !== '/api/files')).toBe(false);
+    await expect(readFile(path.join(target, 'ok.txt'))).rejects.toThrow();
+  });
+
+  it('still refuses a flag the command does not name', async () => {
+    const run = await runCli(['runs', 'outputs', IDS.run, '--prompt', 'x'], { route: route(tree) });
+    expect(run.code).not.toBe(EXIT_CODE.ok);
   });
 });

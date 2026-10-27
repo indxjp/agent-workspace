@@ -14,13 +14,13 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { decide, type Ownership } from '../rbac/decide';
 import { createMemoryDirectory } from '../rbac/memory-directory';
 import { ROLES, type Role } from '../rbac/roles';
-import { clearRbacRuntime } from '../rbac/runtime';
 import {
   NO_ARCHIVE_CAPABILITY,
   archiveCapabilityFor,
   archiveGrantsForRole,
   resolveProjectArchiveCapability,
 } from './archive-capability';
+import { clearApplicationContext } from '../application-context';
 
 const WORKSPACE = { id: 'ws-archive-capability', slug: 'acme', name: 'Acme' };
 
@@ -66,8 +66,8 @@ describe('archiveGrantsForRole', () => {
     });
   });
 
-  it('gives an Admin neither, matching the project clause §21 does not give them', () => {
-    expect(archiveGrantsForRole('admin')).toEqual({ canArchiveOwn: false, canArchiveOther: false });
+  it('gives an Admin both, as Admin holds every project (ADR-0152)', () => {
+    expect(archiveGrantsForRole('admin')).toEqual({ canArchiveOwn: true, canArchiveOther: true });
   });
 
   it('gives a Viewer neither', () => {
@@ -164,11 +164,11 @@ describe('archiveCapabilityFor', () => {
 
 describe('resolveProjectArchiveCapability', () => {
   afterEach(() => {
-    clearRbacRuntime();
+    clearApplicationContext();
   });
 
   it('refuses everything when no RBAC runtime is wired, rather than deciding without one', async () => {
-    clearRbacRuntime();
+    clearApplicationContext();
     expect(await resolveProjectArchiveCapability()).toEqual(NO_ARCHIVE_CAPABILITY);
   });
 });

@@ -94,6 +94,13 @@ export type EngineConformanceSubject<TCompiled> = {
    */
   readonly subagentsCompiled?: ((compiled: TCompiled) => readonly string[]) | undefined;
   /**
+   * The JSON Schema this engine's compiled options will hand the engine as the run's output format,
+   * or `undefined` when the compile carries none — {@link subagentsCompiled} for the request's
+   * `outputSchema`. Declared by every adapter whose catalogue entry says `structuredOutput: true`;
+   * an adapter that omits it is asserted to refuse an output schema by name.
+   */
+  readonly outputSchemaCompiled?: ((compiled: TCompiled) => unknown) | undefined;
+  /**
    * The environment variables this engine still reads its gateway connection from, built from
    * the connection the request carries. Merged into every conformance request's `env`.
    *
@@ -214,6 +221,13 @@ const CONFORMANCE_SKILLS: readonly EngineSkillGrant[] = [
 const CONFORMANCE_CONNECTORS: Readonly<Record<string, unknown>> = {
   'conformance-docs': { type: 'http', url: 'https://mcp.example.com/mcp' },
 };
+
+/** A JSON Schema object for the output-schema scenario (ADR-0143). */
+const CONFORMANCE_OUTPUT_SCHEMA = {
+  type: 'object',
+  properties: { total: { type: 'number' } },
+  required: ['total'],
+} as const;
 
 /** One subagent, as `packages/core`'s `PortableSubagentConfig` carries it. */
 const CONFORMANCE_SUBAGENT: EngineSubagent = {
@@ -593,6 +607,64 @@ export const CONFORMANCE_SCENARIOS: readonly EngineConformanceScenario[] = [
       return pass(
         this.name,
         `subagents: false declared; ${name} refused by name with engine_capability_unsupported (typed refusal)`,
+      );
+    },
+  },
+  {
+    name: 'an-output-schema-is-honoured-or-refused-by-name',
+    about:
+      'an engine that supports structured output compiles the requested JSON Schema into its options (checked through outputSchemaCompiled, which such a subject declares) and compiles a request without one with none; an engine that does not refuses the schema with engine_capability_unsupported, naming outputSchema, and never drops it',
+    run(subject) {
+      const gateway = gatewayFor(subject);
+      const outputSchema = CONFORMANCE_OUTPUT_SCHEMA;
+      const compiled = subject.engine.compile(requestFor(subject, gateway, { outputSchema }));
+      const open = subject.engine.compile(requestFor(subject, gateway));
+      if (!open.ok) return fail(this.name, `the schema-free compile refused: ${open.reason}`);
+      if (subject.outputSchemaCompiled !== undefined) {
+        if (!compiled.ok) {
+          return fail(
+            this.name,
+            `the subject declares outputSchemaCompiled and the engine refused an output schema: ${compiled.reason}`,
+          );
+        }
+        if (
+          JSON.stringify(subject.outputSchemaCompiled(compiled.compiled)) !==
+          JSON.stringify(outputSchema)
+        ) {
+          return fail(
+            this.name,
+            'the engine compiled a request carrying an outputSchema without that schema. A requirement the engine cannot honour is refused, never silently dropped.',
+          );
+        }
+        if (subject.outputSchemaCompiled(open.compiled) !== undefined) {
+          return fail(
+            this.name,
+            'the engine compiled an output schema into a request that asked for none.',
+          );
+        }
+        return pass(this.name, 'structured output declared; the requested schema was compiled');
+      }
+      if (compiled.ok) {
+        return fail(
+          this.name,
+          'the engine compiled a request carrying an outputSchema but the subject declares no outputSchemaCompiled. A requirement the engine cannot honour is refused, never silently dropped.',
+        );
+      }
+      if (compiled.code !== 'engine_capability_unsupported') {
+        return fail(
+          this.name,
+          `the engine refused an outputSchema as ${compiled.code} rather than engine_capability_unsupported.`,
+        );
+      }
+      if (!compiled.reason.includes('outputSchema')) {
+        return fail(
+          this.name,
+          'the output-schema refusal does not name outputSchema; a refusal names what it refuses.',
+        );
+      }
+      return pass(
+        this.name,
+        'no structured output; outputSchema refused by name with engine_capability_unsupported (typed refusal)',
       );
     },
   },

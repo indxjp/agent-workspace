@@ -6,7 +6,6 @@ import path from 'node:path';
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { startToolHost, type ToolHost } from './host.js';
@@ -61,7 +60,7 @@ afterEach(async () => {
 async function open(url: string, headers: Record<string, string> = {}): Promise<Client> {
   const client = new Client({ name: 'test', version: '1.0.0' });
   await client.connect(
-    new StreamableHTTPClientTransport(new URL(url), { requestInit: { headers } }) as Transport,
+    new StreamableHTTPClientTransport(new URL(url), { requestInit: { headers } }),
   );
   return client;
 }

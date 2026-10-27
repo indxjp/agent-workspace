@@ -273,7 +273,7 @@
     "code": "unauthenticated",
     "bodyKind": "problem"}},
   {"witnesses": ["AgentWorkspace.Theorems.Normative.BehaviourRuns.start_accepted"],
-   "input": {"scope": "none", "route": "start", "role": "viewer", "ownership": "own", "fault": "none"},
+   "input": {"scope": "none", "route": "start", "role": "viewer", "ownership": "other", "fault": "none"},
    "id": "start-viewer-denied",
    "expected":
    {"status": 403,

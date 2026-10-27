@@ -1,3 +1,10 @@
+import {
+  MODEL_CONNECTION_CONFIG_FIELDS,
+  MODEL_PROVIDER_CONFIG_RULES,
+  type CreateModelConnectionInput,
+  type ModelConnectionConfigField,
+  type UpdateModelConnectionPatch,
+} from '@indx-workspace/contracts/models';
 import type { ModelProvider } from '@indx-workspace/contracts/runs';
 
 export const PROVIDER_CHOICES = [
@@ -140,57 +147,54 @@ export function connectionDetail(connection: ModelConnectionView): string {
   return details.join(' · ');
 }
 
-export function createConnectionPayload(values: ProviderFormValues): unknown {
+/** Only the fields the provider accepts: a value typed before a provider switch is never sent. */
+function configPayload(
+  values: Readonly<Record<ModelConnectionConfigField, string>>,
+  provider: ProviderId,
+): { baseUrl?: string; deployment?: string; apiVersion?: string } {
   const config: { baseUrl?: string; deployment?: string; apiVersion?: string } = {};
-  if (values.baseUrl.trim() !== '') config.baseUrl = values.baseUrl.trim();
-  if (values.deployment.trim() !== '') config.deployment = values.deployment.trim();
-  if (values.apiVersion.trim() !== '') config.apiVersion = values.apiVersion.trim();
+  for (const field of editableConfigFields(provider)) {
+    if (values[field].trim() !== '') config[field] = values[field].trim();
+  }
+  return config;
+}
+
+export function createConnectionPayload(values: ProviderFormValues): CreateModelConnectionInput {
   return {
     name: values.name.trim(),
     provider: values.provider,
     apiKey: values.apiKey,
-    config,
+    config: configPayload(values, values.provider),
   };
+}
+
+/** The config fields the provider accepts, in the form's display order. */
+export function editableConfigFields(provider: ProviderId): readonly ModelConnectionConfigField[] {
+  return MODEL_CONNECTION_CONFIG_FIELDS.filter((field) =>
+    MODEL_PROVIDER_CONFIG_RULES[provider].allowed.includes(field),
+  );
+}
+
+/** The config fields the provider requires, in the form's display order. */
+export function requiredConfigFields(provider: ProviderId): readonly ModelConnectionConfigField[] {
+  return MODEL_CONNECTION_CONFIG_FIELDS.filter((field) =>
+    MODEL_PROVIDER_CONFIG_RULES[provider].required.includes(field),
+  );
+}
+
+function hasRequiredConfig(
+  values: Readonly<Record<ModelConnectionConfigField, string>>,
+  provider: ProviderId,
+): boolean {
+  return requiredConfigFields(provider).every((field) => values[field].trim() !== '');
 }
 
 export function isProviderFormComplete(values: ProviderFormValues): boolean {
   if (values.name.trim() === '' || values.apiKey === '') return false;
-  if (values.provider === 'azure-openai') {
-    return (
-      values.baseUrl.trim() !== '' &&
-      values.deployment.trim() !== '' &&
-      values.apiVersion.trim() !== ''
-    );
-  }
-  return values.provider !== 'openai-compatible' || values.baseUrl.trim() !== '';
+  return hasRequiredConfig(values, values.provider);
 }
 
 // ── The provider detail/edit panel (`#128`) ─────────────────────────────────────────────────────
-//
-// `server/models/contract.ts`'s `PROVIDER_CONFIG_SPEC`, transcribed rather than imported: that
-// module pulls in `@agent-workspace/core`'s Node-only egress checker, which a client component
-// must never bundle. `add-provider-screen.tsx` already carries this same duplication for the
-// create form (`isProviderFormComplete`'s per-provider rules); this is that duplication's edit-form
-// twin, kept in sync by `model.test.ts` asserting every {@link PROVIDER_CHOICES} id has an entry.
-type ConfigFieldName = 'baseUrl' | 'deployment' | 'apiVersion';
-const PROVIDER_FIELD_SPEC: Readonly<
-  Record<ProviderId, { readonly required: readonly ConfigFieldName[] }>
-> = {
-  anthropic: { required: [] },
-  'anthropic-compatible': { required: [] },
-  openai: { required: [] },
-  'openai-compatible': { required: ['baseUrl'] },
-  'azure-openai': { required: ['baseUrl', 'deployment', 'apiVersion'] },
-};
-
-/** Every provider allows `baseUrl`; only Azure OpenAI additionally allows deployment/API version. */
-export function editableConfigFields(provider: ProviderId): readonly ConfigFieldName[] {
-  return provider === 'azure-openai' ? ['baseUrl', 'deployment', 'apiVersion'] : ['baseUrl'];
-}
-
-export function requiredConfigFields(provider: ProviderId): readonly ConfigFieldName[] {
-  return PROVIDER_FIELD_SPEC[provider].required;
-}
 
 export type EditFormValues = {
   readonly name: string;
@@ -201,15 +205,14 @@ export type EditFormValues = {
 
 export function isEditFormValid(values: EditFormValues, provider: ProviderId): boolean {
   if (values.name.trim() === '') return false;
-  return requiredConfigFields(provider).every((field) => values[field].trim() !== '');
+  return hasRequiredConfig(values, provider);
 }
 
-export function updateConnectionPayload(values: EditFormValues, provider: ProviderId): unknown {
-  const config: { baseUrl?: string; deployment?: string; apiVersion?: string } = {};
-  for (const field of editableConfigFields(provider)) {
-    if (values[field].trim() !== '') config[field] = values[field].trim();
-  }
-  return { name: values.name.trim(), config };
+export function updateConnectionPayload(
+  values: EditFormValues,
+  provider: ProviderId,
+): UpdateModelConnectionPatch {
+  return { name: values.name.trim(), config: configPayload(values, provider) };
 }
 
 /** The problem shape every route in this task's blast radius answers with (`server/models/handlers.ts`). */

@@ -3,12 +3,15 @@ kind: Project
 name: quotation
 engine: claude-agent-sdk
 # No MCP connector: the ERP is an openapiTool() in tools/erp.ts. `aw dev` reads
-# apis/erp.openapi.json and registers it, taking ERP_TOKEN from its environment:
+# apis/erp.openapi.json and registers it, taking ERP_TOKEN from its environment. The caller
+# assertion the tool opts in with is signed with the workspace secret ERP_IDENTITY_SECRET:
+#   aw secrets set ERP_IDENTITY_SECRET
 #   ERP_TOKEN=... aw dev
 # The document's `servers` is the company's ERP (erp.example.co.jp), which is not reachable from
 # here. To try the project, run the bundled stand-in with the same token and set
 # servers[0].url in apis/erp.openapi.json to http://127.0.0.1:8790/api/v1:
-#   ERP_TOKEN=... PORT=8790 node erp/fake-erp.mjs
+#   ERP_TOKEN=... ERP_IDENTITY_SECRET=... IDENTITY_AUDIENCE=<tool-id> IDENTITY_WORKSPACE=<workspace-id> \
+#     PORT=8790 node erp/fake-erp.mjs
 policy:
   permissions:
     readFiles: true

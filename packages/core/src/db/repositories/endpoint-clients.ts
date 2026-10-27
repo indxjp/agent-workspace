@@ -103,11 +103,17 @@ export interface EndpointClientRepositoryProvider {
 
 const REDIRECT_URIS_MAX = 10;
 
-/** Dedupe and check the agent-count invariant: one for `a2a-agent`, 1-64 for `mcp-project`. */
+/** Dedupe and check the agent-count invariant: one for `a2a-agent`, 1-64 for `mcp-project`, none for `builder`. */
 function checkedAgentIds(kind: EndpointClientKind, agentIds: readonly string[]): string[] {
   const unique = [...new Set(agentIds)];
-  if (kind === 'a2a-agent' ? unique.length !== 1 : unique.length < 1) {
-    throw new Error(`An ${kind} endpoint client has an invalid number of agents.`);
+  const invalid =
+    kind === 'builder'
+      ? unique.length !== 0
+      : kind === 'a2a-agent'
+        ? unique.length !== 1
+        : unique.length < 1;
+  if (invalid) {
+    throw new Error(`The ${kind} endpoint client has an invalid number of agents.`);
   }
   if (unique.length > ENDPOINT_CLIENT_AGENTS_MAX) {
     throw new Error(
@@ -237,9 +243,12 @@ export function createDatabaseEndpointClientRepositoryProvider(
                 .returning();
               const row = inserted[0];
               if (row === undefined) throw new Error('endpoint client insert returned no row');
-              await tx
-                .insert(endpointClientAgents)
-                .values(agentIds.map((agentId) => ({ clientId: row.id, workspaceId, agentId })));
+              // A `builder` client binds no agent, and drizzle refuses an empty insert.
+              if (agentIds.length > 0) {
+                await tx
+                  .insert(endpointClientAgents)
+                  .values(agentIds.map((agentId) => ({ clientId: row.id, workspaceId, agentId })));
+              }
               const client = await readOne(tx, row.id);
               if (client === null)
                 throw new Error('endpoint client vanished inside its transaction');
@@ -284,9 +293,11 @@ export function createDatabaseEndpointClientRepositoryProvider(
                     eq(endpointClientAgents.clientId, id),
                   ),
                 );
-              await tx
-                .insert(endpointClientAgents)
-                .values(agentIds.map((agentId) => ({ clientId: id, workspaceId, agentId })));
+              if (agentIds.length > 0) {
+                await tx
+                  .insert(endpointClientAgents)
+                  .values(agentIds.map((agentId) => ({ clientId: id, workspaceId, agentId })));
+              }
             }
             await tx
               .update(endpointClients)

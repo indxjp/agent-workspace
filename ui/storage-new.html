@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connect storage — Agent Workspace</title>
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<script>window.PAGE = { nav: "storage", crumbs: [["Administration"], ["Storage", "storage.html"], ["Connect storage"]] };</script>
+
+<div class="app">
+  <div class="main">
+    <div class="page narrow">
+
+      <div class="page-head">
+        <div>
+          <h1>Connect storage</h1>
+          <div class="sub">Name a bucket or container and the folders agents may see. The credential is sent once and never shown again.</div>
+        </div>
+      </div>
+
+      <div class="card"><div class="card-body">
+        <div class="field"><label>Name</label><input type="text" class="mono-input" value="contracts"></div>
+        <div class="field"><label>Provider</label>
+          <select><option selected>Amazon S3 or compatible</option><option>Google Cloud Storage</option><option>Azure Blob Storage</option><option>Local folder</option></select></div>
+        <div class="field"><label>URL</label><input type="text" class="mono-input" value="s3://meridian-contracts">
+          <div class="help mt8">For example s3://bucket/optional-prefix?endpoint=https://s3.example.com. No keys in the URL.</div></div>
+        <div class="field"><label>Allowed folders</label><textarea class="mono-input" rows="3">reports
+signed</textarea>
+          <div class="help mt8">One folder per line, such as reports. Agents see only these.</div></div>
+        <div class="field mb0"><label class="check"><span class="box"></span><span class="grow"><span class="t">Allow writing</span>
+          <span class="d">Off by default. Grants stay read-only until write-back ships.</span></span></label></div>
+      </div></div>
+
+      <div class="section-head"><h2>Credential</h2></div>
+      <div class="card"><div class="card-body">
+        <div class="field"><label>Access key ID</label><input type="text" class="mono-input"></div>
+        <div class="field mb0"><label>Secret access key</label><input type="password"></div>
+      </div></div>
+
+      <div class="btn-row mt24" style="justify-content:flex-end">
+        <a class="btn" href="storage.html">Cancel</a>
+        <a class="btn primary" href="storage.html">Connect</a>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

@@ -3,7 +3,7 @@
  *
  * The fourth adapter. `compile` is `./compile.ts`, events are `./frames.ts`, memory is
  * `./session.ts`, the filesystem wrapper is `./workspace.ts` and `./guard.ts`, and the only SDK
- * import is `./boundary.ts`. The runner reaches it through {@link MASTRA_ENGINE_ADAPTER} and
+ * import is `./boundary.ts`. The runner reaches it through {@link createMastraEngine} and
  * nothing else.
  *
  * ## The session identity
@@ -49,7 +49,7 @@ export const MASTRA_ADAPTER_VERSION = `0.0.0+${MASTRA_CORE_VERSION}`;
  */
 export const MASTRA_CAPABILITIES = ENGINE_CATALOGUE.mastra.capabilities;
 
-/** Build the adapter. {@link MASTRA_ENGINE_ADAPTER} is this with the real Mastra. */
+/** Build the adapter — the package root's only export (W3-8). With no arguments it runs the real Mastra. */
 export function createMastraEngine(
   runStarter: MastraRunStarter = startMastraRun,
 ): AgentEngine<MastraCompiled> {
@@ -57,6 +57,7 @@ export function createMastraEngine(
     id: MASTRA_ENGINE_ID,
     version: MASTRA_ADAPTER_VERSION,
     capabilities: MASTRA_CAPABILITIES,
+    structuredOutput: ENGINE_CATALOGUE.mastra.structuredOutput,
     // Skills land in `.mastra/skills/<name>/` (the kit's default placeSkills) — the directories the
     // workspace is told to discover (ADR-0084).
     protectedConfigDirectory: MASTRA_PROTECTED_CONFIG_DIRECTORY,
@@ -97,6 +98,3 @@ export function createMastraEngine(
 function isErrorChunk(chunk: unknown): boolean {
   return typeof chunk === 'object' && chunk !== null && 'type' in chunk && chunk.type === 'error';
 }
-
-/** The adapter the runner's registry loads. */
-export const MASTRA_ENGINE_ADAPTER: AgentEngine<MastraCompiled> = createMastraEngine();

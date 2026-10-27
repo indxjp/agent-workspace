@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { RuntimeRunSpec } from '@agent-workspace/runtime';
+import type { RuntimeRunSpec } from '@agent-workspace/runtime/driver';
 
 import type { AgentRecord } from '../agents/contract';
 import type { RuntimeProfileRecord, RuntimeProfileStoreProvider } from '../runtimes/store';
@@ -111,6 +111,7 @@ function dependencies(
         driver: (selectedProfile?.driver ?? 'local') as RuntimeDriverTarget['driver'],
         runnerUrl: 'http://runner:8080',
         workspaceRoot: '/work',
+        fileTransfer: 'push-archive',
       },
     ],
   };
@@ -166,6 +167,7 @@ describe('runtime profile launch composition', () => {
       driverConfig: { runtimeClassName: 'gvisor' },
       runnerUrl: 'http://runner:8080',
       workspaceRoot: '/work',
+      fileTransfer: 'push-archive',
     });
     expect(runtimeSettingsFor(target)).toEqual({
       runnerUrl: 'http://runner:8080',
@@ -228,6 +230,7 @@ describe('runtime profile launch composition', () => {
           driver: 'local',
           runnerUrl: 'http://runner:8080',
           workspaceRoot: '/work',
+          fileTransfer: 'local-disk',
           validate: localRuntimeRunSpecRejection,
         },
       ]),
@@ -266,6 +269,7 @@ describe('runtime profile launch composition', () => {
             driver: selected.driver as RuntimeDriverTarget['driver'],
             runnerUrl: 'http://runner:8080',
             workspaceRoot: '/work',
+            fileTransfer: 'push-archive',
             allocate: (_context, spec) => {
               allocated.push(spec);
               return Promise.resolve({ runnerUrl: 'http://allocated:8080' });

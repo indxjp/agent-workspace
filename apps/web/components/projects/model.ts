@@ -12,13 +12,11 @@
  * and the fetches themselves, the same split `../agents/model.ts` already established for the
  * agent screens.
  *
- * `describeRequestFailure` and `type RequestProblem` are **not**
- * reimplemented here — they are `../agents/model.ts`'s own, generic over any route that answers
- * this platform's one error envelope, and the projects routes answer the same envelope
- * (`server/projects/http.ts`'s `problem()`). Reusing them is what "duplicate-name,
+ * `type RequestProblem` is **not** redeclared here — it is `../agents/model.ts`'s own, generic
+ * over any route that answers this platform's one error envelope. The SDK decodes that envelope,
+ * and `./project-requests-model.ts` turns its typed errors into this shape, so "duplicate-name,
  * invalid-association, 403 and 409 responses are rendered as the server worded them" (the task
- * card's own words) means in code: one place turns a failed response into a message, for every
- * screen in this application.
+ * card's own words).
  *
  * ## Why there is still no runtime or budget field
  *
@@ -47,10 +45,10 @@ import type {
   ProjectPatchInput,
   ProjectResource,
 } from '../../contracts/projects';
-import { describeRequestFailure, type RequestProblem } from '../agents/model';
+import type { RequestProblem } from '../agents/model';
 import type { ModelSelectionValue } from '../models/catalog';
 
-export { describeRequestFailure, type RequestProblem };
+export type { RequestProblem };
 export type { ProjectArchiveCapability } from '../../contracts/projects';
 
 export type ProjectVisibility = ProjectResource['visibility'];
@@ -275,11 +273,6 @@ export function parseProjectFilter(raw: string | null): ProjectFilter {
   return (PROJECT_FILTERS as readonly string[]).includes(raw ?? '')
     ? (raw as ProjectFilter)
     : 'active';
-}
-
-/** The `GET /api/projects` URL for one filter. Always explicit, never relying on the default. */
-export function projectsListQuery(filter: ProjectFilter): string {
-  return `/api/projects?archived=${filter}`;
 }
 
 /**

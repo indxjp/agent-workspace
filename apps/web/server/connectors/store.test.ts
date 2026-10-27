@@ -163,6 +163,7 @@ describe.skipIf(!hasDatabase)(
           'openapiDocument',
           'authType',
           'credentialSecretId',
+          'identitySecretName',
           'enabled',
           'createdBy',
           'ownerPrincipalId',
@@ -332,6 +333,49 @@ describe.skipIf(!hasDatabase)(
       await expect(store.delete(created.connector.id)).resolves.toEqual({ kind: 'deleted' });
       expect(await secretsService.list(scope)).toHaveLength(before.length - 1);
       await expect(store.get(created.connector.id)).resolves.toBeNull();
+    });
+
+    it('resolves the identity signing key by secret name, and reports an unresolvable one as null', async () => {
+      const scope = await createDatabaseWorkspaceScopeResolver(isolated.db).forWorkspaceId(
+        workspace.id,
+      );
+      if (scope === null) throw new Error('fixture workspace does not resolve');
+      const owner = { principalId: PRINCIPAL_ID, userId: OWNER_ID };
+      const sealed = await secretsService.create(scope, {
+        name: 'IDENTITY_SIGNING_KEY',
+        value: Buffer.from('identity-key-value', 'utf8'),
+      });
+      expect(sealed.kind).toBe('created');
+      const input = {
+        transport: 'http' as const,
+        command: null,
+        args: null,
+        url: 'https://identity.example.test/mcp',
+        authType: 'none' as const,
+        credential: null,
+      };
+      const optedIn = await store.create(
+        { ...input, name: 'identity-in', identity: { secret: 'IDENTITY_SIGNING_KEY' } },
+        owner,
+      );
+      const dangling = await store.create(
+        { ...input, name: 'identity-dangling', identity: { secret: 'NOT_A_SECRET' } },
+        owner,
+      );
+      const plain = await store.create({ ...input, name: 'identity-plain' }, owner);
+      if (optedIn.kind !== 'created' || dangling.kind !== 'created' || plain.kind !== 'created') {
+        throw new Error('fixture connectors were not created');
+      }
+      await expect(store.resolveIdentityKey(optedIn.server.id)).resolves.toBe('identity-key-value');
+      await expect(store.resolveIdentityKey(dangling.server.id)).resolves.toBeNull();
+      await expect(store.resolveIdentityKey(plain.server.id)).resolves.toBeUndefined();
+      await expect(store.get(optedIn.server.id)).resolves.toMatchObject({
+        identity: { secret: 'IDENTITY_SIGNING_KEY' },
+      });
+
+      const cleared = await store.update(optedIn.server.id, { identity: null });
+      expect(cleared.kind).toBe('updated');
+      await expect(store.resolveIdentityKey(optedIn.server.id)).resolves.toBeUndefined();
     });
   },
 );

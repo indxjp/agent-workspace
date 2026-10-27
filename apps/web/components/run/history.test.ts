@@ -14,11 +14,10 @@ import {
   ACCOUNTING_STATE_NAMES,
   COST_KEYS,
   MalformedRunError,
-  PROJECT_CATALOG_URL,
   RUN_KEYS,
   USAGE_KEYS,
   USER_FILTER_PROBE_ID,
-  classifyUserFilterProbe,
+  catalogFromList,
   cursorFromSearchParams,
   describeCost,
   filtersFromSearchParams,
@@ -28,16 +27,13 @@ import {
   formatSettledAmount,
   formatTimestamp,
   formatTokenCount,
-  parseCatalog,
-  parseRunDetailResponse,
-  parseRunListPage,
+  isCanonicalRunId,
   parseRunResource,
   reconcileDurableRun,
   resolveResourceReference,
   runMatchesSearch,
-  runDetailPath,
   runIdFromSearchParams,
-  runsListQuery,
+  runListQuery,
   shouldPollDurableRun,
   timestampAccessibilityLabel,
   withScreenState,
@@ -67,6 +63,7 @@ function run(patch: Partial<RunListItem> = {}): unknown {
     projectId: null,
     initiatingUserId: null,
     sessionId: 'd1111111-1111-4111-8111-111111111111',
+    agentVersion: null,
     status: 'completed',
     createdAt: '2026-09-12T10:00:00.000Z',
     startedAt: '2026-09-12T10:00:01.000Z',
@@ -87,6 +84,8 @@ function run(patch: Partial<RunListItem> = {}): unknown {
     },
     cost,
     error: null,
+    output: null,
+    pendingApproval: null,
     accountingState,
     accountingError,
     ...patch,
@@ -138,11 +137,10 @@ describe('a run rendered by the server', () => {
       { engine: null, engineVersion: null },
     ],
     ['a historic run without engine fields', {}, { engine: null, engineVersion: null }],
-  ] as const)('parses %s from list and detail', (_name, engineFields, expected) => {
+  ] as const)('parses %s', (_name, engineFields, expected) => {
     const row = renderRun({ ...record, ...engineFields });
-    const [listed] = parseRunListPage({ runs: [row], nextCursor: null }).runs;
+    const listed = parseRunResource(row);
     expect(listed).toMatchObject(expected);
-    expect(parseRunDetailResponse({ run: row })).toMatchObject(expected);
   });
 });
 
@@ -152,6 +150,16 @@ describe('parseRunResource', () => {
     expect(parsed.id).toBe('a1111111-1111-4111-8111-111111111111');
     expect(parsed.usage.totalTokens).toBe(14204);
     expect(parsed.cost.amount).toBe('0.080000');
+  });
+
+  it('carries a run output and refuses a malformed one', () => {
+    const output = { text: '{"a":1}', structured: { a: 1 } };
+    expect(parseRunResource(run({ output })).output).toEqual(output);
+    const base = run() as Record<string, unknown>;
+    expect(() => parseRunResource({ ...base, output: { text: 1, structured: null } })).toThrow(
+      MalformedRunError,
+    );
+    expect(() => parseRunResource({ ...base, output: { text: 'x' } })).toThrow(MalformedRunError);
   });
 
   it('carries every recognised run status without rejecting it', () => {
@@ -226,6 +234,19 @@ describe('parseRunResource', () => {
 
   it('refuses a non-UUID nullable model connection id returned by the run API', () => {
     expect(() => parseRunResource(run({ modelConnectionId: '../other' }))).toThrow(
+      MalformedRunError,
+    );
+  });
+
+  it.each([
+    [3, 3],
+    [null, null],
+  ] as const)('reads the agent version %s the run API returns', (agentVersion, expected) => {
+    expect(parseRunResource(run({ agentVersion })).agentVersion).toBe(expected);
+  });
+
+  it.each([0, 1.5, '3'])('refuses an agent version of %s', (agentVersion) => {
+    expect(() => parseRunResource(run({ agentVersion: agentVersion as never }))).toThrow(
       MalformedRunError,
     );
   });
@@ -390,51 +411,9 @@ describe('parseRunResource', () => {
   });
 });
 
-describe('parseRunListPage', () => {
-  it('parses the run list envelope', () => {
-    const page = parseRunListPage({ runs: [run(), run()], nextCursor: 'abc' });
-    expect(page.runs).toHaveLength(2);
-    expect(page.nextCursor).toBe('abc');
-  });
-
-  it('accepts a null nextCursor', () => {
-    expect(parseRunListPage({ runs: [], nextCursor: null }).nextCursor).toBeNull();
-  });
-
-  it('refuses an unknown key on the list envelope', () => {
-    expect(() => parseRunListPage({ runs: [], nextCursor: null, extra: true })).toThrow(
-      MalformedRunError,
-    );
-  });
-
-  it('refuses a response with no "runs" array', () => {
-    expect(() => parseRunListPage({ nextCursor: null })).toThrow(MalformedRunError);
-  });
-
-  it('refuses one malformed run inside an otherwise well-formed page', () => {
-    expect(() => parseRunListPage({ runs: [run(), { not: 'a run' }], nextCursor: null })).toThrow(
-      MalformedRunError,
-    );
-  });
-});
-
-describe('parseRunDetailResponse', () => {
-  it('parses the { run } envelope', () => {
-    expect(parseRunDetailResponse({ run: run() }).id).toBe('a1111111-1111-4111-8111-111111111111');
-  });
-
-  it('refuses a response with no "run"', () => {
-    expect(() => parseRunDetailResponse({})).toThrow(MalformedRunError);
-  });
-
-  it('refuses an unknown key on the detail envelope', () => {
-    expect(() => parseRunDetailResponse({ run: run(), extra: true })).toThrow(MalformedRunError);
-  });
-});
-
 // ── Filters and pagination in the URL ───────────────────────────────────────────────────────────
 
-describe('filtersFromSearchParams / runsListQuery round-trip', () => {
+describe('filtersFromSearchParams / runListQuery round-trip', () => {
   it('reads back exactly the filters a URL carries', () => {
     const params = new URLSearchParams(
       'q=sonnet&status=running&agent=ag1&project=pr1&user=us1&cursor=cur1&run=rn1',
@@ -461,16 +440,15 @@ describe('filtersFromSearchParams / runsListQuery round-trip', () => {
   });
 
   it('builds only the query parameters GET /api/runs recognises for a given filter set', () => {
-    const query = runsListQuery({ query: 'sonnet', status: 'running', agentId: 'ag1' }, 'cur1');
-    const params = new URLSearchParams(query);
-    expect([...params.keys()].sort()).toEqual(['agent', 'cursor', 'status']);
-    expect(params.get('status')).toBe('running');
-    expect(params.get('agent')).toBe('ag1');
-    expect(params.get('cursor')).toBe('cur1');
+    expect(runListQuery({ query: 'sonnet', status: 'running', agentId: 'ag1' }, 'cur1')).toEqual({
+      status: 'running',
+      agent: 'ag1',
+      cursor: 'cur1',
+    });
   });
 
   it('sends no cursor when none is held', () => {
-    expect(new URLSearchParams(runsListQuery({}, null)).has('cursor')).toBe(false);
+    expect(runListQuery({}, null)).toEqual({});
   });
 
   it.each(['../users', '../../api/workspaces', '%2e%2e/users'])(
@@ -478,14 +456,14 @@ describe('filtersFromSearchParams / runsListQuery round-trip', () => {
     (runId) => {
       const parsed = runIdFromSearchParams(new URLSearchParams(`run=${runId}`));
       expect(parsed).toBeNull();
-      expect(runDetailPath(runId)).toBeNull();
+      expect(isCanonicalRunId(runId)).toBe(false);
     },
   );
 
   it('constructs a detail path only for a canonical UUID', () => {
     const id = 'a1111111-1111-4111-8111-111111111111';
     expect(runIdFromSearchParams(new URLSearchParams(`run=${id}`))).toBe(id);
-    expect(runDetailPath(id)).toBe(`/api/runs/${id}`);
+    expect(isCanonicalRunId(id)).toBe(true);
   });
 });
 
@@ -520,53 +498,8 @@ describe('withScreenState', () => {
 
 // ── The user filter's availability — never a client-side role table ────────────────────────────
 
-describe('classifyUserFilterProbe', () => {
-  it('is available when the probe answers 200', () => {
-    expect(classifyUserFilterProbe(200, { runs: [], nextCursor: null })).toBe('available');
-  });
-
-  it('fails closed when a 200 probe body is not a run-list response', () => {
-    expect(classifyUserFilterProbe(200, { accepted: true })).toBe('unavailable');
-  });
-
-  it('keeps a 200 probe with an unknown envelope key unavailable', () => {
-    expect(classifyUserFilterProbe(200, { runs: [], nextCursor: null, extra: true })).toBe(
-      'unavailable',
-    );
-  });
-
-  it('keeps a 200 probe with an unknown run key unavailable', () => {
-    expect(
-      classifyUserFilterProbe(200, {
-        runs: [{ ...(run() as object), extra: true }],
-        nextCursor: null,
-      }),
-    ).toBe('unavailable');
-  });
-
-  it('is unavailable when the probe is refused by name', () => {
-    expect(
-      classifyUserFilterProbe(403, { error: { code: 'user_filter_forbidden', message: 'no' } }),
-    ).toBe('unavailable');
-  });
-
-  it(
-    'is unavailable — fail-closed — for a 403 whose body does not name user_filter_forbidden, ' +
-      'proving this function reads the code, not just the status',
-    () => {
-      expect(classifyUserFilterProbe(403, { error: { code: 'forbidden', message: 'no' } })).toBe(
-        'unavailable',
-      );
-    },
-  );
-
-  it('is unavailable for any other status, including a transient 500', () => {
-    expect(classifyUserFilterProbe(500, { error: { code: 'oops', message: 'x' } })).toBe(
-      'unavailable',
-    );
-  });
-
-  it('the probe id is a syntactically valid UUID that names nobody real', () => {
+describe('USER_FILTER_PROBE_ID', () => {
+  it('is a syntactically valid UUID that names nobody real', () => {
     expect(USER_FILTER_PROBE_ID).toMatch(/^[0-9a-f-]{36}$/);
   });
 });
@@ -692,113 +625,20 @@ describe('formatProviderModel', () => {
 
 // ── Resolving an id against a catalogue: resolved / deleted / unknown ───────────────────────────
 
-describe('PROJECT_CATALOG_URL', () => {
-  it('asks for archived projects too, so an archived project keeps its name in run history', () => {
-    // Regression for issue #184: `GET /api/projects` answers only active projects without this
-    // filter, so reverting it to the bare path makes every run of an archived project render its
-    // project as "deleted" — the acceptance criterion "completed run/session history remains
-    // navigable with project attribution", broken silently.
-    const url = new URL(PROJECT_CATALOG_URL, 'https://example.invalid');
-    expect(url.pathname).toBe('/api/projects');
-    expect(url.searchParams.get('archived')).toBe('all');
-  });
-});
-
-describe('parseCatalog', () => {
+describe('catalogFromList', () => {
   const id = 'c1111111-1111-4111-8111-111111111111';
-  const workspaceId = 'b1111111-1111-4111-8111-111111111111';
-  const createdBy = 'f1111111-1111-4111-8111-111111111111';
-  const ownerPrincipalId = '91111111-1111-4111-8111-111111111111';
-  const createdAt = '2026-09-12T10:00:00.000Z';
-  const rows = {
-    agents: {
-      id,
-      workspaceId,
-      name: 'Customer Support Agent',
-      instructions: '',
-      modelConnectionId: null,
-      model: null,
-      runtimeProfileId: null,
-      permissions: {
-        readFiles: true,
-        writeFiles: false,
-        runCommands: false,
-        unrestrictedNetwork: false,
-      },
-      createdBy,
-      ownerPrincipalId,
-      createdAt,
-      updatedAt: createdAt,
-    },
-    projects: {
-      id,
-      workspaceId,
-      name: 'Customer Support Project',
-      instructions: null,
-      defaultAgentId: null,
-      defaultModelConnectionId: null,
-      defaultModel: null,
-      visibility: 'workspace',
-      createdBy,
-      ownerPrincipalId,
-      archivedAt: null,
-      createdAt,
-      updatedAt: createdAt,
-      fileIds: [],
-      mcpServerIds: [],
-    },
-    users: { id, email: 'owner@example.test', name: 'Owner', createdAt },
-    workspaces: {
-      id,
-      slug: 'example',
-      name: 'Example Workspace',
-      archivedAt: null,
-      publicSharingEnabled: false,
-      createdAt,
-      updatedAt: createdAt,
-      role: 'owner',
-    },
-  } as const;
 
-  it('reads an id→label map out of a list response', () => {
-    const catalog = parseCatalog({ agents: [rows.agents] }, 'agents');
-    expect(catalog.byId.get(id)).toBe('Customer Support Agent');
-  });
-
-  it('refuses a response with no list', () => {
-    expect(() => parseCatalog({}, 'agents')).toThrow(MalformedRunError);
-  });
-
-  it('refuses a non-UUID catalogue id at the sibling identifier boundary', () => {
-    expect(() => parseCatalog({ agents: [{ ...rows.agents, id: '../other' }] }, 'agents')).toThrow(
-      MalformedRunError,
+  it('reads an id→label map out of a list', () => {
+    expect(catalogFromList('agents', [{ id, name: 'Customer Support Agent' }]).byId.get(id)).toBe(
+      'Customer Support Agent',
     );
   });
 
-  it.each(['agents', 'projects', 'users', 'workspaces'] as const)(
-    'refuses an unknown key on the %s catalogue envelope',
-    (kind) => {
-      expect(() => parseCatalog({ [kind]: [rows[kind]], extra: true }, kind)).toThrow(
-        MalformedRunError,
-      );
-    },
-  );
-
-  it.each(['agents', 'projects', 'users', 'workspaces'] as const)(
-    'refuses an unknown key on the %s catalogue row',
-    (kind) => {
-      expect(() => parseCatalog({ [kind]: [{ ...rows[kind], extra: true }] }, kind)).toThrow(
-        MalformedRunError,
-      );
-    },
-  );
-
-  it.each(['agents', 'projects', 'users', 'workspaces'] as const)(
-    'parses the exact %s catalogue contract',
-    (kind) => {
-      expect(parseCatalog({ [kind]: [rows[kind]] }, kind).byId.get(id)).toBe(rows[kind].name);
-    },
-  );
+  it('refuses a non-UUID catalogue id at the sibling identifier boundary', () => {
+    expect(() => catalogFromList('agents', [{ id: '../other', name: 'x' }])).toThrow(
+      MalformedRunError,
+    );
+  });
 });
 
 describe('resolveResourceReference', () => {

@@ -14,6 +14,7 @@
  */
 import type { Command } from '../command.js';
 import { agentVersionCommands } from './agent-versions.js';
+import { agentNewCommands } from './agents-new.js';
 import { agentCommands } from './agents.js';
 import { authCommands } from './auth.js';
 import { chatCommands } from './chat.js';
@@ -39,9 +40,11 @@ import { secretCommands } from './secrets.js';
 import { sessionCommands } from './sessions.js';
 import { shareCommands } from './shares.js';
 import { skillCommands } from './skills.js';
+import { storageCommands } from './storage.js';
 import { teamCommands } from './team.js';
 import { toolCommands } from './tool.js';
 import { tokenCommands } from './tokens.js';
+import { triggerCommands } from './triggers.js';
 import { workspaceCommands } from './workspaces.js';
 
 export const COMMANDS: readonly Command[] = [
@@ -73,14 +76,20 @@ export const COMMANDS: readonly Command[] = [
   ...teamCommands,
   // Issue #949 (ADR-0134): the clients external platforms are bound to, and their keys.
   ...endpointClientCommands,
+  // Issue #1295 (ADR-0144): the triggers that start a run from a webhook URL.
+  ...triggerCommands,
   ...modelCommands,
   ...runtimeCommands,
   ...secretCommands,
   ...fileCommands,
+  // Issue #1692 (US-STO-12): connect a bucket or folder and list it.
+  ...storageCommands,
   ...skillCommands,
   ...connectorCommands,
   ...engineCommands,
   ...agentCommands,
+  // Issue #1850: build an agent with the Builder, on a terminal.
+  ...agentNewCommands,
   // Issue #452 (S1-14): the raw version and pointer commands.
   ...agentVersionCommands,
   ...projectCommands,

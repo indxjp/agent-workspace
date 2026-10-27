@@ -9,25 +9,27 @@
  * §34 does not print these, so `tests/route-declarations/ENG-06-SESSION-STATE-305.ts` carries a
  * `mandate` citing §20 for each (ADR-0026).
  */
-import type { NextRequest } from 'next/server';
-
 import { getSessionStateBlob, putSessionStateBlob } from '../../../../../server/sessions/state-api';
+import { route } from '../../../../../server/http/route';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-export async function GET(
-  request: NextRequest,
+async function getStateBlob(
+  request: Request,
   context: RouteContext<'/api/sessions/[engineSessionId]/state-blobs'>,
 ): Promise<Response> {
   const { engineSessionId } = await context.params;
   return getSessionStateBlob(request, engineSessionId);
 }
 
-export async function PUT(
-  request: NextRequest,
+async function putStateBlob(
+  request: Request,
   context: RouteContext<'/api/sessions/[engineSessionId]/state-blobs'>,
 ): Promise<Response> {
   const { engineSessionId } = await context.params;
   return putSessionStateBlob(request, engineSessionId);
 }
+
+export const GET = route({ component: 'sessions', operation: 'state-blob-get' }, getStateBlob);
+export const PUT = route({ component: 'sessions', operation: 'state-blob-put' }, putStateBlob);

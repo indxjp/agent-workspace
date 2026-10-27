@@ -1,0 +1,2 @@
+ALTER TABLE "mcp_servers" ADD COLUMN "identity_secret_name" text;--> statement-breakpoint
+ALTER TABLE "mcp_servers" ADD CONSTRAINT "mcp_servers_identity_transport" CHECK ("mcp_servers"."identity_secret_name" is null or (length(btrim("mcp_servers"."identity_secret_name")) > 0 and ("mcp_servers"."kind" = 'openapi' or ("mcp_servers"."kind" = 'mcp' and "mcp_servers"."transport" in ('http', 'sse')))));

@@ -20,6 +20,12 @@ import { readFile } from 'node:fs/promises';
 import { Socket } from 'node:net';
 import path from 'node:path';
 
+import {
+  configuredPath,
+  resolveStorageSettings,
+  STORAGE_URL_ENV,
+} from '@indx-workspace/contracts/storage-settings';
+
 import { assertServerServesContracts } from './contracts-skew.ts';
 import { assertComposeProjectName, parseEnvironment } from './deployment.ts';
 import { parseProfileDocument, type DeploymentProfile } from './profile.ts';
@@ -27,9 +33,9 @@ import { parseProfileDocument, type DeploymentProfile } from './profile.ts';
 export type ProbeStore = 'relational' | 'objects' | 'identity';
 
 /**
- * `missing` is the object store's alone: the bucket answered 404. That is not a refusal — the
- * platform creates the bundled store's bucket on first boot (`ensureS3Bucket`) — but it is not a pass
- * either. A missing native bucket is operator-owned and refuses validation.
+ * `missing` is the object store's alone: the bucket answered 404. That is not a refusal when
+ * `AW_STORAGE_CREATE_BUCKET=true`, because the platform then creates the bucket on first boot — but
+ * it is not a pass either. Any other missing bucket is operator-owned and refuses validation.
  */
 type ProbeOutcome = 'passed' | 'missing' | 'skipped';
 
@@ -67,10 +73,33 @@ interface GcsObjectStoreProbeInput {
   readonly projectId?: string;
 }
 
-type ObjectStoreProbeInput = S3ObjectStoreProbeInput | GcsObjectStoreProbeInput;
+export type ObjectStoreProbeInput = S3ObjectStoreProbeInput | GcsObjectStoreProbeInput;
 
 /** Whether the bucket the profile names is already there. `validate` never creates it. */
 export type ObjectStorePresence = 'present' | 'absent';
+
+/**
+ * Storage settings the server would refuse to start with: the URL and the old variables name
+ * different places, or the endpoint is on the app's origin. The reason names variables, never values.
+ */
+export class StorageSettingsRefusedError extends Error {
+  constructor(reason: string) {
+    super(`the storage setting is refused — ${reason}`);
+    this.name = 'StorageSettingsRefusedError';
+  }
+}
+
+/**
+ * `AW_STORAGE_CREATE_BUCKET`, read as the server reads it at start-up for an `s3://` URL: unset,
+ * blank or `false` is `false`, `true` is `true`, and anything else is refused. The message names
+ * the variable and never echoes the value.
+ */
+function createsBucket(environment: Readonly<Record<string, string | undefined>>): boolean {
+  const raw = configuredPath('AW_STORAGE_CREATE_BUCKET', environment);
+  if (raw === null || raw === 'false') return false;
+  if (raw === 'true') return true;
+  throw new StorageSettingsRefusedError('AW_STORAGE_CREATE_BUCKET must be true or false.');
+}
 
 /** The three I/O seams, injected so the suite proves the decisions without touching a network. */
 export interface ProfileProbes {
@@ -232,6 +261,104 @@ async function probeObjects(
   }
 }
 
+/**
+ * The listing seam of doctor's storage-layout check: how many objects sit under `prefix`, at most
+ * `cap`. It lives here because this is the one file the CLI may import the bucket clients in (the
+ * storage design, §07 rule 1).
+ */
+export interface LegacyObjectCounter {
+  readonly bucket: (
+    input: ObjectStoreProbeInput,
+    prefix: string,
+    cap: number,
+    signal: AbortSignal,
+  ) => Promise<number>;
+}
+
+const PAGE_SIZE = 1_000;
+
+async function countS3(
+  input: Extract<ObjectStoreProbeInput, { backend: 's3' }>,
+  prefix: string,
+  cap: number,
+  signal: AbortSignal,
+): Promise<number> {
+  const { ListObjectsV2Command, S3Client } = await importOptionalPeer(
+    '@aws-sdk/client-s3',
+    () => import('@aws-sdk/client-s3'),
+  );
+  const client = new S3Client({
+    region: input.region,
+    forcePathStyle: input.forcePathStyle,
+    credentials: { accessKeyId: input.accessKeyId, secretAccessKey: input.secretAccessKey },
+    ...(input.endpoint === undefined ? {} : { endpoint: input.endpoint }),
+  });
+  try {
+    let counted = 0;
+    let token: string | undefined;
+    do {
+      const page = await client.send(
+        new ListObjectsV2Command({
+          Bucket: input.bucket,
+          Prefix: prefix,
+          MaxKeys: Math.min(PAGE_SIZE, cap - counted),
+          ContinuationToken: token,
+        }),
+        { abortSignal: signal },
+      );
+      counted += page.KeyCount ?? 0;
+      token = page.IsTruncated === true ? page.NextContinuationToken : undefined;
+    } while (token !== undefined && counted < cap);
+    return Math.min(counted, cap);
+  } finally {
+    client.destroy();
+  }
+}
+
+async function countGcs(
+  input: Extract<ObjectStoreProbeInput, { backend: 'gcs' }>,
+  prefix: string,
+  cap: number,
+  signal: AbortSignal,
+  timeoutMs: number,
+): Promise<number> {
+  const { Storage } = await importOptionalPeer(
+    '@google-cloud/storage',
+    () => import('@google-cloud/storage'),
+  );
+  const bucket = new Storage({
+    ...(input.projectId === undefined ? {} : { projectId: input.projectId }),
+    retryOptions: { totalTimeout: Math.max(1, timeoutMs / 1_000) },
+  }).bucket(input.bucket);
+  let counted = 0;
+  let pageToken: string | undefined;
+  do {
+    signal.throwIfAborted();
+    const [files, next] = await Promise.race([
+      bucket.getFiles({
+        prefix,
+        autoPaginate: false,
+        maxResults: Math.min(PAGE_SIZE, cap - counted),
+        ...(pageToken === undefined ? {} : { pageToken }),
+      }),
+      rejectWhenAborted(signal),
+    ]);
+    counted += files.length;
+    const token: unknown = (next as { pageToken?: unknown } | null | undefined)?.pageToken;
+    pageToken = typeof token === 'string' ? token : undefined;
+  } while (pageToken !== undefined && counted < cap);
+  return Math.min(counted, cap);
+}
+
+export function liveLegacyObjectCounter(timeoutMs: number): LegacyObjectCounter {
+  return {
+    bucket: (input, prefix, cap, signal) =>
+      input.backend === 's3'
+        ? countS3(input, prefix, cap, signal)
+        : countGcs(input, prefix, cap, signal, timeoutMs),
+  };
+}
+
 async function probeIdentity(issuer: string, signal: AbortSignal): Promise<void> {
   const discovery = `${issuer.replace(/\/+$/u, '')}/.well-known/openid-configuration`;
   const response = await fetch(discovery, { signal, redirect: 'follow' });
@@ -256,7 +383,7 @@ export function liveProfileProbes(timeoutMs: number): ProfileProbes {
 }
 
 /** How long a probe waits for a store that has not been told to hurry. */
-const DEFAULT_PROBE_TIMEOUT_MS = 10_000;
+export const DEFAULT_PROBE_TIMEOUT_MS = 10_000;
 
 export interface RunProfileProbesOptions {
   readonly probes?: ProfileProbes;
@@ -331,33 +458,38 @@ function relationalTarget(
   return fromEnvironment === undefined || fromEnvironment.trim() === '' ? null : fromEnvironment;
 }
 
-function objectStoreTarget(
-  profile: DeploymentProfile,
+/**
+ * The bucket to probe: the one `AW_STORAGE_URL` names, read by the resolver the server starts up
+ * with, or `null`. The old variables and the profile's `storage.objects` never name one, because
+ * the server reads nothing from them.
+ */
+// @story US-STO-10
+export function objectStoreTarget(
   environment: Readonly<Record<string, string | undefined>>,
 ): ObjectStoreProbeInput | null {
-  if (profile.storage.objects.startsWith('gcs://')) {
-    const projectId = environment['GCP_PROJECT']?.trim();
+  const settings = resolveStorageSettings(environment);
+  if (settings.kind !== 'url') return null;
+  const { location } = settings;
+  if (location.kind === 'gcs') {
+    const projectId = location.projectId ?? environment['GCP_PROJECT']?.trim();
     return {
       backend: 'gcs',
-      bucket: profile.storage.objects.slice('gcs://'.length),
+      bucket: location.bucket,
       ...(projectId === undefined || projectId === '' ? {} : { projectId }),
     };
   }
-  if (!profile.storage.objects.startsWith('s3://')) return null;
+  if (location.kind !== 's3') return null;
   const accessKeyId = environment['OBJECT_STORAGE_ACCESS_KEY_ID'] ?? '';
   const secretAccessKey = environment['OBJECT_STORAGE_SECRET_ACCESS_KEY'] ?? '';
   if (accessKeyId.trim() === '' || secretAccessKey.trim() === '') return null;
-  const endpoint = environment['OBJECT_STORAGE_ENDPOINT'];
   return {
     backend: 's3',
-    bucket: profile.storage.objects.slice('s3://'.length),
-    region: environment['AWS_REGION'] ?? 'us-east-1',
+    bucket: location.bucket,
+    region: location.region ?? 'us-east-1',
     accessKeyId,
     secretAccessKey,
-    // `apps/web/server/composition/storage.ts` reads the same variable as `=== 'true'`. The probe
-    // has to address the bucket exactly as the platform will, or it proves the wrong endpoint.
-    forcePathStyle: environment['OBJECT_STORAGE_FORCE_PATH_STYLE'] === 'true',
-    ...(endpoint === undefined || endpoint.trim() === '' ? {} : { endpoint }),
+    forcePathStyle: location.forcePathStyle,
+    ...(location.endpoint === undefined ? {} : { endpoint: location.endpoint }),
   };
 }
 
@@ -434,20 +566,21 @@ export async function runProfileProbes(
     );
   }
 
-  const objects = objectStoreTarget(profile, environment);
+  const objects = objectStoreTarget(environment);
   if (objects === null) {
     results.push(
       skipped(
         'objects',
-        profile.storage.objects.startsWith('azblob://')
-          ? `${profile.storage.objects} is reached through managed identity, which this host cannot assume`
-          : `${profile.storage.objects} has no credential to probe with`,
+        resolveStorageSettings(environment).kind !== 'url'
+          ? `${STORAGE_URL_ENV} is not configured, so there is no bucket to probe`
+          : profile.storage.objects.startsWith('azblob://')
+            ? `${profile.storage.objects} is reached through managed identity, which this host cannot assume`
+            : `${profile.storage.objects} has no credential to probe with`,
       ),
     );
   } else {
-    const selectedBackend = environment['OBJECT_STORAGE_BACKEND']?.trim() ?? '';
-    const platformOwnsBucket =
-      objects.backend === 's3' && selectedBackend === '' && objects.endpoint !== undefined;
+    // The server creates the bucket on first boot only when this says so.
+    const platformOwnsBucket = objects.backend === 's3' && createsBucket(environment);
     results.push(
       composeServiceSkip('objects', objects.backend === 's3' ? (objects.endpoint ?? '') : '') ??
         (await attemptObjects(objects.bucket, platformOwnsBucket, () =>
@@ -532,6 +665,9 @@ export async function runValidateCommand(
   if (profile.cloud === 'local' && composeProject !== undefined && composeProject.trim() !== '') {
     assertComposeProjectName(composeProject);
   }
+  // The server refuses to start with these settings, so validate refuses them before any probe.
+  const storage = resolveStorageSettings(environment);
+  if (storage.kind === 'refused') throw new StorageSettingsRefusedError(storage.reason);
   process.stdout.write(
     describeProbeResults(await runProfileProbes(profile, { ...options, environment })),
   );

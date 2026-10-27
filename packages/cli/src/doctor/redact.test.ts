@@ -12,6 +12,12 @@ describe('redact', () => {
     );
   });
 
+  it('masks the userinfo of a URL glued to a preceding word character', () => {
+    // Found by the redaction property (F-21): a `\b` before the scheme let `_postgres://` through
+    // unmasked, and masking a neighbouring secret then exposed it to a second pass.
+    expect(redact('DSN=x_postgres://admin:hunter2@db/aw', [])).toBe('DSN=x_postgres://***@db/aw');
+  });
+
   it('leaves a URL without userinfo, and an email address, alone', () => {
     const text = 'https://aw.example/api/me answered for admin@localhost.test';
     expect(redact(text, [])).toBe(text);

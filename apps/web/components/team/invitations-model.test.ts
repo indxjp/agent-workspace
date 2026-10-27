@@ -8,8 +8,7 @@
  * - **Action availability.** "Resend invalidates the prior token" and "revoke immediately removes
  *   any usable invitation action" are acceptance criteria, and both are decided here.
  * - **The token never reaches a string.** Every describer is driven with a token-bearing input
- *   where one can reach it at all, and asserted not to echo it. `readInvitationList` is driven with
- *   the create response — the one body that carries a token — and must refuse it outright.
+ *   where one can reach it at all, and asserted not to echo it.
  */
 import { describe, expect, it } from 'vitest';
 
@@ -25,7 +24,6 @@ import {
   EMPTY_INVITATION_DRAFT,
   invitationRequestFrom,
   invitationStateOf,
-  readInvitationList,
   revealIssuedInvitation,
   type InvitationResource,
   type InvitationState,
@@ -74,30 +72,6 @@ function issuedBody(invitation: InvitationResource = PENDING) {
       'This is the only time this token is shown. Only its hash is stored; it cannot be recovered, only revoked and reissued by resending.',
   };
 }
-
-describe('readInvitationList', () => {
-  it('returns the rows of a well-formed list response', () => {
-    expect(readInvitationList({ invitations: [PENDING, EXPIRED] })).toEqual([PENDING, EXPIRED]);
-  });
-
-  it('returns an empty list for a workspace that has sent none', () => {
-    expect(readInvitationList({ invitations: [] })).toEqual([]);
-  });
-
-  it('returns null rather than an empty list for a body it cannot read', () => {
-    // An empty table is a claim ("nobody is waiting here") a malformed response is no evidence for.
-    expect(readInvitationList(null)).toBeNull();
-    expect(readInvitationList({ invitations: [{ ...PENDING, role: 'superuser' }] })).toBeNull();
-    expect(readInvitationList({ rows: [PENDING] })).toBeNull();
-  });
-
-  it('refuses the create response outright, so a token can never become a list row', () => {
-    // `InvitationListResponseSchema` is `.strict()`, and this is what that buys: the one body in
-    // the program that carries a plaintext token cannot be mistaken for the list.
-    expect(readInvitationList(issuedBody())).toBeNull();
-    expect(readInvitationList({ invitations: [{ ...PENDING, token: TOKEN }] })).toBeNull();
-  });
-});
 
 describe('invitationStateOf', () => {
   it('calls a row with a future expiry and no other timestamp pending', () => {
@@ -262,15 +236,6 @@ describe('revealIssuedInvitation', () => {
     expect(revealIssuedInvitation(resent, 'https://workspace.example.test')?.warning).toBe(
       resent.warning,
     );
-  });
-
-  it('returns null for a body it cannot read, quoting no fragment of it', () => {
-    // The error path that would otherwise leak: a partially-read body still has a token in it.
-    expect(revealIssuedInvitation({ token: TOKEN }, 'https://workspace.example.test')).toBeNull();
-    expect(revealIssuedInvitation(null, 'https://workspace.example.test')).toBeNull();
-    expect(
-      revealIssuedInvitation({ ...issuedBody(), token: '' }, 'https://workspace.example.test'),
-    ).toBeNull();
   });
 
   it('returns null rather than a broken string when the link and origin make no URL', () => {

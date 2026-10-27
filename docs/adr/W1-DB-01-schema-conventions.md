@@ -192,6 +192,15 @@ and re-run `pnpm db:generate` so it gets a fresh `when`.
 **Not implemented here:** R-15's proposed CI rule that asserts new journal entries post-date
 every entry on the base branch. `.github/**` is not this task's to write. Declared as a gap.
 
+**Amended by the engineering audit (W3-3, F-17):** the contributor rule is now a script. During
+`git merge origin/main`, `pnpm migrations:renumber` moves the branch's new migrations after
+main's (next `idx`, renamed tag, `when` strictly later, SQL byte for byte, snapshots three-way
+merged and re-chained) and never touches a migration already on main. The gap above is closed by
+`pnpm migrations:check` in fast-checks: dense `idx`, matching tag prefixes, strictly increasing
+`when`, one SQL file and snapshot per entry, and an unbroken snapshot chain. Timestamp-prefixed
+tags were rejected: drizzle-kit would still append to the one journal array and chain snapshots,
+so the collision would remain.
+
 ### 10. `drizzle.config.ts` lives beside the schema, not at the repository root
 
 R-15 sketched it at the root. The root is not this task's to write, and the arrangement is

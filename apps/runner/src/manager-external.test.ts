@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createE2bProvider, createExternalDriver } from '@agent-workspace/runtime';
+import { createE2bProvider, createExternalDriver } from '@agent-workspace/runtime/driver/external';
 
 import { createRunnerManagerServer } from './manager.js';
 

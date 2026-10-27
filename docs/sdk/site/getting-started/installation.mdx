@@ -1,31 +1,56 @@
 ---
 title: "Installation"
-description: "Install the Agent Workspace SDK, its testing subpath, the React chat component and the aw command line from npm."
+description: "Before you begin: Node 24, an Anthropic API key, a non-elevated shell, about 600 MB of disk and one minute. Then, to add Agent Workspace to an app you already have: the SDK and the aw command line from npm."
 ---
 
 <Info>
 
-**Chapter 1 · Run your first agent — step 1 of 3** · [the chapter map](/path/first-agent)
+**Chapter 1 · Run your first agent — step 1 of 4** · [the chapter map](/path/first-agent)
 
-- **You will:** check your environment and install the SDK or the `aw` command line.
-- **You will learn:** which `@indx-workspace/*` package does what, why Node 24, and how to verify a request round-trips.
+- **You will:** check that your machine has what the [Quickstart](/getting-started/quickstart) needs.
+- **You will learn:** why Node 24, where the key comes from, and which `@indx-workspace/*` package does what.
 - **You need:** nothing.
 
 </Info>
 
-Add Agent Workspace to an existing app, or put the `aw` command line on your machine. Everything is
-published to npm under the `@indx-workspace` scope.
+## Before you begin
 
-**What you can do**
+| You need                       | Why, and how to check                                                                                                                             |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Node 24 or newer**           | The packages declare `"engines": { "node": ">=24" }`. Check with `node --version` (below). npm comes with Node.                                     |
+| **An Anthropic API key**       | The agent's model runs on your key. Create one in the [Anthropic Console](https://console.anthropic.com/settings/keys); it starts with `sk-ant-`. |
+| **A shell that is not elevated** (Windows) | PostgreSQL refuses to start under an account with administrator rights. Use a normal PowerShell, cmd or Git Bash window.                 |
+| **The Linux filesystem** (WSL) | Keep the project under `~/`, not under `/mnt/c`, and run the Node that is installed inside the distribution.                                       |
+| **An encrypted disk**          | `aw dev` keeps files under `.agent-workspace/storage` on local disk, unencrypted. Turn on disk encryption before real data lands there; see [Protect stored files](/features/self-host-securely#protect-stored-files). |
+| **About 600 MB of disk**       | A new project with its dependencies, including the embedded PostgreSQL, measured at 587 MB.                                                        |
+| **About one minute**           | Measured on a clean machine: 35 s for `npm create`, 5 s more to the ready screen.                                                                 |
 
-- [Add the SDK to your app](#install-from-npm) with one `npm install`.
-- [Get the `aw` command line](#get-the-aw-command-line).
-- [Check your environment is supported](#requirements).
-- [Verify a request round-trips](#verify-it-worked).
+Docker is not needed.
 
-To start a new project rather than add the SDK to one, use the [Quickstart](/getting-started/quickstart):
-`npm create @indx-workspace@latest my-agent` installs `aw` and the local runtime
-(`@indx-workspace/embedded`) for you.
+Check Node:
+
+```sh claim="run"
+node --version
+```
+
+```text title="Output"
+v24.22.0
+```
+
+Any `v24.x` or later works. On an older Node, install 24 from [nodejs.org](https://nodejs.org) or
+with a version manager (`nvm install 24`), then check again.
+
+Under WSL, also check that `which node` does not point under `/mnt/c`. If it does, Windows Node is
+on the `PATH`; see [WSL: EPERM](/getting-started/troubleshooting#wsl-eperm-or-npx-aw-cannot-determine-the-executable).
+
+You do not need to check the key now. `aw dev` checks it with the provider when it starts and says
+`key checked` on its ready screen, or tells you what is wrong. The [Quickstart](/getting-started/quickstart)
+shows how to set it for your shell.
+
+That is all a new project needs: `npm create @indx-workspace@latest my-agent` installs `aw` and
+the local runtime (`@indx-workspace/embedded`) into the project for you. Continue with the
+[Quickstart](/getting-started/quickstart). The rest of this page is for adding Agent Workspace to an
+app you already have.
 
 <Note>
   The npm scope `@agent-workspace` belongs to an unrelated publisher. Nothing of this platform is
@@ -55,6 +80,10 @@ npx @indx-workspace/aw --version        # run it once
 npm install --global @indx-workspace/aw # or put `aw` on PATH
 ```
 
+`--version` prints the `aw` and contracts versions, for example `aw 0.6.9 (contracts 0.6.9)`. A
+global install needs a writable npm prefix: with a system-wide Node (a Linux package or the `node`
+Docker image) it fails with `EACCES` for a non-root user. Use `npx`, or a Node from nvm or Homebrew.
+
 <AccordionGroup>
   <Accordion title="Every package and what it is">
 
@@ -73,25 +102,14 @@ every request, so `@indx-workspace/sdk@0.6.x` and `@indx-workspace/aw@0.6.x` bot
 contracts 0.6 ([Public surface and stability](/concepts/public-surface#versions-and-deprecation)).
 
   </Accordion>
-</AccordionGroup>
-
-## Requirements
-
-You need **Node 24 or newer**: the packages declare `"engines": { "node": ">=24" }`. In a browser
-nothing else is needed.
-
-On Windows under WSL, keep a project on the Linux filesystem (under `~/`), not on a Windows drive
-under `/mnt/c`: the install and the local runtime are several times slower there, and
-`npm create` says so when it writes a project on one.
-
-<AccordionGroup>
   <Accordion title="Why Node 24, and a custom fetch">
 
 The SDK relies on Node 24 shipping the Web platform's `fetch`, `Headers`, `URL`, `AbortSignal`
-and `ReadableStream` as globals — it imports nothing from `node:*`. In an older Node or a custom
-runtime, pass your own `fetch` through [`ClientOptions.fetch`](/getting-started/configuration) —
-anything that implements the standard `fetch` signature and returns a `ReadableStream` body for a
-streamed response works, including `runs.follow` (see [Streaming](/guides/streaming)).
+and `ReadableStream` as globals — it imports nothing from `node:*`. In a browser nothing else is
+needed. In an older Node or a custom runtime, pass your own `fetch` through
+[`ClientOptions.fetch`](/getting-started/configuration) — anything that implements the standard
+`fetch` signature and returns a `ReadableStream` body for a streamed response works, including
+`runs.follow` (see [Streaming](/guides/streaming)).
 
   </Accordion>
   <Accordion title="TypeScript settings">
@@ -140,5 +158,6 @@ console.log(`connected: ${String(agents.length)} agent(s) visible`);
 
 </Accordion>
 
-Continue with [Authentication](/getting-started/authentication) to set up a real credential, or
-[Quickstart](/getting-started/quickstart) for the full first agent.
+<Card title="Next: Quickstart" icon="arrow-right" href="/getting-started/quickstart">
+  Create the project, start it, and chat with your agent.
+</Card>

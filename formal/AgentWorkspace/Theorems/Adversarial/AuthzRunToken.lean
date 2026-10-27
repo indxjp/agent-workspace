@@ -55,27 +55,27 @@ private def activeRow : RegistryEntry :=
 @[aw_spec (tier := T3) (ts := "packages/core/src/db/repositories/run-tokens.ts#isActive")]
 theorem revocation_has_live_witness :
     isActive activeRow "w" "r" "t" "h" 100 = true ∧
-    isActive { activeRow with revoked := true } "w" "r" "t" "h" 100 = false := by decide
+    isActive { activeRow with revoked := true } "w" "r" "t" "h" 100 = false := by decide +kernel
 
 /-- A matching row is live before its expiry and inactive at that exact second. -/
 @[aw_spec (tier := T3) (ts := "packages/core/src/db/repositories/run-tokens.ts#isActive")]
 theorem expiry_has_live_witness :
     isActive activeRow "w" "r" "t" "h" 199 = true ∧
-    isActive activeRow "w" "r" "t" "h" 200 = false := by decide
+    isActive activeRow "w" "r" "t" "h" 200 = false := by decide +kernel
 
 /-- Registry activity requires the exact workspace and hash even for an otherwise live row. -/
 @[aw_spec (tier := T3) (ts := "packages/core/src/db/repositories/run-tokens.ts#isActive")]
 theorem registry_checks_workspace_and_hash :
     isActive activeRow "w" "r" "t" "h" 100 = true ∧
     isActive activeRow "other" "r" "t" "h" 100 = false ∧
-    isActive activeRow "w" "r" "t" "other" 100 = false := by decide
+    isActive activeRow "w" "r" "t" "other" 100 = false := by decide +kernel
 
 /-- Revoking a run's tokens leaves the same run id in another workspace untouched. -/
 @[aw_spec (tier := T3) (ts := "packages/core/src/db/repositories/run-tokens.ts#revokeForRun")]
 theorem revoke_for_run_preserves_other_workspace :
     let foreign := { activeRow with workspaceId := "other" }
     revokeForRun [activeRow, foreign] "w" "r" =
-      ([{ activeRow with revoked := true }, foreign], 1) := by decide
+      ([{ activeRow with revoked := true }, foreign], 1) := by decide +kernel
 
 /-! ## The tool route (ADR-0113 C16) -/
 
@@ -165,7 +165,7 @@ theorem tool_call_has_allow_witness :
     toolDecision true (.valid toolClaims) true (some ⟨true, ["c"]⟩) (some ⟨"w", .openapi, true⟩)
         "w" "c" = .deny 401 "tool_run_not_active" ∧
     toolDecision true (.valid toolClaims) true (some ⟨false, ["c"]⟩) (some ⟨"w", .openapi, false⟩)
-        "w" "c" = .deny 403 "tool_not_in_run" := by decide
+        "w" "c" = .deny 403 "tool_not_in_run" := by decide +kernel
 
 end ToolRoute
 
@@ -192,7 +192,10 @@ theorem visitor_token_reaches_only_its_session (s : SessionId) (req : Request)
   · simp [sessionScopeMatch, h]
 
 /-- The token goes on only inside its grammar and its own session: reading one run by id (and its
-events), running an agent, or rating a run (`feedback`), and in each case for session `s`. -/
+events), running an agent, rating a run (`feedback`), minting a presigned download URL for a file
+(`download-urls`; the file path under `.attachments/<s>/` is the session it names, issue #251),
+or handing one file to its own session (`attachments` on `sessions`, issue #1308), and in each
+case for session `s`. `upload-urls` is not in the grammar (issue #1574). -/
 @[aw_spec (tier := T3) (ts := "apps/web/server/rbac/decide.ts#TOKEN_SCOPE_GRAMMAR")
   (ts := "apps/web/server/runs/api.ts#requireSessionScopeMatch")
   (doc := "docs/formal/domains/visitor-sessions.md#the-visitor-token")]
@@ -201,7 +204,9 @@ theorem visitor_token_proceeds_only_inside_its_grammar (s : SessionId) (req : Re
     req.sessionId = some s.val ∧
       ((req.resource = .runs ∧ req.op = .read ∧ req.pathId.isSome) ∨
         (req.resource = .agents ∧ req.op = .run) ∨
-        (req.resource = .runs ∧ req.op = .run ∧ req.sub = some "feedback")) := by
+        (req.resource = .runs ∧ req.op = .run ∧ req.sub = some "feedback") ∨
+        (req.resource = .files ∧ req.op = .read ∧ req.sub = some "download-urls") ∨
+        (req.resource = .sessions ∧ req.op = .write ∧ req.sub = some "attachments")) := by
   obtain ⟨resource, op, sub, pathId, sessionId⟩ := req
   unfold visitorDecision at h
   split at h
@@ -212,6 +217,14 @@ theorem visitor_token_proceeds_only_inside_its_grammar (s : SessionId) (req : Re
       simp only [sessionScopeMatch, Bool.not_eq_true', beq_eq_false_iff_ne, ne_eq,
         Decidable.not_not] at hm
       refine ⟨hm, ?_⟩
+      by_cases hsess : resource = .sessions ∧ op = .write
+      · obtain ⟨rfl, rfl⟩ := hsess
+        refine Or.inr (Or.inr (Or.inr (Or.inr ⟨rfl, rfl, ?_⟩)))
+        by_cases hne : sub = some "attachments"
+        · exact hne
+        exfalso
+        apply hs
+        simp [checkTokenScope, inGrammar, grammar, Scope.kind, Ne.symm hne]
       simp only [checkTokenScope, inGrammar, grammar, Scope.kind] at hs
       cases resource <;> cases op <;> cases pathId <;> simp_all
 
@@ -224,7 +237,7 @@ theorem visitor_token_has_allow_witness :
     visitorDecision (.session s) ⟨.agents, .run, some "runs", some "a", some "s"⟩ = .proceed ∧
     visitorDecision (.session s) ⟨.runs, .run, some "feedback", some "r", some "s"⟩ = .proceed ∧
     visitorDecision (.session s) ⟨.runs, .read, none, some "r", some "t"⟩ =
-      .deny 403 "token_out_of_scope" := by decide
+      .deny 403 "token_out_of_scope" := by decide +kernel
 
 /-- On the allowed-origin branch, a cross-origin bootstrap opens a session only when its `Origin`
 is one the surface lists, and that `Origin` is the one echoed back. -/
@@ -271,7 +284,7 @@ theorem visitor_mint_has_witness :
     mintAfterOpen (openVerdict true true [] none .session) true (some ⟨"s"⟩) =
       some (.session ⟨"s"⟩) ∧
     mintAfterOpen (openVerdict false true [] none .session) true (some ⟨"s"⟩) = none := by
-  decide
+  decide +kernel
 
 /-- A visitor session opened on an environment is pinned to the version that environment pointed
 at (`sessions.agent_version_id = resolved.versionId`); with `session_version_stable`, no later

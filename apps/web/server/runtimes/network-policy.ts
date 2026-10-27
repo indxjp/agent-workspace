@@ -38,6 +38,8 @@
  * own Accept line.
  */
 
+import type { RuntimeDriver } from '@indx-workspace/contracts/runtimes';
+
 export type NetworkPolicyId = 'none' | 'restricted' | 'open';
 
 export const networkPolicyIds: readonly NetworkPolicyId[] = ['none', 'restricted', 'open'];
@@ -63,7 +65,7 @@ export interface NetworkPolicyCell {
 
 export interface DriverNetworkPolicyRow {
   /** §14.2's `RuntimeDriverId` spelling, exactly as §15.2's first column prints it. */
-  readonly driver: string;
+  readonly driver: RuntimeDriver;
   readonly cells: Readonly<Record<NetworkPolicyId, NetworkPolicyCell>>;
   /**
    * What `none` is recorded to mean for this driver. §15.2's rule (`docs/spec.md:1045`) is that
@@ -221,7 +223,10 @@ export const networkPolicyMapping: readonly DriverNetworkPolicyRow[] = [
  * `allowedDomains` (#1018): `external` stays out until the E7 live lane proves the always-denied
  * ranges hold.
  */
-const RESTRICTED_PROXY_DRIVERS: ReadonlySet<string> = new Set(['docker', 'kubernetes']);
+export const RESTRICTED_PROXY_DRIVERS: ReadonlySet<string> = new Set<string>([
+  'docker',
+  'kubernetes',
+] as const satisfies readonly RuntimeDriver[]);
 
 /** Why `driver` cannot enforce `restricted` in this deployment, or `null` when it can. */
 export function restrictedUnenforceableReason(

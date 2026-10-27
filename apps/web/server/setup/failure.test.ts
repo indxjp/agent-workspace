@@ -1,3 +1,4 @@
+import { log as webLogger } from '../telemetry/logger';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { setupStepFailure } from './failure';
@@ -10,7 +11,7 @@ describe('setupStepFailure', () => {
   });
 
   it('names the errno of a filesystem error beside its name', () => {
-    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     const error = Object.assign(new Error('EACCES: permission denied, open /var/lib/x'), {
       code: 'EACCES',
     });
@@ -23,7 +24,7 @@ describe('setupStepFailure', () => {
   it.each(['access denied', 'E', 'EACCES/../secret', 42, undefined])(
     'ignores a code that is not an errno (%s)',
     (code) => {
-      vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
       const error = Object.assign(new Error('boom'), { code });
 
       expect(setupStepFailure('runtime test', error, []).message).toBe(
@@ -33,7 +34,7 @@ describe('setupStepFailure', () => {
   );
 
   it('keeps a secret in the error message out of the response and the log', () => {
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const logged = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     const error = new Error(`rejected ${SECRET} at https://host/path?key=${SECRET}`);
 
     const failure = setupStepFailure('runtime test', error, [SECRET]);

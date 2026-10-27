@@ -6,8 +6,8 @@ import { createRunTokenCodec } from '@agent-workspace/gateway/tokens';
 import { POST as revokeTokensRoute } from '../../app/api/runs/[id]/revoke-tokens/route';
 import { POST as legacyRevokeRoute } from '../../app/api/runs/[id]/route';
 import { revokeRunTokens } from './api';
-import { installRunApi, resetRunApi } from './environment';
-import { InMemoryRunStore } from './store';
+import { InMemoryRunStore } from './memory-store';
+import { installTestRunApi, resetTestRunApi } from '../application-context-fixtures';
 
 const SECRET = 'revocation-integration-secret-at-least-32-bytes';
 const WORKSPACE = '22222222-2222-4222-8222-222222222222';
@@ -17,7 +17,7 @@ const AGENT = '33333333-3333-4333-8333-333333333333';
 const SESSION = '44444444-4444-4444-8444-444444444444';
 const RUN = '11111111-1111-4111-8111-111111111111';
 
-afterEach(resetRunApi);
+afterEach(resetTestRunApi);
 
 describe('run-token revocation edge to gateway', () => {
   it('lets an owner revoke one token and makes the next gateway request reject it', async () => {
@@ -58,7 +58,7 @@ describe('run-token revocation edge to gateway', () => {
           ),
       },
     });
-    installRunApi({
+    installTestRunApi({
       store,
       authenticate: () =>
         Promise.resolve({
@@ -120,7 +120,7 @@ describe('run-token revocation edge to gateway', () => {
       sessionId: SESSION,
     });
     let calls = 0;
-    installRunApi({
+    installTestRunApi({
       store,
       authenticate: () =>
         Promise.resolve({
@@ -211,7 +211,7 @@ describe('run-token revocation edge to gateway', () => {
         agentId: AGENT,
         sessionId: SESSION,
       });
-      installRunApi({
+      installTestRunApi({
         store,
         authenticate: () =>
           Promise.resolve({

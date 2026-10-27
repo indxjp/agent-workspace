@@ -1,0 +1,4 @@
+{
+  "apps/web/server/files/extract.ts::EXTRACT_MAX_FILE_BYTES": "not a storage limit (search extraction cap)",
+  "apps/runner/src/manager.ts::MAX_ALLOCATION_BODY_BYTES": "not a storage limit (tool bundles)"
+}

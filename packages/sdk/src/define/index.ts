@@ -3,7 +3,7 @@
  *
  * A project's `agents/*.ts` and `surfaces/*.ts` describe what runs with {@link defineAgent},
  * {@link defineSurface}, the tools {@link mcp}, {@link openapiTool} and {@link postgresTool}, the
- * references {@link skill}, {@link files} and {@link secret}; {@link toAgentVersionBody} turns
+ * references {@link skill}, {@link builtinSkill}, {@link files} and {@link secret}; {@link toAgentVersionBody} turns
  * them into the body of an agent version, which `aw check` dry-runs and `aw push` saves.
  *
  * - **Checked when defined.** Each function validates its input with the contract's own schemas
@@ -18,8 +18,9 @@
  * - **Compiled or stored policy.** A `claude-agent-sdk` agent with no `limits` gets the policy the
  *   server compiles from its permissions and skills (`policySource: 'compiled'`); any `limits`, or
  *   any other engine, gives a stored policy.
- * - **Tools.** `mcp()` names an MCP connector the workspace already has. `openapiTool()` (a
- *   read-only HTTP API from an OpenAPI document) and `postgresTool()` (read-only tables) become
+ * - **Tools.** `mcp()` names an MCP connector the workspace already has. `openapiTool()` (an
+ *   HTTP API from an OpenAPI document; its writes are implicitly approval-gated) and
+ *   `postgresTool()` (read-only tables) become
  *   catalog connectors of their `name`; {@link toolDefinitionsOf} gives the bodies that register
  *   them, and every tool is named in the version's `resources.connectors` (contract C15).
  * - **Code tools.** `defineTool()` declares a function tool (a JSON Schema input, a `run` path); the
@@ -53,6 +54,7 @@ export { defineSurface, isDefinedSurface, type DefinedSurface } from './surface.
 export {
   CODE_TOOL_DEFAULT_TIMEOUT_MS,
   CODE_TOOL_MAX_TIMEOUT_MS,
+  builtinSkill,
   defineTool,
   files,
   isCodeTool,
@@ -80,6 +82,14 @@ export {
   type ToolRunContext,
 } from './references.js';
 export { z } from 'zod';
+export {
+  agentFromVersionBody,
+  toolModulesOf,
+  type AgentFromVersionBody,
+  type AgentVersionSource,
+  type ToolModuleExport,
+  type VersionBodyDrop,
+} from './from-version-body.js';
 export {
   toAgentVersionBody,
   toolDefinitionsOf,

@@ -14,6 +14,7 @@
  *   * `sequence` is dense from 1, and `replaceAll` renumbers from 1;
  *   * `list` answers `null` for a stream that was never written and `[]` for an empty one, and
  *     caps a page at `SESSION_STATE_PAGE_LIMIT` whatever limit is asked for;
+ *   * a batch carrying a NUL or an unpaired surrogate is refused whole, as `jsonb` refuses it;
  *   * a blob is refused over the cap by the *route*, so this store simply keeps what it is given.
  *
  * `apps/web/server/sessions/state-store.test.ts` runs one contract suite against this and against
@@ -22,7 +23,6 @@
 import { createHash } from 'node:crypto';
 
 import type { EngineId } from '@indx-workspace/contracts/engines';
-import { SESSION_STATE_PAGE_LIMIT } from '@agent-workspace/core/db';
 
 import type {
   SessionStateBlobContent,
@@ -33,6 +33,8 @@ import type {
   SessionStateStreamRecord,
   SessionStateStreamRef,
 } from './state';
+import { unstorableTextPath } from './transcript';
+import { SESSION_STATE_PAGE_LIMIT } from './store';
 
 interface Stream {
   readonly engine: EngineId;
@@ -54,6 +56,22 @@ function streamId(ref: SessionStateStreamRef): string {
 
 function blobId(ref: SessionStateBlobRef): string {
   return JSON.stringify([ref.workspaceId, ref.sessionId, ref.engine, ref.blobKey]);
+}
+
+/**
+ * Refuse a batch the durable store's `jsonb` column would refuse (a NUL or an unpaired surrogate),
+ * before anything is written, so a test against memory cannot pass an append a deployment fails.
+ */
+function unstorableRefusal(entries: readonly SessionStateEntryPayload[]): Promise<never> | null {
+  for (const [index, payload] of entries.entries()) {
+    const found = unstorableTextPath(payload.entry, `entries[${String(index)}].entry`);
+    if (found !== null) {
+      return Promise.reject(
+        new Error(`${found} cannot be stored (NUL, unpaired surrogate or nesting too deep)`),
+      );
+    }
+  }
+  return null;
 }
 
 export class InMemorySessionStateStore implements SessionStateStore {
@@ -86,6 +104,8 @@ export class InMemorySessionStateStore implements SessionStateStore {
   }
 
   append(ref: SessionStateStreamRef, entries: readonly SessionStateEntryPayload[]): Promise<void> {
+    const refusal = unstorableRefusal(entries);
+    if (refusal !== null) return refusal;
     const stream = this.#touch(ref);
     for (const incoming of entries) {
       const key = incoming.entryKey;
@@ -132,6 +152,8 @@ export class InMemorySessionStateStore implements SessionStateStore {
     ref: SessionStateStreamRef,
     entries: readonly SessionStateEntryPayload[],
   ): Promise<void> {
+    const refusal = unstorableRefusal(entries);
+    if (refusal !== null) return refusal;
     const stream = this.#touch(ref);
     stream.entries = entries.map((incoming, index) => ({
       sequence: index + 1,

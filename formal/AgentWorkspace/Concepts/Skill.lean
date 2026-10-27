@@ -68,15 +68,21 @@ end Skill
 /-- The columns of `skills`, in declaration order. -/
 def dbColumns : List String :=
   ["id", "workspace_id", "name", "skill_md", "enabled", "created_by", "owner_principal_id",
-    "created_at", "updated_at"]
+    "meta", "pending_delete", "builtin_digest", "created_at", "updated_at"]
 
 /-- The keys of `SkillDetailSchema` (every skill body the routes render): no owner, no creator;
-`SKILL.md` is `source`, parsed into `description`, `instructions` and `allowedTools`. -/
+`SKILL.md` is `source`, parsed into `description`, `instructions` and `allowedTools`; the
+published revisions are `revisions` (SDK-19). -/
 @[aw_spec (ts := "packages/contracts/src/skills.ts#SkillDetailSchema")
   (doc := "docs/sdk/04-api-specification.md#57-skills--awskills")]
 def wireFields : List String :=
   ["id", "name", "enabled", "description", "fileCount", "createdAt", "updatedAt", "source",
-    "instructions", "allowedTools", "files"]
+    "instructions", "allowedTools", "files", "revisions"]
+
+/-- The keys of `SkillDetailSchema` that may be absent from a body: `revisions`, which a server
+that predates skill revisions does not send. Every other key of `wireFields` is always present. -/
+@[aw_spec (ts := "packages/contracts/src/skills.ts#SkillDetailSchema")]
+def wireOptionalFields : List String := ["revisions"]
 
 /-- What `putSkill` is given. -/
 structure PutSkill where

@@ -17,7 +17,7 @@ theorem claims_refuse_unknown_key :
       ("runId", .str "run"), ("sessionId", .str "session"),
       ("workspaceId", .str "workspace"), ("agentId", .str "agent"),
       ("modelConnectionId", .str "connection"), ("issuedAt", .num 100 0),
-      ("expiresAt", .num 200 0), ("extra", .bool true)]) = false := by decide
+      ("expiresAt", .num 200 0), ("extra", .bool true)]) = false := by decide +kernel
 
 /-- A token whose expiry equals its issuance time is invalid. -/
 @[aw_spec (tier := T0) (ts := "packages/gateway/src/tokens/run-token.ts#RunTokenClaimsSchema")]
@@ -26,24 +26,24 @@ theorem claims_refuse_equal_expiry :
       ("runId", .str "run"), ("sessionId", .str "session"),
       ("workspaceId", .str "workspace"), ("agentId", .str "agent"),
       ("modelConnectionId", .str "connection"), ("issuedAt", .num 100 0),
-      ("expiresAt", .num 100 0)]) = false := by decide
+      ("expiresAt", .num 100 0)]) = false := by decide +kernel
 
 /-- The default and valid TTL boundaries match the gateway constants. -/
 @[aw_spec (tier := T0) (ts := "packages/gateway/src/tokens/run-token.ts#DEFAULT_TTL_SECONDS")]
 theorem ttl_edges :
     defaultTtlSeconds = 300 ∧ validTtl 1 = true ∧ validTtl 3600 = true ∧
-      validTtl 0 = false ∧ validTtl 3601 = false := by decide
+      validTtl 0 = false ∧ validTtl 3601 = false := by decide +kernel
 
 /-- Issuance refuses a blank claim subject. -/
 @[aw_spec (tier := T0) (ts := "packages/gateway/src/tokens/run-token.ts#createRunTokenCodec")]
 theorem issue_refuses_blank_subject :
-    issueClaims { runId := " ", sessionId := "s", workspaceId := "w", agentId := "a", modelConnectionId := "m" } "token" 100 300 = none := by decide
+    issueClaims { runId := " ", sessionId := "s", workspaceId := "w", agentId := "a", modelConnectionId := "m" } "token" 100 300 = none := by decide +kernel
 
 /-- Issuance derives both timestamps from the supplied clock and TTL. -/
 @[aw_spec (tier := T0) (ts := "packages/gateway/src/tokens/run-token.ts#createRunTokenCodec")]
 theorem issue_uses_injected_clock :
     (issueClaims { runId := "r", sessionId := "s", workspaceId := "w", agentId := "a", modelConnectionId := "m" } "token" 100 60).map (fun c => (c.issuedAt, c.expiresAt)) =
-      some (100, 160) := by decide
+      some (100, 160) := by decide +kernel
 
 private def claimFixture : JValue := .obj
   [("version", .num 1 0), ("tokenId", .str "token"), ("runId", .str "run"),
@@ -60,6 +60,6 @@ private def replaceIssuedAt : JValue → JValue
 @[aw_spec (tier := T0) (ts := "packages/gateway/src/tokens/run-token.ts#RunTokenClaimsSchema")]
 theorem claims_refuse_unsafe_issued_at :
     claimsShape claimFixture = true ∧
-    claimsShape (replaceIssuedAt claimFixture) = false := by decide
+    claimsShape (replaceIssuedAt claimFixture) = false := by decide +kernel
 
 end AgentWorkspace.Theorems.WellFormed.AuthzRunToken

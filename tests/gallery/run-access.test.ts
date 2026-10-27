@@ -7,16 +7,15 @@
  * install-live harness uploads sit under a grant, that the file tools can read them, and that every
  * tool the agent pre-approves is still there to be called.
  *
- * The harness also starts each project's MCP servers with `FILE_ROOT=<project>/data`; the cases
- * name files those servers must find, so the folder has to ship them. And a run's shell gets only
- * the environment the runner builds, so quotation's skill script needs `node` on that `PATH`.
+ * A run's shell gets only the environment the runner builds, so quotation's skill script needs
+ * `node` on that `PATH`.
  *
- * The four agents that hold a read-only grant and run skill scripts pre-approve
+ * The agents that hold a read-only grant and run skill scripts pre-approve
  * `mcp__agent-workspace__run_skill_script` (ADR-0137), not Bash: the grant still withholds the shell,
  * and the tool the scripts run through is not in the deny list.
  */
 import { spawnSync } from 'node:child_process';
-import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -24,19 +23,17 @@ import {
   CLAUDE_SKILL_SCRIPT_TOOL,
   claudeFileGrantDenials,
   compileClaudeToolPolicy,
-} from '@agent-workspace/engine-claude-agent-sdk';
+} from '@agent-workspace/engine-claude-agent-sdk/testing';
 import { toAgentVersionBody } from '@indx-workspace/sdk/define';
-import { readEvalCaseFile } from '@indx-workspace/sdk/project';
 import { describe, expect, it } from 'vitest';
 
 import { runnerBaseEnvironment, runnerEnvironmentFor } from '../../apps/runner/src/environment.ts';
-import { fileSetupCommands, serverCommands } from '../docs-claims/use-cases.mjs';
+import { fileSetupCommands } from '../docs-claims/use-cases.mjs';
 import cadDrafting from './cad-drafting/agents/cad-drafting.ts';
 import contractReview from './contract-review/agents/contract-review.ts';
 import customerInquiry from './customer-inquiry/agents/customer-inquiry.ts';
 import excelConsolidation from './excel-consolidation/agents/excel-consolidation.ts';
-import { BRANCH_FILES } from './excel-consolidation/data/branch-workbooks.ts';
-import { GALLERY_DIR } from './harness/registry.ts';
+import { GALLERY_DIR, REPOSITORY_ROOT } from './harness/registry.ts';
 import maintenanceTroubleshooting from './maintenance-troubleshooting/agents/maintenance-troubleshooting.ts';
 import manualSearch from './manual-search/agents/manual-search.ts';
 import meetingMinutes from './meeting-minutes/agents/meeting-minutes.ts';
@@ -60,11 +57,19 @@ const AGENTS = [
 ] as const;
 
 /** Agents whose skill scripts run through `run_skill_script` beside a read-only grant. */
-const SCRIPT_RUNNERS = ['cad-drafting', 'contract-review', 'meeting-minutes', 'quality-defect'];
+const SCRIPT_RUNNERS = [
+  'cad-drafting',
+  'contract-review',
+  'excel-consolidation',
+  'manual-search',
+  'meeting-minutes',
+  'quality-defect',
+];
 
 /** Granted folders the agent writes into: nothing is uploaded there. */
 const OUTPUT_FOLDERS: Readonly<Record<string, readonly string[]>> = {
   'cad-drafting': ['drafts'],
+  'contract-review': ['drafts'],
 };
 
 function runTimePolicy(agent: (typeof AGENTS)[number][1]) {
@@ -147,6 +152,7 @@ describe('what a run without a shell is told to do', () => {
         const folder = [
           path.join(dir, 'skills', skill),
           path.join(GALLERY_DIR, 'shared', 'skills', skill),
+          path.join(REPOSITORY_ROOT, 'packages', 'skills-office', skill),
         ].find((candidate) => existsSync(path.join(candidate, 'SKILL.md')));
         if (folder === undefined) throw new Error(`${id}: no SKILL.md for skill ${skill}`);
         return {
@@ -165,54 +171,6 @@ describe('what a run without a shell is told to do', () => {
         ).toContain('run_skill_script');
       }
     }
-  });
-});
-
-/** The files a project's fixture source writes, for a case that names one by its stem only. */
-const FIXTURE_FILES: Readonly<Record<string, readonly string[]>> = {
-  'excel-consolidation': BRANCH_FILES.map((file) => file.path),
-};
-
-const FILE_NAME = /[^\s"'`、。，（）()「」]+\.(?:xlsx|xls|docx|pdf|csv|txt|json)/gu;
-
-/** The file names a project's eval cases name: in an input or an expected phrase, or by stem. */
-function namedFiles(id: string): string[] {
-  const text = readFileSync(path.join(GALLERY_DIR, id, 'evals', `${id}.yaml`), 'utf8');
-  const phrases = readEvalCaseFile(text, `evals/${id}.yaml`).cases.flatMap((entry) => [
-    entry.input,
-    ...(entry.expect.contains ?? []),
-  ]);
-  const fixtures = (FIXTURE_FILES[id] ?? []).map((file) => path.basename(file));
-  const named = phrases.flatMap((phrase) => [
-    ...(phrase.match(FILE_NAME) ?? []).map((name) => path.basename(name)),
-    ...fixtures.filter((file) => file.replace(/\.[^.]+$/u, '') === phrase),
-  ]);
-  return [...new Set(named)];
-}
-
-describe('what the harness serves from FILE_ROOT', () => {
-  it('every MCP server it points at <project>/data finds the files the cases name', () => {
-    const checked: string[] = [];
-    for (const [id] of AGENTS) {
-      const dir = path.join(GALLERY_DIR, id);
-      const root = path.join(dir, 'data');
-      const yaml = readFileSync(path.join(dir, 'agent-workspace.yaml'), 'utf8');
-      const rooted = serverCommands(yaml, () => 'x', { FILE_ROOT: root }).filter(
-        (server) => server.env['FILE_ROOT'] === root,
-      );
-      if (rooted.length === 0) continue;
-      checked.push(id);
-      const present = readdirSync(root, { recursive: true, withFileTypes: true })
-        .filter((entry) => entry.isFile())
-        .map((entry) => entry.name.normalize('NFC'));
-      expect(namedFiles(id), `${id}: no case names a file under FILE_ROOT`).not.toEqual([]);
-      for (const name of namedFiles(id)) {
-        expect(present, `${id}: a case names ${name}, which FILE_ROOT does not hold`).toContain(
-          name.normalize('NFC'),
-        );
-      }
-    }
-    expect(checked).toContain('excel-consolidation');
   });
 });
 

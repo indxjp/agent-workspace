@@ -1,3 +1,4 @@
+import { log as webLogger } from '../server/telemetry/logger';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { StartRunRequestSchema } from '@indx-workspace/contracts/runs';
 import { NextRequest } from 'next/server';
@@ -18,17 +19,13 @@ import {
   startRun,
   streamRunEvents,
 } from '../server/runs/api';
-import {
-  installRunApi,
-  resetRunApi,
-  type Principal,
-  type RunApiEnvironment,
-} from '../server/runs/environment';
-import { InMemoryRunStore } from '../server/runs/store';
+import type { RunPrincipal, RunApiEnvironment } from '../server/runs/environment';
+import { InMemoryRunStore } from '../server/runs/memory-store';
 import { SSE_HEADERS } from '../server/runs/sse';
 import type { TokenScope } from '../server/rbac/token-scope';
 import { decide } from '../server/rbac/decide';
 import { asRecord, asString, loadVectors } from '../../../tests/formal/vectors';
+import { installTestRunApi, resetTestRunApi } from '../server/application-context-fixtures';
 
 const FAMILY = 'behaviour-runs';
 const scenarios = loadVectors(FAMILY, 'routes.json');
@@ -40,7 +37,7 @@ const RUN = '88888888-8888-4888-8888-888888888888';
 const OTHER_RUN = '99999999-9999-4999-8999-999999999999';
 const OWNER = '77777777-7777-4777-8777-777777777777';
 
-function roleOf(name: string): Principal['role'] {
+function roleOf(name: string): RunPrincipal['role'] {
   switch (name) {
     case 'owner':
       return 'owner';
@@ -158,7 +155,7 @@ async function call(route: string, request: Request, id: string): Promise<Respon
 }
 
 afterEach(() => {
-  resetRunApi();
+  resetTestRunApi();
   vi.restoreAllMocks();
 });
 
@@ -206,7 +203,7 @@ describe('behaviour-runs: real run HTTP handlers', () => {
       });
     }
     const principalRole = roleOf(role);
-    const principal: Principal = {
+    const principal: RunPrincipal = {
       principalId: OWNER,
       ownerPrincipalId: OWNER,
       userId: OWNER,
@@ -244,7 +241,7 @@ describe('behaviour-runs: real run HTTP handlers', () => {
         await store.finish(run.id, 'cancelled', 'interrupted by request');
       },
     };
-    if (fault !== 'unconfigured') installRunApi(environment);
+    if (fault !== 'unconfigured') installTestRunApi(environment);
     if (fault === 'stream-missing') vi.spyOn(store, 'openStream').mockResolvedValue(null);
     const request = requestFor(route, fault, scope, fault !== 'unauthenticated');
     const pathId =
@@ -328,7 +325,7 @@ describe('behaviour-runs: real run HTTP handlers', () => {
     expect(parseStartRunBody(body).kind).toBe('rejected');
     expect(StartRunRequestSchema.safeParse(body).success).toBe(false);
     const store = new InMemoryRunStore();
-    installRunApi({
+    installTestRunApi({
       authenticate: () =>
         Promise.resolve({
           principalId: OWNER,
@@ -366,7 +363,7 @@ describe('behaviour-runs: real run HTTP handlers', () => {
       agentId: AGENT,
       sessionId: SESSION,
     });
-    installRunApi({
+    installTestRunApi({
       authenticate: () =>
         Promise.resolve({
           principalId: OWNER,
@@ -408,7 +405,7 @@ describe('behaviour-runs: real run HTTP handlers', () => {
         ownerPrincipalId: OWNER,
       });
     }
-    installRunApi({
+    installTestRunApi({
       authenticate: () =>
         Promise.resolve({
           principalId: OWNER,
@@ -451,7 +448,7 @@ describe('behaviour-runs: real run HTTP handlers', () => {
 
   it('maps thrown handler failures to safe internal_error on every App Router export', async () => {
     const store = new InMemoryRunStore();
-    installRunApi({
+    installTestRunApi({
       authenticate: () => Promise.reject(new Error('secret infrastructure detail')),
       findAgent: () => Promise.resolve(null),
       openSession: () => Promise.resolve(null),
@@ -461,7 +458,7 @@ describe('behaviour-runs: real run HTTP handlers', () => {
       revokeRunTokens: () => Promise.resolve({ revoked: 0, outcome: 'not-found' }),
       interruptRun: () => Promise.resolve(),
     });
-    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     const runContext = { params: Promise.resolve({ id: RUN }) };
     const agentContext = { params: Promise.resolve({ id: AGENT }) };
     const cases: Array<() => Promise<Response>> = [

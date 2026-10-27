@@ -93,7 +93,7 @@ with `credential`, and carries `hasCredential` instead. -/
 theorem connector_wire_carries_no_credential_field :
     (Connector.wireFields.all fun f => !"credential".toList.isPrefixOf f.toList) = true ∧
       "hasCredential" ∈ Connector.wireFields := by
-  decide
+  decide +kernel
 
 /-- A valid tool connector (ADR-0113 C15) is of kind `openapi` or `postgres`, its `tool_config`
 is a JSON object, and a `postgres` connector names its credential. -/
@@ -131,7 +131,7 @@ theorem absent_or_null_auth_type_is_none :
     ((Connector.parseBody (some stdioBody)).toOption.map (·.authType)) = some .none ∧
       ((Connector.parseBody (some { stdioBody with authType := .null })).toOption.map
         (·.authType)) = some .none := by
-  decide
+  decide +kernel
 
 /-- "`credential` is required iff `authType !== 'none'`" at the create route: a `bearer` body
 with no credential and a `none` body with one are both refused, naming the field. -/
@@ -212,7 +212,7 @@ theorem admit_tool_kind_defers (b : Connector.Body) (k : Connector.Kind) (hk : k
 theorem connector_is_an_mcp_servers_row :
     TableName.idKind? .mcpServers = some .connector ∧
       (allTables.filter fun t => TableName.idKind? t == some .connector) = [.mcpServers] := by
-  decide
+  decide +kernel
 
 /-! ## Skills (04 §5.7) -/
 
@@ -243,17 +243,17 @@ theorem skill_name_is_a_bounded_directory_name (n : String) (h : Skill.nameShape
   obtain ⟨hall, h1, h64⟩ := all_of_nameShape h
   refine ⟨h1, h64, fun hm => ?_, fun hm => ?_, fun c hc hu => ?_⟩
   · have := List.all_eq_true.mp hall _ hm
-    revert this; decide
+    revert this; decide +kernel
   · have := List.all_eq_true.mp hall _ hm
-    revert this; decide
+    revert this; decide +kernel
   · have := List.all_eq_true.mp hall c hc
     unfold Skill.isNameChar at this
     simp only [Bool.or_eq_true, Bool.and_eq_true, decide_eq_true_eq, beq_iff_eq] at this
     obtain ⟨hA, hZ⟩ := hu
     rcases this with (⟨ha, _⟩ | ⟨_, h9⟩) | rfl
-    · exact absurd (Char.le_trans ha hZ) (by decide)
-    · exact absurd (Char.le_trans hA h9) (by decide)
-    · exact absurd hA (by decide)
+    · exact absurd (Char.le_trans ha hZ) (by decide +kernel)
+    · exact absurd (Char.le_trans hA h9) (by decide +kernel)
+    · exact absurd hA (by decide +kernel)
 
 /-- The names the docs use are skill names (`release-notes`, `release-notes-v2`),
 and the pattern's edges hold: 64 characters pass, 65 fail, and a leading or trailing hyphen, an
@@ -269,7 +269,7 @@ theorem documented_skill_names :
       Skill.nameShape "-notes" = false ∧ Skill.nameShape "notes-" = false ∧
       Skill.nameShape "Notes" = false ∧ Skill.nameShape "release_notes" = false ∧
       Skill.nameShape "notes.md" = false ∧ Skill.nameShape "" = false := by
-  decide
+  decide +kernel
 
 /-! ## Files (04 §5.6, spec §16) -/
 
@@ -286,7 +286,7 @@ theorem documented_file_paths :
       File.pathAdmitted "a/../b" = false ∧ File.pathAdmitted "a/." = false ∧
       File.pathAdmitted "a\nb" = false ∧ File.pathAdmitted "" = false ∧
       File.pathAdmitted ".hidden/..x" = true := by
-  decide
+  decide +kernel
 
 /-- An admitted path has no empty, `.` or `..` segment. -/
 @[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#56-files--awfiles")
@@ -333,7 +333,7 @@ unchanged with `writeFiles`, and makes every access `read` without it. -/
   (ts := "packages/core/src/db/repositories/agent-resources.ts#createDatabaseAgentResourceRepositoryProvider")]
 theorem write_files_is_a_ceiling (w : Bool) (a : Grant.FileAccess) :
     (Grant.narrow w a).le a = true ∧ Grant.narrow true a = a ∧ Grant.narrow false a = .read := by
-  cases w <;> cases a <;> decide
+  cases w <;> cases a <;> decide +kernel
 
 /-- "It is not a general ACL — there is no `access` column, because 'permitted' is binary": a
 grant row has no `access` column, while a file assignment does. -/
@@ -342,7 +342,7 @@ grant row has no `access` column, while a file assignment does. -/
 theorem a_grant_is_binary :
     (catalogue .agentGrants).hasColumn "access" = false ∧
       (catalogue .agentFiles).hasColumn "access" = true := by
-  decide
+  decide +kernel
 
 /-- "Revocation is this constraint, not a background job": removing a membership removes every
 grant it held, through `ON DELETE CASCADE` on the grant's membership reference. -/
@@ -351,7 +351,7 @@ grant it held, through `ON DELETE CASCADE` on the grant's membership reference. 
 theorem membership_removal_revokes_its_grants :
     (fk .agentGrants "agent_grants_member_workspace_fk").refTable = .memberships ∧
       (fk .agentGrants "agent_grants_member_workspace_fk").onDelete = .cascade := by
-  decide
+  decide +kernel
 
 /-- "The link has no meaning without either end": every reference from an assignment, grant or
 project link table to its agent, project or resource cascades on delete. -/
@@ -360,7 +360,7 @@ project link table to its agent, project or resource cascades on delete. -/
   (ts := "packages/core/src/db/schema/agent-mcp-servers.ts#agentMcpServers")]
 theorem links_die_with_either_end :
     (linkTables.all fun t => (catalogue t).foreignKeys.all (·.onDelete == .cascade)) = true := by
-  decide
+  decide +kernel
 
 /-- "Deleting a secret a connector authenticates with must be an explicit decision": the
 connector's secret reference is `ON DELETE RESTRICT`. -/
@@ -368,7 +368,7 @@ connector's secret reference is `ON DELETE RESTRICT`. -/
 theorem a_connectors_secret_cannot_be_deleted_under_it :
     (fk .mcpServers "mcp_servers_credential_secret_workspace_fk").refTable = .secrets ∧
       (fk .mcpServers "mcp_servers_credential_secret_workspace_fk").onDelete = .restrict := by
-  decide
+  decide +kernel
 
 /-- "Every row that can be own or other carries `ownerPrincipalId`; `createdBy` is legacy human
 attribution and may be `null`": on the four catalogued resource tables the owner is `NOT NULL`
@@ -382,35 +382,40 @@ theorem owner_is_required_and_creator_is_legacy :
         (catalogue t).hasColumn "created_by" && !(catalogue t).isNotNull "created_by") = true ∧
       "ownerPrincipalId" ∈ Agent.wireFields ∧ "createdBy" ∈ Agent.wireFields ∧
       "ownerPrincipalId" ∈ Connector.wireFields ∧ "createdBy" ∈ Connector.wireFields := by
-  decide
+  decide +kernel
 
-/-- The ER diagram's optional (`|o`) references: of the cluster's 49 foreign keys, exactly the
-pointer-move mover, model-connection, runtime-profile, four creator, materialised-version and
-credential-secret keys are nullable; every other reference is mandatory. -/
+/-- The ER diagram's optional (`|o`) references: of the cluster's 54 foreign keys, exactly the
+skill-revision pin, pointer-move mover, model-connection, runtime-profile, four creator,
+creator-agent, materialised-version and credential-secret keys are nullable; every other
+reference is mandatory. -/
 @[aw_spec (tier := T1) (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
   (ts := "packages/core/src/db/schema/agents.ts#agents")]
 theorem optional_references_of_the_catalog :
     (clusterForeignKeys.filter fun (t, k) => !isMandatory t k).map (·.2.name) =
-      ["agent_pointer_moves_moved_by_principal_workspace_fk",
+      ["agent_skills_skill_revision_fk",
+        "agent_pointer_moves_moved_by_principal_workspace_fk",
         "agents_model_connection_id_model_connections_id_fk",
         "agents_runtime_profile_id_runtime_profiles_id_fk",
+        "agents_created_by_agent_id_agents_id_fk",
         "agents_model_connection_workspace_fk", "agents_runtime_profile_workspace_fk",
         "agents_created_by_workspace_fk", "agents_materialised_version_fk",
+        "agents_created_by_agent_workspace_fk",
         "files_created_by_workspace_fk",
         "mcp_servers_created_by_workspace_fk", "mcp_servers_credential_secret_workspace_fk",
         "skills_created_by_workspace_fk"] := by
-  decide
+  decide +kernel
 
 /-- "It is an ordinary row in `agents`, editable and deletable like any other" (spec §19.5.1 rule
-3): there is no built-in flag and no check beyond the non-blank name, so the General agent is
-distinguishable only by its name. -/
+3): there is no built-in flag and no check beyond the non-blank name and the agent-lineage shape,
+so the General agent is distinguishable only by its name. -/
 @[aw_spec (tier := T1) (ts := "packages/core/src/db/schema/agents.ts#agents")
   (doc := "docs/spec.md#1951-rules")
   (doc := "docs/adr/W1-DB-01-schema-conventions.md#13-the-general-agent-has-no-marker-of-any-kind")]
 theorem general_agent_is_an_ordinary_row :
     (catalogue .agents).hasColumn "is_builtin" = false ∧
-      ((catalogue .agents).checks.map Check.name) = ["agents_name_not_blank"] := by
-  decide
+      ((catalogue .agents).checks.map Check.name) =
+        ["agents_name_not_blank", "agents_created_by_agent_lineage_check"] := by
+  decide +kernel
 
 /-- "A resource can sit in the catalog, owned and readable, without being assigned to anything":
 some consistent state holds a skill that no agent is assigned. -/
@@ -421,7 +426,7 @@ theorem a_catalogued_skill_may_be_unassigned :
     ∃ st : State, consistent st = true ∧
       ∃ r ∈ st .skills, ∀ a ∈ st .agentSkills, a.get "skill_id" ≠ r.get "id" := by
   refine ⟨fun t => if t = .agentSkills then [] else Sample.state t, by decide +kernel, ?_⟩
-  exact ⟨(Sample.state .skills).head?.getD default, by decide, fun a ha => by simp at ha⟩
+  exact ⟨(Sample.state .skills).head?.getD default, by decide +kernel, fun a ha => by simp at ha⟩
 
 /-- "`name` 1–200 code points": the connector name bound is `CONNECTOR_NAME_MAX_LENGTH`, 200, and
 the create pattern admits exactly one to 200 code points with no line terminator. -/
@@ -447,7 +452,7 @@ theorem catalog_name_bounds :
     Agent.bounds.1 = Connector.maxNameLength ∧ Agent.bounds.2.2 = Agent.bounds.1 ∧
       Agent.bounds.2.1 = 100000 ∧ Skill.maxNameLength = 64 ∧
       Skill.maxNameLength < Agent.bounds.1 := by
-  decide
+  decide +kernel
 
 /-! ## Witnesses of the hypotheses above -/
 
@@ -530,7 +535,7 @@ bound "applied to the trimmed value" and measured in UTF-16 code units: a string
 its trimmed form, exactly when that form is not empty and has at most 200 code units; padding is
 trimmed, a blank name is refused, 200 letters are 200 units and 100 astral characters are 200
 units while 101 are 202. -/
-@[aw_spec (tier := T1) (ts := "apps/web/server/agents/contract.ts#parseAgentName")
+@[aw_spec (tier := T1) (ts := "packages/contracts/src/agents/resource.ts#AgentNameRequestSchema")
   (ts := "packages/contracts/src/agents.ts#AGENT_NAME_MAX_LENGTH")]
 theorem agent_name_is_trimmed_and_bounded (s : String) :
     (Agent.parseName (.str s) = .ok (Agent.jsTrim s) ↔
@@ -542,9 +547,9 @@ theorem agent_name_is_trimmed_and_bounded (s : String) :
       Agent.utf16Length (String.ofList (List.replicate 201 'a')) = 201 ∧
       Agent.utf16Length (String.ofList (List.replicate 100 '😀')) = 200 ∧
       Agent.utf16Length (String.ofList (List.replicate 101 '😀')) = 202 := by
-  refine ⟨?_, rfl, rfl, utf16_replicate_bmp 'a' (by decide) _,
-    utf16_replicate_bmp 'a' (by decide) _, utf16_replicate_astral '😀' (by decide) _,
-    utf16_replicate_astral '😀' (by decide) _⟩
+  refine ⟨?_, rfl, rfl, utf16_replicate_bmp 'a' (by decide +kernel) _,
+    utf16_replicate_bmp 'a' (by decide +kernel) _, utf16_replicate_astral '😀' (by decide +kernel) _,
+    utf16_replicate_astral '😀' (by decide +kernel) _⟩
   simp only [Agent.parseName, Agent.bounds]
   by_cases he : (Agent.jsTrim s).toList.isEmpty = true
   · have : (Agent.jsTrim s).toList = [] := List.isEmpty_iff.mp he
@@ -558,7 +563,7 @@ theorem agent_name_is_trimmed_and_bounded (s : String) :
 /-- "`agents.instructions`: any string, empty included … this is **not** trimmed": a string is
 accepted, unchanged, exactly when it has at most 100 000 UTF-16 code units, so the empty string
 and a block with surrounding whitespace pass as sent, 100 000 letters pass and 100 001 fail. -/
-@[aw_spec (tier := T1) (ts := "apps/web/server/agents/contract.ts#parseAgentInstructions")
+@[aw_spec (tier := T1) (ts := "packages/contracts/src/agents/resource.ts#AgentInstructionsRequestSchema")
   (ts := "packages/contracts/src/agents.ts#AGENT_INSTRUCTIONS_MAX_LENGTH")]
 theorem agent_instructions_are_untrimmed_and_bounded (s : String) :
     (Agent.parseInstructions (.str s) = .ok s ↔ Agent.utf16Length s ≤ 100000) ∧
@@ -568,8 +573,8 @@ theorem agent_instructions_are_untrimmed_and_bounded (s : String) :
 " ∧
       Agent.utf16Length (String.ofList (List.replicate 100000 'a')) = 100000 ∧
       Agent.utf16Length (String.ofList (List.replicate 100001 'a')) = 100001 := by
-  refine ⟨?_, rfl, rfl, utf16_replicate_bmp 'a' (by decide) _,
-    utf16_replicate_bmp 'a' (by decide) _⟩
+  refine ⟨?_, rfl, rfl, utf16_replicate_bmp 'a' (by decide +kernel) _,
+    utf16_replicate_bmp 'a' (by decide +kernel) _⟩
   simp only [Agent.parseInstructions, Agent.bounds]
   by_cases h : 100000 < Agent.utf16Length s
   · simp [h]
@@ -579,7 +584,7 @@ theorem agent_instructions_are_untrimmed_and_bounded (s : String) :
 /-- "`agents.model`: a non-blank provider-side model id, or `null` for the workspace default":
 `null` is the default, a padded id is trimmed, and a blank id is refused with a pointer to
 `null`. -/
-@[aw_spec (tier := T1) (ts := "apps/web/server/agents/contract.ts#parseAgentModel")]
+@[aw_spec (tier := T1) (ts := "packages/contracts/src/agents/resource.ts#AgentModelRequestSchema")]
 theorem agent_model_null_is_the_default :
     Agent.parseModel .null = .ok none ∧
       Agent.parseModel (.str " claude-sonnet-4-5 ") = .ok (some "claude-sonnet-4-5") ∧
@@ -599,12 +604,12 @@ private def bearerConnector : Connector.Connector :=
   ⟨⟨"c1"⟩, ⟨"w1"⟩, "GitHub", .http, none, none, some "https://example.com/mcp", .bearer,
     some ⟨"s1"⟩, true, none, ⟨"p1"⟩⟩
 
-private theorem stdioConnector_valid : stdioConnector.valid = true := by decide
+private theorem stdioConnector_valid : stdioConnector.valid = true := by decide +kernel
 
-private theorem bearerConnector_valid : bearerConnector.valid = true := by decide
+private theorem bearerConnector_valid : bearerConnector.valid = true := by decide +kernel
 
 example : bearerConnector.credentialSecret.isSome = true :=
-  (connector_credential_iff_auth_type_is_not_none _ bearerConnector_valid).2 (by decide)
+  (connector_credential_iff_auth_type_is_not_none _ bearerConnector_valid).2 (by decide +kernel)
 
 example : stdioConnector.credentialSecret.isSome = false := by
   have h := connector_credential_iff_auth_type_is_not_none _ stdioConnector_valid
@@ -635,9 +640,9 @@ private def fileRow' : File.File :=
   ⟨⟨"f2"⟩, ⟨"w1"⟩, "contracts/agreement.pdf", .file, some "files/w1/contracts/agreement.pdf",
     1024, some "application/pdf", none, ⟨"p1"⟩⟩
 
-private theorem folderRow_valid : folderRow.valid = true := by decide
+private theorem folderRow_valid : folderRow.valid = true := by decide +kernel
 
-private theorem fileRow'_valid : fileRow'.valid = true := by decide
+private theorem fileRow'_valid : fileRow'.valid = true := by decide +kernel
 
 example : folderRow.storageKey = none ∧ folderRow.sizeBytes = 0 ∧ folderRow.contentType = none :=
   (file_and_folder_rows _ folderRow_valid).1 rfl
@@ -662,12 +667,12 @@ private def openapiWithMcpFields : Connector.Body :=
   { stdioBody with kind := .str "openapi" }
 
 example : Connector.admit (some openapiWithMcpFields) = .ok (.tool .openapi) :=
-  admit_tool_kind_defers _ .openapi (by decide) rfl
+  admit_tool_kind_defers _ .openapi (by decide +kernel) rfl
 example : Connector.admit (some { stdioBody with kind := .str "MCP" }) =
     .error [Connector.kindError] :=
-  admit_refuses_an_unknown_kind _ (by decide) (by intro s h; cases h; decide)
+  admit_refuses_an_unknown_kind _ (by decide +kernel) (by intro s h; cases h; decide +kernel)
 example : Connector.admit (some { stdioBody with kind := .null }) = .error [Connector.kindError] :=
-  admit_refuses_an_unknown_kind _ (by decide) (by intro s h; cases h)
+  admit_refuses_an_unknown_kind _ (by decide +kernel) (by intro s h; cases h)
 example : Connector.admit (some { stdioBody with kind := .str "mcp" }) =
     (Connector.parseBody (some stdioBody)).map .mcp :=
   admit_absent_kind_is_the_mcp_rule _ (.inr rfl)
@@ -677,8 +682,8 @@ private def runInput (owner : String) (user : Option String) (users : List Strin
   ⟨true, some ⟨owner⟩, true, ⟨"p2"⟩, user.map Id.mk, users.map Id.mk⟩
 
 /- The negative witness: a user with no grant row is not found, and so runs as `other`. -/
-example : Grant.hasGrant [⟨"u1"⟩] ⟨"u2"⟩ = false := by decide
-example : ¬ (⟨"u2"⟩ : UserId) ∈ [⟨"u1"⟩] := by decide
+example : Grant.hasGrant [⟨"u1"⟩] ⟨"u2"⟩ = false := by decide +kernel
+example : ¬ (⟨"u2"⟩ : UserId) ∈ [⟨"u1"⟩] := by decide +kernel
 example : Grant.runOwnership (runInput "p1" (some "u2") ["u2"]) = .permitted :=
   (run_is_permitted_iff_a_grant_row_names_the_caller _).mpr
     ⟨rfl, rfl, ⟨⟨"p1"⟩, rfl, by decide⟩, ⟨"u2"⟩, rfl, by decide⟩

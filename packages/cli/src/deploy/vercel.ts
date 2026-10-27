@@ -40,6 +40,12 @@
 import { readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 
+import {
+  IGNORED_STORAGE_VARIABLES,
+  ignoredStorageSettingsWarning,
+} from '@indx-workspace/contracts/storage-settings';
+import { parseStorageUrl, type StorageLocation } from '@indx-workspace/contracts/storage-url';
+
 import type { ToolResult } from './runner.ts';
 import { runStep, type DeployContext, type DeployOutcome } from './steps.ts';
 import type { DeployTarget } from './targets.ts';
@@ -505,7 +511,11 @@ function partsOf(
       upload: { platformPackage: platformPackage('gateway') },
       rootDirectory: null,
       functionEntry: true,
-      variables: gatewayVariables(dotEnv),
+      // The control plane's own production URL, derived like the gateway's: aw-control calls go there.
+      variables: [
+        ...gatewayVariables(dotEnv),
+        ['GATEWAY_CONTROL_PLANE_ORIGIN', vercelProductionUrl(target.projectName)],
+      ],
     },
     {
       label: 'manager',
@@ -564,26 +574,66 @@ function partsOf(
 }
 
 /**
+ * `.env` without the old storage variables, which the server ignores, so a deploy never pushes them
+ * to the platform project. Warns once, naming each and never a value (Q-18).
+ */
+export function withoutIgnoredStorageSettings(
+  context: DeployContext,
+  dotEnv: Readonly<Record<string, string>>,
+): Readonly<Record<string, string>> {
+  const warning = ignoredStorageSettingsWarning(dotEnv);
+  if (warning === null) return dotEnv;
+  context.err(`${warning}\n`);
+  return Object.fromEntries(
+    Object.entries(dotEnv).filter(([name]) => !IGNORED_STORAGE_VARIABLES.includes(name)),
+  );
+}
+
+export type StorageTarget =
+  { readonly kind: 'url'; readonly location: StorageLocation } | { readonly kind: 'none' };
+
+/**
+ * Where `.env` says the object store is (the storage design, §04): `AW_STORAGE_URL` alone. The old
+ * location names are ignored, never translated. A refusal names variables and never a value.
+ */
+export function storageTarget(dotEnv: Readonly<Record<string, string>>): StorageTarget {
+  const raw = dotEnv['AW_STORAGE_URL']?.trim() ?? '';
+  if (raw === '') return { kind: 'none' };
+  const parsed = parseStorageUrl(raw);
+  if (!parsed.ok) {
+    throw new Error(`AW_STORAGE_URL in .env is not valid: ${parsed.reason}. Nothing was run.`);
+  }
+  return { kind: 'url', location: parsed.location };
+}
+
+/**
  * A Vercel function has no writable disk to keep skills, files and session state on, so the
  * control plane needs an S3-compatible bucket and its key pair (R2, S3, Tigris...). Without them
  * every `/api/skills*` route answers 503 `skills_runtime_not_configured` and `aw push` fails.
  * Vercel Blob is not the object store (ADR-0120 LC8).
  */
 function assertObjectStorageConfigured(dotEnv: Readonly<Record<string, string>>): void {
-  const backend = dotEnv['OBJECT_STORAGE_BACKEND']?.trim() ?? '';
-  if (backend !== '' && backend !== 's3') return;
+  const storage = storageTarget(dotEnv);
+  if (storage.kind === 'url' && storage.location.kind === 'file') {
+    throw new Error(
+      'AW_STORAGE_URL in .env is a file: URL, and a Vercel function keeps nothing on disk. Use ' +
+        'an s3:// URL for an S3-compatible bucket. Nothing was run.',
+    );
+  }
+  if (storage.kind === 'url' && storage.location.kind !== 's3') return;
   const keys = awsCredentials(dotEnv);
   for (const [name, value] of [
-    ['OBJECT_STORAGE_BUCKET', dotEnv['OBJECT_STORAGE_BUCKET']],
+    ...(storage.kind === 'none' ? ([['AW_STORAGE_URL', '']] as const) : []),
     ['OBJECT_STORAGE_ACCESS_KEY_ID', keys['AWS_ACCESS_KEY_ID']],
     ['OBJECT_STORAGE_SECRET_ACCESS_KEY', keys['AWS_SECRET_ACCESS_KEY']],
   ] as const) {
     if ((value ?? '').trim() === '') {
       throw new Error(
         `${name} is empty in .env: a Vercel function keeps nothing on disk, so the control plane ` +
-          'needs an S3-compatible bucket (set OBJECT_STORAGE_ENDPOINT for a non-AWS store such as ' +
-          'R2) and its key pair, and without them skills, files and session state answer 503 ' +
-          '(and aw push fails). Create the bucket, set the value and run again. Nothing was run.',
+          'needs an S3-compatible bucket (for a non-AWS store such as R2, name its endpoint in ' +
+          'the storage setting) and its key pair, and without them skills, files and session ' +
+          'state answer 503 (and aw push fails). Create the bucket, set the value and run ' +
+          'again. Nothing was run.',
       );
     }
   }
@@ -848,10 +898,11 @@ function namedTarget(context: DeployContext, selected: VercelTarget): VercelTarg
 export async function deployWithVercel(
   context: DeployContext,
   selected: VercelTarget,
-  dotEnv: Readonly<Record<string, string>>,
+  projectEnv: Readonly<Record<string, string>>,
   apply: boolean,
 ): Promise<DeployOutcome> {
   const target = namedTarget(context, selected);
+  const dotEnv = withoutIgnoredStorageSettings(context, projectEnv);
   const unset = [VERCEL_TOKEN_VARIABLE, VERCEL_TEAM_ID_VARIABLE].filter(
     (name) => (context.env[name]?.trim() ?? '') === '',
   );

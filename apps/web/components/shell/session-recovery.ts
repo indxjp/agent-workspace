@@ -22,7 +22,7 @@ export function shouldRecoverSession(input: {
   readonly hasSession: boolean;
   /** Whether `resolveIdentity(session)` resolved the caller's name, workspace and role. */
   readonly identityResolved: boolean;
-  /** Whether a directory is actually wired in — `currentRbacRuntime() !== null`. */
+  /** Whether a directory is actually wired in — `applicationContext() !== null`. */
   readonly runtimeConfigured: boolean;
 }): boolean {
   if (!input.hasSession) return false;

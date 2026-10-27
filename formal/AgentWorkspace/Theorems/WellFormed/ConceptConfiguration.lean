@@ -21,14 +21,14 @@ open AgentWorkspace.Er.Current.Configuration
 theorem provider_wires :
     WireEnum.wires ModelConnection.Provider =
       ["anthropic", "anthropic-compatible", "openai", "azure-openai", "openai-compatible"] := by
-  decide
+  decide +kernel
 
 /-- The model-connection config fields are spelled and ordered as `MODEL_CONNECTION_CONFIG_FIELDS`
 lists them. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/models.ts#MODEL_CONNECTION_CONFIG_FIELDS")]
 theorem config_field_wires :
     WireEnum.wires ModelConnection.ConfigField = ["baseUrl", "deployment", "apiVersion"] := by
-  decide
+  decide +kernel
 
 /-- The runtime drivers are spelled and ordered as `runtimeProfileDrivers` lists them. -/
 @[aw_spec (tier := T0)
@@ -39,23 +39,23 @@ theorem driver_wires :
       ["local", "sandbox-runtime", "docker", "kubernetes", "gke-agent-sandbox", "aca-sessions",
         "aws-agentcore", "aws-ecs", "cloud-run-sandbox", "cloud-run-service", "external",
         "vercel-sandbox", "cloudflare-sandbox"] := by
-  decide
+  decide +kernel
 
 /-- The network policies are spelled and ordered as `runtimeProfileNetworkPolicies` lists them. -/
 @[aw_spec (tier := T0)
   (ts := "packages/core/src/db/schema/runtime-profiles.ts#runtimeProfileNetworkPolicies")]
 theorem network_policy_wires :
-    WireEnum.wires RuntimeProfile.NetworkPolicy = ["none", "restricted", "open"] := by decide
+    WireEnum.wires RuntimeProfile.NetworkPolicy = ["none", "restricted", "open"] := by decide +kernel
 
 /-- The filesystem modes are spelled and ordered as `runtimeProfileFilesystems` lists them. -/
 @[aw_spec (tier := T0)
   (ts := "packages/core/src/db/schema/runtime-profiles.ts#runtimeProfileFilesystems")]
 theorem filesystem_wires :
-    WireEnum.wires RuntimeProfile.Filesystem = ["read-only", "read-write"] := by decide
+    WireEnum.wires RuntimeProfile.Filesystem = ["read-only", "read-write"] := by decide +kernel
 
 /-- The one envelope algorithm is spelled as `secretAlgorithms` lists it. -/
 @[aw_spec (tier := T0) (ts := "packages/core/src/db/schema/secrets.ts#secretAlgorithms")]
-theorem algorithm_wires : WireEnum.wires Secret.Algorithm = ["aes-256-gcm"] := by decide
+theorem algorithm_wires : WireEnum.wires Secret.Algorithm = ["aes-256-gcm"] := by decide +kernel
 
 /-! ## The database checks carry the concept enumerations -/
 
@@ -65,34 +65,34 @@ theorem algorithm_wires : WireEnum.wires Secret.Algorithm = ["aes-256-gcm"] := b
   (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
 theorem provider_check_is_the_provider_enum :
     (catalogue .modelConnections).oneOfCheck? "model_connections_provider_valid" =
-      some ("provider", WireEnum.wires ModelConnection.Provider) := by decide
+      some ("provider", WireEnum.wires ModelConnection.Provider) := by decide +kernel
 
 /-- `runtime_profiles_driver_valid` constrains `driver` to exactly the driver enumeration. -/
 @[aw_spec (tier := T0) (ts := "packages/core/src/db/schema/runtime-profiles.ts#runtimeProfiles")
   (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
 theorem driver_check_is_the_driver_enum :
     (catalogue .runtimeProfiles).oneOfCheck? "runtime_profiles_driver_valid" =
-      some ("driver", WireEnum.wires RuntimeProfile.Driver) := by decide
+      some ("driver", WireEnum.wires RuntimeProfile.Driver) := by decide +kernel
 
 /-- `runtime_profiles_network_policy_valid` constrains `network_policy` to exactly the network
 policy enumeration. -/
 @[aw_spec (tier := T0) (ts := "packages/core/src/db/schema/runtime-profiles.ts#runtimeProfiles")]
 theorem network_policy_check_is_the_network_policy_enum :
     (catalogue .runtimeProfiles).oneOfCheck? "runtime_profiles_network_policy_valid" =
-      some ("network_policy", WireEnum.wires RuntimeProfile.NetworkPolicy) := by decide
+      some ("network_policy", WireEnum.wires RuntimeProfile.NetworkPolicy) := by decide +kernel
 
 /-- `runtime_profiles_filesystem_valid` constrains `filesystem` to exactly the filesystem
 enumeration. -/
 @[aw_spec (tier := T0) (ts := "packages/core/src/db/schema/runtime-profiles.ts#runtimeProfiles")]
 theorem filesystem_check_is_the_filesystem_enum :
     (catalogue .runtimeProfiles).oneOfCheck? "runtime_profiles_filesystem_valid" =
-      some ("filesystem", WireEnum.wires RuntimeProfile.Filesystem) := by decide
+      some ("filesystem", WireEnum.wires RuntimeProfile.Filesystem) := by decide +kernel
 
 /-- `secrets_algorithm_valid` constrains `algorithm` to exactly the algorithm enumeration. -/
 @[aw_spec (tier := T0) (ts := "packages/core/src/db/schema/secrets.ts#secrets")]
 theorem algorithm_check_is_the_algorithm_enum :
     (catalogue .secrets).oneOfCheck? "secrets_algorithm_valid" =
-      some ("algorithm", WireEnum.wires Secret.Algorithm) := by decide
+      some ("algorithm", WireEnum.wires Secret.Algorithm) := by decide +kernel
 
 /-- Every closed set of the cluster passes the `oneOf` DDL value gate, so it can be inlined into its
 `CHECK` constraint. -/
@@ -101,14 +101,14 @@ theorem cluster_value_lists_pass_the_ddl_gate :
     [WireEnum.wires ModelConnection.Provider, WireEnum.wires RuntimeProfile.Driver,
       WireEnum.wires RuntimeProfile.NetworkPolicy, WireEnum.wires RuntimeProfile.Filesystem,
       WireEnum.wires Secret.Algorithm].all (fun vs => (renderValueList? vs).isSome) = true := by
-  decide
+  decide +kernel
 
 /-- The cluster's list of foreign keys is exact: each listed key exists with its target, and every
 key of today's schema that starts or ends in a cluster table is listed. -/
 @[aw_spec (tier := T0)
   (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
   (ts := "packages/core/src/db/schema/tenancy.test.ts#tenantPairingFault")]
-theorem cluster_foreign_keys_are_complete : clusterForeignKeysComplete = true := by decide
+theorem cluster_foreign_keys_are_complete : clusterForeignKeysComplete = true := by decide +kernel
 
 /-- Every foreign key that touches the cluster is classified: a root reference, tenant-paired, or
 covered by a tenant-paired sibling; none is unpaired or global. -/
@@ -119,7 +119,7 @@ theorem cluster_foreign_keys_are_paired :
       [.rootReference, .rootReference, .siblingPaired, .tenantPaired, .rootReference,
         .siblingPaired, .tenantPaired, .siblingPaired, .tenantPaired, .siblingPaired,
         .tenantPaired, .siblingPaired, .tenantPaired, .siblingPaired, .tenantPaired,
-        .tenantPaired] := by decide
+        .tenantPaired, .rootReference, .tenantPaired, .tenantPaired] := by decide +kernel
 
 /-! ## The runtime-connection name encoding -/
 
@@ -144,7 +144,7 @@ private theorem encodeSegment_tail (cs : List Char) :
     rcases h with h | h
     · exact Or.inl (Or.inl h)
     · exact Or.inl (Or.inr h)
-  · decide
+  · decide +kernel
 
 private theorem label_tail {l : List Char} (h : RuntimeProfile.isLabel l = true) :
     l.all Secret.isNameTail = true := by
@@ -171,20 +171,20 @@ theorem encoded_connection_name_is_a_runtime_connection_secret (driver label n :
     · rename_i hlen
       cases h
       have e : Secret.runtimeConnectionPrefix.toList = 'R' :: "UNTIME_CONNECTION__".toList := by
-        decide
-      have hu : "UNTIME_CONNECTION__".toList.all Secret.isNameTail = true := by decide
-      have hlu : "UNTIME_CONNECTION__".toList.length = 19 := by decide
+        decide +kernel
+      have hu : "UNTIME_CONNECTION__".toList.all Secret.isNameTail = true := by decide +kernel
+      have hlu : "UNTIME_CONNECTION__".toList.length = 19 := by decide +kernel
       rw [e] at hlen
       constructor
       · simp only [Secret.isValidName, String.toList_ofList, e, List.cons_append,
           Secret.isValidNameChars, Secret.nameMaxLength, Bool.and_eq_true, List.all_append]
         simp only [List.length_append, List.length_cons, List.length_nil, hlu] at hlen
-        refine ⟨⟨by decide, ⟨⟨hu, encodeSegment_tail _⟩, by decide⟩, label_tail hl⟩, ?_⟩
+        refine ⟨⟨by decide +kernel, ⟨⟨hu, encodeSegment_tail _⟩, by decide⟩, label_tail hl⟩, ?_⟩
         simp only [List.length_append, List.length_cons, List.length_nil, hlu, decide_eq_true_eq]
         omega
       · simp only [Secret.purposeOf, String.toList_ofList, List.append_assoc]
         have hpl : Secret.runtimeConnectionPrefix.length =
-            Secret.runtimeConnectionPrefix.toList.length := by decide
+            Secret.runtimeConnectionPrefix.toList.length := by decide +kernel
         rw [hpl, isPrefixOf_append, List.drop_left, List.cons_append, List.cons_append,
           List.nil_append, split_isSome]
         rfl
@@ -215,7 +215,7 @@ theorem decode_inverts_encode (d : RuntimeProfile.Driver) (label n : String)
         simp only [RuntimeProfile.decodeDriver, RuntimeProfile.decodeDriverChars,
           String.toList_ofList, List.append_assoc, isPrefixOf_append, List.drop_left,
           ite_true, List.cons_append, List.nil_append, split_driver, Option.map_some]
-        cases d <;> decide
+        cases d <;> decide +kernel
       refine ⟨hd, ?_⟩
       simp only [RuntimeProfile.decodeKnownDriver, hd, Option.bind_some]
       exact WireEnum.ofWire?_toWire d
@@ -227,11 +227,11 @@ whatever the id. -/
   (ts := "apps/web/server/models/store.ts#MODEL_CONNECTION_SECRET_PREFIX")]
 theorem credential_name_has_the_model_connection_purpose (id : String) :
     Secret.purposeOf (Secret.modelConnectionSecretName id) = .modelConnectionCredential := by
-  have e1 : "MODEL_CONNECTION_".toList = 'M' :: "ODEL_CONNECTION_".toList := by decide
-  have e2 : "RUNTIME_CONNECTION__".toList = 'R' :: "UNTIME_CONNECTION__".toList := by decide
+  have e1 : "MODEL_CONNECTION_".toList = 'M' :: "ODEL_CONNECTION_".toList := by decide +kernel
+  have e2 : "RUNTIME_CONNECTION__".toList = 'R' :: "UNTIME_CONNECTION__".toList := by decide +kernel
   simp only [Secret.purposeOf, Secret.modelConnectionSecretName, String.toList_append,
     Secret.modelConnectionPrefix, Secret.runtimeConnectionPrefix]
-  have hRM : ('R' == 'M') = false := by decide
+  have hRM : ('R' == 'M') = false := by decide +kernel
   simp only [e1, e2, List.isPrefixOf_cons_cons, isPrefixOf_append, hRM, Bool.false_and,
     Bool.and_true, List.cons_append]
   rfl
@@ -299,23 +299,23 @@ theorem readiness_agrees_with_ready (h : Bool) (p : ModelConnection.Provider)
 
 example : Secret.isValidName "RUNTIME_CONNECTION__DOCKER__PRIMARY" = true ∧
     Secret.purposeOf "RUNTIME_CONNECTION__DOCKER__PRIMARY" = .runtimeConnection :=
-  encoded_connection_name_is_a_runtime_connection_secret "docker" "primary" _ (by decide)
+  encoded_connection_name_is_a_runtime_connection_secret "docker" "primary" _ (by decide +kernel)
 
 example : RuntimeProfile.decodeDriver "RUNTIME_CONNECTION__AWS_AGENTCORE__POOL" =
       some "aws-agentcore" ∧
     RuntimeProfile.decodeKnownDriver "RUNTIME_CONNECTION__AWS_AGENTCORE__POOL" = some .awsAgentcore :=
-  decode_inverts_encode .awsAgentcore "pool" _ (by decide)
+  decode_inverts_encode .awsAgentcore "pool" _ (by decide +kernel)
 
 /-- A valid secret: an environment-variable name and a correctly sized envelope. -/
 private def validSecret : Secret.Secret :=
   { id := ⟨"s1"⟩, workspace := ⟨"w1"⟩, name := "GITHUB_TOKEN", algorithm := .aes256Gcm,
     envelope := ⟨"local-v1", 32, 12, 16, 5, 12, 16⟩, createdAt := "t0", updatedAt := "t0" }
 
-example := valid_secret_satisfies_the_secret_checks validSecret (by decide)
+example := valid_secret_satisfies_the_secret_checks validSecret (by decide +kernel)
 
 example := valid_profile_satisfies_the_profile_checks
   { id := ⟨"rp1"⟩, workspace := ⟨"w1"⟩, name := "default", driver := .docker,
     runtimeConnection := none, networkPolicy := .none, filesystem := .readOnly,
-    createdAt := "t0", updatedAt := "t0" } (by decide)
+    createdAt := "t0", updatedAt := "t0" } (by decide +kernel)
 
 end AgentWorkspace.Theorems.WellFormed.ConceptConfiguration

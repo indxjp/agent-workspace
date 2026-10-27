@@ -190,7 +190,7 @@ resource "google_sql_user" "main" {
 
 # ── Object storage ────────────────────────────────────────────────────────────────────────────────
 
-# Native GCS bucket for the application's own OBJECT_STORAGE_* config (spec §31/§32).
+# Native GCS bucket the application's AW_STORAGE_URL names (the storage design, §04).
 resource "google_storage_bucket" "objects" {
   name     = "${var.project_id}-${var.name}-objects"
   location = var.region
@@ -433,6 +433,12 @@ resource "google_cloud_run_v2_service" "gateway" {
         value = var.gateway_pricing_json
       }
       env {
+        # aw-control MCP calls go to web at its deterministic Cloud Run URL: the web service's `uri`
+        # would be a cycle, since web already depends on this service for MODEL_GATEWAY_URL.
+        name  = "GATEWAY_CONTROL_PLANE_ORIGIN"
+        value = "https://${var.name}-web-${data.google_project.current.number}.${var.region}.run.app"
+      }
+      env {
         name = "DATABASE_URL"
         value_source {
           secret_key_ref {
@@ -663,28 +669,21 @@ resource "google_cloud_run_v2_service" "web" {
         }
       }
       env {
-        name  = "OBJECT_STORAGE_BACKEND"
-        value = "gcs"
+        # One setting for where files, skills and session transcripts live (the storage design, §04).
+        name  = "AW_STORAGE_URL"
+        value = "gcs://${google_storage_bucket.objects.name}?project=${var.project_id}"
       }
-      env {
-        name  = "OBJECT_STORAGE_BUCKET"
-        value = google_storage_bucket.objects.name
+      dynamic "env" {
+        # Absent when unset, so the server default applies and an existing service gets no new revision.
+        for_each = var.storage_signed_upload_max_bytes == null ? [] : [var.storage_signed_upload_max_bytes]
+        content {
+          name  = "AW_STORAGE_SIGNED_UPLOAD_MAX_BYTES"
+          value = tostring(env.value)
+        }
       }
       env {
         name  = "GCP_PROJECT"
         value = var.project_id
-      }
-      env {
-        name  = "AW_FILE_STORAGE_ROOT"
-        value = "/var/lib/agent-workspace/files"
-      }
-      env {
-        name  = "AW_SKILL_STORAGE_ROOT"
-        value = "/var/lib/agent-workspace/skills"
-      }
-      env {
-        name  = "AW_SESSION_TRANSCRIPT_ROOT"
-        value = "/var/lib/agent-workspace/sessions"
       }
       env {
         name  = "AW_RUNTIME_VERIFICATION_FILE"

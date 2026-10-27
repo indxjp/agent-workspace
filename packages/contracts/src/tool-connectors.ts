@@ -1,12 +1,13 @@
 import { z } from 'zod';
 
 import { isUuid } from './identifiers.js';
+import { ConnectorIdentitySchema, IDENTITY_ASSERTION_HEADER } from './identity-assertion.js';
 import { NAME_KEY_PATTERN } from './project-file.js';
 import { urlCarriesCredential } from './url-credential.js';
 
 /**
- * The tool connectors (ADR-0113 SD1, plan C15): a connector of kind `openapi` (a read-only HTTP
- * API described by an OpenAPI document) or `postgres` (structured, parameterised reads from named
+ * The tool connectors (ADR-0113 SD1, plan C15): a connector of kind `openapi` (an HTTP API
+ * described by an OpenAPI document, whose writes run only for an approved call) or `postgres` (structured, parameterised reads from named
  * tables). Both run in the gateway behind {@link GATEWAY_TOOL_ROUTE} (C16), never in the sandbox.
  * A connector without a kind is an MCP connector (`@indx-workspace/contracts/connectors`).
  *
@@ -67,6 +68,28 @@ export const TOOL_OPERATION_PATH_MAX_LENGTH = 2048;
 export const AW_DEV_TOOLS_CONNECTOR = 'aw-dev-tools';
 
 /**
+ * The reserved tool-server id of the Builder's `aw-control` tools (design §04). The platform owns
+ * the name: no workspace connector may take it, so a run that lists it can only ever reach the
+ * control-plane tools through the gateway.
+ */
+export const AW_CONTROL_CONNECTOR = 'aw-control';
+
+/**
+ * Whether `name` is a connector name the platform keeps for itself ({@link AW_CONTROL_CONNECTOR}),
+ * compared after trimming and lower-casing so no spelling of it slips through.
+ */
+export function isReservedConnectorName(name: string): boolean {
+  return name.trim().toLowerCase() === AW_CONTROL_CONNECTOR;
+}
+
+/**
+ * The gateway path an engine reaches the {@link AW_CONTROL_CONNECTOR} tools through (#1846). The
+ * gateway forwards it to the control plane's `/api/builder/mcp` at the one origin its deployment
+ * sets, never at one a request, a header or a run row names.
+ */
+export const GATEWAY_AW_CONTROL_PATH = `/v1/tools/${AW_CONTROL_CONNECTOR}/mcp`;
+
+/**
  * The URL `aw push` registers `aw-dev-tools` at on a deployment whose tool sandbox is enabled
  * (ADR-0118 TS3, TS8). It is a reserved name (RFC 6761) that nothing dials: the connector exists
  * so a version can reference it and be promoted, while a run reaches the session's tool sandbox
@@ -77,27 +100,27 @@ export const TOOL_SANDBOX_CONNECTOR_URL = 'https://tool-sandbox.invalid/mcp';
 /** The three operations every `postgres` connector exposes (C17). */
 export const POSTGRES_TOOL_OPERATION_NAMES = ['list_tables', 'describe', 'select'] as const;
 
-/** The only HTTP methods an `openapi` connector exposes in slice 2 (ADR-0113 SD4). */
-export const TOOL_OPERATION_METHODS = ['GET', 'HEAD'] as const;
+/** The HTTP methods an `openapi` connector exposes (ADR-0113 SD4, amended by #1304). */
+export const TOOL_OPERATION_METHODS = ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'] as const;
 
 /** One of {@link TOOL_OPERATION_METHODS}. */
 export type ToolOperationMethod = (typeof TOOL_OPERATION_METHODS)[number];
+
+/** The methods of {@link TOOL_OPERATION_METHODS} that change state: each is implicitly `requireApproval`. */
+export const TOOL_WRITE_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'] as const;
 
 /**
  * Problem codes the tool connector routes add to the connector routes' table, with the status each
  * travels under (ADR-0113 SD4, C15, C17).
  *
  * - `connector_spec_invalid`: the document is empty, too large or unusable, or an `allow` rule
- *   names no operation or admits nothing ({@link selectAllowedOperations}).
- * - `connector_write_unsupported`: an `allow` rule names a method other than `GET`/`HEAD` (in any
- *   case), an `operationId:` rule names such an operation, or a `postgres` body sets `readOnly`
- *   to anything but `true` (SD4).
+ *   names no operation, admits nothing or names an operation whose method is not supported
+ *   ({@link selectAllowedOperations}).
  * - `connector_tool_name_collision`: two operations of one connector get the same name (C17).
  * - `connector_kind_unsupported`: the body names a kind this server does not create.
  */
 export const TOOL_CONNECTOR_PROBLEM_CODES = {
   connector_spec_invalid: 422,
-  connector_write_unsupported: 422,
   connector_tool_name_collision: 422,
   connector_kind_unsupported: 400,
 } as const;
@@ -108,6 +131,15 @@ export type ToolConnectorProblemCode = keyof typeof TOOL_CONNECTOR_PROBLEM_CODES
 /**
  * Problem codes the gateway's tool route answers with at run time (C16).
  *
+ * `approval_required` is the tool error (not an HTTP failure of the route) a write answers with
+ * when its canonical call is not in the run's approved calls (ADR-0113 SD4, amended by #1304); it
+ * is the word the engine's denial message starts with. `approval_already_used` is the same refusal
+ * for a write whose approval was consumed by an earlier call: an approved write runs at most once
+ * (ADR-0145 D2.1), and the gateway refuses the repeat before it reads the credential.
+ *
+ * `tool_control_plane_unconfigured` answers an {@link AW_CONTROL_CONNECTOR} call on a gateway whose
+ * deployment set no control-plane origin; the gateway never falls back to another one.
+ *
  * The gateway answers a disabled connector, or one from another workspace, with
  * `403 tool_not_in_run` as well, so the route never reveals whether a connector exists. S2-02d may
  * refine this.
@@ -115,8 +147,11 @@ export type ToolConnectorProblemCode = keyof typeof TOOL_CONNECTOR_PROBLEM_CODES
 export const TOOL_GATEWAY_PROBLEM_CODES = {
   tool_run_not_active: 401,
   tool_not_in_run: 403,
+  approval_required: 403,
+  approval_already_used: 403,
   tool_upstream_failed: 502,
   tool_upstream_timeout: 504,
+  tool_control_plane_unconfigured: 503,
 } as const;
 
 /** One of the keys of {@link TOOL_GATEWAY_PROBLEM_CODES}. */
@@ -216,6 +251,26 @@ export function toolServerKeys(namesInIdOrder: readonly string[]): readonly stri
 }
 
 /**
+ * The tool rules that gate an `openapi` connector's writes (ADR-0113 SD4, amended by #1304):
+ * `mcp__<serverKey>__<operation>` for each operation whose method is in {@link TOOL_WRITE_METHODS}.
+ * Every write is implicitly `requireApproval`; this is the one definition of that, and the
+ * gateway's backstop feeds it to `needsApproval` (ADR-0145 D3), the decision the engine's
+ * `canUseTool` makes too. Pure.
+ */
+export function toolApprovalRules(
+  serverKey: string,
+  operations: readonly Pick<ToolOperation, 'name' | 'method'>[],
+): readonly string[] {
+  return operations
+    .filter((operation) => isWriteMethod(operation.method))
+    .map((operation) => `mcp__${serverKey}__${operation.name}`);
+}
+
+function isWriteMethod(method: ToolOperationMethod): boolean {
+  return TOOL_WRITE_METHODS.some((write) => write === method);
+}
+
+/**
  * The longest MCP connector name {@link connectorServerKey} uses as its key: the length of
  * `connector-<uuid>`, so no model-visible tool name is longer than it was (ADR-0113 SD13, #1109).
  */
@@ -226,9 +281,13 @@ const CONNECTOR_SERVER_KEY_PREFIX = 'connector-';
 
 /**
  * MCP server keys a run's other components own, which no connector may take (ADR-0113 SD13): the
- * Claude adapter's skill-script server.
+ * Claude adapter's skill-script server and the Builder's {@link AW_CONTROL_CONNECTOR} tools, so a
+ * workspace connector stored under that name can never appear as `mcp__aw-control__*`.
  */
-export const RESERVED_MCP_SERVER_KEYS: readonly string[] = ['agent-workspace'];
+export const RESERVED_MCP_SERVER_KEYS: readonly string[] = [
+  'agent-workspace',
+  AW_CONTROL_CONNECTOR,
+];
 
 /**
  * An MCP connector's server key in the engine configuration (ADR-0113 SD13, amended by #1109), the
@@ -331,7 +390,7 @@ const OperationPathSchema = z
     message: 'must not contain whitespace or a control character',
   });
 
-/** One tool an `openapi` connector exposes (C17): its name, its read method and its path template. */
+/** One tool an `openapi` connector exposes (C17): its name, its method and its path template. */
 export const ToolOperationSchema = z
   .object({
     name: ToolOperationNameSchema,
@@ -343,18 +402,6 @@ export const ToolOperationSchema = z
 
 /** One of the operations an `openapi` connector exposes. */
 export type ToolOperation = z.infer<typeof ToolOperationSchema>;
-
-/** Every other method an OpenAPI document can name: refused as a write in slice 2 (SD4). */
-const NON_READ_METHODS: ReadonlySet<string> = new Set([
-  'POST',
-  'PUT',
-  'PATCH',
-  'DELETE',
-  'OPTIONS',
-  'TRACE',
-  'CONNECT',
-  'QUERY',
-]);
 
 const ALLOW_RULE_SHAPE = /^([A-Za-z]+) (.+)$/su;
 const OPERATION_ID_PREFIX = /^operationId:/u;
@@ -372,7 +419,6 @@ type AllowRule =
       readonly glob: readonly string[];
     }
   | { readonly kind: 'operationId'; readonly operationId: string }
-  | { readonly kind: 'write' }
   | { readonly kind: 'invalid' };
 
 /** The segments of a path that starts with `/`; `/` alone has none. */
@@ -389,20 +435,14 @@ function isGlobSegments(segments: readonly string[]): boolean {
   );
 }
 
-/**
- * A rule's method: `GET` or `HEAD` exactly, `write` for another HTTP method in any case (so
- * `post /refunds` is the typed write refusal, SD4), or `null` for anything else, including a read
- * method not in upper case.
- */
-function readMethod(method: string): ToolOperationMethod | 'write' | null {
-  if (method === 'GET' || method === 'HEAD') return method;
-  return NON_READ_METHODS.has(method.toUpperCase()) ? 'write' : null;
+/** A rule's method: one of {@link TOOL_OPERATION_METHODS} exactly (upper case), else `null`. */
+function readMethod(method: string): ToolOperationMethod | null {
+  return TOOL_OPERATION_METHODS.find((supported) => supported === method) ?? null;
 }
 
-/** Whether an OpenAPI operation's method, in any case, is one slice 2 exposes (SD4). */
-function isReadMethod(method: string): boolean {
-  const upper = method.toUpperCase();
-  return upper === 'GET' || upper === 'HEAD';
+/** Whether an OpenAPI operation's method, in any case, is one {@link TOOL_OPERATION_METHODS} lists. */
+function isSupportedMethod(method: string): boolean {
+  return readMethod(method.toUpperCase()) !== null;
 }
 
 /** Read one `allow` rule (ADR-0113 SD14); the schema and {@link selectAllowedOperations} share it. */
@@ -420,7 +460,6 @@ function readAllowRule(rule: string): AllowRule {
   const glob = match?.[2];
   if (methodText === undefined || glob === undefined) return { kind: 'invalid' };
   const method = readMethod(methodText);
-  if (method === 'write') return { kind: 'write' };
   if (
     method === null ||
     glob.length > TOOL_OPERATION_PATH_MAX_LENGTH ||
@@ -432,22 +471,22 @@ function readAllowRule(rule: string): AllowRule {
   return isGlobSegments(segments) ? { kind: 'path', method, glob: segments } : { kind: 'invalid' };
 }
 
-const WRITE_RULE_MESSAGE = 'only GET and HEAD operations are supported';
-const INVALID_RULE_MESSAGE = 'must be "GET <path-glob>", "HEAD <path-glob>" or "operationId:<id>"';
+const INVALID_RULE_MESSAGE =
+  'must be "<METHOD> <path-glob>" (GET, HEAD, POST, PUT, PATCH or DELETE) or "operationId:<id>"';
 
 /**
- * One `allow` rule (ADR-0113 SD4, SD14, C15): `GET <glob>`, `HEAD <glob>` or `operationId:<id>`.
+ * One `allow` rule (ADR-0113 SD4, SD14, C15): `<METHOD> <glob>` or `operationId:<id>`.
  *
  * A glob starts with `/`; each segment is a literal (printable ASCII without `/ ? # *`), `*` (one
- * segment) or `**` (zero or more, last segment only). `GET` and `HEAD` are upper case. Another
- * HTTP method in any case (`POST /refunds`, `post /refunds`) is refused with `params.problemCode`
- * `connector_write_unsupported`. An
- * operation id is 1–256 characters with no whitespace or control character.
+ * segment) or `**` (zero or more, last segment only). The method is one of
+ * {@link TOOL_OPERATION_METHODS}, in upper case. A rule admitting a {@link TOOL_WRITE_METHODS}
+ * method is allowed: its operations are implicitly `requireApproval` ({@link toolApprovalRules}).
+ * An operation id is 1–256 characters with no whitespace or control character.
  */
 export const OpenApiAllowRuleSchema = z.string().superRefine((rule, context) => {
-  const read = readAllowRule(rule);
-  if (read.kind === 'write') addProblem(context, 'connector_write_unsupported', WRITE_RULE_MESSAGE);
-  if (read.kind === 'invalid') context.addIssue({ code: 'custom', message: INVALID_RULE_MESSAGE });
+  if (readAllowRule(rule).kind === 'invalid') {
+    context.addIssue({ code: 'custom', message: INVALID_RULE_MESSAGE });
+  }
 });
 
 /** An `allow` list: 1–{@link OPENAPI_ALLOW_MAX_RULES} rules, no exact duplicates. */
@@ -466,9 +505,11 @@ export const OpenApiAllowSchema = z
 
 /**
  * Header names an `openapi` connector may never put its credential in, compared ignoring case:
- * they frame the request, so a credential there would change what is sent.
+ * they frame the request, so a credential there would change what is sent. The identity
+ * assertion's header is here too: only the platform may write it (ADR-0142 D1).
  */
 export const OPENAPI_AUTH_HEADER_REFUSED_NAMES = [
+  IDENTITY_ASSERTION_HEADER,
   'host',
   'content-length',
   'content-type',
@@ -658,7 +699,8 @@ const HeaderCredentialSchema = z
  *
  * - `document`: the OpenAPI document as text, up to 1 MiB; the server never fetches one.
  * - `baseUrl`: when absent, `servers[0]` decides it at registration (SD15).
- * - `allow`: the `GET`/`HEAD` rules that pick the operations to expose (SD14).
+ * - `allow`: the rules that pick the operations to expose (SD14); a write operation is implicitly
+ *   `requireApproval` (SD4).
  * - `auth` (default `none`) and `credential`, write-only: required when `auth` is not `none` and
  *   refused when it is.
  * - `dryRun: true` checks the body and the document without saving.
@@ -675,6 +717,8 @@ export const CreateOpenApiConnectorRequestSchema = z
     allow: OpenApiAllowSchema,
     auth: OpenApiAuthSchema.default('none'),
     credential: HeaderCredentialSchema.optional(),
+    /** Opt in to the signed identity assertion (ADR-0142 D1): the signing secret's name. */
+    identity: ConnectorIdentitySchema.optional(),
     dryRun: z.literal(true).optional(),
   })
   .strict()
@@ -753,27 +797,18 @@ const PostgresCredentialSchema = z
     }
   });
 
-/**
- * `readOnly`, required to be `true` (SD4). `false` is a write request, refused with
- * `params.problemCode` `connector_write_unsupported`; a value that is not a boolean is an ordinary
- * `invalid_body` issue.
- */
-const PostgresReadOnlyRequestSchema = z
-  .boolean()
-  .superRefine((readOnly, context) => {
-    if (!readOnly) {
-      addProblem(context, 'connector_write_unsupported', 'only reads are supported; set true');
-    }
-  })
-  .pipe(z.literal(true));
+/** `readOnly`, required to be `true` (SD4): a postgres connector offers only reads. */
+const PostgresReadOnlyRequestSchema = z.literal(true, {
+  error: 'only reads are supported; set true',
+});
 
 /**
  * The body of `POST /api/connectors` for a `postgres` connector (ADR-0113 SD1, SD4, C15).
  *
  * - `credential`: the connection URL, write-only, sealed as a secret and never returned.
  * - `tables`: the 1–64 qualified tables it may read.
- * - `readOnly: true`, required: slice 2 offers only structured, parameterised reads (SD4);
- *   `false` is `422 connector_write_unsupported`.
+ * - `readOnly: true`, required: a postgres connector offers only structured, parameterised reads
+ *   (SD4); anything else is `400 invalid_body`.
  * - `maxRows` (default 100, at most 1000) and `dryRun: true`.
  */
 export const CreatePostgresConnectorRequestSchema = z
@@ -881,7 +916,7 @@ export interface OpenApiOperationCandidate {
 /** An `allow` rule {@link selectAllowedOperations} refuses, at its path in the create body. */
 export interface AllowRuleRefusal {
   readonly path: readonly ['allow', number];
-  readonly code: 'connector_spec_invalid' | 'connector_write_unsupported';
+  readonly code: 'connector_spec_invalid';
   readonly message: string;
 }
 
@@ -922,9 +957,9 @@ function ruleRefusal(
  * template segment `{x}` is one segment, `*` matches exactly one, a trailing `**` zero or more and
  * a literal itself only. `GET /orders/*` admits `/orders/{orderId}`, not `/orders/{orderId}/items`.
  * A path rule that admits no operation is refused as `connector_spec_invalid`. An `operationId:`
- * rule admits its operation when that is `GET` or `HEAD`; one naming another method is refused as
- * `connector_write_unsupported`, one naming no operation as `connector_spec_invalid`. A rule the
- * schema would refuse is refused here the same way.
+ * rule admits its operation whatever its method is among {@link TOOL_OPERATION_METHODS}; one naming
+ * an operation with another method (`OPTIONS`, `TRACE`) or no operation is refused as
+ * `connector_spec_invalid`. A rule the schema would refuse is refused here the same way.
  *
  * A candidate whose path is not a valid template (it does not start with `/`, is too long, or
  * holds whitespace or a control character) is never admitted, by any rule.
@@ -940,9 +975,7 @@ export function selectAllowedOperations<Candidate extends OpenApiOperationCandid
   );
   allow.forEach((rule, index) => {
     const read = readAllowRule(rule);
-    if (read.kind === 'write') {
-      refusals.push(ruleRefusal(index, 'connector_write_unsupported', WRITE_RULE_MESSAGE));
-    } else if (read.kind === 'invalid') {
+    if (read.kind === 'invalid') {
       refusals.push(ruleRefusal(index, 'connector_spec_invalid', INVALID_RULE_MESSAGE));
     } else if (read.kind === 'path') {
       const matched = usable.filter(
@@ -958,8 +991,14 @@ export function selectAllowedOperations<Candidate extends OpenApiOperationCandid
       const named = usable.filter((candidate) => candidate.operationId === read.operationId);
       if (named.length === 0) {
         refusals.push(ruleRefusal(index, 'connector_spec_invalid', 'names no operation'));
-      } else if (named.some((candidate) => !isReadMethod(candidate.method))) {
-        refusals.push(ruleRefusal(index, 'connector_write_unsupported', WRITE_RULE_MESSAGE));
+      } else if (named.some((candidate) => !isSupportedMethod(candidate.method))) {
+        refusals.push(
+          ruleRefusal(
+            index,
+            'connector_spec_invalid',
+            'names an operation whose method is not supported',
+          ),
+        );
       } else {
         for (const candidate of named) admitted.add(candidate);
       }

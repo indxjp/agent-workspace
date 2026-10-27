@@ -2,16 +2,21 @@ apiVersion: agentworkspace.dev/v2
 kind: Project
 name: quality-defect
 engine: claude-agent-sdk
-# The past-trouble database is your own MCP server (mcp/defect-db.mjs). A project file names only
-# remote connectors, so run it over Streamable HTTP for `aw dev`, inside the plant network:
-#   MCP_TRANSPORT=http PORT=8790 node mcp/defect-db.mjs
-connectors:
-  defect-db:
-    url: http://127.0.0.1:8790/mcp
-    transport: http
+# No MCP connector: the QMS is an openapiTool() in tools/qms.ts. `aw dev` reads
+# apis/qms.openapi.json and registers it, taking QMS_TOKEN from its environment. The caller
+# assertion the tool opts in with is signed with the workspace secret QMS_IDENTITY_SECRET, so the
+# QMS shows only the 工程 whose past cases the person who entered the defect may see:
+#   aw secrets set QMS_IDENTITY_SECRET
+#   QMS_TOKEN=... aw dev
+# The document's `servers` is the company's QMS (qms.example.co.jp), which is not reachable from
+# here. To try the project, run the bundled stand-in with the same token and set
+# servers[0].url in apis/qms.openapi.json to http://127.0.0.1:8790/api/v1:
+#   QMS_TOKEN=... QMS_IDENTITY_SECRET=... IDENTITY_AUDIENCE=<tool-id> IDENTITY_WORKSPACE=<workspace-id> \
+#     PORT=8790 node qms/fake-qms.mjs
 # Defect data is confidential. The ceiling is what no agent in this project can widen, whoever
-# pushes it: no network egress, no connector but the defect database, no file writes, a budget.
-# runCommands stays allowed so the eight-d skill can check its own draft with Node.
+# pushes it: no network egress, no tool but the QMS, no file writes, a budget.
+# runCommands stays allowed so a person can run the eight-d check script through run_skill_script;
+# the agent does not call it during a run (the backend runs the same parser).
 policy:
   permissions:
     writeFiles: false
@@ -19,8 +24,7 @@ policy:
   limits:
     maxTurns: 20
     maxBudgetUsd: 1.5
-  tools:
-    - defect-db
+  tools: [qms]
   promotion:
     minEvalScore: 0.9
 environments:

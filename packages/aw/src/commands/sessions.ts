@@ -1,4 +1,4 @@
-import { SESSION_STATUSES } from '@indx-workspace/contracts/sessions';
+import { SESSION_STATUSES, type SessionStatus } from '@indx-workspace/contracts/sessions';
 
 import {
   command,
@@ -22,7 +22,7 @@ const SESSION_COLUMNS = [
   'updatedAt',
 ];
 
-async function setStatus(context: CommandContext, status: 'active' | 'archived'): Promise<unknown> {
+async function setStatus(context: CommandContext, status: SessionStatus): Promise<unknown> {
   return context.client.sessions.update(
     positional(context, 0, 'id'),
     { status },

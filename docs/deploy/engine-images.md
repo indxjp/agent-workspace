@@ -26,9 +26,9 @@ To build one locally:
 ```sh
 node scripts/engine-images.mjs            # <engine> <image> <engine-version>, one per line
 docker build --build-arg ENGINE=claude-agent-sdk -f runtime.Dockerfile --target runtime .
-docker build --build-arg ENGINE=openai-agents --build-arg ENGINE_VERSION=0.0.0+0.20.0   -f runtime.Dockerfile --target runtime .
-docker build --build-arg ENGINE=pi --build-arg ENGINE_VERSION=0.0.0+1.1.0    -f runtime.Dockerfile --target runtime .
-docker build --build-arg ENGINE=mastra --build-arg ENGINE_VERSION=0.0.0+1.76.0   -f runtime.Dockerfile --target runtime .
+docker build --build-arg ENGINE=openai-agents --build-arg ENGINE_VERSION=0.0.0+0.21.0   -f runtime.Dockerfile --target runtime .
+docker build --build-arg ENGINE=pi --build-arg ENGINE_VERSION=0.0.0+1.4.0    -f runtime.Dockerfile --target runtime .
+docker build --build-arg ENGINE=mastra --build-arg ENGINE_VERSION=0.0.0+1.79.0   -f runtime.Dockerfile --target runtime .
 ```
 
 The runner's manifest names no adapter (ADR-0074 D11): the build installs the selected adapter

@@ -43,16 +43,19 @@ import type { Server } from 'node:http';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
-import type { RunRequest } from '@agent-workspace/core';
+import { createJsonLogger } from '@agent-workspace/core/telemetry';
+import { startTracing } from '@agent-workspace/core/tracing';
 import type { EngineRunRequest, EngineStartContext } from '@agent-workspace/engine';
 
 import { loadEngine, toEngineRunRequest } from './engines.js';
 import { runnerBaseEnvironment, runnerEnvironmentFor } from './environment.js';
 import { startEngineAgent, type EngineStartOutcome } from './runtime.js';
-import { materializeRunResources } from './resources.js';
+import { materializeRunResources, type ResolvedRunRequest } from './resources.js';
 import { startRunnerServer } from './server.js';
 import { createHttpEngineSessionStore } from './session-state.js';
 import { MIRROR_TOKEN_ENV, readMirrorConfig } from './session.js';
+
+const log = createJsonLogger({ service: 'runner' });
 
 /** The workspace name, kept from the Wave-0 placeholder because `index.test.ts` asserts it. */
 export const PACKAGE_NAME = '@agent-workspace/runner';
@@ -146,7 +149,7 @@ export function closeServer(
  * one name is a conflict the run's own request should decide.
  */
 export async function startAgentInThisContainer(
-  request: RunRequest,
+  request: ResolvedRunRequest,
   base: Record<string, string> = runnerBaseEnvironment(),
   context: EngineStartContext = {},
 ): Promise<EngineStartOutcome> {
@@ -194,8 +197,8 @@ export async function startAgentInThisContainer(
  *     `sessionDurability()` reports that, and spec §14.9's release blocker is visible rather than
  *     hidden behind a store that silently kept nothing.
  *   * `configured` installs the HTTP store, whose target is the web application's
- *     `/api/sessions/:engineSessionId/state-*` — the routes `installSessionApi` had to be called
- *     for. The two halves of §14.9 only work together, which is why they land in the same task.
+ *     `/api/sessions/:engineSessionId/state-*` — the routes the web composition root installs as
+ *     `ApplicationContext.sessions`. The two halves of §14.9 only work together, which is why they land in the same task.
  *
  * `engine` is the run's own (`RunRequest.engine`), because a stream is engine-scoped: the control
  * plane refuses a write whose engine disagrees with the one the session is pinned to
@@ -218,15 +221,14 @@ export function sessionMirrorDeps(
             'the signed per-run claim; a deployment-wide mirror bearer is not accepted.',
         );
       }
-      console.log(
-        `[runner] session store installed: ${engine} state POSTs to ` +
-          `${config.baseUrl}/api/sessions/…/state-entries (spec §14.9)`,
-      );
+      log.info('session store installed (spec §14.9)', { engine });
       return {
         sessionStore: createHttpEngineSessionStore({ ...config, token: runToken, engine }),
+        // The same control plane and per-run bearer carry the run's `search_files` calls (ADR-0147).
+        fileSearch: { baseUrl: config.baseUrl, token: runToken },
       };
     case 'absent':
-      console.warn(`[runner] no session mirror: ${config.reason}`);
+      log.warn('no session mirror', { reason: config.reason });
       return {};
     default: {
       // The rejecting `else`. `MirrorConfig` is a closed union today; a fourth arm added without
@@ -255,8 +257,10 @@ export async function main(): Promise<{ server: Server; url: string }> {
   // healthy. `sessionMirrorDeps` throws, and the caller below turns that into exit 1 by name.
   const mirrorConfig = readMirrorConfig(process.env);
   if (mirrorConfig.kind === 'invalid') throw new Error(mirrorConfig.reason);
+  const tracing = await startTracing('agent-workspace-runner', process.env, log);
   const { server, address } = await startRunnerServer(process.env, {
-    startAgent: (request: RunRequest): Promise<EngineStartOutcome> =>
+    logger: log,
+    startAgent: (request: ResolvedRunRequest): Promise<EngineStartOutcome> =>
       startAgentInThisContainer(
         request,
         base,
@@ -271,27 +275,32 @@ export async function main(): Promise<{ server: Server; url: string }> {
   const stop = (signal: NodeJS.Signals): void => {
     if (stopping) {
       // A second signal is an operator saying "stop waiting". Honour it rather than logging.
-      console.error(`[runner] second ${signal}; leaving without waiting for in-flight runs`);
+      log.error('second signal; leaving without waiting for in-flight runs', { signal });
       process.exit(EXIT_SHUTDOWN_TIMED_OUT);
     }
     stopping = true;
-    console.log(`[runner] ${signal} received; closing ${url} and finishing in-flight runs`);
-    void closeServer(server).then((outcome) => {
+    log.info('signal received; closing and finishing in-flight runs', { signal });
+    void closeServer(server).then(async (outcome) => {
+      await tracing
+        ?.shutdown()
+        .catch((error: unknown) => log.error('spans were not flushed', { error }));
       for (const s of SHUTDOWN_SIGNALS) process.off(s, stop);
       if (outcome === 'closed') {
-        console.log('[runner] closed cleanly');
+        log.info('closed cleanly');
         return;
       }
-      console.error(
-        `[runner] connections were still open after ${String(SHUTDOWN_GRACE_MS)}ms; exiting anyway`,
-      );
+      log.error('connections were still open after the grace period; exiting anyway', {
+        graceMs: SHUTDOWN_GRACE_MS,
+      });
       process.exit(EXIT_SHUTDOWN_TIMED_OUT);
     });
   };
   for (const signal of SHUTDOWN_SIGNALS) process.on(signal, stop);
 
-  console.log(`[runner] serving the spec §14.3 runtime contract on ${url}`);
-  console.log('[runner] GET /healthz · POST /run · POST /interrupt · POST/GET /files');
+  log.info('serving the spec §14.3 runtime contract', {
+    port: address.port,
+    endpoints: 'GET /healthz · POST /run · POST /interrupt · POST/GET /files',
+  });
   return { server, url };
 }
 
@@ -303,9 +312,7 @@ if (isMainModule(process.argv[1], import.meta.url)) {
     // `listen` rejects for a port already in use or a host that cannot be bound; neither has a
     // sensible fallback, and a runtime container that came up on a port nobody chose is worse
     // than one that did not come up.
-    console.error(
-      `[runner] failed to start: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    log.error('failed to start', { error });
     process.exit(EXIT_STARTUP_FAILED);
   }
 }

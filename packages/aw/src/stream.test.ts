@@ -40,6 +40,27 @@ describe('renderFrame', () => {
     expect(renderFrame({ kind: 'done' }, RAW)).toEqual(['{"kind":"done"}']);
   });
 
+  it('renders run.warning before the first agent frame as a warning line, without throwing (ADR-0146)', () => {
+    const warning: RunEventFrame = {
+      kind: 'run-warning',
+      id: '2',
+      data: { code: 'attachments_removed_shell' },
+    };
+    const first = agent('agent.message', {
+      messageId: 'm1',
+      role: 'assistant',
+      blocks: [{ type: 'text', text: 'hi' }],
+    });
+    expect(renderFrame(warning, HUMAN)).toEqual(['warning: attachments_removed_shell']);
+    expect(renderFrame({ ...warning, data: { code: 'c', message: 'No shell.' } }, HUMAN)).toEqual([
+      'warning: No shell.',
+    ]);
+    expect(renderFrame(warning, JSONL)).toEqual([JSON.stringify(warning)]);
+    expect(renderFrame(warning, { ...HUMAN, json: true })).toEqual([JSON.stringify(warning)]);
+    expect(renderFrame(warning, RAW)).toEqual([JSON.stringify(warning)]);
+    expect([warning, first].flatMap((frame) => renderFrame(frame, HUMAN))).toHaveLength(2);
+  });
+
   it('renders the whole neutral vocabulary for a human', () => {
     expect(
       renderFrame(agent('agent.session', { engineSessionId: 'sess_1', model: null }), HUMAN),
@@ -117,6 +138,9 @@ describe('renderFrame', () => {
     ).toEqual(['engine event: stream_event']);
     expect(renderFrame(agent('agent.malformed', { reason: 'not an object' }), HUMAN)).toEqual([
       'engine sent an unreadable event: not an object',
+    ]);
+    expect(renderFrame(agent('agent.handoff', { reason: 'Wants a refund.' }), HUMAN)).toEqual([
+      'handed to a person: Wants a refund.',
     ]);
   });
 

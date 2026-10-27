@@ -29,7 +29,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import type { ClassifiedSdkEvent } from '@agent-workspace/core';
+import type { ClassifiedSdkEvent } from '@agent-workspace/run-protocol';
 import {
   createScriptedGateway,
   expectConformance,
@@ -37,22 +37,32 @@ import {
 } from '@agent-workspace/engine/testing';
 import type { EngineRunRequest, SessionDurabilityVerdict } from '@agent-workspace/engine';
 import { skillPlacementVerdict } from '@agent-workspace/engine';
-import { describe, expect, it } from 'vitest';
+import { ENGINE_CATALOGUE } from '@indx-workspace/contracts/engines';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ClaudeRun, RunDeps } from './boundary.js';
+import type { ClaudeRun, ClaudeRunStart, RunDeps } from './boundary.js';
 import {
   CLAUDE_AGENT_SDK_CAPABILITIES,
-  CLAUDE_AGENT_SDK_ENGINE_ADAPTER,
   CLAUDE_AGENT_SDK_ENGINE_ID,
   CLAUDE_AGENT_SDK_VERSION,
   claudeGatewayEnv,
   createClaudeAgentSdkEngine,
 } from './engine.js';
+import { compileRunRequest } from './compile.js';
 import type { CompiledSdkOptions } from './options.js';
 import { ClaudeRunPolicy } from './policy.js';
 import { CLAUDE_PROTECTED_CONFIG_DIRECTORY } from './scope.js';
 import { CLAUDE_SKILL_SCRIPT_TOOL } from './skill-script.js';
 import { claudeOptionsAllowPermission, claudeOptionsAllowWrite } from './tools.js';
+
+// Each adapter package exports a factory, not a built adapter (W3-8): build one here.
+const CLAUDE_AGENT_SDK_ENGINE_ADAPTER = createClaudeAgentSdkEngine();
+
+// The real `compileRunRequest` behind a spy, so a test can count the compiles one start performs.
+vi.mock('./compile.js', async (importOriginal) => {
+  const original = await importOriginal<typeof import('./compile.js')>();
+  return { ...original, compileRunRequest: vi.fn(original.compileRunRequest) };
+});
 
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -195,6 +205,8 @@ function replayingStarter(events: readonly ClassifiedSdkEvent[] = RECORDED_RUN) 
         }
         return { durable: true, mirroredBatches: mirrored };
       },
+      approvalRequest: () => null,
+      handoff: () => null,
       abort: (reason?: unknown) => {
         controller.abort(reason);
       },
@@ -214,6 +226,7 @@ function subject(
     permissionAllowed: claudeOptionsAllowPermission,
     connectorsCompiled: (compiled) => Object.keys(compiled.mcpServers),
     subagentsCompiled: (compiled) => Object.keys(compiled.agents ?? {}),
+    outputSchemaCompiled: (compiled) => compiled.outputFormat?.schema,
     // The Claude adapter still reads its credential out of `env` on a pre-v2 body (ADR-0070), so
     // the conformance request's env carries the two variables compose writes today, built from
     // the scripted gateway's own connection. That is what makes `no-provider-credential-in-the-
@@ -344,7 +357,13 @@ describe('the port translation', () => {
   });
 
   it('derives the policy arm from the catalogue: strict, with fileGrantDeny defaulting to empty (#992)', () => {
-    expect(ClaudeRunPolicy.parse({ tools: null })).toEqual({ tools: null, fileGrantDeny: [] });
+    expect(ClaudeRunPolicy.parse({ tools: null })).toEqual({
+      tools: null,
+      fileGrantDeny: [],
+      requireApproval: [],
+      handoff: false,
+      approvedToolCalls: [],
+    });
     expect(ClaudeRunPolicy.safeParse({ tools: null, thinkingLevel: 'high' }).success).toBe(false);
   });
 
@@ -715,7 +734,7 @@ describe('run_skill_script (ADR-0137)', () => {
       cwd: '/workspace/conformance',
       skillsDirectory: '.claude/skills',
       skills: [{ name: 'review', scripts: ['check.mjs'] }],
-      writable: ['drafts'],
+      writable: ['drafts', 'outputs'],
     });
   });
 
@@ -766,5 +785,358 @@ describe('run_skill_script (ADR-0137)', () => {
     });
     expect(refused.ok ? '' : refused.code).toBe('engine_policy_invalid');
     expect(refused.ok ? '' : refused.reason).toContain('run_skill_script');
+  });
+});
+
+describe('a start runs the options compile() produced', () => {
+  const gateway = createScriptedGateway();
+  const request: EngineRunRequest = {
+    runId: '6f1d0d0a-8b0a-4a1f-9b3e-1c2d3e4f5a6b',
+    sessionId: '2b0f5f2a-91a4-4a0e-9a1a-9f7a1b2c3d4e',
+    projectKey: PROJECT_KEY,
+    cwd: '/workspace/conformance',
+    prompt: 'summarise the contracts',
+    engine: CLAUDE_AGENT_SDK_ENGINE_ID,
+    portable: AGENT,
+    policy: POLICY,
+    session: { mode: 'fresh' },
+    gateway: gateway.connection,
+    resources: { files: [], skills: [] },
+    env: { PATH: '/usr/bin', ANTHROPIC_AUTH_TOKEN: gateway.connection.token },
+  };
+
+  function startedWith(): ClaudeRunStart {
+    const handed: ClaudeRunStart[] = [];
+    const starter = replayingStarter();
+    createClaudeAgentSdkEngine((start, deps) => {
+      handed.push(start);
+      return starter(start, deps);
+    }).start(request);
+    const [start] = handed;
+    if (start === undefined) throw new Error('the run starter was not called');
+    return start;
+  }
+
+  beforeEach(() => {
+    vi.mocked(compileRunRequest).mockClear();
+  });
+
+  it('starts the run from the compiled options', () => {
+    const compiled = CLAUDE_AGENT_SDK_ENGINE_ADAPTER.compile(request);
+    if (!compiled.ok) throw new Error(compiled.reason);
+    const start = startedWith();
+    expect(start.options).toEqual(compiled.compiled);
+    expect(start.prompt).toBe(request.prompt);
+    expect(start.runId).toBe(request.runId);
+    expect(start.projectKey).toBe(request.projectKey);
+  });
+
+  it('compiles once per start, and starts with that very value', () => {
+    const start = startedWith();
+    expect(compileRunRequest).toHaveBeenCalledTimes(1);
+    expect(start.options).toBe(vi.mocked(compileRunRequest).mock.results[0]?.value);
+  });
+});
+
+describe('structured output (ADR-0143)', () => {
+  const gateway = createScriptedGateway();
+  const outputSchema = {
+    type: 'object',
+    properties: { total: { type: 'number' } },
+    required: ['total'],
+  };
+  const request: EngineRunRequest = {
+    runId: '6f1d0d0a-8b0a-4a1f-9b3e-1c2d3e4f5a6b',
+    sessionId: '2b0f5f2a-91a4-4a0e-9a1a-9f7a1b2c3d4e',
+    projectKey: PROJECT_KEY,
+    cwd: '/workspace/conformance',
+    prompt: 'go',
+    engine: CLAUDE_AGENT_SDK_ENGINE_ID,
+    portable: AGENT,
+    policy: POLICY,
+    session: { mode: 'fresh' },
+    gateway: gateway.connection,
+    resources: { files: [], skills: [] },
+    env: { PATH: '/usr/bin', ANTHROPIC_AUTH_TOKEN: gateway.connection.token },
+  };
+  const [init] = RECORDED_RUN;
+  const resultEvent = (
+    subtype: 'success' | 'error_max_structured_output_retries',
+    extra: Record<string, unknown> = {},
+  ): ClassifiedSdkEvent => ({
+    kind: 'result',
+    subtype,
+    carriesUsage: true,
+    event: {
+      type: 'result',
+      subtype,
+      session_id: 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d',
+      num_turns: 1,
+      total_cost_usd: 0.0012,
+      modelUsage: {},
+      ...extra,
+    },
+  });
+
+  function started(events: readonly ClassifiedSdkEvent[]) {
+    const starter = replayingStarter(events);
+    const aborts: unknown[] = [];
+    const engine = createClaudeAgentSdkEngine((runRequest, deps) => {
+      const run = starter(runRequest, deps);
+      return {
+        ...run,
+        abort: (reason?: unknown) => {
+          aborts.push(reason);
+          run.abort(reason);
+        },
+      };
+    });
+    return { connection: engine.start({ ...request, outputSchema }), aborts };
+  }
+
+  it('is declared by the catalogue and handed to the adapter', () => {
+    expect(ENGINE_CATALOGUE['claude-agent-sdk'].structuredOutput).toBe(true);
+  });
+
+  it('compiles an outputFormat only when the request asks for one', () => {
+    const asked = CLAUDE_AGENT_SDK_ENGINE_ADAPTER.compile({ ...request, outputSchema });
+    expect(asked.ok && asked.compiled.outputFormat).toEqual({
+      type: 'json_schema',
+      schema: outputSchema,
+    });
+    const plain = CLAUDE_AGENT_SDK_ENGINE_ADAPTER.compile(request);
+    expect(plain.ok).toBe(true);
+    expect(plain.ok && 'outputFormat' in plain.compiled).toBe(false);
+  });
+
+  it("carries a result's structured_output on the agent.result frame's raw", async () => {
+    if (init === undefined) throw new Error('RECORDED_RUN is empty');
+    const { connection } = started([
+      init,
+      resultEvent('success', { structured_output: { total: 3 } }),
+    ]);
+    const frames = [];
+    for await (const frame of connection.frames) frames.push(frame);
+    const result = frames.find((frame) => frame.frame === 'agent.result');
+    expect(result).toMatchObject({ frame: 'agent.result', stopReason: 'end_turn' });
+    expect(result?.raw).toMatchObject({ structured_output: { total: 3 } });
+  });
+
+  it('fails the run with output_schema_unsatisfied after the result frame, and aborts it', async () => {
+    if (init === undefined) throw new Error('RECORDED_RUN is empty');
+    const { connection, aborts } = started([
+      init,
+      resultEvent('error_max_structured_output_retries'),
+    ]);
+    const seen: string[] = [];
+    let failure: unknown = null;
+    try {
+      for await (const frame of connection.frames) seen.push(frame.frame);
+    } catch (error) {
+      failure = error;
+    }
+    expect(seen).toContain('agent.result');
+    expect(failure).toBeInstanceOf(Error);
+    const message = failure instanceof Error ? failure.message : '';
+    expect(message).toMatch(/^output_schema_unsatisfied: /u);
+    expect(message).not.toContain('total');
+    expect(aborts).toHaveLength(1);
+  });
+});
+
+describe('approvals (ADR-0145)', () => {
+  const gateway = createScriptedGateway();
+  const request: EngineRunRequest = {
+    runId: '6f1d0d0a-8b0a-4a1f-9b3e-1c2d3e4f5a6b',
+    sessionId: '2b0f5f2a-91a4-4a0e-9a1a-9f7a1b2c3d4e',
+    projectKey: PROJECT_KEY,
+    cwd: '/workspace/conformance',
+    prompt: 'go',
+    engine: CLAUDE_AGENT_SDK_ENGINE_ID,
+    portable: AGENT,
+    policy: { ...POLICY, requireApproval: ['Write'] },
+    session: { mode: 'fresh' },
+    gateway: gateway.connection,
+    resources: { files: [], skills: [] },
+    env: { PATH: '/usr/bin', ANTHROPIC_AUTH_TOKEN: gateway.connection.token },
+  };
+  const [init] = RECORDED_RUN;
+  const final = RECORDED_RUN.at(-1);
+  const asked = {
+    toolName: 'Write',
+    toolUseId: 'toolu_9',
+    canonicalCall: '{"input":{},"name":"Write"}',
+  };
+
+  it('is declared by the catalogue for this engine', () => {
+    expect(ENGINE_CATALOGUE['claude-agent-sdk'].approvals).toBe(true);
+  });
+
+  it('compiles the gate and hands it to the run starter', () => {
+    const compiled = CLAUDE_AGENT_SDK_ENGINE_ADAPTER.compile(request);
+    expect(compiled.ok && compiled.compiled.approval?.requireApproval).toEqual(['Write']);
+    const starter = vi.fn(replayingStarter());
+    createClaudeAgentSdkEngine(starter).start(request);
+    expect(starter.mock.calls[0]?.[0]).toMatchObject({ approval: { requireApproval: ['Write'] } });
+  });
+
+  it('refuses a policy that would not ask, as a value', () => {
+    const refused = CLAUDE_AGENT_SDK_ENGINE_ADAPTER.compile({
+      ...request,
+      policy: {
+        tools: {
+          base: 'claude_code_preset',
+          autoApprove: [],
+          deny: [],
+          permissionMode: 'dontAsk',
+          allowDangerouslySkipPermissions: false,
+        },
+        requireApproval: ['Write'],
+      },
+    });
+    expect(refused).toMatchObject({ ok: false, code: 'engine_policy_invalid' });
+  });
+
+  it('refuses a gate on a tool the SDK runs without asking, naming it', () => {
+    const refused = CLAUDE_AGENT_SDK_ENGINE_ADAPTER.compile({
+      ...request,
+      policy: { ...POLICY, requireApproval: ['Read'] },
+    });
+    expect(refused).toMatchObject({ ok: false, code: 'engine_policy_invalid' });
+    expect(!refused.ok && refused.reason).toContain('"Read"');
+  });
+
+  it('ends a run the gate stopped without reporting the SDK result as a failure', async () => {
+    if (init === undefined || final === undefined) throw new Error('RECORDED_RUN is empty');
+    const replay = replayingStarter([init, final]);
+    const connection = createClaudeAgentSdkEngine((start, deps) => ({
+      ...replay(start, deps),
+      approvalRequest: () => asked,
+    })).start(request);
+    const seen: string[] = [];
+    for await (const frame of connection.frames) seen.push(frame.frame);
+    expect(seen).not.toContain('agent.result');
+    expect(connection.approvalRequest?.()).toEqual(asked);
+  });
+
+  it('treats a thrown stream as the stop when a request was recorded, and as a failure otherwise', async () => {
+    if (init === undefined) throw new Error('RECORDED_RUN is empty');
+    const throwing = (recorded: boolean) =>
+      createClaudeAgentSdkEngine(() => ({
+        events: (async function* (): AsyncGenerator<ClassifiedSdkEvent, void, void> {
+          await Promise.resolve();
+          yield init;
+          throw new Error('aborted by the permission interrupt');
+        })(),
+        sessionDurability: () => ({ durable: false, reason: 'test' }),
+        approvalRequest: () => (recorded ? asked : null),
+        handoff: () => null,
+        abort: () => undefined,
+      })).start(request);
+    const drain = async (connection: ReturnType<typeof throwing>): Promise<void> => {
+      for await (const frame of connection.frames) void frame;
+    };
+    await expect(drain(throwing(true))).resolves.toBeUndefined();
+    await expect(drain(throwing(false))).rejects.toThrow('aborted by the permission interrupt');
+  });
+
+  it('still fails a run on a rejected key after a request was recorded', async () => {
+    if (init === undefined) throw new Error('RECORDED_RUN is empty');
+    const rejected: ClassifiedSdkEvent = {
+      kind: 'system',
+      subtype: 'api_retry',
+      event: {
+        type: 'system',
+        subtype: 'api_retry',
+        session_id: 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d',
+        attempt: 1,
+        max_retries: 10,
+        retry_delay_ms: 500,
+        error_status: 401,
+        error: 'authentication_failed',
+      },
+    };
+    const replay = replayingStarter([init, rejected]);
+    const connection = createClaudeAgentSdkEngine(
+      (start, deps) => ({ ...replay(start, deps), approvalRequest: () => asked }),
+      () => Promise.resolve(Response.json({ error: 'upstream' }, { status: 500 })),
+    ).start(request);
+    const drain = async (): Promise<void> => {
+      for await (const frame of connection.frames) void frame;
+    };
+    await expect(drain()).rejects.toThrow(/^model_credential_rejected:/u);
+  });
+});
+
+describe('handoff (ADR-0145 D4)', () => {
+  const gateway = createScriptedGateway();
+  const request: EngineRunRequest = {
+    runId: '6f1d0d0a-8b0a-4a1f-9b3e-1c2d3e4f5a6b',
+    sessionId: '2b0f5f2a-91a4-4a0e-9a1a-9f7a1b2c3d4e',
+    projectKey: PROJECT_KEY,
+    cwd: '/workspace/conformance',
+    prompt: 'go',
+    engine: CLAUDE_AGENT_SDK_ENGINE_ID,
+    portable: AGENT,
+    policy: { ...POLICY, handoff: true },
+    session: { mode: 'fresh' },
+    gateway: gateway.connection,
+    resources: { files: [], skills: [] },
+    env: { PATH: '/usr/bin', ANTHROPIC_AUTH_TOKEN: gateway.connection.token },
+  };
+  const handoffTool = 'mcp__agent-workspace__handoff_to_person';
+
+  async function frameNames(handoff: { reason: string } | null): Promise<string[]> {
+    const replay = replayingStarter();
+    const connection = createClaudeAgentSdkEngine((start, deps) => ({
+      ...replay(start, deps),
+      handoff: () => handoff,
+    })).start(request);
+    const names: string[] = [];
+    for await (const frame of connection.frames) names.push(frame.frame);
+    return names;
+  }
+
+  it('auto-approves the tool and hands the opt-in to the run starter only when it is on', () => {
+    const on = CLAUDE_AGENT_SDK_ENGINE_ADAPTER.compile(request);
+    expect(on.ok && on.compiled.allowedTools).toContain(handoffTool);
+    expect(on.ok && on.compiled.handoff).toBe(true);
+    const starter = vi.fn(replayingStarter());
+    createClaudeAgentSdkEngine(starter).start(request);
+    expect(starter.mock.calls[0]?.[0]).toMatchObject({ handoff: true });
+
+    const off = CLAUDE_AGENT_SDK_ENGINE_ADAPTER.compile({ ...request, policy: POLICY });
+    expect(off.ok && off.compiled.allowedTools).not.toContain(handoffTool);
+    expect(off.ok && off.compiled.handoff).toBeUndefined();
+    const offStarter = vi.fn(replayingStarter());
+    createClaudeAgentSdkEngine(offStarter).start({ ...request, policy: POLICY });
+    expect(offStarter.mock.calls[0]?.[0]).toMatchObject({ handoff: undefined });
+  });
+
+  it('refuses a connector named like the server that now carries the tool', () => {
+    const refused = CLAUDE_AGENT_SDK_ENGINE_ADAPTER.compile({
+      ...request,
+      portable: {
+        ...AGENT,
+        mcpServers: { 'agent-workspace': { type: 'http', url: 'https://example.test/mcp' } },
+      },
+    });
+    expect(refused).toMatchObject({ ok: false, code: 'engine_policy_invalid' });
+  });
+
+  it('ends the frames with agent.handoff after agent.result, with the reason', async () => {
+    const replay = replayingStarter();
+    const connection = createClaudeAgentSdkEngine((start, deps) => ({
+      ...replay(start, deps),
+      handoff: () => ({ reason: 'The visitor asked for a person.' }),
+    })).start(request);
+    const frames = [];
+    for await (const frame of connection.frames) frames.push(frame);
+    expect(frames.slice(-2).map((frame) => frame.frame)).toEqual(['agent.result', 'agent.handoff']);
+    expect(frames.at(-1)).toMatchObject({ reason: 'The visitor asked for a person.' });
+  });
+
+  it('emits no agent.handoff when the model did not hand off', async () => {
+    expect(await frameNames(null)).not.toContain('agent.handoff');
   });
 });

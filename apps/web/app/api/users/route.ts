@@ -18,7 +18,8 @@
  */
 import { refusingLocalRuntimeKey } from '../../../server/cli-auth/local-runtime-key-guard';
 import { createUser, listUsers } from '../../../server/rbac/handlers';
-import { authorise, readJsonBody, toResponse } from '../../../server/rbac/http';
+import { readJsonBody } from '../../../server/http/result';
+import { authorise, toResponse } from '../../../server/rbac/http';
 
 // The repository-wide route invariant (`tests/route-inventory.test.ts`): every route runs on the
 // Node runtime and none is prerendered. Correct here independently of the gate — these handlers

@@ -4,35 +4,32 @@
  * It does four things the platform does not:
  *
  * 1. **Says who the customer is.** The site's own session knows the signed-in customer; the agent
- *    and its connector do not (a connector's credential is the agent's, RF-102). The backend mints
- *    a short-lived signed token for that customer and puts it in the prompt; the CRM server
- *    refuses any history call whose token does not verify or names someone else.
+ *    does not. The backend starts the run with `subject: customerId`; the platform signs it into
+ *    the `x-aw-identity` header of every call to the CRM connector (ADR-0142), and the CRM reads
+ *    the customer from that assertion. Nothing about who is asking is in the prompt.
  * 2. **Keeps the conversation.** The first message starts a session; every later message passes
  *    the same `sessionId`, so the agent remembers what was said.
- * 3. **Routes handoffs.** A run has no handoff event, so the backend reads the answer: the skill's
- *    phrase 「担当者におつなぎします」 and its 〔引継ぎ: 理由〕 tag become `{ handoff: true, reason }`
- *    for the operator queue.
+ * 3. **Routes handoffs.** The agent passes the customer to a person with `handoff_to_person`
+ *    (`engine.handoff`); the run's `agent.handoff` frame becomes `{ handoff: true, reason }` for the
+ *    operator queue, and nothing is read out of the reply text.
  * 4. **Checks the answer before it leaves.** No phone number, e-mail or address pattern and no
  *    refund promise may reach the customer, whatever the model wrote. A withheld answer is
  *    replaced by a handoff, never shown.
  */
 import type { AgentWorkspaceClient } from '@indx-workspace/sdk';
+import { z } from 'zod';
 
-import { runAndRead, type ToolCall } from '../../shared/run-answer.ts';
-import { mintCustomerToken } from '../lib/customer-token.mjs';
+import { readRun, runAndRead, type RunReading, type ToolCall } from '../../shared/run-answer.ts';
 import { findPii, type PiiFinding } from '../lib/pii.mjs';
 
-export const HANDOFF_PHRASE = '担当者におつなぎします';
+/** The `reason` of a handoff the guard made when it withheld the agent's answer. */
+export const GUARD_REASON = 'guard';
 
-export const HANDOFF_REASONS = ['identity', 'refund', 'complaint', 'other', 'guard'] as const;
-export type HandoffReason = (typeof HANDOFF_REASONS)[number];
-
-const REASON_TAGS: Readonly<Record<string, HandoffReason>> = {
-  本人確認: 'identity',
-  返金: 'refund',
-  苦情: 'complaint',
-  その他: 'other',
-};
+export const ChatAnswerSchema = z.object({
+  reply: z
+    .string()
+    .describe('お客様に見せる回答。引継ぎのときは「担当者におつなぎします」を含める'),
+});
 
 /** Promises only an operator may make (the skill bans them; the backend enforces it). */
 const REFUND_PROMISE = /返金(?:いた|致)?します|返金させていただきます|全額お返し|補償いたします/u;
@@ -49,10 +46,6 @@ export interface ChatInput {
   readonly message: string;
   /** The conversation's session; omit on the first message. */
   readonly sessionId?: string;
-  /** The HMAC secret shared with the CRM server, at least 32 characters. */
-  readonly tokenSecret: string;
-  /** Seconds since the epoch; tests pin it. */
-  readonly now?: number;
 }
 
 export interface ChatReply {
@@ -62,8 +55,8 @@ export interface ChatReply {
   /** The run, for `aw runs rate` when the customer presses thumbs-down. */
   readonly runId: string;
   readonly handoff: boolean;
-  /** Why the conversation goes to an operator; null when it does not. */
-  readonly reason: HandoffReason | null;
+  /** Why the conversation goes to an operator: the agent's `handoff_to_person` reason, or {@link GUARD_REASON}. */
+  readonly reason: string | null;
   /** Set when the guard replaced the agent's answer: what it found (never shown to the customer). */
   readonly withheld: {
     readonly pii: readonly PiiFinding[];
@@ -83,28 +76,22 @@ function field(call: ToolCall, key: string): string | null {
   return typeof value === 'string' ? value : null;
 }
 
-/** The prompt one turn sends: the backend's session header, then the customer's words. */
-export function composePrompt(customerId: string, token: string, message: string): string {
-  return [
-    '【顧客セッション】',
-    `customerId: ${customerId}`,
-    `token: ${token}`,
-    '',
-    '【お客様のメッセージ】',
-    message,
-  ].join('\n');
-}
-
-/** Read `〔引継ぎ: 理由〕` from an answer that hands off; `other` when the tag is missing. */
-export function handoffReason(answer: string): HandoffReason | null {
-  if (!answer.includes(HANDOFF_PHRASE)) return null;
-  const tag = /〔引継ぎ[:：]\s*([^〕]+)〕/u.exec(answer)?.[1]?.trim();
-  return (tag === undefined ? undefined : REASON_TAGS[tag]) ?? 'other';
-}
-
-/** Remove the routing tag before the customer sees the answer. */
-const withoutTag = (answer: string): string =>
-  answer.replace(/\s*〔引継ぎ[:：][^〕]*〕/gu, '').trim();
+/**
+ * The trigger a mail provider's inbound-parse webhook posts to (ADR-0144): the parsed message is the
+ * body and its Message-ID is the `Idempotency-Key`. A mail's sender address proves nobody, so the
+ * run has no `subject` and the CRM refuses its history tools: this path answers from the FAQ. `outputSchema` (ADR-0154)
+ * makes the run answer in `ChatAnswerSchema`, so {@link chatFromRun} reads a typed reply from it.
+ */
+export const INBOUND_MAIL_TRIGGER = {
+  kind: 'webhook',
+  name: 'customer-inquiry-mail',
+  prompt: [
+    '届いたお問い合わせメールへの返信案を書いてください。',
+    'メール（JSON）:',
+    '{{body}}',
+  ].join('\n'),
+  outputSchema: ChatAnswerSchema,
+} as const;
 
 export async function chat(
   aw: AgentWorkspaceClient,
@@ -113,20 +100,36 @@ export async function chat(
 ): Promise<ChatReply> {
   const message = input.message.trim();
   if (message === '') throw new Error('message must not be empty');
-  const token = mintCustomerToken(input.tokenSecret, input.customerId, {
-    ...(input.now === undefined ? {} : { now: input.now }),
-  });
-  const reading = await runAndRead(aw, agentId, {
-    prompt: composePrompt(input.customerId, token, message),
-    sessionId: input.sessionId ?? null,
-  });
+  const reading = await runAndRead(
+    aw,
+    agentId,
+    {
+      prompt: message,
+      subject: input.customerId,
+      sessionId: input.sessionId ?? null,
+    },
+    ChatAnswerSchema,
+  );
+  return checkedReply(reading);
+}
+
+/**
+ * The reply to a mail whose run the inbound-mail trigger started: read the run's typed answer and
+ * check it as {@link chat} does. `runId` is the `202 { run }` id of the firing; this starts no run.
+ */
+export async function chatFromRun(aw: AgentWorkspaceClient, runId: string): Promise<ChatReply> {
+  return checkedReply(await readRun(aw, runId, ChatAnswerSchema));
+}
+
+function checkedReply(reading: RunReading<z.output<typeof ChatAnswerSchema>>): ChatReply {
+  const { reply } = reading.output;
 
   const interactionsRead = reading.toolCalls
-    .filter((call) => toolIs(call, 'get_interaction') && !call.isError)
+    .filter((call) => toolIs(call, 'getInteraction') && !call.isError)
     .flatMap((call) => field(call, 'id') ?? []);
   const queries = reading.toolCalls
-    .filter((call) => toolIs(call, 'search_history') || toolIs(call, 'search_faq'))
-    .flatMap((call) => field(call, 'query') ?? []);
+    .filter((call) => toolIs(call, 'searchInteractions') || toolIs(call, 'search_files'))
+    .flatMap((call) => field(call, 'q') ?? field(call, 'query') ?? []);
   const base = {
     sessionId: reading.run.sessionId,
     runId: reading.run.id,
@@ -134,26 +137,25 @@ export async function chat(
     queries,
   };
 
-  // Defence in depth: the CRM server already masks, but the model also sees what the customer
+  // Defence in depth: the CRM API already masks, but the model also sees what the customer
   // typed, and a model can be talked into repeating anything it has seen.
-  const pii = findPii(reading.answer, { allow: PUBLIC_NUMBERS });
-  const refundPromise = REFUND_PROMISE.test(reading.answer);
+  const pii = findPii(reply, { allow: PUBLIC_NUMBERS });
+  const refundPromise = REFUND_PROMISE.test(reply);
   if (pii.length > 0 || refundPromise) {
     return {
       ...base,
       text: WITHHELD_ANSWER,
       handoff: true,
-      reason: 'guard',
+      reason: GUARD_REASON,
       withheld: { pii, refundPromise },
     };
   }
 
-  const reason = handoffReason(reading.answer);
   return {
     ...base,
-    text: withoutTag(reading.answer),
-    handoff: reason !== null,
-    reason,
+    text: reply.trim(),
+    handoff: reading.handoff !== null,
+    reason: reading.handoff,
     withheld: null,
   };
 }

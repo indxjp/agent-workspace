@@ -50,6 +50,27 @@ describe('ENGINE_CATALOGUE', () => {
     expect(ENGINE_IDS.filter((id) => !isWithholdingEngine(id))).toStrictEqual(['claude-agent-sdk']);
   });
 
+  it('states the entry field each engine upserts its session entries on', () => {
+    expect(ENGINE_CATALOGUE['claude-agent-sdk'].sessionEntryKey).toBe('uuid');
+    expect(ENGINE_CATALOGUE.pi.sessionEntryKey).toBe('id');
+    expect(ENGINE_CATALOGUE.mastra.sessionEntryKey).toBe('key');
+    expect(ENGINE_CATALOGUE['openai-agents'].sessionEntryKey).toBeNull();
+  });
+
+  it('declares structured output for every engine but pi', () => {
+    expect(ENGINE_CATALOGUE['claude-agent-sdk'].structuredOutput).toBe(true);
+    expect(ENGINE_CATALOGUE['openai-agents'].structuredOutput).toBe(true);
+    expect(ENGINE_CATALOGUE.pi.structuredOutput).toBe(false);
+    expect(ENGINE_CATALOGUE.mastra.structuredOutput).toBe(true);
+  });
+
+  it('declares approvals for the Claude Agent SDK alone', () => {
+    expect(ENGINE_CATALOGUE['claude-agent-sdk'].approvals).toBe(true);
+    expect(ENGINE_CATALOGUE['openai-agents'].approvals).toBe(false);
+    expect(ENGINE_CATALOGUE.pi.approvals).toBe(false);
+    expect(ENGINE_CATALOGUE.mastra.approvals).toBe(false);
+  });
+
   it('shows the model an MCP tool the way each engine does', () => {
     expect(mcpToolName(ENGINE_CATALOGUE['claude-agent-sdk'].mcpToolName, 's', 't')).toBe(
       'mcp__s__t',
@@ -73,7 +94,7 @@ describe('engineSettingsSchema', () => {
 });
 
 describe('AgentPolicySchema arms', () => {
-  it('lists the keys in wire order: engine, settings, narrowing, skills, limits', () => {
+  it('lists the keys in wire order: engine, settings, narrowing, requireApproval and handoff (Claude only), skills, limits', () => {
     for (const option of AgentPolicySchema.options) {
       const { shape } = option.unwrap();
       const id = shape.engine.value;
@@ -83,6 +104,7 @@ describe('AgentPolicySchema arms', () => {
         'engine',
         ...Object.keys(ENGINE_CATALOGUE[id].settings),
         narrowing,
+        ...(id === 'claude-agent-sdk' ? ['requireApproval', 'handoff'] : []),
         'skills',
         'limits',
       ]);

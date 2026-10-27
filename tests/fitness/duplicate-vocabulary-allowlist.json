@@ -1,0 +1,6 @@
+[
+  "apps/web/server/rbac/roles.ts::MEMBERSHIP_ROLES",
+  "packages/core/src/db/repositories/agent-version-evaluations.ts::EVALUATION_RUN_STATUSES",
+  "packages/core/src/db/schema/memberships.ts::MEMBERSHIP_ROLES",
+  "packages/core/src/db/schema/runs.ts::TERMINAL_RUN_STATUSES"
+]

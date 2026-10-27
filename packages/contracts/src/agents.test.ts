@@ -3,7 +3,13 @@ import { describe, expect, it } from 'vitest';
 import {
   AGENT_PERMISSION_KEYS,
   AGENT_POLICY_PROBLEM_CODES,
+  agentRequestIssueMessages,
   AgentGrantsSchema,
+  AgentResourceSchema,
+  BUILTIN_AGENT_KEYS,
+  BUILTIN_AGENT_PROBLEM_CODES,
+  BuiltinAgentKeySchema,
+  AgentResourceAssignmentsSchema,
   AgentPolicyResponseSchema,
   AgentPolicySchema,
   AgentSkillPolicySchema,
@@ -11,10 +17,92 @@ import {
   CLAUDE_PERMISSION_TOOL_DENIALS,
   claudeBaseToolPolicyFor,
   claudeDeniedToolsFor,
+  CreateAgentInputSchema,
   CreateAgentWithAssignmentsResponseSchema,
   PortablePolicyBaseSchema,
+  UpdateAgentPatchSchema,
   type PortablePolicyBase,
 } from './agents.js';
+
+describe('built-in agents (#1848)', () => {
+  it('has the one key, and the read-only problem code at 403', () => {
+    expect(BUILTIN_AGENT_KEYS).toEqual(['builder']);
+    expect(BuiltinAgentKeySchema.safeParse('other').success).toBe(false);
+    expect(BUILTIN_AGENT_PROBLEM_CODES).toEqual({ builtin_agent_read_only: 403 });
+  });
+
+  it('carries the marker on a resource only as a known key', () => {
+    const resource = {
+      id: '6f1a2b3c-4d5e-4f60-8a7b-8c9d0e1f2a3b',
+      workspaceId: '7a1a2b3c-4d5e-4f60-8a7b-8c9d0e1f2a3b',
+      ownerPrincipalId: '8a1a2b3c-4d5e-4f60-8a7b-8c9d0e1f2a3b',
+      name: 'builder',
+      instructions: '',
+      modelConnectionId: null,
+      model: null,
+      runtimeProfileId: null,
+      permissions: {
+        readFiles: false,
+        writeFiles: false,
+        runCommands: false,
+        unrestrictedNetwork: false,
+      },
+      createdBy: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    expect(AgentResourceSchema.safeParse({ ...resource, builtin: 'builder' }).success).toBe(true);
+    expect(AgentResourceSchema.safeParse(resource).success).toBe(true);
+    expect(AgentResourceSchema.safeParse({ ...resource, builtin: 'other' }).success).toBe(false);
+  });
+});
+
+describe('agent lineage and archive on the resource (#1851)', () => {
+  const resource = {
+    id: '6f1a2b3c-4d5e-4f60-8a7b-8c9d0e1f2a3b',
+    workspaceId: '7a1a2b3c-4d5e-4f60-8a7b-8c9d0e1f2a3b',
+    ownerPrincipalId: '8a1a2b3c-4d5e-4f60-8a7b-8c9d0e1f2a3b',
+    name: 'Made by the builder',
+    instructions: '',
+    modelConnectionId: null,
+    model: null,
+    runtimeProfileId: null,
+    permissions: {
+      readFiles: false,
+      writeFiles: false,
+      runCommands: false,
+      unrestrictedNetwork: false,
+    },
+    createdBy: null,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  };
+  const lineage = {
+    agentId: '9a1a2b3c-4d5e-4f60-8a7b-8c9d0e1f2a3b',
+    version: 1,
+    runId: 'run_abc',
+  };
+  const parses = (extra: Record<string, unknown>): boolean =>
+    AgentResourceSchema.safeParse({ ...resource, ...extra }).success;
+
+  it('accepts lineage and archivedAt, each optional', () => {
+    expect(parses({ createdByAgent: lineage })).toBe(true);
+    expect(parses({ archivedAt: '2026-02-01T00:00:00.000Z' })).toBe(true);
+    expect(parses({})).toBe(true);
+  });
+
+  it('keeps the lineage version and run when the creating agent is gone', () => {
+    expect(parses({ createdByAgent: { ...lineage, agentId: null } })).toBe(true);
+  });
+
+  it('refuses a partial, malformed or unknown-key lineage and a non-date archivedAt', () => {
+    expect(parses({ createdByAgent: { agentId: lineage.agentId, version: 1 } })).toBe(false);
+    expect(parses({ createdByAgent: { ...lineage, version: 0 } })).toBe(false);
+    expect(parses({ createdByAgent: { ...lineage, runId: '' } })).toBe(false);
+    expect(parses({ createdByAgent: { ...lineage, extra: true } })).toBe(false);
+    expect(parses({ archivedAt: 'yesterday' })).toBe(false);
+  });
+});
 
 describe('AGENT_POLICY_PROBLEM_CODES', () => {
   it('maps every code to its status, the ceiling refusal included (issue #524)', () => {
@@ -30,6 +118,55 @@ describe('AGENT_POLICY_PROBLEM_CODES', () => {
       policy_cannot_widen: 403,
       agent_policy_not_configured: 503,
     });
+  });
+});
+
+describe('AgentResourceAssignmentsSchema skill pins', () => {
+  const base = { files: [], skillIds: ['s1'], connectorIds: [] };
+
+  it('accepts old payloads and a pin on an assigned skill', () => {
+    expect(AgentResourceAssignmentsSchema.safeParse(base).success).toBe(true);
+    expect(
+      AgentResourceAssignmentsSchema.safeParse({ ...base, skillRevisions: { s1: 2 } }).success,
+    ).toBe(true);
+  });
+
+  it('refuses a pin on an unassigned skill, revision 0 and the word latest', () => {
+    for (const skillRevisions of [{ s2: 1 }, { s1: 0 }, { s1: 'latest' }]) {
+      expect(AgentResourceAssignmentsSchema.safeParse({ ...base, skillRevisions }).success).toBe(
+        false,
+      );
+    }
+  });
+});
+
+describe('AgentResourceAssignmentsSchema storage grants', () => {
+  const stored = { files: [], skillIds: [], connectorIds: [] };
+  const grant = {
+    connectionId: '11111111-1111-4111-8111-111111111111',
+    prefix: 'reports/2026',
+    access: 'read',
+  };
+
+  // @story US-STO-12
+  it('[US-STO-12][contract][sdk] reads an assignment stored before the field existed as no grants', () => {
+    expect(AgentResourceAssignmentsSchema.parse(stored).storageGrants).toEqual([]);
+  });
+
+  // @story US-STO-12
+  it('[US-STO-12][contract][sdk] accepts a grant by connection id and refuses a name, an unknown access or a stray key', () => {
+    expect(
+      AgentResourceAssignmentsSchema.safeParse({ ...stored, storageGrants: [grant] }).success,
+    ).toBe(true);
+    for (const bad of [
+      { ...grant, connectionId: 'acme-data' },
+      { ...grant, access: 'write' },
+      { ...grant, name: 'acme-data' },
+    ]) {
+      expect(
+        AgentResourceAssignmentsSchema.safeParse({ ...stored, storageGrants: [bad] }).success,
+      ).toBe(false);
+    }
   });
 });
 
@@ -408,5 +545,48 @@ describe('the Claude permission floor (ENG-04b, #325)', () => {
     for (const key of AGENT_PERMISSION_KEYS) {
       expect(CLAUDE_PERMISSION_TOOL_DENIALS[key].length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('the agent request schemas', () => {
+  const permissions = {
+    readFiles: true,
+    writeFiles: false,
+    runCommands: false,
+    unrestrictedNetwork: false,
+  };
+
+  it('normalises a create body: the name trimmed, nothing else changed', () => {
+    const body = {
+      name: ' Support ',
+      instructions: ' ',
+      modelConnectionId: null,
+      model: null,
+      permissions,
+    };
+    expect(CreateAgentInputSchema.parse(body)).toEqual({
+      ...body,
+      name: 'Support',
+    });
+  });
+
+  it('reports unknown keys before its fields, one line each', () => {
+    const parsed = UpdateAgentPatchSchema.safeParse({
+      permissions: { readFiles: 1, x: true },
+      y: 1,
+    });
+    expect(parsed.success ? [] : agentRequestIssueMessages(parsed.error.issues)).toEqual([
+      'y is not a field of an agent; expected some of name, instructions, modelConnectionId, model, runtimeProfileId, permissions.',
+      'permissions.x is not a permission this platform knows; expected exactly readFiles, writeFiles, runCommands, unrestrictedNetwork.',
+      'permissions.readFiles must be a boolean; received a number.',
+      'permissions.writeFiles is required; it has no default.',
+      'permissions.runCommands is required; it has no default.',
+      'permissions.unrestrictedNetwork is required; it has no default.',
+    ]);
+  });
+
+  it('bounds lengths in UTF-16 code units', () => {
+    expect(UpdateAgentPatchSchema.safeParse({ name: '😀'.repeat(100) }).success).toBe(true);
+    expect(UpdateAgentPatchSchema.safeParse({ name: '😀'.repeat(101) }).success).toBe(false);
   });
 });

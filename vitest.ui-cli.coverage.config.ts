@@ -28,10 +28,10 @@ export default defineConfig({
       thresholds: {
         // Measured independently from server/package coverage so UI and CLI regressions cannot be
         // diluted by well-covered infrastructure. Ratchet upward with interaction coverage.
-        lines: 47,
-        functions: 39,
-        statements: 46,
-        branches: 45,
+        lines: 70,
+        functions: 61,
+        statements: 68,
+        branches: 66,
       },
     },
   },

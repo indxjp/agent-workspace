@@ -1,20 +1,44 @@
 # CI: the Nx task graph and its remote cache
 
 Decisions: [ADR-0053](../adr/0053-ci-runs-on-nx-and-blacksmith-never-on-a-self-hosted-runner.md)
-(Nx; runners per its 2026-10-16 amendment), [ADR-0110](../adr/0110-nx-cloud-is-replaced-by-a-self-hosted-oidc-gated-remote-cache.md)
+(Nx; runners per its 2026-10-23 amendment), [ADR-0110](../adr/0110-nx-cloud-is-replaced-by-a-self-hosted-oidc-gated-remote-cache.md)
 (Nx Cloud → self-hosted cache). Operator steps: the operator runbook (maintainers' copy).
 
 ## What runs where
 
-Every workflow runs on ephemeral VMs, never a self-hosted runner. Every job runs on GitHub's
-`ubuntu-latest` except the four that set a run's length (`formal`, `generated-project-e2e`,
-`journey-e2e`, `tool-sandbox-e2e`). Those run on the label in the repository variable
-`CI_BOTTLENECK_RUNNER` (`blacksmith-4vcpu-ubuntu-2404`), and on `ubuntu-latest` when it is unset
-(ADR-0053, Amendments 2026-10-16). `scripts/check-workflows.mjs` refuses the variable on any other
-job. If Blacksmith stops picking jobs up, delete the variable
-(`gh variable delete CI_BOTTLENECK_RUNNER`) and re-run. In `ci.yml`, the `build` job runs `nx run-many -t build`
+Trigger tiers (ADR-0053, Amendments 2026-10-19 and 2026-10-24, second): a pull request runs the inner
+loop; the merge queue runs the same loop on the merged commit, plus `formal` and `image-scan` when the
+diff reaches them; the heavy tier (the Docker and end-to-end jobs, coverage, the release checks) runs
+nightly on `main` and as the release gate, which `publish-packages.yml` and `images.yml` call with
+`full: true` before they publish; a push to `main` only builds and writes the cache. A failed nightly
+opens or updates an issue (`nightly-alarm.yml`). The label `ci:full` on a pull request runs the heavy
+tier early, from the next push after it is added. A body edit re-runs the fast checks only, even on a
+`ci:full` pull request.
+
+Every Linux job runs on the organisation's self-hosted MS-A2 pool, `[self-hosted, ms-a2]`: eight
+runners on one host (`ito-MS-A2`, `ito-MS-A2-2` … `-8`), so up to eight jobs run at once and share
+its Docker daemon. The Windows jobs (`blacksmith-4vcpu-windows-2025`) and the macOS install
+lane (`blacksmith-6vcpu-macos-latest`) stay on Blacksmith, and so do the few long Linux jobs that held
+a pool slot longest per Blacksmith dollar or need a Docker daemon of their own: the inner-loop
+`typecheck · Nx task graph`, `lint · Nx task graph` and the four `tests · <shard>` jobs (ADR-0053,
+Amendment 2026-10-25), `formal`,
+`journey-e2e`, `docs-claims`, `tool-sandbox-e2e` and `browser` (`blacksmith-8vcpu-ubuntu-2404`), `OSS export ·
+dry run` (`blacksmith-2vcpu-ubuntu-2404`) and the isolation `kind` and `kind-deploy` lanes
+(`blacksmith-4vcpu-ubuntu-2404`) (ADR-0053, second Amendment 2026-10-23). In `ci.yml`, `quality.yml`,
+`security.yml`, `internal-checks.yml` and `ci-nx-cache.yml`, `scripts/check-workflows.mjs` refuses any
+label but `[self-hosted, ms-a2]`, except the Blacksmith label of the `ci.yml` jobs above (`OFFLOADED_JOBS`; ADR-0053, Amendments 2026-10-23 and 2026-10-25). The same files run in the public export, so each of those `runs-on` is an expression on
+`github.repository_owner` that falls back to `ubuntu-latest` (or `windows-latest`) outside INDXDev,
+and every job of the workflows that spend money (the live, cloud and deployment lanes, the Nx cache
+gate and the nightly alarm) starts with `if: github.repository_owner == 'INDXDev'`; the export gate
+refuses any other runner in the public tree (ADR-0053, Amendment 2026-10-26). Because the host is shared and
+kept, a job publishes its PostgreSQL service and emulators on random host ports, names its containers
+per runner (`$RUNNER_NAME`) and removes them when it ends. The two Compose E2Es
+(`generated-project-e2e`, `tool-sandbox-e2e`) publish on ports `scripts/ci/free-ports.mjs` picks,
+not 3000, and the coverage floors cap Vitest at 8 workers; the steps that delete preinstalled SDKs,
+prune Docker or add swap are skipped on it. In `ci.yml`, the `build` job runs `nx run-many -t build`
 once for every workspace but `@indx-workspace/embedded` and uploads the outputs as the
-`workspace-build` artifact. Beside it, `build-embedded` runs embedded's webpack build, uploads
+`workspace-build` artifact; on MS-A2 it also copies the archive into the host's handoff directory
+(`$AW_CI_HANDOFF_DIR`), which the jobs there read instead of downloading. Beside it, `build-embedded` runs embedded's webpack build, uploads
 `embedded-build` and runs embedded's tests. The jobs that
 need built packages restore them (`.github/actions/workspace-build`) instead of building; only
 `release-checks`, `generated-project-e2e`, `journey-e2e` and `docs-claims` wait for embedded. `release-images` (the runtime, gateway and egress-proxy image
@@ -30,7 +54,8 @@ while the job installs. The jobs that need embedded run after `build` only, besi
 `.github/actions/workspace-build` waits for its artifact; `generated-project-e2e` and
 `tool-sandbox-e2e` (which needs no build job at all) build their Docker images before that wait.
 `journey-e2e` runs the journey and the first-hour stopwatch as two matrix legs, and `docs-claims`
-runs its pages as three shards (`run.mjs --shard i/3`), each with its own report. A pull request runs typecheck, lint and
+runs its pages on one runner, leaving the pages whose only block is quickstart.mdx's install block to
+the first-hour leg, which runs that block on the same container. A pull request runs typecheck, lint and
 tests for `nx affected` against its merge base with `main`; a push to `main` runs the whole graph.
 
 `ci-success` is the one check branch protection requires. It needs `fast-checks`, `build`,
@@ -39,9 +64,9 @@ code tool pushed, run in its tool sandbox and promoted on the Compose stack). A 
 `ci-success`, so a required job never has a job-level `if:`; it filters paths inside a step and
 ends green when the diff does not reach it. The developer journey moved from its own workflow
 (`journey-e2e.yml`) into `ci.yml` (#514), so a red journey run blocks merges. It takes on
-`ci.yml`'s triggers and concurrency, which is a trade-off: an `edited` pull request event (a title
-or body change, which the ownership gate needs) re-runs it, and a superseded run is cancelled, on
-`main` too. A `main` commit that a quick follow-up merge supersedes therefore records no
+`ci.yml`'s triggers and concurrency. An `edited` pull request event (a title or body change, which
+the PR-body gates need) runs only the fast checks in a concurrency group of its own, so it never
+cancels the code run; `scripts/check-workflows.mjs` enforces that split. A `main` commit that a quick follow-up merge supersedes may record no
 `journey-timings`; read the measurement from the latest `main` run whose journey reached its report
 (the upload warns rather than fails when the file is missing), or re-measure any ref with
 `workflow_dispatch`.

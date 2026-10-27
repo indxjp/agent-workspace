@@ -15,15 +15,15 @@
 # | `runner` | runner | The §14.3 HTTP contract, `local` driver. Reachable only from `web`. |
 # | `gateway` | gateway | Anthropic-compatible model gateway. Not published. |
 # | `postgres` | postgres | `postgres:17`. Not published. |
-# | `seaweedfs` | storage | S3-compatible object storage. Not published. |
+# | `seaweedfs` | storage | S3-compatible object storage. Published on 127.0.0.1:8333 only. |
 #
 # §33: *"Five components are enough. Do not split things merely because 'microservices are
 # scalable.'"* There is no sixth long-running service and no sixth service to create a bucket.
 # A one-shot `migrate` container runs the migrations before `web` starts (ADR-0122) and exits;
 # `web`'s entry point still runs them as an idempotent no-op (see `Dockerfile`). The bucket is
-# created by `web`'s composition root on first boot (`ensureS3Bucket`, idempotent), so no
-# `mc`-style init container exists — a service that exists only to create a bucket is the sixth
-# service this section exists to prevent.
+# created by `web`'s composition root on first boot, because `AW_STORAGE_CREATE_BUCKET` is `true`
+# below (`createBucketIfMissing`, idempotent), so no `mc`-style init container exists — a service
+# that exists only to create a bucket is the sixth service this section exists to prevent.
 #
 # Sandbox containers are not here either, and that is spec A.4's rule rather than an omission:
 # *"runtimes — created on demand by the docker driver, not declared in compose"*. Their image is
@@ -31,17 +31,21 @@
 #
 # ## What is published, and what is not
 #
-# Only `web`, on 127.0.0.1:3000 (put a reverse proxy in front to serve other hosts, as
-# docs/deploy/single-vm.md does). `runner`, `postgres` and `seaweedfs` are reachable on the internal
-# `agent-workspace` network and from nowhere else. That is why the Postgres credentials below are
+# `web`, on 127.0.0.1:3000 (put a reverse proxy in front to serve other hosts, as
+# docs/deploy/single-vm.md does), and `seaweedfs`'s signed S3 gateway, on 127.0.0.1:8333: a browser
+# sends a file above 64 MiB straight to the store through a signed link, so the store must be
+# reachable from the host. `web` signs those links for the `publicEndpoint` in `AW_STORAGE_URL`,
+# because SigV4 signs the Host header and `seaweedfs` is not a name the host resolves. `runner`, `postgres`
+# and the rest of `seaweedfs` are reachable on the internal `agent-workspace` network and from
+# nowhere else. That is why the Postgres credentials below are
 # literals in this file rather than variables: they authenticate a service to a service across a
 # private bridge network, they are not the deployment's secrets, and promoting them to `.env`
 # would put two more values in a file spec §37 wants to stay small while protecting nothing.
 # The object store's key pair is the exception: `web` already read it from `.env`
 # (`OBJECT_STORAGE_ACCESS_KEY_ID` / `OBJECT_STORAGE_SECRET_ACCESS_KEY`), so `seaweedfs` reads the
 # same two variables rather than a second copy that could drift
-# (docs/adr/0067-the-bundled-object-store-is-seaweedfs.md). Publish those ports and the Postgres
-# reasoning stops holding — the header on each service says so.
+# (docs/adr/0067-the-bundled-object-store-is-seaweedfs.md). Publish the Postgres or runner ports and
+# that reasoning stops holding — the header on each service says so.
 #
 # ## The one privileged capability that is deliberately absent
 #
@@ -77,14 +81,31 @@ services:
       seaweedfs:
         condition: service_healthy
     environment:
-      # The four §37 values. `DATABASE_URL` and `OBJECT_STORAGE_ENDPOINT` name compose service
-      # hostnames, so a `.env` copied unedited works inside this network and nowhere else.
+      # The four §37 values. `DATABASE_URL` and the endpoint in `AW_STORAGE_URL` name compose
+      # service hostnames, so a `.env` copied unedited works inside this network and nowhere else.
       DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env — copy .env.example}
       MASTER_ENCRYPTION_KEY: ${MASTER_ENCRYPTION_KEY:-}
-      OBJECT_STORAGE_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:-http://seaweedfs:8333}
-      OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:-agent-workspace}
-      OBJECT_STORAGE_FORCE_PATH_STYLE: 'true'
+      # Where files, skills and session state are kept. `.env.example`'s value is the bundled
+      # `seaweedfs` below; its `publicEndpoint` is the host signed links name, so keep it in step
+      # with the `seaweedfs` port binding. There is no default: nothing invents a storage location.
+      AW_STORAGE_URL: ${AW_STORAGE_URL:?set AW_STORAGE_URL in .env — copy .env.example}
+      # The bundled `seaweedfs` starts empty, so `web` creates the bucket on first boot.
+      AW_STORAGE_CREATE_BUCKET: 'true'
+      # The old storage names are forwarded only so a leftover value in `.env` draws the one
+      # storage_setting_ignored warning; the server reads nothing from them.
+      AW_FILE_STORAGE_ROOT: ${AW_FILE_STORAGE_ROOT:-}
+      AW_SKILL_STORAGE_ROOT: ${AW_SKILL_STORAGE_ROOT:-}
+      AW_SESSION_TRANSCRIPT_ROOT: ${AW_SESSION_TRANSCRIPT_ROOT:-}
+      OBJECT_STORAGE_BACKEND: ${OBJECT_STORAGE_BACKEND:-}
+      OBJECT_STORAGE_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:-}
+      OBJECT_STORAGE_PUBLIC_ENDPOINT: ${OBJECT_STORAGE_PUBLIC_ENDPOINT:-}
+      OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:-}
+      OBJECT_STORAGE_FORCE_PATH_STYLE: ${OBJECT_STORAGE_FORCE_PATH_STYLE:-}
       AWS_REGION: ${AWS_REGION:-us-east-1}
+      # The largest file a signed link may carry (the storage design, §04 "Size limits"); 5 GiB is
+      # the contract's hard maximum. Files above 64 MiB reach the store directly, so the store's
+      # public endpoint must be reachable from the browser and allow `PUT` from this app's origin.
+      AW_STORAGE_SIGNED_UPLOAD_MAX_BYTES: ${AW_STORAGE_SIGNED_UPLOAD_MAX_BYTES:-5368709120}
       # The same two variables create `seaweedfs`'s only S3 identity below; there is no literal
       # fallback, so a `.env` without them is refused before anything starts.
       AWS_ACCESS_KEY_ID: ${OBJECT_STORAGE_ACCESS_KEY_ID:?set OBJECT_STORAGE_ACCESS_KEY_ID in .env — copy .env.example}
@@ -120,9 +141,6 @@ services:
       # The existing operator-supplied encryption material signs short-lived internal tokens too;
       # provider credentials themselves still travel only through the Models screen.
       GATEWAY_TOKEN_SECRET: ${MASTER_ENCRYPTION_KEY:-}
-      AW_FILE_STORAGE_ROOT: /var/lib/agent-workspace/files
-      AW_SKILL_STORAGE_ROOT: /var/lib/agent-workspace/skills
-      AW_SESSION_TRANSCRIPT_ROOT: /var/lib/agent-workspace/sessions
       AW_RUNTIME_VERIFICATION_FILE: /var/lib/agent-workspace/runtime-verifications.json
       AW_SESSION_TRANSCRIPT_RETENTION_DAYS: '30'
       AW_SESSION_RETENTION_DRY_RUN: 'false'
@@ -219,6 +237,8 @@ services:
       MASTER_ENCRYPTION_KEY: ${MASTER_ENCRYPTION_KEY:-}
       GATEWAY_TOKEN_SECRET: ${MASTER_ENCRYPTION_KEY:-}
       GATEWAY_PRICING_JSON: ${GATEWAY_PRICING_JSON:?set an immutable provider:model price catalog in .env}
+      # The gateway forwards the Builder's aw-control MCP calls to web on the shared network.
+      GATEWAY_CONTROL_PLANE_ORIGIN: http://web:3000
     networks:
       - agent-workspace
       # A.4: on-demand sandbox containers join this network and can reach the gateway service;
@@ -268,7 +288,7 @@ services:
       - agent-workspace
 
   # ── seaweedfs ─────────────────────────────────────────────────────────────────────────────────
-  # §32's "Object Storage" and A.4's "storage". S3-compatible, so `OBJECT_STORAGE_ENDPOINT` can be
+  # §32's "Object Storage" and A.4's "storage". S3-compatible, so `AW_STORAGE_URL` can be
   # repointed at real S3 with no code change (§31).
   #
   # SeaweedFS 4.47 (Apache-2.0), pinned by its multi-arch image index digest — the same digest the
@@ -288,6 +308,13 @@ services:
   #   They are the same `.env` variables `web` signs with. With an identity configured SeaweedFS
   #   refuses an unsigned request with 403 and a wrongly signed one with SignatureDoesNotMatch.
   #
+  # * `-s3.allowedOrigins` is the bucket CORS for browser uploads through a signed link (a direct
+  #   `PUT`): this app's origin only, in both loopback spellings, never `*`. Change it together
+  #   with `WEB_PORT` or a public hostname.
+  #
+  # * `ports` publishes the S3 gateway on the host's loopback only, so a browser can `PUT` to a
+  #   signed link; it is still signed-only (403 unsigned) and the other ports stay unpublished.
+  #
   # The web composition root provisions its configured bucket idempotently, then isolates public
   # files and private skills beneath separate prefixes. No object-store credentials reach a browser.
   seaweedfs:
@@ -303,6 +330,7 @@ services:
         '-s3.ip.bind=0.0.0.0',
         '-s3.port.iceberg=0',
         '-s3.port.lance=0',
+        '-s3.allowedOrigins=http://localhost:${WEB_PORT:-3000},http://127.0.0.1:${WEB_PORT:-3000}',
         '-master.telemetry=false',
       ]
     environment:
@@ -316,6 +344,8 @@ services:
       timeout: 5s
       retries: 12
       start_period: 30s
+    ports:
+      - '127.0.0.1:8333:8333'
     volumes:
       - seaweedfs-data:/data
     networks:
@@ -336,6 +366,10 @@ networks:
     name: agent-workspace-runtime-control
     driver: bridge
     internal: true
+    # The runner attaches only a runtime network that carries its ownership label
+    # (packages/runtime/src/docker.ts), and refuses the run otherwise.
+    labels:
+      agent-workspace.runtime: docker-network
   tool-sandbox:
     name: agent-workspace-tool-sandbox
     driver: bridge

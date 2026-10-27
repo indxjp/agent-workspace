@@ -42,10 +42,9 @@ export interface HelmValuesArtefact {
  * does not carry that Azure-specific identity and endpoint wiring. Rendering an AKS overlay would
  * therefore offer a deployment the chart cannot serve, so it is withheld and the reason is
  * printed. The chart also mounts no volume and runs with `readOnlyRootFilesystem: true`; with
- * `storage.objects: local-filesystem`,
- * `apps/web/server/composition/storage.ts` falls back to the local-filesystem provider rooted at
- * `AW_FILE_STORAGE_ROOT`, a path that does not exist on a read-only root — and every file write
- * fails at runtime instead of at install time.
+ * `storage.objects: local-filesystem`, `AW_STORAGE_URL` is a `file://` URL that
+ * `apps/web/server/composition/storage.ts` opens on the pod's own disk, a path that does not exist
+ * on a read-only root — and every file write fails at runtime instead of at install time.
  */
 export function helmOverlaySkipReason(profile: DeploymentProfile): string | null {
   if (CHART_FLAVOURS[profile.cloud] === null) return null;

@@ -2,14 +2,18 @@ apiVersion: agentworkspace.dev/v2
 kind: Project
 name: contract-review
 engine: claude-agent-sdk
-# No connectors: the agent reads the playbook from the file store and runs one skill script
-# (contract-playbook, which reads the uploaded draft itself) in its sandbox. Both folders exist once a
-# file is uploaded into them; upload the three drafts and the playbook once:
-#   for f in data/contracts/*.docx; do aw files upload "contracts/$(basename "$f")" "$f"; done
+# No connectors: the playbook's rules are applied by one skill script (contract-playbook) in the
+# agent's sandbox, and a question about a rule is answered with the platform's search_files over the
+# granted `playbook` folder: no index server. Both folders exist once a
+# file is uploaded into them; upload the three drafts (one folder per deal team), each team's
+# scratch folder (`.gitkeep` makes `drafts/<team>` exist, so a run scoped to it can write there) and the
+# playbook once:
+#   for f in data/contracts/*/*.docx; do aw files upload "contracts/$(basename "$(dirname "$f")")/$(basename "$f")" "$f"; done
+#   for f in data/drafts/*/.gitkeep; do aw files upload "drafts/$(basename "$(dirname "$f")")/.gitkeep" "$f"; done
 #   for f in data/playbook/*.md; do aw files upload "playbook/$(basename "$f")" "$f"; done
 policy:
   permissions:
-    writeFiles: false
+    writeFiles: true
     runCommands: true
     unrestrictedNetwork: false
   limits:

@@ -57,11 +57,12 @@ import { GET as runEventsRoute } from '../../../app/api/runs/[id]/events/route';
 import { GET as readRunRoute } from '../../../app/api/runs/[id]/route';
 import { POST as createSurfaceSessionRoute } from '../../../app/p/s/[name]/sessions/route';
 import { fixtureSurface, fromVersionRequest } from '../../agent-versions/fixtures';
+import { applicationContext } from '../../application-context';
 import { issueLocalApiKey } from '../../cli-auth/local-credential';
 import type { RegisteredComposition } from '../../composition/register';
-import { currentModelsRuntime } from '../../models/runtime';
 import { mintApiKey } from '../../rbac/api-key';
-import { getRunApi, installRunApi } from '../../runs/environment';
+import { getRunApi } from '../../runs/environment';
+import { installTestRunApi } from '../../application-context-fixtures';
 
 const hasDatabase = Boolean(process.env['TEST_DATABASE_URL']?.trim());
 
@@ -73,10 +74,9 @@ if (!hasDatabase) {
 }
 
 const CONTROLLED_ENV = [
-  'AW_FILE_STORAGE_ROOT',
+  'AW_STORAGE_URL',
   'AW_LOCAL_SURFACE_SESSIONS',
   'AW_RUNTIME_VERIFICATION_FILE',
-  'AW_SKILL_STORAGE_ROOT',
   'BOOTSTRAP_ADMIN',
   'BOOTSTRAP_ADMIN_PASSWORD',
   'DATABASE_URL',
@@ -85,7 +85,6 @@ const CONTROLLED_ENV = [
   'HOSTNAME',
   'MASTER_ENCRYPTION_KEY',
   'NEXT_RUNTIME',
-  'OBJECT_STORAGE_BUCKET',
   'RUNNER_MANAGER_TOKEN',
   'RUNNER_MANAGER_URL',
   'RUNNER_URL',
@@ -232,13 +231,11 @@ describe.skipIf(!hasDatabase)('the surface session bootstrap through register() 
     process.env['AW_LOCAL_SURFACE_SESSIONS'] = '1';
     process.env['HOST'] = '127.0.0.1';
     for (const name of [
-      'AW_FILE_STORAGE_ROOT',
+      'AW_STORAGE_URL',
       'AW_RUNTIME_VERIFICATION_FILE',
-      'AW_SKILL_STORAGE_ROOT',
       'GATEWAY_TOKEN_SECRET',
       'HOSTNAME',
       'NEXT_RUNTIME',
-      'OBJECT_STORAGE_BUCKET',
       'RUNNER_MANAGER_TOKEN',
       'RUNNER_MANAGER_URL',
     ] as const) {
@@ -250,8 +247,9 @@ describe.skipIf(!hasDatabase)('the surface session bootstrap through register() 
 
     const modelList = await startModelListServer();
     modelListServer = modelList.server;
-    const modelsRuntime = currentModelsRuntime();
-    if (modelsRuntime === null) throw new Error('the composition installed no models API');
+    const models = applicationContext()?.models;
+    if (models?.kind !== 'serving') throw new Error('the composition installed no models API');
+    const modelsRuntime = models.runtime;
     const connection = await modelsRuntime.models.forWorkspace(workspaceId).create({
       name: CONNECTION_NAME,
       provider: 'anthropic',
@@ -271,7 +269,7 @@ describe.skipIf(!hasDatabase)('the surface session bootstrap through register() 
     // session takes one run at a time, so a visitor's next turn needs the last one finished.
     const installed = getRunApi();
     if (installed === null) throw new Error('the composition installed no run API');
-    installRunApi({
+    installTestRunApi({
       ...installed,
       launch: (context) => {
         ended = installed.store.finish(context.run.id, 'completed', null);

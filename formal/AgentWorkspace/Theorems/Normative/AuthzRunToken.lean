@@ -14,14 +14,14 @@ private def claims : Claims :=
 @[aw_spec (tier := T1) (ts := "packages/gateway/src/tokens/run-token.ts#createRunTokenCodec")]
 theorem verification_expires_at_boundary :
     verifyVerdict true true claims 399 = .valid claims ∧
-    verifyVerdict true true claims 400 = .expired := by decide
+    verifyVerdict true true claims 400 = .expired := by decide +kernel
 
 /-- Bad signatures or claims stay invalid even when the token is also expired. -/
 @[aw_spec (tier := T1) (ts := "packages/gateway/src/tokens/run-token.ts#createRunTokenCodec")]
 theorem invalid_verdict_precedes_expiry :
     verifyVerdict false true claims 400 = .invalid ∧
     verifyVerdict true false claims 400 = .invalid ∧
-    verifyVerdict false false claims 399 = .invalid := by decide
+    verifyVerdict false false claims 399 = .invalid := by decide +kernel
 
 /-- Gateway authentication returns the first applicable public failure in its defined order. -/
 @[aw_spec (tier := T1) (ts := "packages/gateway/src/auth.ts#authenticateGatewayRequest")]
@@ -40,7 +40,7 @@ theorem gateway_error_order :
       .deny 410 "run_deleted" ∧
     authenticate true (.valid claims) (some "run-a") .missing =
       .deny 404 "run_not_found" ∧
-    authenticate true (.valid claims) (some "run-a") .active = .allow := by decide
+    authenticate true (.valid claims) (some "run-a") .active = .allow := by decide +kernel
 
 /-- Gateway refusal uses the stable authentication error envelope. -/
 @[aw_spec (tier := T1) (ts := "packages/gateway/src/auth.ts#authenticateGatewayRequest")]
@@ -48,25 +48,25 @@ theorem gateway_error_envelope :
     gatewayEnvelope "token_revoked" = .obj
       [("type", .str "error"), ("error", .obj
         [("type", .str "authentication_error"), ("code", .str "token_revoked"),
-          ("message", .str "The gateway run token has been revoked.")])] := by decide
+          ("message", .str "The gateway run token has been revoked.")])] := by decide +kernel
 
 /-- Revoking a token distinguishes absent, active, and already revoked rows. -/
 @[aw_spec (tier := T1) (ts := "packages/core/src/db/repositories/run-tokens.ts#revoke")]
 theorem revocation_outcomes :
     (revokeOne none).2 = .notFound ∧
     (revokeOne (some { workspaceId := "w", runId := "r", tokenId := "t", tokenHash := "h", expiresAt := 200, revoked := false })).2 = .revoked ∧
-    (revokeOne (some { workspaceId := "w", runId := "r", tokenId := "t", tokenHash := "h", expiresAt := 200, revoked := true })).2 = .alreadyRevoked := by decide
+    (revokeOne (some { workspaceId := "w", runId := "r", tokenId := "t", tokenHash := "h", expiresAt := 200, revoked := true })).2 = .alreadyRevoked := by decide +kernel
 
 /-- Runner authentication requires the token's scoped identity to match the run row. -/
 @[aw_spec (tier := T1) (ts := "apps/web/server/composition/session-rbac.ts#installSessionTranscripts")]
 theorem runner_principal_checks_run_row :
     runnerPrincipal true claims (some { id := "run-a", workspaceId := "workspace", sessionId := "session", agentId := "agent" }) = true ∧
-    runnerPrincipal true claims (some { id := "run-a", workspaceId := "other", sessionId := "session", agentId := "agent" }) = false := by decide
+    runnerPrincipal true claims (some { id := "run-a", workspaceId := "other", sessionId := "session", agentId := "agent" }) = false := by decide +kernel
 
 /-- A runner principal requires the persisted session id to match its signed claim. -/
 @[aw_spec (tier := T1) (ts := "apps/web/server/composition/session-rbac.ts#installSessionTranscripts")]
 theorem runner_principal_checks_session :
     runnerPrincipal true claims (some { id := "run-a", workspaceId := "workspace", sessionId := "session", agentId := "agent" }) = true ∧
-    runnerPrincipal true claims (some { id := "run-a", workspaceId := "workspace", sessionId := "other", agentId := "agent" }) = false := by decide
+    runnerPrincipal true claims (some { id := "run-a", workspaceId := "workspace", sessionId := "other", agentId := "agent" }) = false := by decide +kernel
 
 end AgentWorkspace.Theorems.Normative.AuthzRunToken

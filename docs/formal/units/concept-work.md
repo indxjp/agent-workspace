@@ -246,7 +246,7 @@ are enforced by the repositories today.
 - **Not callable from a test:** the `resumable` derivation is inline in two handlers of
   `apps/web/server/sessions/api.ts`; the ledger's accounting derivation (`pricedCount`) is inline in
   the PostgreSQL repository's settlement transaction; the Windows device-name refusal is private
-  to `packages/core/src/schemas.ts` (it is observed through `validateTenantSessionScope`). The
+  to `packages/run-protocol/src/schemas.ts` (it is observed through `validateTenantSessionScope`). The
   `?archived=` filter is replayed against `PROJECT_LIST_FILTERS` only.
 - **Phase 4 behaviour:** project archive/restore (`409 project_archived`), session
   archive/restore (`409 session_archived`), run-token revocation, settlement (the ledger update and

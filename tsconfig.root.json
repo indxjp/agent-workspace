@@ -14,7 +14,21 @@
       "@agent-workspace/gateway/providers/registry": [
         "./packages/gateway/src/providers/registry.ts"
       ],
-      "@agent-workspace/runtime": ["./packages/runtime/src/index.ts"],
+      "@agent-workspace/runtime/driver": ["./packages/runtime/src/index.ts"],
+      "@agent-workspace/runtime/driver/local": ["./packages/runtime/src/local.ts"],
+      "@agent-workspace/runtime/driver/docker": ["./packages/runtime/src/docker.ts"],
+      "@agent-workspace/runtime/driver/kubernetes": ["./packages/runtime/src/kubernetes.ts"],
+      "@agent-workspace/runtime/driver/cloud-run": ["./packages/runtime/src/cloud-run.ts"],
+      "@agent-workspace/runtime/driver/external": ["./packages/runtime/src/external/index.ts"],
+      "@agent-workspace/runtime/driver/vercel-sandbox": [
+        "./packages/runtime/src/vercel-sandbox.ts"
+      ],
+      "@agent-workspace/runtime/driver/cloudflare-sandbox": [
+        "./packages/runtime/src/cloudflare-sandbox.ts"
+      ],
+      "@agent-workspace/runtime/driver/aca-sessions": ["./packages/runtime/src/aca-sessions.ts"],
+      "@agent-workspace/runtime/engine-images": ["./packages/runtime/src/engine-images.ts"],
+      "@agent-workspace/runtime/transfer": ["./packages/runtime/src/transfer.ts"],
       "@indx-workspace/platforms": ["./packages/platforms/src/index.ts"],
       "@indx-workspace/platforms/testing": ["./packages/platforms/src/testing/index.ts"]
     },

@@ -8,6 +8,8 @@
  * every key but {@link GOOD_KEY} and {@link GOOD_KEY_2} — and the runtime registry reports one
  * enabled driver.
  */
+import { captureLog } from '../telemetry/capture-log';
+import { log as webLogger } from '../telemetry/logger';
 import crypto from 'node:crypto';
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -42,12 +44,7 @@ import {
   configureWebRuntimeRegistry,
   type WebRuntimeRegistry,
 } from '../runtimes/registry';
-import {
-  currentSetupRuntime,
-  type SetupInput,
-  type SetupResult,
-  type SetupRuntime,
-} from '../setup/runtime';
+import type { SetupInput, SetupResult, SetupRuntime } from '../setup/runtime';
 
 import { probeModelConnection } from '../models/probe';
 
@@ -190,6 +187,9 @@ describe.skipIf(!hasDatabase)('first-run setup is atomic (issue #415, PostgreSQL
     return workspace.scope;
   }
 
+  /** The setup workflow {@link install} built last. */
+  let installed: SetupRuntime | null = null;
+
   /** Install the setup workflow over `over`, and answer the runtime it installed. */
   async function install(
     over: DatabaseRoot,
@@ -200,14 +200,14 @@ describe.skipIf(!hasDatabase)('first-run setup is atomic (issue #415, PostgreSQL
       readonly runtimeSecrets?: SecretsService | null;
     } = {},
   ): Promise<SetupRuntime> {
-    await installSetupApi(
+    const setup = await installSetupApi(
       over,
       { models, discover },
       { probeDiscover: discover, runtimeSecrets, ...options },
     );
-    const runtime = currentSetupRuntime();
-    if (runtime === null) throw new Error('the setup API was not installed');
-    return runtime;
+    if (setup.kind !== 'serving') throw new Error('the setup API was not installed');
+    installed = setup.runtime;
+    return installed;
   }
 
   /**
@@ -228,9 +228,8 @@ describe.skipIf(!hasDatabase)('first-run setup is atomic (issue #415, PostgreSQL
   }
 
   async function complete(input: SetupInput): Promise<SetupResult> {
-    const runtime = currentSetupRuntime();
-    if (runtime === null) throw new Error('the setup API was not installed');
-    return runtime.complete(input);
+    if (installed === null) throw new Error('the setup API was not installed');
+    return installed.complete(input);
   }
 
   /** Every row setup writes, as the workspace holds them now. */
@@ -518,7 +517,7 @@ describe.skipIf(!hasDatabase)('first-run setup is atomic (issue #415, PostgreSQL
     // The workspace default is the last write but one: the connection, profile, agent and setup
     // mark have landed when it is refused. One undo step is made to fail as well.
     const live = db();
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const logged = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     await withFailingRoot(
       {
         setWorkspaceModelDefault: (workspaceId, value) =>
@@ -537,13 +536,48 @@ describe.skipIf(!hasDatabase)('first-run setup is atomic (issue #415, PostgreSQL
     );
     // Deleting the agent the attempt created took its mark with it, so nothing remains.
     await expectUntouched();
-    const messages = logged.mock.calls.map((call) => call.map(String).join(' '));
-    expect(messages).toEqual([
-      expect.stringMatching(
-        /^\[setup\] rolling back a refused setup attempt left writes in place: clear setup mark on agent [0-9a-f-]{36}$/u,
-      ),
+    expect(logged.mock.calls).toEqual([
+      [
+        '[setup] rolling back a refused setup attempt left writes in place',
+        { failed: [expect.stringMatching(/^clear setup mark on agent [0-9a-f-]{36}$/u)] },
+      ],
     ]);
-    expect(messages.join('\n')).not.toContain(GOOD_KEY);
+    expect(JSON.stringify(logged.mock.calls)).not.toContain(GOOD_KEY);
+  });
+
+  it('never overwrites a built-in agent that carries the name the wizard was given', async () => {
+    const repository = db().agents.forScope(scope());
+    const builder = await repository.create({
+      name: 'builder',
+      instructions: 'The shipped Builder.',
+      modelConnectionId: null,
+      model: null,
+      runtimeProfileId: null,
+      permissions: {
+        readFiles: true,
+        writeFiles: false,
+        runCommands: false,
+        unrestrictedNetwork: false,
+      },
+      ownerPrincipalId: (await repository.list())[0]?.ownerPrincipalId ?? '',
+      createdBy: adminUserId,
+    });
+    if (builder.kind !== 'created') throw new Error(`fixture agent: ${builder.kind}`);
+    if (isolated === undefined) throw new Error('the isolated database is not open');
+    await isolated.db
+      .update(agents)
+      .set({ builtinKey: 'builder' })
+      .where(eq(agents.id, builder.agent.id));
+    const before = await repository.get(builder.agent.id);
+
+    expect(await complete(setupInput({ agentName: 'builder' }))).toMatchObject({
+      ok: false,
+      status: 409,
+      code: 'name-conflict',
+    });
+
+    expect(await repository.get(builder.agent.id)).toEqual(before);
+    expect(before?.builtin).toBe('builder');
   });
 
   it('a refused re-run gives the setup mark back to the agent that had it', async () => {
@@ -571,7 +605,7 @@ describe.skipIf(!hasDatabase)('first-run setup is atomic (issue #415, PostgreSQL
     const before = await snapshot();
 
     // The re-run reads a broken default, so it must write one, and that write is refused.
-    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     await withFailingRoot(
       {
         getWorkspaceModelDefault: () =>
@@ -1056,13 +1090,13 @@ describe.skipIf(!hasDatabase)('first-run setup is atomic (issue #415, PostgreSQL
     const first = await complete(setupInput());
     if (!first.ok) throw new Error(`setup refused: ${first.code}`);
     const before = await snapshot();
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const logged = captureLog();
     decryption.fails = true;
     const refused = await complete(setupInput({ providerApiKey: GOOD_KEY_2 }));
     expect(refused).toMatchObject({ ok: false, status: 500, code: 'credential_unreadable' });
     if (refused.ok) throw new Error('unreachable');
     expect(refused.message).toContain('MASTER_ENCRYPTION_KEY');
-    const messages = logged.mock.calls.map((call) => call.map(String).join(' ')).join('\n');
+    const messages = logged.text();
     expect(messages).toContain('DecryptError');
     expect(messages).not.toContain(GOOD_KEY);
     // With the right master key back, the original key is still there.
@@ -1180,17 +1214,8 @@ describe.skipIf(!hasDatabase)('first-run setup is atomic (issue #415, PostgreSQL
       await install(db());
     });
 
-    function loggedText(spies: readonly { mock: { calls: unknown[][] } }[]): string {
-      return spies
-        .flatMap((spy) => spy.mock.calls.map((call) => call.map(String).join(' ')))
-        .join('\n');
-    }
-
     it('tests with the submitted key, stores it as an encrypted runtime connection, and points the profile at it', async () => {
-      const spies = [
-        vi.spyOn(console, 'error').mockImplementation(() => undefined),
-        vi.spyOn(console, 'log').mockImplementation(() => undefined),
-      ];
+      const spies = captureLog();
       const result = await complete(setupInput(EXTERNAL));
       if (!result.ok) throw new Error(`setup refused: ${result.code}`);
       expect(testedWith).toEqual([E2B_KEY]);
@@ -1206,11 +1231,11 @@ describe.skipIf(!hasDatabase)('first-run setup is atomic (issue #415, PostgreSQL
         runtimeConnectionId: result.runtimeConnectionId,
       });
       expect(JSON.stringify(result)).not.toContain(E2B_KEY);
-      expect(loggedText(spies)).not.toContain(E2B_KEY);
+      expect(spies.text()).not.toContain(E2B_KEY);
     });
 
     it('answers 500 setup_failed naming the runtime test, and stores nothing, when the test throws', async () => {
-      const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const spy = captureLog();
       configureWebRuntimeRegistry({
         ...LOCAL_REGISTRY,
         list: () =>
@@ -1224,7 +1249,7 @@ describe.skipIf(!hasDatabase)('first-run setup is atomic (issue #415, PostgreSQL
       if (refused.ok) throw new Error('unreachable');
       expect(refused.message).toContain('runtime test');
       expect(refused.message).not.toContain(E2B_KEY);
-      const logged = loggedText([spy]);
+      const logged = spy.text();
       expect(logged).toContain('runtime test');
       expect(logged).not.toContain(E2B_KEY);
       expect(logged).not.toContain('api.e2b.dev');
@@ -1233,7 +1258,7 @@ describe.skipIf(!hasDatabase)('first-run setup is atomic (issue #415, PostgreSQL
     });
 
     it('names the manager status, typed code and Worker step, and nothing from its body, when the manager refuses the runtime test', async () => {
-      vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
       configureWebRuntimeRegistry({
         ...LOCAL_REGISTRY,
         list: () =>
@@ -1273,7 +1298,7 @@ describe.skipIf(!hasDatabase)('first-run setup is atomic (issue #415, PostgreSQL
     });
 
     it("names the invalid field's typed code when the manager answers 400", async () => {
-      vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
       configureWebRuntimeRegistry({
         ...LOCAL_REGISTRY,
         list: () =>
@@ -1354,7 +1379,7 @@ describe.skipIf(!hasDatabase)('first-run setup is atomic (issue #415, PostgreSQL
       });
 
       it('fails setup at the runtime test step with the typed hop, and stores nothing, when it never starts', async () => {
-        vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
         const manager = useManager([starting]);
         const refused = await complete(setupInput(EXTERNAL));
         expect(refused).toMatchObject({ ok: false, status: 500, code: 'setup_failed' });
@@ -1418,7 +1443,7 @@ describe.skipIf(!hasDatabase)('first-run setup is atomic (issue #415, PostgreSQL
       });
 
       it('still rolls everything back when a write throws after the refusal', async () => {
-        vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
         useRefusingRegistry();
         await withFailingRoot(
           { setWorkspaceSetupAgentId: () => Promise.reject(new Error('connection terminated')) },
@@ -1436,7 +1461,7 @@ describe.skipIf(!hasDatabase)('first-run setup is atomic (issue #415, PostgreSQL
     });
 
     it('answers 503 setup_unavailable naming the secrets store, and writes nothing, when the store throws', async () => {
-      const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const spy = captureLog();
       const broken: SecretsService = Object.assign(
         Object.create(runtimeSecrets) as SecretsService,
         {
@@ -1449,13 +1474,13 @@ describe.skipIf(!hasDatabase)('first-run setup is atomic (issue #415, PostgreSQL
       if (refused.ok) throw new Error('unreachable');
       expect(refused.message).toContain('secrets store');
       expect(refused.message).not.toContain(E2B_KEY);
-      expect(loggedText([spy])).not.toContain(E2B_KEY);
+      expect(spy.text()).not.toContain(E2B_KEY);
       await expectUntouched();
       expect(await runtimeConnectionNames()).toEqual([]);
     });
 
     it('answers 500 setup_failed naming persistence, and rolls back, when a write throws', async () => {
-      vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
       await withFailingRoot(
         { setWorkspaceSetupAgentId: () => Promise.reject(new Error('connection terminated')) },
         async () => {
@@ -1470,7 +1495,7 @@ describe.skipIf(!hasDatabase)('first-run setup is atomic (issue #415, PostgreSQL
     });
 
     it('rolls the runtime connection back with the rest of a refused setup', async () => {
-      vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
       await withFailingRoot(
         { setWorkspaceSetupAgentId: () => Promise.resolve(false) },
         async () => {
@@ -1488,7 +1513,7 @@ describe.skipIf(!hasDatabase)('first-run setup is atomic (issue #415, PostgreSQL
       const first = await complete(setupInput(EXTERNAL));
       if (!first.ok || first.runtimeConnectionId === null) throw new Error('first setup failed');
       const connectionId = first.runtimeConnectionId;
-      vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
       await withFailingRoot(
         { setWorkspaceSetupAgentId: () => Promise.resolve(false) },
         async () => {
@@ -1571,7 +1596,7 @@ describe.skipIf(!hasDatabase)('first-run setup is atomic (issue #415, PostgreSQL
         },
       );
       await install(db(), { runtimeSecrets: conflicting });
-      vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
       const refused = await complete(setupInput(EXTERNAL));
       expect(refused).toMatchObject({ ok: false, status: 409, code: 'name-conflict' });
       await expectUntouched();
@@ -1586,7 +1611,7 @@ describe.skipIf(!hasDatabase)('first-run setup is atomic (issue #415, PostgreSQL
         { replace: () => Promise.resolve({ kind: 'not-found' as const }) },
       );
       await install(db(), { runtimeSecrets: vanishing });
-      vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
       const refused = await complete(setupInput({ ...EXTERNAL, runtimeCredential: E2B_KEY_2 }));
       expect(refused).toMatchObject({
         ok: false,

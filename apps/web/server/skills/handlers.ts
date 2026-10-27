@@ -53,20 +53,29 @@ import {
 import {
   createCaseFoldGuard,
   isValidSkillName,
-  skillFileKey,
   skillFilesPrefix,
   skillMetaKey,
   skillNameFromMetaKey,
+  skillRowFolder,
   SKILL_META_PREFIX,
 } from './keys';
 import { extractSkillInstructions, parseSkillFrontmatter } from './frontmatter';
-import type { ObjectStore } from './object-store-bridge';
-import { UnsafeObjectKeyError } from './object-store-bridge';
-import { json, problem, type ApiResult } from './result';
-import { walkFiles } from './tree';
-import { validateImportBody, validatePatchBody } from './validate';
+import { UnsafeObjectKeyError } from '@agent-workspace/core/storage/keys';
+import type { SkillObjects } from '../storage/store';
+import type { ApiResult } from '../http/result';
+import { json, problem } from './result';
+import {
+  ensureSkillRows,
+  skillFiles,
+  skillWriter,
+  SkillSaveRefusedError,
+  type SkillRows,
+  type SkillRowsWriter,
+  type SkillWriter,
+} from './tree';
+import { validateImportBody, validatePatchBody, type ImportFileEntry } from './validate';
 
-export { problem, type ApiResult, type ApiProblem } from './result';
+export { problem, type ApiProblem } from './result';
 
 /**
  * Validate the `:name` path segment. `false`/not-a-slug is `404`, not `400`: `isValidSkillName` is
@@ -104,7 +113,7 @@ function isSkillMetaRecord(value: unknown): value is SkillMetaRecord {
   );
 }
 
-async function readSkillMeta(store: ObjectStore, name: string): Promise<SkillMetaRecord | null> {
+async function readSkillMeta(store: SkillObjects, name: string): Promise<SkillMetaRecord | null> {
   const object = await store.get(skillMetaKey(name));
   if (object === null) return null;
   let parsed: unknown;
@@ -116,7 +125,7 @@ async function readSkillMeta(store: ObjectStore, name: string): Promise<SkillMet
   return isSkillMetaRecord(parsed) ? parsed : null;
 }
 
-async function writeSkillMeta(store: ObjectStore, record: SkillMetaRecord): Promise<void> {
+async function writeSkillMeta(store: SkillObjects, record: SkillMetaRecord): Promise<void> {
   const body = new TextEncoder().encode(JSON.stringify(record));
   await store.put(skillMetaKey(record.name), { body, contentType: 'application/json' });
 }
@@ -129,6 +138,25 @@ async function writeSkillMeta(store: ObjectStore, record: SkillMetaRecord): Prom
 function decodeBase64(value: string): Uint8Array | null {
   if (!SKILL_FILE_BASE64_PATTERN.test(value)) return null;
   return new Uint8Array(Buffer.from(value, 'base64'));
+}
+
+/**
+ * The SKILL.md text of an import as `describeSkill` will read it back (BOM stripped), or `null` when
+ * its base64 or its UTF-8 is invalid, which `importSkill` refuses before it writes anything.
+ */
+export function skillMdText(files: readonly ImportFileEntry[]): string | null {
+  const entry = files.find((file) => file.path === SKILL_MD_FILENAME);
+  const bytes = entry === undefined ? null : decodeBase64(entry.contentBase64);
+  return bytes === null ? null : utf8Text(bytes);
+}
+
+/** `bytes` as UTF-8 text with a BOM stripped, or `null` when they are not valid UTF-8. */
+export function utf8Text(bytes: Uint8Array): string | null {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    return null;
+  }
 }
 
 function encodeBase64(bytes: Uint8Array): string {
@@ -156,23 +184,29 @@ export type SkillDetail = Omit<ContractSkillDetail, 'id'>;
  * retroactively — see {@link listSkills}'s `store_inconsistent` answer.
  */
 function isValidUtf8(bytes: Uint8Array): boolean {
-  try {
-    new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-    return true;
-  } catch {
-    return false;
-  }
+  return utf8Text(bytes) !== null;
 }
 
-async function describeSkill(store: ObjectStore, meta: SkillMetaRecord): Promise<SkillDetail> {
-  const files = await walkFiles(store, skillFilesPrefix(meta.name));
-  const skillMd = await store.get(skillFileKey(meta.name, SKILL_MD_FILENAME));
-  const frontmatter = skillMd === null ? {} : parseSkillFrontmatter(skillMd.body);
-  const instructions = skillMd === null ? null : extractSkillInstructions(skillMd.body);
+// @story US-STO-08
+async function describeSkill(
+  store: SkillObjects,
+  meta: SkillMetaRecord,
+  rows?: SkillRows,
+): Promise<SkillDetail> {
+  const files = await skillFiles(
+    store,
+    rows,
+    skillRowFolder(meta.name),
+    skillFilesPrefix(meta.name),
+  );
+  const skillMd =
+    (await files.find((file) => file.relativePath === SKILL_MD_FILENAME)?.read()) ?? null;
+  const frontmatter = skillMd === null ? {} : parseSkillFrontmatter(skillMd);
+  const instructions = skillMd === null ? null : extractSkillInstructions(skillMd);
   const source =
     skillMd === null || instructions === null
       ? null
-      : new TextDecoder('utf-8', { fatal: true }).decode(skillMd.body);
+      : new TextDecoder('utf-8', { fatal: true }).decode(skillMd);
   // Sizes come from the `list` that `walkFiles` already performed. Reading each file back with
   // `get` would make describing one skill cost its whole directory in bytes, and `listSkills`
   // calls this once per skill — a workspace's entire skill corpus, read on every list request.
@@ -213,9 +247,48 @@ export function unreadableSkillMdProblem(name: string): ApiResult {
   );
 }
 
+/**
+ * A save the catalog service refused, as the 4xx the caller can act on: another push of the skill
+ * is still writing (`upload_in_progress`), an older file outside the skill holds one of its paths
+ * (`path_taken`), a concurrent delete moved the path (`path_changed`), or a file is too large.
+ */
+export function saveRefusedProblem(error: SkillSaveRefusedError): ApiResult {
+  switch (error.code) {
+    case 'upload_in_progress':
+      return problem(
+        409,
+        'upload_in_progress',
+        'Another upload of this skill is still writing its files; retry once it finishes.',
+      );
+    case 'path_taken':
+      return problem(
+        409,
+        'path_taken',
+        'A file that is not part of this skill already holds one of its paths.',
+      );
+    case 'path_changed':
+      return problem(
+        409,
+        'path_changed',
+        "One of this skill's files was removed or moved while it was written; retry.",
+      );
+    case 'too_large':
+      return problem(413, 'too_large', 'A file is larger than a skill file may be.');
+  }
+}
+
+/** A writer's refusal as this route's answer; anything else is rethrown. */
+export function writeRefusedProblem(error: unknown): ApiResult {
+  if (error instanceof UnsafeObjectKeyError) {
+    return problem(400, 'invalid_path', `A file path is not valid: ${error.message}`);
+  }
+  if (error instanceof SkillSaveRefusedError) return saveRefusedProblem(error);
+  throw error;
+}
+
 // ── GET /api/skills ────────────────────────────────────────────────────────────────────────────
 
-export async function listSkills(store: ObjectStore): Promise<ApiResult> {
+export async function listSkills(store: SkillObjects, rows?: SkillRows): Promise<ApiResult> {
   const entries = await store.list(SKILL_META_PREFIX);
   const names = entries
     .filter((entry) => entry.kind === 'file')
@@ -227,7 +300,7 @@ export async function listSkills(store: ObjectStore): Promise<ApiResult> {
   for (const name of names) {
     const meta = await readSkillMeta(store, name);
     if (meta === null) continue; // an entry this module cannot make sense of is skipped, not fatal
-    const detail = await describeSkill(store, meta);
+    const detail = await describeSkill(store, meta, rows);
     // K-4: one such row hides the whole list rather than being omitted from it or listed with no
     // id — see {@link unreadableSkillMdProblem} for why, and for the repair path.
     if (detail.source === null) return unreadableSkillMdProblem(name);
@@ -238,21 +311,19 @@ export async function listSkills(store: ObjectStore): Promise<ApiResult> {
 
 // ── POST /api/skills ───────────────────────────────────────────────────────────────────────────
 
-export async function importSkill(store: ObjectStore, rawBody: unknown): Promise<ApiResult> {
+export async function importSkill(
+  store: SkillObjects,
+  rawBody: unknown,
+  rows: SkillRowsWriter,
+): Promise<ApiResult> {
   const validated = validateImportBody(rawBody);
   if (!validated.ok) return validated.result;
   const { name, files } = validated.value;
 
-  const existing = await readSkillMeta(store, name);
-  if (existing !== null) {
-    return problem(
-      409,
-      'skill_already_exists',
-      `A skill named ${JSON.stringify(name)} already exists.`,
-    );
-  }
+  const existing = await existingSkillProblem(store, name);
+  if (existing !== null) return existing;
 
-  const decoded: { key: string; bytes: Uint8Array }[] = [];
+  const decoded: ReplacedFile[] = [];
   for (const file of files) {
     const bytes = decodeBase64(file.contentBase64);
     if (bytes === null) {
@@ -267,47 +338,152 @@ export async function importSkill(store: ObjectStore, rawBody: unknown): Promise
     if (file.path === SKILL_MD_FILENAME && !isValidUtf8(bytes)) {
       return problem(400, 'malformed_content', `${SKILL_MD_FILENAME}'s bytes are not valid UTF-8.`);
     }
-    // `skillFileKey` is a plain template — it cannot throw. Whether `file.path` is actually a safe
-    // relative path (no `..`, no absolute form, no reserved marker) is decided by `key-safety.ts`'s
-    // guard when `store.put` runs below, and the `try` around that loop is what reports its refusal
-    // as this route's documented 400 rather than an uncaught 500.
-    decoded.push({ key: skillFileKey(name, file.path), bytes });
+    // Whether `file.path` is actually a safe relative path (no `..`, no absolute form, no reserved
+    // marker) is decided by `key-safety.ts`'s guard when the writer runs below, and the `try` around
+    // that loop is what reports its refusal as this route's documented 400 rather than an uncaught
+    // 500.
+    decoded.push({ path: file.path, bytes });
   }
 
+  const writer = skillWriter(store, rows, name);
   try {
-    for (const file of decoded) {
-      await store.put(file.key, { body: file.bytes, contentType: null });
-    }
+    for (const file of decoded) await writer.put(file.path, file.bytes);
   } catch (error) {
-    if (error instanceof UnsafeObjectKeyError) {
-      return problem(400, 'invalid_path', `A file path is not valid: ${error.message}`);
-    }
-    throw error;
+    return writeRefusedProblem(error);
   }
 
+  return recordImportedSkill(store, name, rows);
+}
+
+/** `409` when a skill of this name already has its record in the store, else `null`. */
+export async function existingSkillProblem(
+  store: SkillObjects,
+  name: string,
+): Promise<ApiResult | null> {
+  if ((await readSkillMeta(store, name)) === null) return null;
+  return problem(
+    409,
+    'skill_already_exists',
+    `A skill named ${JSON.stringify(name)} already exists.`,
+  );
+}
+
+/** The end of an import, once every file is written: the skill's record, then its `201` body. */
+export async function recordImportedSkill(
+  store: SkillObjects,
+  name: string,
+  rows: SkillRowsWriter,
+): Promise<ApiResult> {
   const now = new Date().toISOString();
   const meta: SkillMetaRecord = { name, enabled: true, createdAt: now, updatedAt: now };
   await writeSkillMeta(store, meta);
+  return json(201, { skill: await describeSkill(store, meta, rows) });
+}
 
-  return json(201, { skill: await describeSkill(store, meta) });
+// ── POST /api/skills/:name/revisions ───────────────────────────────────────────────────────────
+
+export interface ReplacedFile {
+  readonly path: string;
+  readonly bytes: Uint8Array;
+}
+
+/**
+ * SDK-19 (N-1): make `rawFiles` the skill's whole current content — the same admission rules as
+ * `POST /api/skills`, files the new set does not name removed — and return the decoded bytes so the
+ * caller freezes exactly what was written, not a read-back a concurrent `PATCH` could have changed.
+ * Files are written before any is removed, and a file whose name differs only by case from a new one
+ * is kept, so a failure part-way never loses the current `SKILL.md`.
+ */
+export async function replaceSkillFiles(
+  store: SkillObjects,
+  name: string,
+  rawFiles: unknown,
+  rows: SkillRowsWriter,
+): Promise<
+  | { ok: true; files: readonly ReplacedFile[]; skill: SkillDetail }
+  | { ok: false; result: ApiResult }
+> {
+  const meta = await readSkillMeta(store, name);
+  if (meta === null) {
+    return {
+      ok: false,
+      result: problem(404, 'skill_not_found', `No skill named ${JSON.stringify(name)}.`),
+    };
+  }
+  const validated = validateImportBody({ name, files: rawFiles });
+  if (!validated.ok) return validated;
+
+  const files: ReplacedFile[] = [];
+  for (const file of validated.value.files) {
+    const bytes = decodeBase64(file.contentBase64);
+    if (bytes === null) {
+      return {
+        ok: false,
+        result: problem(
+          400,
+          'malformed_content',
+          `files entry ${JSON.stringify(file.path)} is not valid base64.`,
+        ),
+      };
+    }
+    if (file.path === SKILL_MD_FILENAME && !isValidUtf8(bytes)) {
+      return {
+        ok: false,
+        result: problem(
+          400,
+          'malformed_content',
+          `${SKILL_MD_FILENAME}'s bytes are not valid UTF-8.`,
+        ),
+      };
+    }
+    files.push({ path: file.path, bytes });
+  }
+
+  const writer = skillWriter(store, rows, name);
+  const kept = new Set(files.map((file) => file.path.toLowerCase()));
+  try {
+    await ensureSkillRows(store, rows, name);
+    const existing = await writer.files();
+    for (const file of files) await writer.put(file.path, file.bytes);
+    for (const old of existing) {
+      if (!kept.has(old.relativePath.toLowerCase())) await writer.remove(old.relativePath);
+    }
+  } catch (error) {
+    return { ok: false, result: writeRefusedProblem(error) };
+  }
+
+  const updated: SkillMetaRecord = { ...meta, updatedAt: new Date().toISOString() };
+  await writeSkillMeta(store, updated);
+  return { ok: true, files, skill: await describeSkill(store, updated, rows) };
 }
 
 // ── GET /api/skills/:name ──────────────────────────────────────────────────────────────────────
 
-export async function getSkill(store: ObjectStore, name: string): Promise<ApiResult> {
+export async function getSkill(
+  store: SkillObjects,
+  name: string,
+  rows?: SkillRows,
+): Promise<ApiResult> {
   const meta = await readSkillMeta(store, name);
   if (meta === null) {
     return problem(404, 'skill_not_found', `No skill named ${JSON.stringify(name)}.`);
   }
-  return json(200, { skill: await describeSkill(store, meta) });
+  return json(200, { skill: await describeSkill(store, meta, rows) });
 }
 
 // ── PATCH /api/skills/:name ────────────────────────────────────────────────────────────────────
 
+/** SKILL.md's bytes as the writer reads them, or `null` when it is missing. */
+async function readSkillMd(writer: SkillWriter): Promise<Uint8Array | null> {
+  const file = (await writer.files()).find((entry) => entry.relativePath === SKILL_MD_FILENAME);
+  return (await file?.read()) ?? null;
+}
+
 export async function patchSkill(
-  store: ObjectStore,
+  store: SkillObjects,
   name: string,
   rawBody: unknown,
+  rows: SkillRowsWriter,
 ): Promise<ApiResult> {
   const meta = await readSkillMeta(store, name);
   if (meta === null) {
@@ -339,7 +515,7 @@ export async function patchSkill(
   }
 
   // Round 4 (ADR-0048, B2-PATCH): `files` is the third place a caller-supplied relative path
-  // becomes a `skillFileKey`/`store.put` key — `validateImportBody`'s `files` and this function's
+  // becomes a `writer.put` path — `validateImportBody`'s `files` and this function's
   // own `removeFiles` (just above) each already ran a case-fold check before this task's round-3
   // repair; this one ran none at all, which is exactly what the confirmer's two probes found: a
   // two-entry `files` array (`SKILL.md`, `skill.md`) answered 200 with one file surviving under the
@@ -355,10 +531,18 @@ export async function patchSkill(
   // cannot drift apart the way they did before this round. See `keys.ts#createCaseFoldGuard`'s own
   // header for the full account, including the declared cost this also imposes on a same-request
   // `removeFiles`+`files` rename.
+  // A skill stored as a bare prefix moves whole into rows first, which readers prefer, so the
+  // case-fold guard below sees every file it has.
+  if ((files?.length ?? 0) + (removeFiles?.length ?? 0) > 0) {
+    try {
+      await ensureSkillRows(store, rows, name);
+    } catch (error) {
+      return writeRefusedProblem(error);
+    }
+  }
+  const writer = skillWriter(store, rows, name);
   if (files !== undefined && files.length > 0) {
-    const existingPaths = (await walkFiles(store, skillFilesPrefix(name))).map(
-      (file) => file.relativePath,
-    );
+    const existingPaths = (await writer.files()).map((file) => file.relativePath);
     const caseFoldGuard = createCaseFoldGuard(existingPaths);
     const seenInThisPatch = new Set<string>();
     for (const [index, file] of files.entries()) {
@@ -386,7 +570,7 @@ export async function patchSkill(
     }
   }
 
-  const puts: { key: string; bytes: Uint8Array }[] = [];
+  const puts: ReplacedFile[] = [];
   if (files !== undefined) {
     for (const file of files) {
       const bytes = decodeBase64(file.contentBase64);
@@ -406,18 +590,13 @@ export async function patchSkill(
           `${SKILL_MD_FILENAME}'s bytes are not valid UTF-8.`,
         );
       }
-      // See `importSkill`'s identical comment: `skillFileKey` cannot throw, and the guard's
-      // decision is reported by the `try` around the `store.put`/`store.delete` calls below.
-      puts.push({ key: skillFileKey(name, file.path), bytes });
+      // See `importSkill`'s identical comment: the guard's decision is reported by the `try`
+      // around the writer calls below.
+      puts.push({ path: file.path, bytes });
     }
   }
 
-  const deletes: string[] = [];
-  if (removeFiles !== undefined) {
-    for (const relativePath of removeFiles) {
-      deletes.push(skillFileKey(name, relativePath));
-    }
-  }
+  const deletes = removeFiles ?? [];
 
   // Round 3 (ADR-0044, "Verify after write, and capture before a destructive mutation"): captured
   // immediately before the destructive half of this request (`store.delete`) runs, never after —
@@ -428,26 +607,14 @@ export async function patchSkill(
   // has run (so an in-flight, legitimate `files` entry that rewrites `SKILL.md` itself is what gets
   // restored to, not a stale pre-request copy) and *before* `deletes` runs, so a restore below puts
   // back exactly what this request itself had just made current.
-  let skillMdBeforeDelete: { body: Uint8Array; contentType: string | null } | null = null;
+  let skillMdBeforeDelete: Uint8Array | null = null;
 
   try {
-    for (const file of puts) {
-      await store.put(file.key, { body: file.bytes, contentType: null });
-    }
-    if (deletes.length > 0) {
-      const before = await store.get(skillFileKey(name, SKILL_MD_FILENAME));
-      if (before !== null) {
-        skillMdBeforeDelete = { body: before.body, contentType: before.contentType };
-      }
-    }
-    for (const key of deletes) {
-      await store.delete(key);
-    }
+    for (const file of puts) await writer.put(file.path, file.bytes);
+    if (deletes.length > 0) skillMdBeforeDelete = await readSkillMd(writer);
+    for (const relativePath of deletes) await writer.remove(relativePath);
   } catch (error) {
-    if (error instanceof UnsafeObjectKeyError) {
-      return problem(400, 'invalid_path', `A file path is not valid: ${error.message}`);
-    }
-    throw error;
+    return writeRefusedProblem(error);
   }
 
   // The read-back stands ALONGSIDE the admission grammar (`validatePatchBody`'s
@@ -462,15 +629,11 @@ export async function patchSkill(
   // Whatever `deletes` just did, `SKILL.md` itself must still be readable, or this patch is rejected
   // and rolled back rather than reported as a 200 that quietly broke the skill.
   if (deletes.length > 0) {
-    const skillMdStillPresent = await store.get(skillFileKey(name, SKILL_MD_FILENAME));
-    if (skillMdStillPresent === null) {
+    if ((await readSkillMd(writer)) === null) {
       if (skillMdBeforeDelete !== null) {
         // Restore what this request itself had just made current (see the capture comment above),
         // so a caller sees a clean rejection rather than a permanently broken skill directory.
-        await store.put(skillFileKey(name, SKILL_MD_FILENAME), {
-          body: skillMdBeforeDelete.body,
-          contentType: skillMdBeforeDelete.contentType,
-        });
+        await writer.put(SKILL_MD_FILENAME, skillMdBeforeDelete);
       }
       return problem(
         409,
@@ -495,7 +658,7 @@ export async function patchSkill(
   };
   await writeSkillMeta(store, updated);
 
-  return json(200, { skill: await describeSkill(store, updated) });
+  return json(200, { skill: await describeSkill(store, updated, rows) });
 }
 
 // ── GET /api/skills/:name/export ──────────────────────────────────────────────────────────────
@@ -505,16 +668,21 @@ export interface SkillExportFile {
   readonly contentBase64: string;
 }
 
-export async function exportSkill(store: ObjectStore, name: string): Promise<ApiResult> {
+// @story US-STO-08
+export async function exportSkill(
+  store: SkillObjects,
+  name: string,
+  rows?: SkillRows,
+): Promise<ApiResult> {
   const meta = await readSkillMeta(store, name);
   if (meta === null) {
     return problem(404, 'skill_not_found', `No skill named ${JSON.stringify(name)}.`);
   }
-  const walked = await walkFiles(store, skillFilesPrefix(name));
+  const listed = await skillFiles(store, rows, skillRowFolder(name), skillFilesPrefix(name));
   const files: SkillExportFile[] = [];
-  for (const file of walked) {
-    const object = await store.get(file.key);
-    if (object === null) {
+  for (const file of listed) {
+    const body = await file.read();
+    if (body === null) {
       // Listed a moment ago, gone now: a concurrent delete raced this export. Reported as an
       // inconsistency rather than silently omitted (ADR-0015: a check that cannot run must fail).
       return problem(
@@ -523,7 +691,7 @@ export async function exportSkill(store: ObjectStore, name: string): Promise<Api
         `${file.relativePath} was listed but could not be read back.`,
       );
     }
-    files.push({ path: file.relativePath, contentBase64: encodeBase64(object.body) });
+    files.push({ path: file.relativePath, contentBase64: encodeBase64(body) });
   }
   return json(200, { skill: { name: meta.name, files } });
 }

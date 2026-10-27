@@ -22,16 +22,23 @@
  */
 import type { OpenAiAgentsToolName } from '@indx-workspace/contracts/agents';
 import {
+  OUTPUT_SCHEMA_UNSATISFIED,
+  OUTPUT_SCHEMA_UNSATISFIED_MESSAGE,
+} from '@indx-workspace/contracts/runs';
+import {
   Agent,
   MaxTurnsExceededError,
   MCPServerSSE,
   MCPServerStdio,
   MCPServerStreamableHttp,
+  ModelBehaviorError,
   OpenAIProvider,
+  RunMessageOutputItem,
   Runner,
   applyDiff,
   setTracingDisabled,
   tool,
+  type JsonSchemaDefinition,
   type MCPServer,
   type Model,
   type RunStreamEvent,
@@ -63,6 +70,23 @@ import type { EngineStoreSession } from './session.js';
 import { nodeSkillScriptHost, OPENAI_AGENTS_SKILL_SCRIPT_INPUT } from './skill-script.js';
 
 /**
+ * The run's answer: the last assistant message's text, and the SDK's parsed `finalOutput` when a
+ * schema was asked for. `null` when that value does not satisfy the schema.
+ */
+function finalAnswer(
+  items: readonly unknown[],
+  finalOutput: unknown,
+  schema: Readonly<Record<string, unknown>> | null,
+): { readonly text: string; readonly structured: unknown } | null {
+  const message = items.findLast((item) => item instanceof RunMessageOutputItem);
+  const text = message instanceof RunMessageOutputItem ? message.content : '';
+  if (schema === null) return { text, structured: null };
+  return z.fromJSONSchema(schema).safeParse(finalOutput).success
+    ? { text, structured: finalOutput }
+    : null;
+}
+
+/**
  * The failure a run ends with when a model call came back `401` or `403` from the provider
  * (issue #690), or `null` for any other error. The adapter never holds the model key, so this is
  * the first moment it can see the key is wrong. A gateway refusal of the run token carries a
@@ -83,7 +107,7 @@ function rejectedKeyFailure(error: unknown): Error | null {
 }
 
 /** The pinned SDK version. `engine.test.ts` holds it to this package's manifest. */
-export const OPENAI_AGENTS_SDK_VERSION = '0.20.0';
+export const OPENAI_AGENTS_SDK_VERSION = '0.21.0';
 
 type OpenAiAgentsPin<Fact extends true> = Fact;
 type AsToolOptions = NonNullable<Parameters<Agent['asTool']>[0]>;
@@ -417,9 +441,24 @@ export async function* startOpenAiAgentsRun(
       tools: [...toolsFor(compiled, run.signal), ...delegates],
       mcpServers: servers,
       modelSettings,
+      // `strict: false`: the provider sees the caller's schema as written; the answer is checked
+      // below, because the SDK only JSON-parses a plain JSON Schema.
+      ...(compiled.outputSchema === null
+        ? {}
+        : {
+            outputType: {
+              type: 'json_schema',
+              name: 'output',
+              strict: false,
+              // The contract fixes the root at `type: "object"`; the SDK's type wants a strict shape.
+              schema: compiled.outputSchema as JsonSchemaDefinition['schema'],
+            },
+          }),
     });
     const runner = new Runner({ tracingDisabled: true, traceIncludeSensitiveData: false });
     let stopReason: 'end_turn' | 'max_turns' | 'max_budget' | 'cancelled' = 'end_turn';
+    let output: { readonly text: string; readonly structured: unknown } | undefined;
+    let unsatisfied = false;
     try {
       const result = await runner.run(agent, prompt, {
         stream: true,
@@ -445,15 +484,32 @@ export async function* startOpenAiAgentsRun(
             ? failure
             : new Error('the run failed with a non-Error value.');
         }
+        const answer = finalAnswer(result.newItems, result.finalOutput, compiled.outputSchema);
+        if (answer === null) unsatisfied = true;
+        else output = answer;
       }
     } catch (error) {
       if (state.budgetSpent) stopReason = 'max_budget';
-      else if (error instanceof MaxTurnsExceededError) stopReason = 'max_turns';
+      // The SDK raises this when the final text is not JSON; it is the only structured-output
+      // failure it reports, so with a schema asked for it is the model's answer that was wrong.
+      else if (error instanceof ModelBehaviorError && compiled.outputSchema !== null) {
+        unsatisfied = true;
+      } else if (error instanceof MaxTurnsExceededError) stopReason = 'max_turns';
       else if (deps.signal.aborted) stopReason = 'cancelled';
       else throw rejectedKeyFailure(error) ?? error;
     }
     if (deps.signal.aborted) stopReason = 'cancelled';
-    yield { kind: 'run_completed', stopReason, turns: state.turns, usage: state.usage };
+    yield {
+      kind: 'run_completed',
+      stopReason,
+      turns: state.turns,
+      usage: state.usage,
+      ...(stopReason === 'end_turn' && output !== undefined ? { output } : {}),
+    };
+    // After the frames, so the usage of the run that missed its schema is still recorded.
+    if (unsatisfied && stopReason === 'end_turn') {
+      throw new Error(`${OUTPUT_SCHEMA_UNSATISFIED}: ${OUTPUT_SCHEMA_UNSATISFIED_MESSAGE}`);
+    }
   } finally {
     deps.signal.removeEventListener('abort', forwardAbort);
     for (const server of servers) await server.close().catch(() => undefined);

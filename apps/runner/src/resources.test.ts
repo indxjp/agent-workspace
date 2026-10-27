@@ -1,13 +1,35 @@
-import { chmod, lstat, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import {
+  chmod,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { RunRequest, type RunFileResource, type RunSkillResource } from '@agent-workspace/core';
-import { skillsUnderConfigDirectory } from '@agent-workspace/engine';
+import {
+  RunRequest,
+  type RunFileReference,
+  type RunFileResource,
+  type RunSkillReference,
+} from '@agent-workspace/run-protocol';
+import { skillsUnderConfigDirectory, type EngineSkillGrant } from '@agent-workspace/engine';
 import { describe, expect, it } from 'vitest';
 
 import { toEngineRunRequest } from './engines.js';
-import { materializeRunResources, type SkillPlacingEngine } from './resources.js';
+import {
+  materializeRunResources,
+  readSkillInbox,
+  removeSkillInbox,
+  withoutSkills,
+  type ResolvedRunRequest,
+  type SkillPlacingEngine,
+} from './resources.js';
 
 /**
  * The engine, as materialisation sees one (ENG-04b, #325).
@@ -23,10 +45,10 @@ const ENGINE: SkillPlacingEngine = {
     skillsUnderConfigDirectory(engineRequest.resources.skills, '.claude'),
 };
 
-function request(
+function wireRequest(
   root: string,
   files: readonly RunFileResource[],
-  skills: readonly RunSkillResource[] = [],
+  skills: readonly RunSkillReference[] = [],
 ) {
   const cwd = path.join(root, 'workspace');
   return RunRequest.parse({
@@ -56,13 +78,37 @@ function request(
   });
 }
 
+/** A request whose skills carry their bytes, the shape the runner hands to the engine port. */
+function request(
+  root: string,
+  files: readonly RunFileResource[],
+  skills: readonly EngineSkillGrant[] = [],
+): ResolvedRunRequest {
+  return { ...wireRequest(root, files), resources: { files, skills } };
+}
+
+/**
+ * A file grant the way a run names it: by reference. The bytes are laid down separately, as
+ * `POST /files` does (see {@link layFile}); materialization checks the path and sets the mode.
+ */
+function fileRef(name: string, access: 'read' | 'read-write', size = 0): RunFileReference {
+  return { kind: 'file', path: name, access, size, sha256: '0'.repeat(64) };
+}
+
+/** Write `body` at `name` inside the request's workspace, as `POST /files` would. */
+async function layFile(parsed: ResolvedRunRequest, name: string, body: string): Promise<void> {
+  const target = path.join(parsed.cwd, name);
+  await mkdir(path.dirname(target), { recursive: true });
+  await writeFile(target, body);
+}
+
 /** Materialize one request through {@link ENGINE}, the way `index.ts` does through the real one. */
-function materialize(parsed: RunRequest, engine: SkillPlacingEngine = ENGINE) {
+function materialize(parsed: ResolvedRunRequest, engine: SkillPlacingEngine = ENGINE) {
   return materializeRunResources(parsed, toEngineRunRequest(parsed), engine);
 }
 
 /** Where {@link ENGINE} keeps its configuration, for a test that asserts about a written path. */
-function configDirOf(parsed: RunRequest): string {
+function configDirOf(parsed: { readonly cwd: string }): string {
   return path.join(parsed.cwd, ENGINE.protectedConfigDirectory);
 }
 
@@ -91,14 +137,8 @@ describe('run resource materialization', () => {
   it('materializes only selected files and removes an assignment revoked before resume', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'agent-resources-'));
     try {
-      const first = request(root, [
-        {
-          kind: 'file',
-          path: 'assigned.txt',
-          access: 'read-write',
-          contentBase64: Buffer.from('assigned').toString('base64'),
-        },
-      ]);
+      const first = request(root, [fileRef('assigned.txt', 'read-write')]);
+      await layFile(first, 'assigned.txt', 'assigned');
       materialize(first);
       expect(await readFile(path.join(first.cwd, 'assigned.txt'), 'utf8')).toBe('assigned');
       await expect(readFile(path.join(first.cwd, 'unassigned.txt'), 'utf8')).rejects.toMatchObject({
@@ -117,14 +157,8 @@ describe('run resource materialization', () => {
   it('makes a read-only assignment immutable at the filesystem boundary', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'agent-readonly-'));
     try {
-      const parsed = request(root, [
-        {
-          kind: 'file',
-          path: 'readonly.txt',
-          access: 'read',
-          contentBase64: Buffer.from('original').toString('base64'),
-        },
-      ]);
+      const parsed = request(root, [fileRef('readonly.txt', 'read')]);
+      await layFile(parsed, 'readonly.txt', 'original');
       materialize(parsed);
       if (process.platform !== 'win32') {
         await expect(writeFile(path.join(parsed.cwd, 'readonly.txt'), 'changed')).rejects.toThrow();
@@ -138,7 +172,7 @@ describe('run resource materialization', () => {
   it('re-materializes an assigned skill on every turn of the same session', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'agent-skill-turns-'));
     try {
-      const skill = (body: string): RunSkillResource => ({
+      const skill = (body: string): EngineSkillGrant => ({
         name: 'reviewer',
         files: [
           { path: 'SKILL.md', contentBase64: Buffer.from(body).toString('base64') },
@@ -167,7 +201,7 @@ describe('run resource materialization', () => {
     // side effect.
     const root = await mkdtemp(path.join(tmpdir(), 'agent-skill-dropped-'));
     try {
-      const both: RunSkillResource = {
+      const both: EngineSkillGrant = {
         name: 'reviewer',
         files: [
           { path: 'SKILL.md', contentBase64: Buffer.from('# skill').toString('base64') },
@@ -183,7 +217,7 @@ describe('run resource materialization', () => {
         request(
           root,
           [],
-          [{ name: 'reviewer', files: [both.files[0] as RunSkillResource['files'][number]] }],
+          [{ name: 'reviewer', files: [both.files[0] as EngineSkillGrant['files'][number]] }],
         ),
       );
       await expect(readFile(dropped, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
@@ -344,14 +378,10 @@ describe('run resource materialization', () => {
     try {
       const granted: readonly RunFileResource[] = [
         { kind: 'directory', path: 'contracts', access: 'read' },
-        {
-          kind: 'file',
-          path: 'contracts/agreement.txt',
-          access: 'read',
-          contentBase64: Buffer.from('terms').toString('base64'),
-        },
+        fileRef('contracts/agreement.txt', 'read'),
       ];
       const first = request(root, granted);
+      await layFile(first, 'contracts/agreement.txt', 'terms');
       materialize(first);
       expect(await readFile(path.join(first.cwd, 'contracts/agreement.txt'), 'utf8')).toBe('terms');
 
@@ -367,14 +397,7 @@ describe('run resource materialization', () => {
   it('rejects mixed-case aliases of the private .claude directory', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'agent-private-resource-'));
     try {
-      const parsed = request(root, [
-        {
-          kind: 'file',
-          path: '.ClAuDe/settings.json',
-          access: 'read-write',
-          contentBase64: Buffer.from('{}').toString('base64'),
-        },
-      ]);
+      const parsed = request(root, [fileRef('.ClAuDe/settings.json', 'read-write')]);
       expect(() => materialize(parsed)).toThrow(/private \.claude directory/u);
     } finally {
       await removeRoot(root);
@@ -384,14 +407,7 @@ describe('run resource materialization', () => {
   it('rejects a relative-prefixed path that normalizes into the private .claude directory', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'agent-private-relative-'));
     try {
-      const parsed = request(root, [
-        {
-          kind: 'file',
-          path: './.claude/settings.json',
-          access: 'read-write',
-          contentBase64: Buffer.from('{}').toString('base64'),
-        },
-      ]);
+      const parsed = request(root, [fileRef('./.claude/settings.json', 'read-write')]);
       expect(() => materialize(parsed)).toThrow('private .claude directory');
     } finally {
       await removeRoot(root);
@@ -414,14 +430,7 @@ describe('run resource materialization', () => {
   ])('rejects %s into the private .claude directory', async (_label, spelling) => {
     const root = await mkdtemp(path.join(tmpdir(), 'agent-private-spelling-'));
     try {
-      const parsed = request(root, [
-        {
-          kind: 'file',
-          path: spelling,
-          access: 'read-write',
-          contentBase64: Buffer.from('{}').toString('base64'),
-        },
-      ]);
+      const parsed = request(root, [fileRef(spelling, 'read-write')]);
       expect(() => materialize(parsed)).toThrow('private .claude directory');
       await expect(lstat(path.join(configDirOf(parsed), 'settings.json'))).rejects.toMatchObject({
         code: 'ENOENT',
@@ -437,14 +446,7 @@ describe('run resource materialization', () => {
   ])('refuses %s before anything is written', async (_label, spelling) => {
     const root = await mkdtemp(path.join(tmpdir(), 'agent-private-parent-'));
     try {
-      const parsed = request(root, [
-        {
-          kind: 'file',
-          path: spelling,
-          access: 'read-write',
-          contentBase64: Buffer.from('{}').toString('base64'),
-        },
-      ]);
+      const parsed = request(root, [fileRef(spelling, 'read-write')]);
       expect(() => materialize(parsed)).toThrow(/unsafe archive path/u);
       await expect(lstat(path.join(configDirOf(parsed), 'settings.json'))).rejects.toMatchObject({
         code: 'ENOENT',
@@ -457,18 +459,171 @@ describe('run resource materialization', () => {
   it('still writes a sibling whose name only starts with the private directory', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'agent-private-sibling-'));
     try {
-      const parsed = request(root, [
-        {
-          kind: 'file',
-          path: '.claude-backup/notes.md',
-          access: 'read-write',
-          contentBase64: Buffer.from('ok').toString('base64'),
-        },
-      ]);
+      const parsed = request(root, [fileRef('.claude-backup/notes.md', 'read-write')]);
+      await layFile(parsed, '.claude-backup/notes.md', 'ok');
       materialize(parsed);
       expect(await readFile(path.join(parsed.cwd, '.claude-backup', 'notes.md'), 'utf8')).toBe(
         'ok',
       );
+    } finally {
+      await removeRoot(root);
+    }
+  });
+});
+
+describe('granted file references', () => {
+  // @story US-STO-06
+  const hydrated = 'as hydrated';
+  const reference = (access: 'read' | 'read-write', name: string): RunFileReference =>
+    fileRef(name, access, hydrated.length);
+
+  /** Lay `name` down the way `POST /files` would, then materialize a request granting it. */
+  async function hydrate(root: string, grant: RunFileReference) {
+    const parsed = request(root, [grant]);
+    await mkdir(path.dirname(path.join(parsed.cwd, grant.path)), { recursive: true });
+    await writeFile(path.join(parsed.cwd, grant.path), hydrated);
+    materialize(parsed);
+    return path.join(parsed.cwd, grant.path);
+  }
+
+  it('[US-STO-06][contract][run] read grants arrive read-only', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'agent-reference-ro-'));
+    try {
+      const target = await hydrate(root, reference('read', 'reports/q3.txt'));
+      expect((await lstat(target)).mode & 0o777).toBe(0o444);
+      expect(await readFile(target, 'utf8')).toBe(hydrated);
+      if (process.platform !== 'win32' && process.getuid?.() !== 0) {
+        await expect(writeFile(target, 'changed')).rejects.toMatchObject({ code: 'EACCES' });
+      }
+    } finally {
+      await removeRoot(root);
+    }
+  });
+
+  it('[US-STO-06][contract][run] read-write grants arrive writable', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'agent-reference-rw-'));
+    try {
+      const target = await hydrate(root, reference('read-write', 'draft.txt'));
+      expect((await lstat(target)).mode & 0o777).toBe(0o644);
+      await writeFile(target, 'changed');
+      expect(await readFile(target, 'utf8')).toBe('changed');
+    } finally {
+      await removeRoot(root);
+    }
+  });
+
+  it('[US-STO-06][contract][run] a reference to the private config directory is refused', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'agent-reference-config-'));
+    try {
+      await expect(hydrate(root, reference('read', '.claude/settings.json'))).rejects.toThrow(
+        /private \.claude directory/u,
+      );
+    } finally {
+      await removeRoot(root);
+    }
+  });
+
+  it('[US-STO-06][contract][run] narrowing a folder grant to one child keeps that child', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'agent-reference-narrowed-'));
+    try {
+      const both = request(root, [
+        { kind: 'directory', path: 'docs', access: 'read' },
+        reference('read', 'docs/a.txt'),
+        reference('read', 'docs/b.txt'),
+      ]);
+      await layFile(both, 'docs/a.txt', hydrated);
+      await layFile(both, 'docs/b.txt', hydrated);
+      materialize(both);
+      const parsed = request(root, [reference('read', 'docs/a.txt')]);
+      materialize(parsed);
+      const kept = path.join(parsed.cwd, 'docs', 'a.txt');
+      expect(await readFile(kept, 'utf8')).toBe(hydrated);
+      expect((await lstat(kept)).mode & 0o777).toBe(0o444);
+      await expect(lstat(path.join(parsed.cwd, 'docs', 'b.txt'))).rejects.toMatchObject({
+        code: 'ENOENT',
+      });
+    } finally {
+      await removeRoot(root);
+    }
+  });
+
+  it('[US-STO-06][contract][run] a revoked reference is removed on the next turn', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'agent-reference-revoked-'));
+    try {
+      const target = await hydrate(root, reference('read', 'reports/q3.txt'));
+      materialize(request(root, []));
+      await expect(readFile(target, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
+      await removeRoot(root);
+    }
+  });
+});
+
+describe('skill references through the inbox', () => {
+  // @story US-STO-06
+  // @story US-STO-11
+  const bytes = '# support skill';
+  const granted: RunSkillReference = {
+    name: 'support',
+    files: [{ path: 'SKILL.md', size: bytes.length, sha256: '0'.repeat(64) }],
+  };
+
+  async function lay(cwd: string): Promise<string> {
+    const inbox = path.join(cwd, '.aw-inbox', 'skills', 'support');
+    await mkdir(inbox, { recursive: true });
+    await writeFile(path.join(inbox, 'SKILL.md'), bytes);
+    return inbox;
+  }
+
+  it('[US-STO-06][contract][run] a skill reference is placed from the inbox', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'agent-skill-inbox-'));
+    try {
+      const parsed = wireRequest(root, [], [granted]);
+      await lay(parsed.cwd);
+      const inlined = await readSkillInbox(parsed, ENGINE.protectedConfigDirectory);
+      removeSkillInbox(parsed.cwd, ENGINE.protectedConfigDirectory);
+      materialize(inlined);
+      const placed = path.join(configDirOf(parsed), 'skills', 'support', 'SKILL.md');
+      expect(await readFile(placed, 'utf8')).toBe(bytes);
+      expect((await lstat(placed)).mode & 0o777).toBe(0o444);
+      await expect(lstat(path.join(parsed.cwd, '.aw-inbox'))).rejects.toMatchObject({
+        code: 'ENOENT',
+      });
+    } finally {
+      await removeRoot(root);
+    }
+  });
+
+  it('[US-STO-06][contract][run] a request that grants skills is not stripped of them', () => {
+    expect(() => withoutSkills(wireRequest('/tmp', [], [granted]))).toThrow(/grants skills/);
+  });
+
+  it('[US-STO-06][contract][run] a symlinked inbox path is refused', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'agent-skill-inbox-link-'));
+    try {
+      const parsed = wireRequest(root, [], [granted]);
+      const outside = path.join(root, 'outside');
+      await mkdir(outside);
+      await writeFile(path.join(outside, 'SKILL.md'), bytes);
+      await mkdir(path.join(parsed.cwd, '.aw-inbox', 'skills'), { recursive: true });
+      await symlink(outside, path.join(parsed.cwd, '.aw-inbox', 'skills', 'support'));
+      await expect(readSkillInbox(parsed, ENGINE.protectedConfigDirectory)).rejects.toThrow();
+    } finally {
+      await removeRoot(root);
+    }
+  });
+
+  it('[US-STO-11][contract][run] a read-only inbox is still removed', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'agent-skill-inbox-ro-'));
+    try {
+      const parsed = wireRequest(root, [], [granted]);
+      const inbox = await lay(parsed.cwd);
+      await chmod(path.join(inbox, 'SKILL.md'), 0o444);
+      await chmod(inbox, 0o555);
+      removeSkillInbox(parsed.cwd, ENGINE.protectedConfigDirectory);
+      await expect(lstat(path.join(parsed.cwd, '.aw-inbox'))).rejects.toMatchObject({
+        code: 'ENOENT',
+      });
     } finally {
       await removeRoot(root);
     }

@@ -16,8 +16,8 @@
  * read-only — this task does not own that file) fed by the real, unmodified
  * `createRepositoryAgentResourceStoreProvider` (`../../../../../server/agents/resource-store.ts`)
  * and `createDatabaseAgentResourceRepositoryProvider`, over a real database. Only the object store
- * behind assigned file content is faked (`createInMemoryObjectStoreProvider`, the same fake
- * `apps/web/server/compose/resource-loader.test.ts` already uses) — the write-permission ceiling
+ * behind assigned file content is faked (`createInMemoryObjectStore`, under the real catalog
+ * service, as `apps/web/server/compose/resource-loader.test.ts` does) — the write-permission ceiling
  * under test has nothing to do with where file bytes live.
  *
  * `apps/web/server/compose/**` is outside this task's Owns globs; nothing in that directory is
@@ -41,11 +41,14 @@ import {
   workspacePrincipals,
   type IsolatedTestDatabase,
 } from '@agent-workspace/core/db/unscoped';
-import { createInMemoryObjectStoreProvider } from '@agent-workspace/core/storage';
+import { createInMemoryObjectStore } from '@agent-workspace/core/storage';
 
 import { createAgentRunResourceLoader } from '../../../../../server/compose/resource-loader';
 import { createRepositoryAgentResourceStoreProvider } from '../../../../../server/agents/resource-store';
 import { createResourceCatalogStoreProvider } from '../../../../../server/resources/catalog-store';
+import { createStorageService } from '../../../../../server/storage/service';
+
+const quietLog = { info() {}, warn() {}, error() {}, child: () => quietLog };
 
 const rawUrl = process.env['TEST_DATABASE_URL'];
 const hasDatabase = rawUrl !== undefined && rawUrl.trim() !== '';
@@ -165,7 +168,11 @@ describe.skipIf(!hasDatabase)(
       if (assigned === null) throw new Error('the agent has no assignments');
       const loader = createAgentRunResourceLoader({
         catalog,
-        files: createInMemoryObjectStoreProvider(),
+        storage: createStorageService({
+          catalog: (id) => catalog.forWorkspace(id),
+          objects: createInMemoryObjectStore(),
+          log: quietLog,
+        }),
       });
       const selection = await loader.load(workspaceId, assigned);
       const folder = selection.files.find((resource) => resource.path === 'handbook');

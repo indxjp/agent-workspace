@@ -63,6 +63,30 @@ describe('CreateEndpointClientRequestSchema', () => {
     ).toBe(false);
   });
 
+  it('takes a builder client with no agent, and refuses one with an agent or toolNames', () => {
+    const base = { name: 'builder-door', kind: 'builder' };
+    expect(CreateEndpointClientRequestSchema.safeParse({ ...base, agentIds: [] }).success).toBe(
+      true,
+    );
+    expect(
+      CreateEndpointClientRequestSchema.safeParse({ ...base, agentIds: [AGENT_A] }).success,
+    ).toBe(false);
+    expect(
+      CreateEndpointClientRequestSchema.safeParse({ ...base, agentIds: [], toolNames: ['a'] })
+        .success,
+    ).toBe(false);
+  });
+
+  it('still refuses an mcp-project client with no agent', () => {
+    expect(
+      CreateEndpointClientRequestSchema.safeParse({
+        name: 'orders',
+        kind: 'mcp-project',
+        agentIds: [],
+      }).success,
+    ).toBe(false);
+  });
+
   it('refuses toolNames on an a2a-agent client, and null is the only empty value allowed', () => {
     const base = { name: 'support-agent', kind: 'a2a-agent', agentIds: [AGENT_A] };
     expect(

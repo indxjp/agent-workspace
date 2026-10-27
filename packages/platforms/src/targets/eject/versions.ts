@@ -5,13 +5,13 @@
  * `typescript` is the plain registry release of the build the repository installs under an alias.
  */
 export const EJECT_PINS = {
-  '@anthropic-ai/claude-agent-sdk': '0.3.296',
-  '@mastra/core': '1.76.0',
-  '@mastra/mcp': '2.3.0',
-  '@openai/agents': '0.20.0',
-  '@openai/agents-extensions': '0.20.0',
-  '@ai-sdk/anthropic': '4.0.78',
-  zod: '4.6.6',
+  '@anthropic-ai/claude-agent-sdk': '0.3.310',
+  '@mastra/core': '1.79.0',
+  '@mastra/mcp': '2.5.0',
+  '@openai/agents': '0.21.0',
+  '@openai/agents-extensions': '0.21.0',
+  '@ai-sdk/anthropic': '4.0.85',
+  zod: '4.6.7',
   '@types/node': '26.6.5',
   typescript: '6.0.2',
 } as const;

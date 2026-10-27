@@ -3,9 +3,11 @@ import type { AddressInfo } from 'node:net';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createCloudflareSandboxProvider, createExternalDriver } from '@agent-workspace/runtime';
+import { createCloudflareSandboxProvider } from '@agent-workspace/runtime/driver/cloudflare-sandbox';
+import { createExternalDriver } from '@agent-workspace/runtime/driver/external';
 
-import { createRunnerManagerServer, createShutdownGate } from './manager.js';
+import { createRunnerManagerServer } from './manager.js';
+import { createShutdownGate } from './shutdown-gate.js';
 
 const TOKEN = 'runner-manager-fixture-token-more-than-32-characters';
 const SECRET = 'bridge_SENTINEL_secret_0123456789';

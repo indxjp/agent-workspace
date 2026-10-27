@@ -9,14 +9,17 @@
  */
 import type { EngineCapabilities } from '@indx-workspace/contracts/engines';
 
+import { outputSchemaRefusal } from './compile-checks.js';
 import { engineFrameBuilder, type EngineFrame } from './frames.js';
 import type {
   AgentEngine,
   EngineCompileResult,
+  EngineApprovalRequest,
   EngineConnection,
   EngineRunRequest,
   EngineSessionStore,
   EngineSkillFile,
+  EngineFileSearchLink,
   EngineStartContext,
   SessionDurabilityVerdict,
 } from './port.js';
@@ -45,6 +48,8 @@ export type EngineRunPlan<TEvent> = {
   readonly cancelled: TEvent | null;
   /** The port's durability verdict, given whether a terminal event was seen. */
   durability(completed: boolean): SessionDurabilityVerdict;
+  /** The call the run stopped on for want of approval (ADR-0145 D5); omit on an engine that cannot. */
+  approvalRequest?(): EngineApprovalRequest | null;
 };
 
 export type EngineAdapterSpec<TCompiled, TEvent> = {
@@ -52,6 +57,8 @@ export type EngineAdapterSpec<TCompiled, TEvent> = {
   readonly version: string;
   readonly capabilities: EngineCapabilities;
   readonly protectedConfigDirectory: string;
+  /** The catalogue's `structuredOutput`. Default `false`: a request carrying `outputSchema` is refused before `compile` runs. */
+  readonly structuredOutput?: boolean;
   /** Default: `skillsUnderConfigDirectory(request.resources.skills, protectedConfigDirectory)` when `capabilities.skills`, else `[]`. */
   readonly placeSkills?: (request: EngineRunRequest) => readonly EngineSkillFile[];
   compile(request: EngineRunRequest): EngineCompileResult<TCompiled>;
@@ -61,6 +68,7 @@ export type EngineAdapterSpec<TCompiled, TEvent> = {
     context: {
       readonly sessionStore: EngineSessionStore | undefined;
       readonly abortController: AbortController;
+      readonly fileSearch: EngineFileSearchLink | undefined;
     },
   ): EngineRunPlan<TEvent>;
 };
@@ -72,6 +80,9 @@ export function createEngineAdapter<TCompiled, TEvent>(
   spec: EngineAdapterSpec<TCompiled, TEvent>,
 ): AgentEngine<TCompiled> {
   const builder = engineFrameBuilder(spec.id);
+  const compile = (request: EngineRunRequest): EngineCompileResult<TCompiled> =>
+    outputSchemaRefusal(spec.id, spec.structuredOutput ?? false, request.outputSchema) ??
+    spec.compile(request);
 
   return {
     id: spec.id,
@@ -86,10 +97,10 @@ export function createEngineAdapter<TCompiled, TEvent>(
           ? skillsUnderConfigDirectory(request.resources.skills, spec.protectedConfigDirectory)
           : []),
 
-    compile: (request) => spec.compile(request),
+    compile,
 
     start(request: EngineRunRequest, context: EngineStartContext = {}): EngineConnection {
-      const compiled = spec.compile(request);
+      const compiled = compile(request);
       if (!compiled.ok) {
         throw new Error(
           `startRun: ${compiled.reason} Call compile() first and act on its refusal.`,
@@ -99,6 +110,7 @@ export function createEngineAdapter<TCompiled, TEvent>(
       const plan = spec.plan(compiled.compiled, request, {
         sessionStore: context.sessionStore,
         abortController,
+        fileSearch: context.fileSearch,
       });
       const { identity } = plan;
       let completed = false;
@@ -175,6 +187,9 @@ export function createEngineAdapter<TCompiled, TEvent>(
           return Promise.resolve();
         },
         sessionDurability: (): SessionDurabilityVerdict => plan.durability(completed),
+        ...(plan.approvalRequest === undefined
+          ? {}
+          : { approvalRequest: () => plan.approvalRequest?.() ?? null }),
       };
     },
   };

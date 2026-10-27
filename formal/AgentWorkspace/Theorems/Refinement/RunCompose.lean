@@ -9,17 +9,17 @@ private def archived : ExistingSession :=
     active := false, engineSessionIdKnown := true }
 
 /-- The repaired composition root agrees with the target on existing-session acceptance. -/
-@[aw_spec (tier := T4) (ts := "apps/web/server/composition/register.ts#openSession")]
+@[aw_spec (tier := T4) (ts := "apps/web/server/composition/wiring/run-api.ts#openSession")]
 theorem target_agrees_with_current (w s : Bool) (session : ExistingSession) :
     openSessionTarget w s session = openSessionCurrent w s session := by
   rfl
 
 /-- An archived session is refused before its saved SDK id can select a resumed launch. -/
-@[aw_spec (tier := T4) (ts := "apps/web/server/composition/register.ts#openSession")]
+@[aw_spec (tier := T4) (ts := "apps/web/server/composition/wiring/run-api.ts#openSession")]
 theorem archived_session_reuse_refused :
     openSessionCurrent true true archived = false ∧
     openSessionTarget true true archived = false ∧
-    sessionForLaunchResume archived = true := by decide
+    sessionForLaunchResume archived = true := by decide +kernel
 
 /-- The server parser and published contract both reject an empty paired model. -/
 @[aw_spec (tier := T4) (ts := "apps/web/server/runs/api.ts#parseStartRunBody")]
@@ -31,6 +31,6 @@ theorem server_rejects_empty_model_with_contract :
       | .rejected _ => false) = false ∧
     AgentWorkspace.Contracts.Runs.startRunRequest (.obj [("prompt", .str "go"),
       ("modelConnectionId", .str "123e4567-e89b-42d3-a456-426614174000"),
-      ("model", .str "")]) = false := by decide
+      ("model", .str "")]) = false := by decide +kernel
 
 end AgentWorkspace.Theorems.Refinement.RunCompose

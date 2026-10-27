@@ -12,10 +12,10 @@ import { NO_INVITATION_CAPABILITY } from '../../contracts/invitations';
 import { NO_MEMBERSHIP_CAPABILITY } from '../../contracts/team';
 import { createMemoryDirectory } from '../rbac/memory-directory';
 import { ROLES, type Role } from '../rbac/roles';
-import { clearRbacRuntime } from '../rbac/runtime';
 import { invitationCapabilityForViewer } from './invitation-capability';
 import { membershipCapabilityForViewer } from './membership-capability';
 import { NO_TEAM_CAPABILITY, resolveTeamCapability, teamCapabilityFor } from './team-capability';
+import { clearApplicationContext } from '../application-context';
 
 const WORKSPACE = { id: 'ws-team-capability', slug: 'acme', name: 'Acme' };
 
@@ -87,11 +87,11 @@ describe('teamCapabilityFor', () => {
 
 describe('resolveTeamCapability', () => {
   afterEach(() => {
-    clearRbacRuntime();
+    clearApplicationContext();
   });
 
   it('refuses both halves when no RBAC runtime is wired, rather than deciding without one', async () => {
-    clearRbacRuntime();
+    clearApplicationContext();
     expect(await resolveTeamCapability()).toEqual(NO_TEAM_CAPABILITY);
   });
 });

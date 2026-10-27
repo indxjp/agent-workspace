@@ -10,31 +10,30 @@ import type { EngineId } from '@indx-workspace/contracts/engines';
  */
 export const ENGINE_PACKAGES: Readonly<Record<EngineId, Readonly<Record<string, string>>>> = {
   'claude-agent-sdk': {
-    '@anthropic-ai/claude-agent-sdk': '0.3.296',
-    '@anthropic-ai/sdk': '0.133.0',
+    '@anthropic-ai/claude-agent-sdk': '0.3.310',
+    '@anthropic-ai/sdk': '0.137.0',
   },
   'openai-agents': {
-    '@ai-sdk/anthropic': '4.0.78',
-    '@openai/agents': '0.20.0',
-    '@openai/agents-extensions': '0.20.0',
+    '@ai-sdk/anthropic': '4.0.85',
+    '@openai/agents': '0.21.0',
+    '@openai/agents-extensions': '0.21.0',
     ws: '8.22.0',
   },
   pi: {
-    '@earendil-works/chord': '1.1.0',
-    '@earendil-works/pi-agent-core': '1.1.0',
-    '@earendil-works/pi-ai': '1.1.0',
-    '@earendil-works/pi-codemode': '1.1.0',
-    '@earendil-works/pi-coding-agent': '1.1.0',
-    '@earendil-works/pi-mcp': '1.1.0',
-    '@earendil-works/pi-telemetry': '1.1.0',
-    '@earendil-works/pi-tui': '1.1.0',
+    '@earendil-works/pi-agent-core': '1.4.0',
+    '@earendil-works/pi-ai': '1.4.0',
+    '@earendil-works/pi-codemode': '1.4.0',
+    '@earendil-works/pi-coding-agent': '1.4.0',
+    '@earendil-works/pi-mcp': '1.4.0',
+    '@earendil-works/pi-telemetry': '1.4.0',
+    '@earendil-works/pi-tui': '1.4.0',
   },
   mastra: {
-    '@ai-sdk/anthropic': '4.0.78',
-    '@ai-sdk/openai': '4.0.91',
-    '@mastra/core': '1.76.0',
-    '@mastra/mcp': '2.3.0',
-    '@mastra/memory': '1.37.0',
+    '@ai-sdk/anthropic': '4.0.85',
+    '@ai-sdk/openai': '4.0.99',
+    '@mastra/core': '1.79.0',
+    '@mastra/mcp': '2.5.0',
+    '@mastra/memory': '1.39.0',
   },
 };
 

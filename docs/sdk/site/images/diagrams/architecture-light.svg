@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 560" width="960" height="560" role="img" aria-labelledby="title desc">
+  <title id="title">Agent Workspace architecture</title>
+  <desc id="desc">Your repository is pushed with aw dev or aw push to the control plane on your servers, which stores state in PostgreSQL and object storage and launches each run in a runner sandbox (local, Docker or Kubernetes) running an engine. The engine reaches the model only through the model gateway, which holds the provider keys. Your site or app talks to the control plane.</desc>
+  <style>
+    .bg{fill:#ffffff}
+    .box{fill:#f6f8fc;stroke:#d0d7e2;stroke-width:1.5}
+    .pbox{fill:#eef3fd;stroke:#2f5fd0;stroke-width:1.5}
+    .inner{fill:#ffffff;stroke:#d0d7e2;stroke-width:1.5}
+    .edge{fill:none;stroke:#2f5fd0;stroke-width:2}
+    .link{fill:none;stroke:#d0d7e2;stroke-width:2}
+    .bound{fill:none;stroke:#2f5fd0;stroke-width:1.5;stroke-dasharray:6 5}
+    text{font-family:Geist,ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;fill:#0f172a}
+    .t{font-size:16px;font-weight:600}
+    .s{font-size:13px;fill:#475569}
+    .m{font-family:'Geist Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px}
+    .lbl{font-size:12px;fill:#2f5fd0;font-weight:600}
+    .ml{font-family:'Geist Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;fill:#2f5fd0}
+    .arrow{fill:#2f5fd0}
+  </style>
+  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="arrow" d="M0 0L10 5L0 10z"/></marker></defs>
+  <rect class="bg" width="960" height="560" rx="16"/>
+  <rect class="box" x="20" y="50" width="200" height="160" rx="12"/>
+  <text class="t" x="40" y="80">Your repository</text>
+  <text class="m" x="40" y="110">agent-workspace.yaml</text>
+  <text class="m" x="40" y="134">agents/*.ts</text>
+  <text class="m" x="40" y="158">skills/</text>
+  <text class="m" x="40" y="182">tools/</text>
+  <rect class="box" x="20" y="300" width="200" height="130" rx="12"/>
+  <text class="t" x="40" y="330">Your site or app</text>
+  <text class="s" x="40" y="358">chat page · widget</text>
+  <text class="s" x="40" y="380">React · SDK · HTTP</text>
+  <text class="s" x="40" y="410">your users talk here</text>
+  <rect class="bound" x="300" y="16" width="470" height="528" rx="16"/>
+  <text class="lbl" x="320" y="40">YOUR SERVERS</text>
+  <rect class="pbox" x="330" y="56" width="280" height="140" rx="12"/>
+  <text class="t" x="350" y="86">Control plane</text>
+  <text class="s" x="350" y="112">agents · runs · users</text>
+  <text class="s" x="350" y="132">secrets · audit</text>
+  <text class="s" x="350" y="168">web console + API</text>
+  <rect class="box" x="630" y="56" width="120" height="140" rx="12"/>
+  <text class="t" x="690" y="104" text-anchor="middle">PostgreSQL</text>
+  <text class="s" x="690" y="130" text-anchor="middle">+ object</text>
+  <text class="s" x="690" y="150" text-anchor="middle">storage</text>
+  <path class="link" d="M610 126H630"/>
+  <rect class="box" x="330" y="246" width="420" height="140" rx="12"/>
+  <text class="t" x="350" y="276">Runner + sandbox</text>
+  <text class="s" x="350" y="298">one sandbox per run: local · Docker · Kubernetes</text>
+  <rect class="inner" x="350" y="312" width="380" height="60" rx="12"/>
+  <text class="t" x="366" y="336">Engine</text>
+  <text class="s" x="366" y="358">Claude Agent SDK · Mastra · OpenAI Agents SDK · pi</text>
+  <rect class="pbox" x="330" y="436" width="420" height="84" rx="12"/>
+  <text class="t" x="350" y="466">Model gateway</text>
+  <text class="s" x="350" y="490">provider keys stay here; a run gets a per-run token</text>
+  <rect class="box" x="800" y="416" width="144" height="124" rx="12"/>
+  <text class="t" x="820" y="444">Model</text>
+  <text class="s" x="820" y="468">Anthropic · OpenAI</text>
+  <text class="s" x="820" y="488">Azure OpenAI</text>
+  <text class="s" x="820" y="508">self-hosted</text>
+  <path class="edge" d="M220 110H326" marker-end="url(#a)"/>
+  <text class="ml" x="236" y="100">aw dev</text>
+  <text class="ml" x="236" y="128">aw push</text>
+  <path class="edge" d="M220 365H274V166H326" marker-end="url(#a)"/>
+  <path class="edge" d="M470 196V242" marker-end="url(#a)"/>
+  <text class="lbl" x="482" y="224">launches each run</text>
+  <path class="edge" d="M470 386V432" marker-end="url(#a)"/>
+  <text class="lbl" x="482" y="414">model calls</text>
+  <path class="edge" d="M750 478H796" marker-end="url(#a)"/>
+</svg>

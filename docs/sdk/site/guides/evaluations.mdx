@@ -53,13 +53,15 @@ cases:
         - You are a customer
 ```
 
-| Check         | Passes when                                                  |
-| ------------- | ------------------------------------------------------------ |
-| `contains`    | the final answer contains every listed text (case-sensitive) |
-| `notContains` | the final answer contains none of the listed texts           |
-| `tool`        | the run called the tool with exactly this name               |
-| `toolInput`   | with `tool`, one of its calls had at least these arguments   |
-| `judge`       | a model grades the answer as meeting this rubric             |
+| Check            | Passes when                                                  |
+| ---------------- | ------------------------------------------------------------ |
+| `contains`       | the final answer contains every listed text (case-sensitive) |
+| `notContains`    | the final answer contains none of the listed texts           |
+| `tool`           | the run called the tool with exactly this name               |
+| `toolInput`      | with `tool`, one of its calls had at least these arguments   |
+| `output`         | with `outputSchema`, the run's structured output had these   |
+| `judge`          | a model grades the answer as meeting this rubric             |
+| `awaitsApproval` | `true`: the run stops for approval instead of finishing      |
 
 `toolInput` is optional and only valid beside `tool`. It is a subset match: a call passes when every
 key you list is present with an equal value, and the call may carry others. It holds at most 2048
@@ -74,6 +76,55 @@ cases:
       toolInput:
         orderId: '1042'
 ```
+
+`output` checks the run's structured output and is only valid in a case that has an `outputSchema`:
+the JSON Schema the case's run answers with (draft 2020-12, root `type: object`, at most 4096
+characters of JSON). It is a subset match like `toolInput`: every key you list must be present with
+an equal value, and the output may carry others. Arrays must be equal and in the same order. It holds
+at most 2048 characters of JSON. A case with an `outputSchema` on an engine that cannot return
+structured output is refused with `engine_capability_unsupported`.
+
+```yaml title="evals/drafting.yaml (illustrative)" claim="illustrative"
+cases:
+  - name: the outline is 140 x 90
+    input: change BRK-1003 to a 140 x 90 plate
+    outputSchema:
+      type: object
+      required: [width, height]
+      properties:
+        width: { type: number }
+        height: { type: number }
+    expect:
+      output:
+        width: 140
+        height: 90
+```
+
+### Agents that stop for approval
+
+An agent whose tools need a person's approval stops at the gated call, and its run ends as
+`awaiting_approval` (see [the run lifecycle](/concepts/run-lifecycle)). A case that reaches that gate fails with
+`run_awaiting_approval` unless it says it expects the stop. Add `awaitsApproval: true` and the pause
+is the pass condition. The other checks then read what the run did up to the pause: `tool` and
+`toolInput` also match the call it stopped on, and `contains`, `notContains` and `judge` read the
+answer so far.
+
+```yaml title="evals/consolidation.yaml (illustrative)" claim="illustrative"
+cases:
+  - name: stops at the plan write
+    input: consolidate the three branch workbooks
+    expect:
+      awaitsApproval: true
+      tool: Write
+      toolInput:
+        file_path: outputs/plan.json
+```
+
+An evaluation never approves, so nothing is written: once the case is scored, the run is cancelled
+and its approval request is voided. A case with `awaitsApproval` whose run finishes without stopping
+fails with `run_not_awaiting_approval`, because the gate is what the case tests. `awaitsApproval`
+cannot be combined with `output`, since a run that has stopped has no structured output yet. Cases
+without it behave as before.
 
 A file holds at most 200 cases. Edit it like any other source file, and commit it. The schema is
 `EvalCaseFileSchema` in [`evaluations`](/reference/contracts/evaluations).
@@ -167,11 +218,11 @@ when a case fails. `aw push --yes` points `local` at the version it saves, so gi
 rather than the one `aw dev` syncs to. `aw eval run` is the same command as `aw eval`, with three
 flags for a pipeline:
 
-| Flag                 | What it does                                                                        |
-| -------------------- | ----------------------------------------------------------------------------------- |
-| `--min-score <n>`    | exits 1 unless the share of passing cases, 0 to 1, is at least `n`                  |
-| `--junit <file>`     | writes a JUnit XML report, a suite per agent, even when the run fails               |
-| `--baseline <id>`    | prints which cases regressed, were fixed, added or removed against that evaluation  |
+| Flag              | What it does                                                                       |
+| ----------------- | ---------------------------------------------------------------------------------- |
+| `--min-score <n>` | exits 1 unless the share of passing cases, 0 to 1, is at least `n`                 |
+| `--junit <file>`  | writes a JUnit XML report, a suite per agent, even when the run fails              |
+| `--baseline <id>` | prints which cases regressed, were fixed, added or removed against that evaluation |
 
 With `--min-score`, a failing case no longer fails the command by itself; the score does. The
 baseline is an evaluation id from an earlier run, and it must have completed. It compares one agent,

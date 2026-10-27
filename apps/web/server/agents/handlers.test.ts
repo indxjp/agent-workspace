@@ -16,9 +16,8 @@ import {
   listAgents,
   requireAgentId,
   updateAgent,
-  type ApiProblem,
-  type ApiResult,
 } from './handlers';
+import { type ApiProblem, type ApiResult } from '../http/result';
 import { createInMemoryAgentStoreProvider } from './memory-store';
 import type { AgentStoreProvider, WorkspaceAgentStore } from './store';
 
@@ -144,6 +143,25 @@ describe('GET /api/agents', () => {
     expect(seenByA).toEqual(['A-only']);
     expect(seenByB).toEqual(['B-only']);
   });
+
+  it('lists a built-in agent last and keeps the rest in the store order (#1848)', async () => {
+    await createAgent(a, body({ name: 'builder' }), OWNER_A);
+    await createAgent(a, body({ name: 'Alpha' }), OWNER_A);
+    await createAgent(a, body({ name: 'Beta' }), OWNER_A);
+    // The memory store keeps no built-in marker (PostgreSQL does); mark the row named `builder`.
+    const marked: WorkspaceAgentStore = {
+      ...a,
+      list: async () =>
+        (await a.list()).map((row) =>
+          row.name === 'builder' ? { ...row, builtin: 'builder' as const } : row,
+        ),
+    };
+    // Rows created in the same millisecond tie-break by random id, so read the store's own order.
+    const storeOrder = (await a.list()).map((row) => row.name).filter((name) => name !== 'builder');
+    const listed = listBody(await listAgents(marked));
+    expect(listed.map((x) => x.name)).toEqual([...storeOrder, 'builder']);
+    expect(listed[2]?.builtin).toBe('builder');
+  });
 });
 
 function listBody(result: ApiResult): AgentResource[] {
@@ -175,6 +193,47 @@ describe('GET /api/agents/:id', () => {
     const createdResult = await createAgent(a, body({ name: 'Secret Project Agent' }), OWNER_A);
     const result = await getAgent(b, agentOf(createdResult).id);
     expect(JSON.stringify(result.body)).not.toContain('Secret Project Agent');
+  });
+});
+
+describe('lineage and archivedAt on read (issue #1851)', () => {
+  const LINEAGE = {
+    agentId: '44444444-4444-4444-8444-444444444444',
+    version: 2,
+    runId: 'run_abc',
+  };
+  const ARCHIVED_AT = new Date('2026-02-03T04:05:06.007Z');
+
+  /** The memory store cannot write lineage (only the builder can), so mark the stored row. */
+  function markedStore(id: string): WorkspaceAgentStore {
+    const mark = <T extends { id: string }>(row: T) =>
+      row.id === id ? { ...row, createdByAgent: LINEAGE, archivedAt: ARCHIVED_AT } : row;
+    return {
+      ...a,
+      list: async () => (await a.list()).map(mark),
+      get: async (rowId) => {
+        const row = await a.get(rowId);
+        return row === null ? null : mark(row);
+      },
+    };
+  }
+
+  it('shows lineage and archivedAt on get and on list', async () => {
+    const made = agentOf(await createAgent(a, body({ name: 'Made' }), OWNER_A));
+    const store = markedStore(made.id);
+    const expected = { createdByAgent: LINEAGE, archivedAt: '2026-02-03T04:05:06.007Z' };
+    expect(agentOf(await getAgent(store, made.id))).toMatchObject(expected);
+    expect(listBody(await listAgents(store))[0]).toMatchObject(expected);
+  });
+
+  it('shows neither for a person-made agent, and an archived agent is still listed', async () => {
+    const person = agentOf(await createAgent(a, body({ name: 'Person' }), OWNER_A));
+    const made = agentOf(await createAgent(a, body({ name: 'Made' }), OWNER_A));
+    const store = markedStore(made.id);
+    const read = agentOf(await getAgent(store, person.id));
+    expect(read).not.toHaveProperty('createdByAgent');
+    expect(read).not.toHaveProperty('archivedAt');
+    expect(listBody(await listAgents(store))).toHaveLength(2);
   });
 });
 

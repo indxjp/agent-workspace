@@ -9,7 +9,8 @@
  */
 import { createSecret, listSecrets } from '../../../server/secrets/handlers';
 import { requireResourceAccess } from '../../../server/resources/authorise';
-import { readJsonBody, toResponse, withWorkspaceStore } from '../../../server/secrets/http';
+import { readJsonBody, withWorkspaceStore } from '../../../server/secrets/http';
+import { apiResultResponse } from '../../../server/http/json-transport';
 
 // The repository-wide route invariant (`tests/route-inventory.test.ts`): every route runs on the
 // Node runtime and is never prerendered. These handlers read the session cookie through
@@ -32,7 +33,7 @@ export async function GET(request: Request): Promise<Response> {
     (store) => listSecrets(store, new URL(request.url).searchParams.get('name')),
     access.principal.workspaceId,
   );
-  return toResponse(result);
+  return apiResultResponse(result);
 }
 
 /**
@@ -54,5 +55,5 @@ export async function POST(request: Request): Promise<Response> {
     },
     access.principal.workspaceId,
   );
-  return toResponse(result);
+  return apiResultResponse(result);
 }

@@ -12,7 +12,8 @@ import { FIXTURE_PERMISSIONS, fixtureSurface, versionRequest, type FixtureEdits 
 import { createAgentVersion } from './handlers';
 import { createInMemoryAgentVersionStoreProvider } from './memory-store';
 import { setAgentPointer, type PointerActor } from './pointers';
-import { saveUiEdit, type UiEdit } from './ui-edit';
+import type { StorageConnectionLookup } from './storage-grants';
+import { saveUiEdit, uiEditBody, type UiEdit } from './ui-edit';
 
 /**
  * `saveUiEdit` (issue #616) on the memory stores: a console edit adds exactly one `ui` version,
@@ -27,6 +28,20 @@ const DIGEST = 'a'.repeat(64);
 
 /** A workspace that holds every bundle a version pins. */
 const everyBundleStored = (): Promise<readonly string[]> => Promise.resolve([]);
+
+const STORAGE_CONNECTION = '33333333-3333-4333-8333-333333333333';
+/** A workspace that holds the `acme-data` storage connection, which allows `reports`. */
+const acmeData: StorageConnectionLookup = (names) =>
+  Promise.resolve(
+    new Map(
+      names
+        .filter((name) => name === 'acme-data')
+        .map((name) => [
+          name,
+          { id: STORAGE_CONNECTION, allowedPrefixes: ['reports'], writeAllowed: false },
+        ]),
+    ),
+  );
 
 async function harness() {
   // A ticking clock, so every row write moves `updatedAt` and the memory store sees the edit.
@@ -76,12 +91,13 @@ async function harness() {
         versionRequest({ name: agent.name, ...edits }),
         await current(agent.id),
         OWNER,
-        { store, toolBundles: everyBundleStored },
+        { store, toolBundles: everyBundleStored, storageConnections: acmeData },
       );
       const { number } = AgentVersionResourceSchema.parse(saved.body);
       await setAgentPointer({ environment: 'local', version: number }, agent, ACTOR, {
         store,
         toolBundles: everyBundleStored,
+        storageConnections: acmeData,
       });
     },
     edit(edit: UiEdit) {
@@ -89,9 +105,15 @@ async function harness() {
         saveUiEdit(row, edit, ACTOR, {
           store,
           toolBundles: everyBundleStored,
+          storageConnections: acmeData,
           assignments: () =>
             Promise.resolve(
-              assignments.get(agent.id) ?? { files: [], skillIds: [], connectorIds: [] },
+              assignments.get(agent.id) ?? {
+                files: [],
+                skillIds: [],
+                connectorIds: [],
+                storageGrants: [],
+              },
             ),
         }),
       );
@@ -108,6 +130,22 @@ async function harness() {
 }
 
 describe('saveUiEdit', () => {
+  it('saves a console edit of an agent that holds a storage grant and keeps the grant', async () => {
+    const h = await harness();
+    await h.push({
+      resources: { files: [{ path: 'storage://acme-data/reports', access: 'read' }] },
+    });
+
+    const refused = await h.edit({ kind: 'patch', patch: { instructions: 'From the console.' } });
+
+    expect(refused).toBeNull();
+    expect(h.provider.assignmentsOf(h.agent.id)?.storageGrants).toEqual([
+      { connectionId: STORAGE_CONNECTION, prefix: 'reports', access: 'read' },
+    ]);
+    const listing = await h.listing();
+    expect(listing.pointers).toMatchObject([{ environment: 'local', number: 2 }]);
+  });
+
   it('adds exactly one ui version on the local body, moves local and keeps the surfaces', async () => {
     const h = await harness();
     await h.push({ instructions: 'From code.', surfaces: [fixtureSurface('help')] });
@@ -173,7 +211,7 @@ describe('saveUiEdit', () => {
 
   it('builds version 1 from the row and its assignments for an agent with no version', async () => {
     const h = await harness();
-    h.setAssignments({ files: [], skillIds: [SKILL], connectorIds: [] });
+    h.setAssignments({ files: [], skillIds: [SKILL], connectorIds: [], storageGrants: [] });
 
     expect(
       await h.edit({ kind: 'patch', patch: { modelConnectionId: CONNECTION, model: 'opus' } }),
@@ -194,6 +232,63 @@ describe('saveUiEdit', () => {
     expect(listing.pointers).toMatchObject([{ environment: 'local', number: 1 }]);
   });
 
+  it('keeps a skill revision pin through later edits, drops it with its skill (SDK-19, N-1)', async () => {
+    const h = await harness();
+    await h.push();
+    const pinned = {
+      files: [],
+      skillIds: [SKILL],
+      skillRevisions: { [SKILL]: 2 },
+      connectorIds: [],
+      storageGrants: [],
+    };
+
+    expect(await h.edit({ kind: 'resources', assignments: pinned })).toBeNull();
+    expect(h.provider.assignmentsOf(h.agent.id)?.skillRevisions).toEqual({ [SKILL]: 2 });
+
+    expect(await h.edit({ kind: 'patch', patch: { instructions: 'Later.' } })).toBeNull();
+    const versions = (await h.listing()).versions.map((version) =>
+      AgentVersionBodySchema.parse(version.body),
+    );
+    expect(versions[1]?.definition.resources.skillRevisions).toEqual({ triage: 2 });
+    expect(versions[2]?.definition.resources.skillRevisions).toEqual({ triage: 2 });
+
+    expect(
+      await h.edit({
+        kind: 'resources',
+        assignments: {
+          files: [],
+          skillIds: [],
+          skillRevisions: { [SKILL]: 2 },
+          connectorIds: [],
+          storageGrants: [],
+        },
+      }),
+    ).toBeNull();
+    const last = AgentVersionBodySchema.parse((await h.listing()).versions[3]?.body);
+    expect(last.definition.resources.skillRevisions).toBeUndefined();
+    expect(last.definition.resources.skills).toEqual([]);
+  });
+
+  it('carries a row pin into the body built from the row (SDK-19, N-1)', async () => {
+    const h = await harness();
+    h.setAssignments({
+      files: [],
+      skillIds: [SKILL],
+      skillRevisions: { [SKILL]: 3 },
+      connectorIds: [],
+      storageGrants: [],
+    });
+
+    expect(await h.edit({ kind: 'patch', patch: { instructions: 'Edited.' } })).toBeNull();
+
+    const body = AgentVersionBodySchema.parse((await h.listing()).versions[0]?.body);
+    expect(body.definition.resources).toMatchObject({
+      skills: ['triage'],
+      skillRevisions: { triage: 3 },
+    });
+  });
+
   it('keeps an earlier edit to an un-materialised row', async () => {
     const h = await harness();
     await h.push({ instructions: 'From code.', surfaces: [fixtureSurface('help')] });
@@ -210,6 +305,50 @@ describe('saveUiEdit', () => {
     });
     // Surfaces live only in version bodies; the row-built base keeps `local`'s (review of #646).
     expect(body.surfaces).toMatchObject([{ name: 'help', agent: 'Renamed' }]);
+  });
+
+  it('answers 409 pointer_moved, not an overwrite, when a concurrent save moved local after the edit read it (#1847)', async () => {
+    const h = await harness();
+    await h.push({ instructions: 'From code.' });
+    let raced = false;
+    const racing = {
+      ...h.store,
+      async list(agentId: string) {
+        const listing = await h.store.list(agentId);
+        if (!raced) {
+          raced = true;
+          await h.push({ instructions: 'From a second tab.' });
+        }
+        return listing;
+      },
+    };
+
+    const refused = await saveUiEdit(
+      await h.agents.get(h.agent.id).then((row) => row ?? h.agent),
+      { kind: 'patch', patch: { instructions: 'From the console.' } },
+      ACTOR,
+      {
+        store: racing,
+        toolBundles: everyBundleStored,
+        storageConnections: acmeData,
+        assignments: () =>
+          Promise.resolve({ files: [], skillIds: [], connectorIds: [], storageGrants: [] }),
+      },
+    );
+
+    expect(refused).toMatchObject({
+      status: 409,
+      body: { error: { code: 'pointer_moved', details: ['environment:local', 'current:2'] } },
+    });
+    const listing = await h.listing();
+    expect(listing.pointers).toMatchObject([{ environment: 'local', number: 2 }]);
+    // The edit's own version stays saved and unpointed (builder design §08 Data rule 2).
+    expect(listing.versions.map((version) => [version.number, version.via])).toEqual([
+      [1, 'api'],
+      [2, 'api'],
+      [3, 'ui'],
+    ]);
+    expect((await h.agents.get(h.agent.id))?.instructions).toBe('From a second tab.');
   });
 
   it('answers the legacy code for an id the workspace does not have, and saves nothing', async () => {
@@ -239,5 +378,32 @@ describe('saveUiEdit', () => {
       body: { error: { code: 'invalid_agent_version' } },
     });
     expect(h.provider.versionCount()).toBe(1);
+  });
+});
+
+describe('uiEditBody keeps storage folder grants', () => {
+  // @story US-STO-12
+  it('[US-STO-12][api][sdk] a resources edit replaces file ids and leaves the storage:// grants alone', () => {
+    const base = AgentVersionBodySchema.parse(
+      versionRequest({
+        resources: {
+          files: [
+            { path: 'docs/a.md', access: 'read' },
+            { path: 'storage://acme-data/reports/2026', access: 'read' },
+          ],
+        },
+      }).body,
+    );
+    const edited = uiEditBody(
+      base,
+      {
+        kind: 'resources',
+        assignments: { files: [], skillIds: [], connectorIds: [], storageGrants: [] },
+      },
+      () => 'unused',
+    );
+    expect(edited.definition.resources.files).toEqual([
+      { path: 'storage://acme-data/reports/2026', access: 'read' },
+    ]);
   });
 });

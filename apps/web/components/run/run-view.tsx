@@ -31,16 +31,17 @@
  * consequences follow, and each is recorded in `docs/adr/`:
  *
  *   1. **An action nobody has built is a disabled button, not a live one.** Interrupt, Sessions,
- *      Attach file, Resume another session and Download point at capability no Wave 1 task ships.
- *      They render with the label the mockup gives them, in the design system's own
- *      `.btn[disabled]` treatment. See W1-UI-03-an-unbuilt-action-is-a-disabled-button.md.
+ *      Resume another session and Download point at capability no Wave 1 task ships (Attach file
+ *      is built: `attach-control.tsx`, issue #1680). They render with the label the mockup gives
+ *      them, in the design system's own `.btn[disabled]` treatment. See W1-UI-03-an-unbuilt-action-is-a-disabled-button.md.
  *   2. **A region with no data is absent, not an empty frame.** No rail cards renders no `<aside>`
  *      and the transcript takes the full width; no SDK events renders the tab's empty line rather
  *      than an empty log. §43 asks for calm and sparse, and a framed empty container is furniture.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { AssistantProse } from '@indx-workspace/react';
 import { ShareDialog, type ShareSubject } from '../shares/share-dialog';
+import { AttachControl, type AttachedFile } from './attach-control';
 
 import {
   type ActivityStep,
@@ -110,7 +111,39 @@ const KV =
 export interface RunViewProps {
   readonly run: Run;
   readonly sessionId: string | null;
-  readonly onFollowUp?: (text: string) => void;
+  /** The runs this screen started in the session; a session share publishes their stored text. */
+  readonly runIds?: readonly string[];
+  /** The follow-up's text and the ids of the files attached to the session since the last send. */
+  readonly onFollowUp?: (text: string, attachments: readonly string[]) => void;
+  /** Sets the follow-up text, and focuses it, each time `nonce` changes after mount. */
+  readonly prefill?: ComposerPrefill | undefined;
+  /** Rendered under the transcript: a caller's own prompt, such as the Builder's approval card. */
+  readonly approval?: ReactNode;
+}
+
+/** Text a caller asks a composer to hold; a new `nonce` is a new request, the same one is not. */
+export interface ComposerPrefill {
+  readonly text: string;
+  readonly nonce: number;
+}
+
+/**
+ * Applies `prefill` to a composer when its nonce changes. The nonce present at mount is the
+ * baseline, so a composer that replaces another (the home screen becoming this view) does not
+ * replay a request the earlier one already took.
+ */
+export function useComposerPrefill(
+  prefill: ComposerPrefill | undefined,
+  setText: (text: string) => void,
+  composer: RefObject<HTMLTextAreaElement | null>,
+): void {
+  const applied = useRef(prefill?.nonce);
+  useEffect(() => {
+    if (prefill === undefined || prefill.nonce === applied.current) return;
+    applied.current = prefill.nonce;
+    setText(prefill.text);
+    composer.current?.focus();
+  }, [prefill, setText, composer]);
 }
 
 /** A session share must use the durable session id, never a display title or subtitle. */
@@ -122,30 +155,25 @@ export function shareSubjectForSession(
   return id === '' ? null : { type: 'session', id, label };
 }
 
-/** Publish visible message content without the signed-in user's identity. */
-export function shareableTranscript(messages: readonly Message[]): readonly unknown[] {
-  return messages.map((message) => {
-    switch (message.kind) {
-      case 'user':
-        return { kind: message.kind, id: message.id, paragraphs: message.paragraphs };
-      case 'agent':
-        return { kind: message.kind, id: message.id, blocks: message.blocks };
-      default: {
-        const unknown: never = message;
-        throw new TypeError(`no message of kind ${JSON.stringify(unknown)} can be shared`);
-      }
-    }
-  });
-}
-
 /**
  * The §19 run view. One component, rendered by the home chat after the first message and by
  * nothing else in this wave.
  */
-export function RunView({ run, sessionId, onFollowUp }: RunViewProps) {
+export function RunView({
+  run,
+  sessionId,
+  runIds = [],
+  onFollowUp,
+  prefill,
+  approval,
+}: RunViewProps) {
   const { heading, messages, technical, rail, followUp, failure } = run;
   const shareSubject = shareSubjectForSession(sessionId, heading.title);
   const [followUpDraft, setFollowUpDraft] = useState('');
+  const followUpRef = useRef<HTMLTextAreaElement>(null);
+  useComposerPrefill(prefill, setFollowUpDraft, followUpRef);
+  const [attached, setAttached] = useState<readonly AttachedFile[]>([]);
+  useEffect(() => setAttached([]), [sessionId]);
   const lastMessage = messages[messages.length - 1] ?? messages[0];
   // `dot` means *live* (`badgeForRunStatus`), and a null status is a run whose status is not known
   // yet. A follow-up is a second run on the same session, so it must wait for a terminal status —
@@ -158,7 +186,11 @@ export function RunView({ run, sessionId, onFollowUp }: RunViewProps) {
     if (!canSendFollowUp || onFollowUp === undefined) return;
     const text = followUpDraft.trim();
     setFollowUpDraft('');
-    onFollowUp(text);
+    setAttached([]);
+    onFollowUp(
+      text,
+      attached.map((file) => file.id),
+    );
   };
 
   return (
@@ -171,9 +203,7 @@ export function RunView({ run, sessionId, onFollowUp }: RunViewProps) {
           )}
         </div>
         <div className="ml-auto flex items-center gap-2">
-          {shareSubject === null ? null : (
-            <ShareDialog subject={shareSubject} transcript={shareableTranscript(messages)} />
-          )}
+          {shareSubject === null ? null : <ShareDialog subject={shareSubject} runIds={runIds} />}
           {heading.status === null ? null : <StatusBadge badge={heading.status} />}
           {heading.actions.map((action) => (
             <UnbuiltButton key={action.id} action={action} />
@@ -197,9 +227,11 @@ export function RunView({ run, sessionId, onFollowUp }: RunViewProps) {
             {assistantIsWorking ? <PendingAssistant name={heading.title} /> : null}
             {failure === null ? null : <FailureNotice failure={failure} />}
           </div>
+          {approval}
 
           <div className="mt-10 flex flex-col gap-2 rounded-[18px] border border-border-strong bg-surface px-4 py-3 shadow-(--shadow)">
             <textarea
+              ref={followUpRef}
               aria-label="Ask a follow-up"
               className="min-h-[52px] w-full resize-y border-0 bg-transparent p-0 text-[14.5px] leading-[1.6] text-text placeholder:text-muted focus:outline-none"
               placeholder={followUp.placeholder}
@@ -211,10 +243,19 @@ export function RunView({ run, sessionId, onFollowUp }: RunViewProps) {
                 submitFollowUp();
               }}
             />
-            <div className="flex items-center gap-2">
-              {followUp.actions.map((action) => (
-                <UnbuiltButton key={action.id} action={action} ghost small />
-              ))}
+            <div className="flex flex-wrap items-center gap-2">
+              <AttachControl
+                sessionId={sessionId}
+                files={attached}
+                onAttached={(file) => setAttached((current) => [...current, file])}
+                buttonClass={`${BTN} ${BTN_SM} ${BTN_GHOST}`}
+                disabledClass={BTN_DISABLED}
+              />
+              {followUp.actions
+                .filter((action) => action.id !== 'attach')
+                .map((action) => (
+                  <UnbuiltButton key={action.id} action={action} ghost small />
+                ))}
               <span className="flex-1" />
               <span className="text-[12.5px] text-muted">{followUp.status}</span>
               <button

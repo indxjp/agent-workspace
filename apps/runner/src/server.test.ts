@@ -11,19 +11,67 @@
  * credential" — over a real socket, with real SSE framing, and assert the two wire names a
  * consumer downstream (`apps/web/server/runs/relay.ts`) depends on by name.
  */
-import { beforeAll, describe, expect, it } from 'vitest';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { createReadStream } from 'node:fs';
+import { createServer } from 'node:http';
+
+import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { toAgentFrames, type ClassifiedSdkEvent } from '@agent-workspace/core';
+import { createJsonLogger, type Logger } from '@agent-workspace/core/telemetry';
+import { SpanKind, startTracing } from '@agent-workspace/core/tracing';
+import { toAgentFrames, type ClassifiedSdkEvent } from '@agent-workspace/run-protocol';
 import type { EngineFrame } from '@agent-workspace/engine';
-import { decodeUstar } from '@agent-workspace/runtime';
+import {
+  decodeUstar,
+  encodeUstar,
+  encodeUstarStream,
+  RUN_FILES_MAX_BYTES,
+} from '@agent-workspace/runtime/transfer';
 
+import { generatedBody, MiB, peakRssGrowth } from '../../../tests/load/flat-memory.js';
 import { createRunnerServer, parseMaxConcurrentRuns } from './server.js';
 import { collectWorkspace } from './files.js';
 import { installedEngines } from './engines.js';
 import type { EngineStartOutcome, RunnerAgentConnection } from './runtime.js';
+
+// The real verifier, held at a gate a test can close, so "interrupted while hashing" is not a race;
+// `after` runs once it has answered, so "changed after verification" is not a race either.
+const verifyGate = vi.hoisted(
+  (): { hold: Promise<void>; after: (cwd: string) => Promise<void> } => ({
+    hold: Promise.resolve(),
+    after: () => Promise.resolve(),
+  }),
+);
+vi.mock('./verify-files.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./verify-files.js')>();
+  return {
+    ...actual,
+    verifyReferencedFiles: async (
+      ...args: Parameters<typeof actual.verifyReferencedFiles>
+    ): ReturnType<typeof actual.verifyReferencedFiles> => {
+      await verifyGate.hold;
+      const verification = await actual.verifyReferencedFiles(...args);
+      await verifyGate.after(args[0]);
+      return verification;
+    },
+  };
+});
+
+// Set to make the skill inbox removal throw, as a filesystem fault would, naming the host path.
+const inboxRemoval = vi.hoisted((): { fail: boolean } => ({ fail: false }));
+vi.mock('./resources.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./resources.js')>();
+  return {
+    ...actual,
+    removeSkillInbox: (...args: Parameters<typeof actual.removeSkillInbox>): void => {
+      if (inboxRemoval.fail) throw new Error(`EACCES: permission denied, rmdir '${args[0]}'`);
+      actual.removeSkillInbox(...args);
+    },
+  };
+});
 
 // `/healthz` lists the installed engines, so the first request imports every adapter package (four
 // agent SDKs, seconds on a loaded CI runner). That import is paid once here, outside any test's own
@@ -212,6 +260,56 @@ describe('the terminal frame createRunnerServer sends at the end of every run', 
       expect(body).toContain('"interrupted":true');
     },
   );
+});
+
+describe('a run that stopped for want of approval (ADR-0145 D5)', () => {
+  const asked = {
+    toolName: 'Write',
+    toolUseId: 'toolu_9',
+    canonicalCall: '{"input":{"path":"SECRET-ARGUMENT"},"name":"Write"}',
+  };
+
+  it('ends as run-error carrying awaiting_approval and the call, with a message that omits its arguments', async () => {
+    const { names, body } = await runOnce({ ...fakeConnection([]), approvalRequest: () => asked });
+    expect(names.at(-1)).toBe('run-error');
+    const data = body.split('event: run-error')[1] ?? '';
+    const frame = JSON.parse(data.slice(data.indexOf('data: ') + 6).split('\n')[0] ?? '{}') as {
+      code: string;
+      outcome: string;
+      message: string;
+      approvalRequest: unknown;
+    };
+    expect(frame).toMatchObject({
+      code: 'awaiting_approval',
+      outcome: 'awaiting_approval',
+      approvalRequest: asked,
+    });
+    expect(frame.message).toMatch(/^awaiting_approval: /u);
+    expect(frame.message).not.toContain('SECRET-ARGUMENT');
+  });
+
+  it('is still run-done when the connection reports no request', async () => {
+    const { names } = await runOnce({ ...fakeConnection([]), approvalRequest: () => null });
+    expect(names.at(-1)).toBe('run-done');
+  });
+
+  it('is still run-error without the approval code when the stream also failed', async () => {
+    const { names, body } = await runOnce({
+      ...fakeConnection([], { fails: true }),
+      approvalRequest: () => asked,
+    });
+    expect(names.at(-1)).toBe('run-error');
+    expect(body).not.toContain('awaiting_approval');
+  });
+
+  it('is still run-interrupted when the run was interrupted (W1-RN-03)', async () => {
+    const { names, body } = await runThenInterrupt({
+      ...fakeCleanlyCancellingConnection(),
+      approvalRequest: () => asked,
+    });
+    expect(names.at(-1)).toBe('run-interrupted');
+    expect(body).not.toContain('awaiting_approval');
+  });
 });
 
 /**
@@ -665,6 +763,833 @@ describe('the section 14.3 file endpoints', () => {
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
       await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('POST /files streaming', () => {
+  // @story US-STO-06
+  it(
+    '[US-STO-06][contract][run] POST /files streams a 128 MiB archive with flat memory',
+    { timeout: 120_000 },
+    async () => {
+      const root = await mkdtemp(path.join(tmpdir(), 'w3-runner-files-flat-'));
+      const workspace = path.join(root, 'workspace');
+      const runner = createRunnerServer({ workspacePath: workspace });
+      // A plain sink that drains and answers 204, bypassing /files.
+      const sink = createServer((req, res) => {
+        req.resume();
+        req.on('end', () => res.writeHead(204).end());
+      });
+      const listen = async (server: typeof sink): Promise<string> => {
+        await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+        const address = server.address();
+        if (address === null || typeof address === 'string') throw new Error('no address');
+        return `http://127.0.0.1:${String(address.port)}`;
+      };
+      const post = (url: string, body: ReadableStream<Uint8Array>): Promise<Response> =>
+        fetch(url, { method: 'POST', body, duplex: 'half' });
+      const archiveOf = (name: string, size: number) => {
+        const generated = generatedBody(size);
+        const archive = encodeUstarStream(
+          [
+            {
+              path: name,
+              type: 'file',
+              mode: 0o644,
+              size,
+              open: () => Promise.resolve(generated.body),
+            },
+          ],
+          { maxBytes: RUN_FILES_MAX_BYTES },
+        );
+        return { archive, sha256: generated.sha256 };
+      };
+      try {
+        const runnerUrl = `${await listen(runner)}/files`;
+        const sinkUrl = await listen(sink);
+        // The first large upload in a process grows RSS once by native cost that has nothing to do
+        // with the code under test (PR #1757): pay it with 32 MiB sent straight to the sink, then
+        // load /files itself with 1 MiB before the baseline.
+        await (await post(sinkUrl, generatedBody(32 * MiB).body)).arrayBuffer();
+        expect((await post(runnerUrl, archiveOf('warm.bin', MiB).archive)).status).toBe(200);
+        await rm(path.join(workspace, 'warm.bin'));
+
+        const { archive, sha256 } = archiveOf('big.bin', RUN_FILES_MAX_BYTES);
+        let sent = 0;
+        let nextSample = 4 * MiB;
+        let allSent: () => void = () => undefined;
+        const arrived = new Promise<void>((resolve) => {
+          allSent = resolve;
+        });
+        let answer: Promise<Response> | undefined;
+        const growth = await peakRssGrowth(async (sample) => {
+          const sampled = archive.pipeThrough(
+            new TransformStream<Uint8Array, Uint8Array>({
+              transform(chunk, controller) {
+                sent += chunk.byteLength;
+                // The archive's 512-byte header offsets every chunk, so sample on crossing a step.
+                if (sent >= nextSample) {
+                  sample();
+                  nextSample += 4 * MiB;
+                }
+                controller.enqueue(chunk);
+              },
+              flush: () => allSent(),
+            }),
+          );
+          answer = post(runnerUrl, sampled);
+          await Promise.race([arrived, answer]);
+        });
+        expect(growth).toBeLessThan(64 * MiB);
+        const response = await answer;
+        expect(response?.status).toBe(200);
+        expect(await response?.json()).toEqual({ hydrated: ['big.bin'] });
+        const onDisk = createHash('sha256');
+        for await (const chunk of createReadStream(path.join(workspace, 'big.bin'))) {
+          onDisk.update(chunk as Buffer);
+        }
+        expect(onDisk.digest('hex')).toBe(await sha256);
+      } finally {
+        sink.closeAllConnections();
+        runner.closeAllConnections();
+        await Promise.all([
+          new Promise<void>((resolve) => sink.close(() => resolve())),
+          new Promise<void>((resolve) => runner.close(() => resolve())),
+        ]);
+        await rm(root, { recursive: true, force: true });
+      }
+    },
+  );
+});
+
+describe('the section 14.3 file endpoint failures', () => {
+  async function withFilesServer(
+    options: {
+      maxFileArchiveBytes?: number;
+      maxFileArchiveMembers?: number;
+      workspaceIsFile?: boolean;
+      logger?: Logger;
+    },
+    body: (url: string, workspace: string) => Promise<void>,
+  ): Promise<void> {
+    const root = await mkdtemp(path.join(tmpdir(), 'w3-runner-files-fail-'));
+    const workspace = path.join(root, 'workspace');
+    if (options.workspaceIsFile === true) await writeFile(workspace, 'not a directory');
+    else await mkdir(workspace);
+    const server = createRunnerServer({
+      workspacePath: workspace,
+      ...(options.logger === undefined ? {} : { logger: options.logger }),
+      ...(options.maxFileArchiveBytes === undefined
+        ? {}
+        : { maxFileArchiveBytes: options.maxFileArchiveBytes }),
+      ...(options.maxFileArchiveMembers === undefined
+        ? {}
+        : { maxFileArchiveMembers: options.maxFileArchiveMembers }),
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    if (address === null || typeof address === 'string') throw new Error('no address');
+    try {
+      await body(`http://127.0.0.1:${String(address.port)}/files`, workspace);
+    } finally {
+      // A refused upload leaves its request open until the client stops sending.
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await rm(root, { recursive: true, force: true });
+    }
+  }
+
+  it('answers a missing path with a 404 that does not carry the workspace root', async () => {
+    await withFilesServer({}, async (url, workspace) => {
+      const response = await fetch(`${url}?path=missing.txt`);
+      const text = await response.text();
+      expect(response.status).toBe(404);
+      expect(JSON.parse(text)).toMatchObject({ error: 'file_not_found' });
+      expect(text).not.toContain(workspace);
+    });
+  });
+
+  it('answers a traversal request and a missing path parameter with a 400', async () => {
+    await withFilesServer({}, async (url) => {
+      const traversal = await fetch(`${url}?path=%252e%252e/x`);
+      expect(traversal.status).toBe(400);
+      expect(await traversal.json()).toMatchObject({ error: 'invalid_file_request' });
+
+      const missing = await fetch(url);
+      expect(missing.status).toBe(400);
+      expect(await missing.json()).toEqual({
+        error: 'invalid_file_request',
+        message: 'at least one path query parameter is required',
+      });
+    });
+  });
+
+  it('answers a body that is not a tar archive with a 400', async () => {
+    await withFilesServer({}, async (url) => {
+      const response = await fetch(url, { method: 'POST', body: 'garbage' });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({ error: 'invalid_archive' });
+    });
+  });
+
+  it('refuses a collection over the size cap with a 413', async () => {
+    await withFilesServer({ maxFileArchiveBytes: 4 }, async (url, workspace) => {
+      await writeFile(path.join(workspace, 'five.txt'), '12345');
+      const response = await fetch(`${url}?path=five.txt`);
+      expect(response.status).toBe(413);
+      expect(await response.json()).toMatchObject({ error: 'archive_too_large' });
+    });
+  });
+
+  it('[US-STO-06][contract][run] POST /files refuses an archive whose files exceed the cap with a 413', async () => {
+    await withFilesServer({ maxFileArchiveBytes: MiB }, async (url, workspace) => {
+      const archive = encodeUstar([
+        { path: 'big.bin', type: 'file', mode: 0o644, data: new Uint8Array(2 * MiB) },
+      ]);
+      let offset = 0;
+      const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (offset >= archive.byteLength) controller.close();
+          else controller.enqueue(archive.subarray(offset, (offset += 64 * 1024)));
+        },
+      });
+      const response = await fetch(url, { method: 'POST', body, duplex: 'half' });
+      expect(response.status).toBe(413);
+      expect(await response.json()).toMatchObject({ error: 'archive_too_large' });
+      await expect(readFile(path.join(workspace, 'big.bin'))).rejects.toMatchObject({
+        code: 'ENOENT',
+      });
+    });
+  });
+
+  it('[US-STO-06][contract][run] POST /files refuses a headers-only archive over the member cap with a 413', async () => {
+    await withFilesServer({ maxFileArchiveMembers: 2 }, async (url, workspace) => {
+      const archive = encodeUstar(
+        ['a.txt', 'b.txt', 'c.txt'].map((name) => ({
+          path: name,
+          type: 'file' as const,
+          mode: 0o644,
+          data: new Uint8Array(0),
+        })),
+      );
+      const response = await fetch(url, { method: 'POST', body: archive });
+      expect(response.status).toBe(413);
+      expect(await response.json()).toMatchObject({ error: 'archive_too_large' });
+      await expect(readFile(path.join(workspace, 'c.txt'))).rejects.toMatchObject({
+        code: 'ENOENT',
+      });
+    });
+  });
+
+  it.each([
+    [
+      'joins a valid traceparent',
+      `00-${'4bf92f3577b34da6a3ce929d0e0e4736'}-00f067aa0ba902b7-01`,
+      true,
+    ],
+    ['ignores a malformed traceparent', 'not-a-traceparent', false],
+  ])(
+    'answers a server fault with a fixed 500 and logs a JSON line (%s)',
+    async (_name, traceparent, joined) => {
+      const lines: Record<string, unknown>[] = [];
+      const logger = createJsonLogger({
+        service: 'runner',
+        write: (_level, line) => lines.push(JSON.parse(line) as Record<string, unknown>),
+      });
+      await withFilesServer({ workspaceIsFile: true, logger }, async (url, workspace) => {
+        const archive = encodeUstar([
+          { path: 'a.txt', type: 'file', mode: 0o600, data: Buffer.from('a') },
+        ]);
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { traceparent },
+          body: Buffer.from(archive),
+        });
+        const text = await response.text();
+        expect(response.status).toBe(500);
+        expect(JSON.parse(text)).toEqual({
+          error: 'internal_error',
+          message: 'the workspace files could not be processed.',
+        });
+        expect(text).not.toContain(workspace);
+        expect(lines).toHaveLength(1);
+        expect(lines[0]).toMatchObject({ level: 'error', service: 'runner', msg: '/files failed' });
+        expect(lines[0]?.['traceId']).toBe(joined ? '4bf92f3577b34da6a3ce929d0e0e4736' : undefined);
+        expect(JSON.stringify(lines)).not.toContain('not-a-traceparent');
+      });
+    },
+  );
+});
+
+describe('run admission log (F-04)', () => {
+  it('writes one JSON line joined to the caller trace', async () => {
+    const lines: Record<string, unknown>[] = [];
+    const server = createRunnerServer({
+      startAgent: () => Promise.resolve({ ok: true, connection: fakeConnection([]) }),
+      logger: createJsonLogger({
+        service: 'runner',
+        write: (_level, line) => lines.push(JSON.parse(line) as Record<string, unknown>),
+      }),
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    if (address === null || typeof address === 'string') throw new Error('no address');
+    try {
+      const runId = '55555555-5555-4555-8555-555555555555';
+      const response = await fetch(`http://127.0.0.1:${String(address.port)}/run`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          traceparent: '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01',
+        },
+        body: JSON.stringify(runRequestBody(runId, '66666666-6666-4666-8666-666666666666')),
+      });
+      await response.text();
+      expect(lines).toEqual([
+        expect.objectContaining({
+          level: 'info',
+          service: 'runner',
+          msg: 'run admitted',
+          runId,
+          traceId: '4bf92f3577b34da6a3ce929d0e0e4736',
+        }),
+      ]);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+});
+
+describe('trace forwarding to the model gateway (F-04)', () => {
+  const TRACEPARENT = '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01';
+
+  /** The `env` the engine was started with for one `POST /run` carrying `headers`. */
+  async function engineEnv(
+    headers: Readonly<Record<string, string>>,
+    env: Readonly<Record<string, string>> = {},
+  ): Promise<Readonly<Record<string, string>>> {
+    let started: Readonly<Record<string, string>> | undefined;
+    const server = createRunnerServer({
+      startAgent: (request) => {
+        started = request.env;
+        return Promise.resolve({ ok: true, connection: fakeConnection([]) });
+      },
+      logger: createJsonLogger({ service: 'runner', write: () => undefined }),
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    if (address === null || typeof address === 'string') throw new Error('no address');
+    try {
+      const body = {
+        ...(runRequestBody(
+          '77777777-7777-4777-8777-777777777777',
+          '88888888-8888-4888-8888-888888888888',
+        ) as Record<string, unknown>),
+        env,
+      };
+      const response = await fetch(`http://127.0.0.1:${String(address.port)}/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify(body),
+      });
+      await response.text();
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+    if (started === undefined) throw new Error('the engine was not started');
+    return started;
+  }
+
+  it("hands the engine the caller's traceparent and tracestate for its gateway calls", async () => {
+    const env = await engineEnv({ traceparent: TRACEPARENT, tracestate: 'aw=1' });
+    expect(env['ANTHROPIC_CUSTOM_HEADERS']).toBe(`traceparent: ${TRACEPARENT}\ntracestate: aw=1`);
+  });
+
+  it('keeps custom headers the run already sets', async () => {
+    const env = await engineEnv(
+      { traceparent: TRACEPARENT },
+      { ANTHROPIC_CUSTOM_HEADERS: 'x-team: core' },
+    );
+    expect(env['ANTHROPIC_CUSTOM_HEADERS']).toBe(`x-team: core\ntraceparent: ${TRACEPARENT}`);
+  });
+
+  it('extends a differently cased custom-headers key instead of adding a second one', async () => {
+    const env = await engineEnv(
+      { traceparent: TRACEPARENT },
+      { anthropic_custom_headers: 'x-team: core' },
+    );
+    expect(env).toEqual({ anthropic_custom_headers: `x-team: core\ntraceparent: ${TRACEPARENT}` });
+  });
+
+  it.each([
+    ['absent', {}],
+    ['malformed', { traceparent: 'not-a-traceparent', tracestate: 'aw=1' }],
+  ])('forwards nothing for an %s traceparent', async (_name, headers) => {
+    expect(await engineEnv(headers)).toEqual({});
+  });
+
+  it('records a server span in the adopted trace and hands the engine that span as parent', async () => {
+    type Exporter = NonNullable<Parameters<typeof startTracing>[3]>;
+    const spans: Parameters<Exporter['export']>[0][number][] = [];
+    const exporter: Exporter = {
+      export: (batch, done) => {
+        spans.push(...batch);
+        done({ code: 0 });
+      },
+      shutdown: () => Promise.resolve(),
+    };
+    const tracing = await startTracing(
+      'runner',
+      { OTEL_EXPORTER_OTLP_ENDPOINT: 'http://otel' },
+      createJsonLogger({ service: 'runner', write: () => undefined }),
+      exporter,
+    );
+    let env: Readonly<Record<string, string>>;
+    try {
+      env = await engineEnv({
+        traceparent: TRACEPARENT,
+        authorization: 'Bearer not-a-span-attribute',
+      });
+    } finally {
+      await tracing?.shutdown();
+    }
+
+    expect(spans).toHaveLength(1);
+    const [span] = spans;
+    expect(span?.kind).toBe(SpanKind.SERVER);
+    expect(span?.name).toBe('POST /run');
+    expect(span?.spanContext().traceId).toBe('4bf92f3577b34da6a3ce929d0e0e4736');
+    expect(span?.parentSpanContext?.spanId).toBe('00f067aa0ba902b7');
+    expect(span?.attributes).toEqual({
+      'http.request.method': 'POST',
+      'http.route': '/run',
+      'http.response.status_code': 200,
+    });
+    expect(env['ANTHROPIC_CUSTOM_HEADERS']).toContain(
+      `traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-${span?.spanContext().spanId ?? ''}-01`,
+    );
+    expect(JSON.stringify([span?.attributes, span?.events])).not.toContain('not-a-span-attribute');
+  });
+});
+
+describe('granted file references at /run', () => {
+  // @story US-STO-06
+  const sha256 = (bytes: string): string => createHash('sha256').update(bytes).digest('hex');
+
+  /** POST one `/run` that grants `reports/q3.txt` by reference; report the answer and any start. */
+  async function runWithReference(
+    onDisk: string | null,
+    reference: { readonly size: number; readonly sha256: string },
+  ): Promise<{ readonly status: number; readonly body: unknown; readonly started: number }> {
+    const cwd = await mkdtemp(path.join(tmpdir(), 'w3-runner-reference-'));
+    if (onDisk !== null) {
+      await mkdir(path.join(cwd, 'reports'));
+      await writeFile(path.join(cwd, 'reports', 'q3.txt'), onDisk);
+    }
+    let started = 0;
+    const server = createRunnerServer({
+      startAgent: () => {
+        started += 1;
+        return Promise.resolve({ ok: true, connection: fakeConnection([]) });
+      },
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    if (address === null || typeof address === 'string') throw new Error('no address');
+    try {
+      const response = await fetch(`http://127.0.0.1:${String(address.port)}/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...(runRequestBody(
+            'aaaaaaaa-1111-4111-8111-111111111111',
+            'bbbbbbbb-2222-4222-8222-222222222222',
+          ) as Record<string, unknown>),
+          cwd,
+          resources: {
+            files: [{ kind: 'file', path: 'reports/q3.txt', access: 'read', ...reference }],
+            skills: [],
+          },
+        }),
+      });
+      const text = await response.text();
+      return {
+        status: response.status,
+        body: response.status === 200 ? text : (JSON.parse(text) as unknown),
+        started,
+      };
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await rm(cwd, { recursive: true, force: true });
+    }
+  }
+
+  /** POST one `/run` that grants skill `support` by reference; report the answer, start and inbox. */
+  async function runWithSkillReference(
+    onDisk: string | null,
+    reference: { readonly size: number; readonly sha256: string },
+  ) {
+    const cwd = await mkdtemp(path.join(tmpdir(), 'w3-runner-skill-reference-'));
+    if (onDisk !== null) {
+      await mkdir(path.join(cwd, '.aw-inbox', 'skills', 'support'), { recursive: true });
+      await writeFile(path.join(cwd, '.aw-inbox', 'skills', 'support', 'SKILL.md'), onDisk);
+    }
+    const started: unknown[] = [];
+    const server = createRunnerServer({
+      startAgent: (request) => {
+        started.push(request.resources?.skills);
+        return Promise.resolve({ ok: true, connection: fakeConnection([]) });
+      },
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    if (address === null || typeof address === 'string') throw new Error('no address');
+    try {
+      const response = await fetch(`http://127.0.0.1:${String(address.port)}/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...(runRequestBody(
+            'aaaaaaaa-1111-4111-8111-111111111111',
+            'bbbbbbbb-2222-4222-8222-222222222222',
+          ) as Record<string, unknown>),
+          cwd,
+          resources: {
+            files: [],
+            skills: [{ name: 'support', files: [{ path: 'SKILL.md', ...reference }] }],
+          },
+        }),
+      });
+      const text = await response.text();
+      return {
+        status: response.status,
+        text,
+        started,
+        inboxLeft: await stat(path.join(cwd, '.aw-inbox')).then(
+          () => true,
+          () => false,
+        ),
+        cwd,
+      };
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await rm(cwd, { recursive: true, force: true });
+    }
+  }
+
+  /**
+   * POST one `/run` whose resources carry inline bytes; report the answer and whether an engine started.
+   * `granted` is written under `cwd` first, so the reference itself is valid and only the inline bytes can refuse it.
+   */
+  async function runWithInlineBytes(
+    granted: { readonly at: string; readonly body: string },
+    resources: unknown,
+  ) {
+    const cwd = await mkdtemp(path.join(tmpdir(), 'w3-runner-inline-'));
+    await mkdir(path.dirname(path.join(cwd, granted.at)), { recursive: true });
+    await writeFile(path.join(cwd, granted.at), granted.body);
+    let started = 0;
+    const server = createRunnerServer({
+      startAgent: () => {
+        started += 1;
+        return Promise.resolve({ ok: true, connection: fakeConnection([]) });
+      },
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    if (address === null || typeof address === 'string') throw new Error('no address');
+    try {
+      const response = await fetch(`http://127.0.0.1:${String(address.port)}/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...(runRequestBody(
+            'aaaaaaaa-1111-4111-8111-111111111111',
+            'bbbbbbbb-2222-4222-8222-222222222222',
+          ) as Record<string, unknown>),
+          cwd,
+          resources,
+        }),
+      });
+      return { status: response.status, text: await response.text(), started };
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await rm(cwd, { recursive: true, force: true });
+    }
+  }
+
+  it('[US-STO-06][contract][run] /run refuses a file resource with contentBase64 with 400 and does not echo it', async () => {
+    const secret = `payload-${randomUUID()}`;
+    const answer = await runWithInlineBytes(
+      { at: 'notes.txt', body: secret },
+      {
+        files: [
+          {
+            kind: 'file',
+            path: 'notes.txt',
+            access: 'read',
+            size: secret.length,
+            sha256: sha256(secret),
+            contentBase64: Buffer.from(secret).toString('base64'),
+          },
+        ],
+        skills: [],
+      },
+    );
+    expect(answer.status).toBe(400);
+    expect(JSON.parse(answer.text)).toMatchObject({ error: 'invalid_run_request' });
+    expect(answer.text).not.toContain(Buffer.from(secret).toString('base64'));
+    expect(answer.text).not.toContain(secret);
+    expect(answer.started).toBe(0);
+  });
+
+  it('[US-STO-06][contract][run] /run refuses a skill file with contentBase64 with 400 and does not echo it', async () => {
+    const secret = `payload-${randomUUID()}`;
+    const answer = await runWithInlineBytes(
+      { at: '.aw-inbox/skills/support/SKILL.md', body: secret },
+      {
+        files: [],
+        skills: [
+          {
+            name: 'support',
+            files: [
+              {
+                path: 'SKILL.md',
+                size: secret.length,
+                sha256: sha256(secret),
+                contentBase64: Buffer.from(secret).toString('base64'),
+              },
+            ],
+          },
+        ],
+      },
+    );
+    expect(answer.status).toBe(400);
+    expect(JSON.parse(answer.text)).toMatchObject({ error: 'invalid_run_request' });
+    expect(answer.text).not.toContain(Buffer.from(secret).toString('base64'));
+    expect(answer.text).not.toContain(secret);
+    expect(answer.started).toBe(0);
+  });
+
+  it('[US-STO-06][contract][run] a skill reference whose sha256 does not match the inbox file answers 422 run_file_checksum_mismatch and never starts the engine', async () => {
+    const answer = await runWithSkillReference('what arrived', {
+      size: 'what arrived'.length,
+      sha256: sha256('what was granted'),
+    });
+    expect(answer.status).toBe(422);
+    expect(JSON.parse(answer.text)).toEqual({
+      error: 'run_file_checksum_mismatch',
+      message: 'granted file ".aw-inbox/skills/support/SKILL.md" did not arrive intact',
+    });
+    expect(answer.text).not.toContain(answer.cwd);
+    expect(answer.started).toEqual([]);
+    expect(answer.inboxLeft).toBe(false);
+  });
+
+  it('[US-STO-06][contract][run] a skill reference whose file did not arrive answers 422 run_file_missing and never starts the engine', async () => {
+    const answer = await runWithSkillReference(null, { size: 4, sha256: sha256('gone') });
+    expect(answer.status).toBe(422);
+    expect(JSON.parse(answer.text)).toMatchObject({ error: 'run_file_missing' });
+    expect(answer.started).toEqual([]);
+  });
+
+  it('[US-STO-06][contract][run] a skill file removed after verification answers 422 run_file_missing without a host path and never starts the engine', async () => {
+    verifyGate.after = (cwd) => rm(path.join(cwd, '.aw-inbox', 'skills', 'support', 'SKILL.md'));
+    try {
+      const answer = await runWithSkillReference('# support', {
+        size: '# support'.length,
+        sha256: sha256('# support'),
+      });
+      expect(answer.status).toBe(422);
+      expect(JSON.parse(answer.text)).toEqual({
+        error: 'run_file_missing',
+        message: 'a granted skill file did not arrive intact',
+      });
+      expect(answer.text).not.toContain(answer.cwd);
+      expect(answer.started).toEqual([]);
+      expect(answer.inboxLeft).toBe(false);
+    } finally {
+      verifyGate.after = () => Promise.resolve();
+    }
+  });
+
+  it('[US-STO-06][contract][run] a skill inbox that cannot be removed answers 500 without a host path and never starts the engine', async () => {
+    inboxRemoval.fail = true;
+    try {
+      const answer = await runWithSkillReference('# support', {
+        size: '# support'.length,
+        sha256: sha256('# support'),
+      });
+      expect(answer.status).toBe(500);
+      expect(JSON.parse(answer.text)).toEqual({
+        error: 'internal_error',
+        message: 'the granted skill files could not be cleared',
+      });
+      expect(answer.text).not.toContain(answer.cwd);
+      expect(answer.started).toEqual([]);
+    } finally {
+      inboxRemoval.fail = false;
+    }
+  });
+
+  it('[US-STO-06][contract][run] a matching skill reference starts the engine with the inbox bytes inline and removes the inbox', async () => {
+    const answer = await runWithSkillReference('# support', {
+      size: '# support'.length,
+      sha256: sha256('# support'),
+    });
+    expect(answer.status).toBe(200);
+    expect(answer.started).toEqual([
+      [
+        {
+          name: 'support',
+          files: [{ path: 'SKILL.md', contentBase64: Buffer.from('# support').toString('base64') }],
+        },
+      ],
+    ]);
+    expect(answer.inboxLeft).toBe(false);
+  });
+
+  it('[US-STO-06][contract][run] a reference whose sha256 does not match the hydrated file answers 422 run_file_checksum_mismatch and never starts the engine', async () => {
+    const answer = await runWithReference('what arrived', {
+      size: 'what arrived'.length,
+      sha256: sha256('what was granted'),
+    });
+    expect(answer.status).toBe(422);
+    expect(answer.body).toEqual({
+      error: 'run_file_checksum_mismatch',
+      message: 'granted file "reports/q3.txt" did not arrive intact',
+    });
+    expect(answer.started).toBe(0);
+  });
+
+  it('[US-STO-06][contract][run] a reference to a file that did not arrive answers 422 run_file_missing and never starts the engine', async () => {
+    const answer = await runWithReference(null, { size: 4, sha256: sha256('gone') });
+    expect(answer.status).toBe(422);
+    expect(answer.body).toMatchObject({ error: 'run_file_missing' });
+    expect(answer.started).toBe(0);
+  });
+
+  it('[US-STO-06][contract][run] a matching reference starts the engine', async () => {
+    const answer = await runWithReference('as granted', {
+      size: 'as granted'.length,
+      sha256: sha256('as granted'),
+    });
+    expect(answer.status).toBe(200);
+    expect(answer.started).toBe(1);
+  });
+
+  it('[US-STO-06][contract][run] an interrupt that arrives while references are verified ends the run without starting the engine', async () => {
+    let release: () => void = () => undefined;
+    verifyGate.hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let started = 0;
+    const server = createRunnerServer({
+      startAgent: () => {
+        started += 1;
+        return Promise.resolve({ ok: true, connection: fakeConnection([]) });
+      },
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    if (address === null || typeof address === 'string') throw new Error('no address');
+    const base = `http://127.0.0.1:${String(address.port)}`;
+    const runId = 'cccccccc-3333-4333-8333-333333333333';
+    const cwd = await mkdtemp(path.join(tmpdir(), 'w3-runner-reference-'));
+    await writeFile(path.join(cwd, 'notes.txt'), 'granted');
+    try {
+      const response = fetch(`${base}/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...(runRequestBody(runId, 'dddddddd-4444-4444-8444-444444444444') as Record<
+            string,
+            unknown
+          >),
+          cwd,
+          resources: {
+            files: [
+              {
+                kind: 'file',
+                path: 'notes.txt',
+                access: 'read',
+                size: 'granted'.length,
+                sha256: sha256('granted'),
+              },
+            ],
+            skills: [],
+          },
+        }),
+      });
+      const activeRuns = async (): Promise<unknown> =>
+        ((await (await fetch(`${base}/healthz`)).json()) as { activeRuns: unknown }).activeRuns;
+      while ((await activeRuns()) !== 1) {
+        await new Promise<void>((resolve) => setTimeout(resolve, 5));
+      }
+      const interrupt = await fetch(`${base}/interrupt`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId }),
+      });
+      expect(interrupt.status).toBe(202);
+
+      release();
+      const body = await (await response).text();
+      expect([...body.matchAll(/^event: (.+)$/gm)].map((m) => m[1])).toEqual(['run-interrupted']);
+      expect(started).toBe(0);
+    } finally {
+      release();
+      verifyGate.hold = Promise.resolve();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('[US-STO-06][contract][run] a reference into the engine protected config directory answers 422 run_file_missing even when its bytes match', async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), 'w3-runner-reference-'));
+    await mkdir(path.join(cwd, '.claude'));
+    await writeFile(path.join(cwd, '.claude', 'settings.json'), 'private');
+    let started = 0;
+    const server = createRunnerServer({
+      startAgent: () => {
+        started += 1;
+        return Promise.resolve({ ok: true, connection: fakeConnection([]) });
+      },
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    if (address === null || typeof address === 'string') throw new Error('no address');
+    try {
+      const response = await fetch(`http://127.0.0.1:${String(address.port)}/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...(runRequestBody(
+            'eeeeeeee-5555-4555-8555-555555555555',
+            'ffffffff-6666-4666-8666-666666666666',
+          ) as Record<string, unknown>),
+          cwd,
+          resources: {
+            files: [
+              {
+                kind: 'file',
+                path: '.claude/settings.json',
+                access: 'read',
+                size: 'private'.length,
+                sha256: sha256('private'),
+              },
+            ],
+            skills: [],
+          },
+        }),
+      });
+      expect(response.status).toBe(422);
+      expect(await response.json()).toMatchObject({ error: 'run_file_missing' });
+      expect(started).toBe(0);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await rm(cwd, { recursive: true, force: true });
     }
   });
 });

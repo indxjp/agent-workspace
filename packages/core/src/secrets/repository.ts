@@ -44,6 +44,7 @@ import type { Database } from '../db/client.js';
 import { mcpServers } from '../db/schema/mcp-servers.js';
 import { modelConnections } from '../db/schema/model-connections.js';
 import { secrets, type SecretAlgorithm } from '../db/schema/secrets.js';
+import { storageConnections } from '../db/schema/storage-connections.js';
 import { requireWorkspaceScope, type WorkspaceScope } from '../db/repositories/scope.js';
 import { postgresViolations } from '../db/repositories/violations.js';
 import type { SecretEnvelope } from './envelope.js';
@@ -76,11 +77,12 @@ export type ReplaceSecretOutcome =
  * Everything that still references a secret. A connector references its credential by the
  * `mcp_servers.credential_secret_id` foreign key; a model connection owns the secret named
  * `MODEL_CONNECTION_<id without dashes, upper-case>` by convention until RF-204 replaces the
- * convention with a foreign key.
+ * convention with a foreign key; a storage connection owns `STORAGE_CONNECTION_<the same>`.
  */
 export interface SecretReferrers {
   readonly connectorIds: readonly string[];
   readonly modelConnectionIds: readonly string[];
+  readonly storageConnectionIds: readonly string[];
 }
 
 export type DeleteSecretOutcome =
@@ -113,6 +115,9 @@ export interface SecretsRepository {
 export interface SecretsRepositoryProvider {
   forScope(scope: WorkspaceScope): SecretsRepository;
 }
+
+/** Transcribed from `secrets_name_shape` in `../db/schema/secrets.ts`, for the in-memory provider. */
+const SECRET_NAME_SHAPE = /^[A-Z][A-Z0-9_]{0,127}$/u;
 
 const NAME_CONFLICT_CONSTRAINTS: ReadonlySet<string> = new Set(['secrets_workspace_name_key']);
 const UNIQUE_VIOLATION = '23505';
@@ -268,12 +273,23 @@ export function createDatabaseSecretsRepositoryProvider(db: Database): SecretsRe
                   ),
                 )
                 .orderBy(asc(modelConnections.id));
-              if (connectors.length > 0 || models.length > 0) {
+              const storage = await tx
+                .select({ id: storageConnections.id })
+                .from(storageConnections)
+                .where(
+                  and(
+                    eq(storageConnections.workspaceId, checked.workspaceId),
+                    sql`'STORAGE_CONNECTION_' || upper(replace(${storageConnections.id}::text, '-', '')) = ${row.name}`,
+                  ),
+                )
+                .orderBy(asc(storageConnections.id));
+              if (connectors.length > 0 || models.length > 0 || storage.length > 0) {
                 return {
                   kind: 'in-use',
                   referrers: {
                     connectorIds: connectors.map((connector) => connector.id),
                     modelConnectionIds: models.map((model) => model.id),
+                    storageConnectionIds: storage.map((connection) => connection.id),
                   },
                 };
               }
@@ -287,7 +303,10 @@ export function createDatabaseSecretsRepositoryProvider(db: Database): SecretsRe
                 failure.code === FOREIGN_KEY_VIOLATION &&
                 SECRET_REFERENCE_CONSTRAINTS.has(failure.constraint)
               ) {
-                return { kind: 'in-use', referrers: { connectorIds: [], modelConnectionIds: [] } };
+                return {
+                  kind: 'in-use',
+                  referrers: { connectorIds: [], modelConnectionIds: [], storageConnectionIds: [] },
+                };
               }
             }
             throw error;
@@ -326,6 +345,13 @@ export function createInMemorySecretsRepositoryProvider(): SecretsRepositoryProv
           return Promise.resolve(ownRows().map((row) => row.metadata));
         },
         create(input: CreateSecretInput): Promise<CreateSecretOutcome> {
+          // PostgreSQL's CHECK throws here; so does this double, so no test can store a name
+          // production would refuse.
+          if (!SECRET_NAME_SHAPE.test(input.name)) {
+            return Promise.reject(
+              new Error('the secret name violates the check constraint "secrets_name_shape"'),
+            );
+          }
           const conflict = ownRows().some((row) => row.metadata.name === input.name);
           if (conflict) {
             return Promise.resolve({ kind: 'name-conflict', name: input.name });

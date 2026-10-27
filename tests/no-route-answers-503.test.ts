@@ -53,7 +53,7 @@ import { mkdtempSync, existsSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -379,10 +379,8 @@ describe('every declared route reaches a handler, and the ones that do not are t
       BOOTSTRAP_ADMIN: ADMIN_EMAIL,
     });
 
-    const files = mkdtempSync(path.join(tmpdir(), 'aw-probe-files-'));
-    const skills = mkdtempSync(path.join(tmpdir(), 'aw-probe-skills-'));
-    const sessions = mkdtempSync(path.join(tmpdir(), 'aw-probe-sessions-'));
-    temporaryRoots.push(files, skills, sessions);
+    const storage = mkdtempSync(path.join(tmpdir(), 'aw-probe-storage-'));
+    temporaryRoots.push(storage);
 
     port = await freePort();
     base = `http://127.0.0.1:${String(port)}`;
@@ -409,9 +407,7 @@ describe('every declared route reaches a handler, and the ones that do not are t
           BOOTSTRAP_ADMIN: ADMIN_EMAIL,
           BOOTSTRAP_ADMIN_PASSWORD: 'correct horse battery staple',
           MASTER_ENCRYPTION_KEY: MASTER_KEY,
-          AW_FILE_STORAGE_ROOT: files,
-          AW_SKILL_STORAGE_ROOT: skills,
-          AW_SESSION_TRANSCRIPT_ROOT: sessions,
+          AW_STORAGE_URL: pathToFileURL(storage).href,
           RUNNER_URL,
           OIDC_ISSUER_URL,
           OIDC_CLIENT_ID,

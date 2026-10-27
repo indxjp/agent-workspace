@@ -5,6 +5,7 @@
  * rather than trusted from its handler's own unit tests, and why the test-only resolver reading a
  * header is the strongest attacker position a cross-workspace assertion can be given.
  */
+import type { DatabaseRoot } from '@agent-workspace/core/db';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
@@ -20,7 +21,9 @@ import {
   GET as listConnectionsRoute,
   POST as createConnectionRoute,
 } from '../../app/api/runtime-connections/route';
-import { clearRbacRuntime } from '../rbac/runtime';
+import { clearApplicationContext } from '../application-context';
+import { installTestDomains } from '../application-context-fixtures';
+import { installRuntimesApi } from '../composition/services';
 import { installWorkspaceHeaderRbac, TEST_ROLE_HEADER } from '../rbac/testing';
 import { createInMemoryRuntimeConnectionStoreProvider } from './connections';
 import { createInMemoryRuntimeProfileStoreProvider } from './memory-store';
@@ -29,20 +32,15 @@ import {
   configureWebRuntimeRegistry,
   createWebRuntimeRegistry,
 } from './registry';
-import {
-  clearRuntimesRuntime,
-  configureRuntimesRuntime,
-  type WorkspaceResolution,
-} from './runtime';
+import type { WorkspaceResolution } from './runtime';
 
 const WORKSPACE_A = '11111111-1111-4111-8111-111111111111';
 const WORKSPACE_B = '22222222-2222-4222-8222-222222222222';
 const WORKSPACE_HEADER = 'x-test-workspace';
 
 afterEach(() => {
-  clearRuntimesRuntime();
+  clearApplicationContext();
   clearWebRuntimeRegistry();
-  clearRbacRuntime();
 });
 
 type TestRole = 'owner' | 'admin' | 'builder' | 'viewer';
@@ -52,15 +50,20 @@ function useMemoryRuntime(): void {
   // Owner and Admin, and a Builder reads profiles only (ADR-0088). The identity reads the same
   // header the workspace resolver does.
   installWorkspaceHeaderRbac(WORKSPACE_HEADER);
-  configureRuntimesRuntime({
-    profiles: createInMemoryRuntimeProfileStoreProvider(),
-    connections: createInMemoryRuntimeConnectionStoreProvider(),
-    resolveWorkspace(request: Request): Promise<WorkspaceResolution> {
-      const workspaceId = request.headers.get(WORKSPACE_HEADER);
-      if (workspaceId === null) {
-        return Promise.resolve({ kind: 'unauthenticated', reason: 'no test workspace header' });
-      }
-      return Promise.resolve({ kind: 'workspace', workspaceId });
+  installTestDomains({
+    runtimes: {
+      kind: 'serving',
+      runtime: {
+        profiles: createInMemoryRuntimeProfileStoreProvider(),
+        connections: createInMemoryRuntimeConnectionStoreProvider(),
+        resolveWorkspace(request: Request): Promise<WorkspaceResolution> {
+          const workspaceId = request.headers.get(WORKSPACE_HEADER);
+          if (workspaceId === null) {
+            return Promise.resolve({ kind: 'unauthenticated', reason: 'no test workspace header' });
+          }
+          return Promise.resolve({ kind: 'workspace', workspaceId });
+        },
+      },
     },
   });
 }
@@ -132,19 +135,41 @@ const CREATE_BODY = JSON.stringify({
 
 describe('/api/runtime-profiles — unconfigured', () => {
   it('answers 503 by name, never 401 and never an empty 200', async () => {
-    // The role gate is wired, so this is the runtimes runtime's own answer, not the gate's.
-    installWorkspaceHeaderRbac(WORKSPACE_HEADER);
+    // The role gate lives in the same context, so with none installed it answers first; the
+    // runtimes runtime's own answer is the `unavailable` case below.
     const response = await listProfilesRoute(
       request('GET', '/api/runtime-profiles', { workspace: WORKSPACE_A }),
     );
     expect(response.status).toBe(503);
     const body = (await response.json()) as { error: { code: string } };
-    expect(body.error.code).toBe('runtimes_runtime_not_configured');
+    expect(body.error.code).toBe('rbac_runtime_not_configured');
+  });
+
+  it('answers the same 503 on both APIs while the runtimes are unavailable (no secrets service)', async () => {
+    installWorkspaceHeaderRbac(WORKSPACE_HEADER);
+    const built = await installRuntimesApi(
+      () => Promise.resolve({ kind: 'workspace', workspaceId: WORKSPACE_A }),
+      () => Promise.resolve(null),
+      {} as unknown as DatabaseRoot,
+      null,
+    );
+    expect(built).toEqual({ runtimes: { kind: 'unavailable' }, runtimeSwitchAudit: null });
+    installTestDomains({ runtimes: built.runtimes });
+    for (const response of [
+      await listProfilesRoute(request('GET', '/api/runtime-profiles', { workspace: WORKSPACE_A })),
+      await listConnectionsRoute(
+        request('GET', '/api/runtime-connections', { workspace: WORKSPACE_A }),
+      ),
+    ]) {
+      expect(response.status).toBe(503);
+      const body = (await response.json()) as { error: { code: string } };
+      expect(body.error.code).toBe('runtimes_runtime_not_configured');
+    }
   });
 });
 
 describe('/api/runtime-profiles — configured', () => {
-  afterEach(() => clearRuntimesRuntime());
+  afterEach(() => clearApplicationContext());
 
   it('401s with no workspace header, and never leaks whether a store exists', async () => {
     useMemoryRuntime();
@@ -261,6 +286,44 @@ describe('/api/runtime-profiles — configured', () => {
       const body = (await patched.json()) as { error: { details?: string[] } };
       expect(body.error.details?.[0]?.startsWith(`driverConfig.pools.0.${key}: `), key).toBe(true);
     }
+  });
+
+  // FX-4: a persist path the launcher would refuse after the run is refused when it is stored.
+  it('refuses a persistPaths entry outside the workspace on create and patch, naming its index', async () => {
+    useMemoryRuntime();
+    const refused = await createProfileRoute(
+      request('POST', '/api/runtime-profiles', {
+        workspace: WORKSPACE_A,
+        body: JSON.stringify({ ...JSON.parse(CREATE_BODY), persistPaths: ['out', '../etc'] }),
+      }),
+    );
+    expect(refused.status).toBe(400);
+    const refusal = (await refused.json()) as { error: { code: string; details?: string[] } };
+    expect(refusal.error.code).toBe('invalid_body');
+    expect(refusal.error.details).toEqual([
+      'persistPaths.1: must be a relative path inside the workspace',
+    ]);
+
+    const created = await createProfileRoute(
+      request('POST', '/api/runtime-profiles', {
+        workspace: WORKSPACE_A,
+        body: JSON.stringify({ ...JSON.parse(CREATE_BODY), persistPaths: ['/workspace/out'] }),
+      }),
+    );
+    expect(created.status, await created.clone().text()).toBe(201);
+    const { id } = (await created.json()) as { id: string };
+    const patched = await patchProfileRoute(
+      request('PATCH', `/api/runtime-profiles/${id}`, {
+        workspace: WORKSPACE_A,
+        body: JSON.stringify({ persistPaths: ['/etc/passwd'] }),
+      }),
+      idContext(id),
+    );
+    expect(patched.status).toBe(400);
+    const body = (await patched.json()) as { error: { details?: string[] } };
+    expect(body.error.details).toEqual([
+      'persistPaths.0: must be a relative path inside the workspace',
+    ]);
   });
 
   it('accepts settings and secret references whose names only contain a credential word', async () => {
@@ -537,10 +600,9 @@ describe('/api/runtime-profiles — a policy the driver cannot enforce here', ()
 });
 
 describe('/api/runtime-connections', () => {
-  afterEach(() => clearRuntimesRuntime());
+  afterEach(() => clearApplicationContext());
 
   it('answers 503 unconfigured, never a fabricated list', async () => {
-    installWorkspaceHeaderRbac(WORKSPACE_HEADER);
     const response = await listConnectionsRoute(
       request('GET', '/api/runtime-connections', { workspace: WORKSPACE_A }),
     );

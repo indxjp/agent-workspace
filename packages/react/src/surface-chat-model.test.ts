@@ -231,7 +231,30 @@ describe('the surface turn model (#540)', () => {
           isError: false,
         },
       ],
+      handoff: null,
     });
+  });
+
+  it('records an agent.handoff frame with its reason (ADR-0145 D4)', () => {
+    const handoff: RunEventFrame = {
+      kind: 'runtime',
+      id: '8',
+      name: 'agent.handoff',
+      data: {
+        frame: 'agent.handoff',
+        engine: ENGINE_IDS[0],
+        raw: null,
+        reason: 'The visitor asked for a person.',
+      },
+    };
+    expect(foldTurn([handoff]).handoff).toEqual({ reason: 'The visitor asked for a person.' });
+    expect(foldTurn([]).handoff).toBeNull();
+    // A visitor's stream omits the operator-only reason; the handoff is still recorded.
+    const visitor: RunEventFrame = {
+      ...handoff,
+      data: { frame: 'agent.handoff', engine: ENGINE_IDS[0], raw: null },
+    };
+    expect(foldTurn([visitor]).handoff).toEqual({ reason: null });
   });
 
   it('ignores an unmatched result, a malformed tool frame and the platform frames', () => {
@@ -254,11 +277,13 @@ describe('the surface turn model (#540)', () => {
       runId: 'run-1',
       answerIds: ['assistant-a', 'assistant-b'],
       tools: [],
+      handoff: null,
     };
     const working: SurfaceTurn = {
       runId: 'run-2',
       answerIds: [],
       tools: [{ id: 'c', name: 'x', input: null, output: null, isError: false }],
+      handoff: null,
     };
     const placement = answerPlacement([answered, working]);
     expect(placement.first.get('assistant-a')).toBe(answered);

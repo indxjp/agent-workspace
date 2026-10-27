@@ -7,6 +7,8 @@
  * the whole API exactly as far as these hold, including the unconfigured case, which must fail
  * rather than fall through to an empty-but-successful answer (ADR-0015).
  */
+import { clearApplicationContext } from '../application-context';
+import { installTestDomains } from '../application-context-fixtures';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
@@ -14,22 +16,17 @@ import {
   AGENT_MODEL_MAX_LENGTH,
   AGENT_NAME_MAX_LENGTH,
 } from '../../contracts/agents';
-import type { ApiProblem, ApiResult } from './handlers';
-import {
-  MAX_REQUEST_BODY_BYTES,
-  readAgentIdParam,
-  readJsonBody,
-  toResponse,
-  withWorkspaceStore,
-} from './http';
+import type { ApiProblem, ApiResult } from '../http/result';
+import { MAX_REQUEST_BODY_BYTES, readAgentIdParam, readJsonBody, withWorkspaceStore } from './http';
+import { apiResultResponse } from '../http/json-transport';
 import { createInMemoryAgentStoreProvider } from './memory-store';
-import { clearAgentsRuntime, configureAgentsRuntime, type WorkspaceResolution } from './runtime';
+import { type WorkspaceResolution } from './runtime';
 import type { WorkspaceAgentStore } from './store';
 
 const WORKSPACE_A = '11111111-1111-4111-8111-111111111111';
 
 afterEach(() => {
-  clearAgentsRuntime();
+  clearApplicationContext();
 });
 
 function codeOf(result: ApiResult): string {
@@ -210,16 +207,16 @@ describe('readJsonBody bounds the request body in bytes, not only the fields in 
   });
 });
 
-describe('toResponse', () => {
+describe('apiResultResponse', () => {
   it('serialises a body as JSON with a charset', async () => {
-    const response = toResponse({ status: 201, body: { id: 'x' } });
+    const response = apiResultResponse({ status: 201, body: { id: 'x' } });
     expect(response.status).toBe(201);
     expect(response.headers.get('content-type')).toBe('application/json; charset=utf-8');
     expect(await response.json()).toEqual({ id: 'x' });
   });
 
   it('sends no body and no content type for a 204', async () => {
-    const response = toResponse({ status: 204, body: null });
+    const response = apiResultResponse({ status: 204, body: null });
     expect(response.status).toBe(204);
     expect(response.headers.get('content-type')).toBeNull();
     expect(await response.text()).toBe('');
@@ -241,16 +238,18 @@ describe('readAgentIdParam', () => {
 
 describe('withWorkspaceStore — the gate every agent route passes through', () => {
   function configure(resolution: WorkspaceResolution): void {
-    configureAgentsRuntime({
-      resolveWorkspace: () => Promise.resolve(resolution),
-      agents: createInMemoryAgentStoreProvider(),
+    installTestDomains({
+      agents: {
+        resolveWorkspace: () => Promise.resolve(resolution),
+        agents: createInMemoryAgentStoreProvider(),
+      },
     });
   }
 
   const request = new Request('https://example.invalid/api/agents');
 
   it('returns 503 when nothing has been wired, never 401 and never an empty success', async () => {
-    clearAgentsRuntime();
+    clearApplicationContext();
     const result = await withWorkspaceStore(request, () =>
       Promise.resolve({ status: 200, body: { agents: [] } }),
     );
@@ -259,7 +258,7 @@ describe('withWorkspaceStore — the gate every agent route passes through', () 
   });
 
   it('does not call the handler at all when nothing is wired', async () => {
-    clearAgentsRuntime();
+    clearApplicationContext();
     let called = false;
     await withWorkspaceStore(request, () => {
       called = true;
@@ -315,17 +314,27 @@ describe('withWorkspaceStore — the gate every agent route passes through', () 
     expect(received).not.toBeNull();
     // The store's own surface carries no workspace parameter: there is nothing to forget (§25).
     const surface = Object.keys(received ?? {});
-    expect(surface.sort()).toEqual(['create', 'delete', 'get', 'list', 'replacePolicy', 'update']);
+    expect(surface.sort()).toEqual([
+      'create',
+      'createWithAssignments',
+      'delete',
+      'get',
+      'list',
+      'replacePolicy',
+      'update',
+    ]);
   });
 
   it('passes the request to the resolver, so the workspace is derived from it and not from a global', async () => {
     let seen: Request | null = null;
-    configureAgentsRuntime({
-      resolveWorkspace: (incoming) => {
-        seen = incoming;
-        return Promise.resolve({ kind: 'workspace', workspaceId: WORKSPACE_A });
+    installTestDomains({
+      agents: {
+        resolveWorkspace: (incoming) => {
+          seen = incoming;
+          return Promise.resolve({ kind: 'workspace', workspaceId: WORKSPACE_A });
+        },
+        agents: createInMemoryAgentStoreProvider(),
       },
-      agents: createInMemoryAgentStoreProvider(),
     });
     await withWorkspaceStore(request, () => Promise.resolve({ status: 200, body: null }));
     expect(seen).toBe(request);

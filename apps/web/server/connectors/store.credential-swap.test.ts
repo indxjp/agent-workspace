@@ -4,6 +4,7 @@
  * so no partial failure can leave the connector pointing at a new destination with its old
  * credential. Runs against in-memory doubles, so every failure point can be injected.
  */
+import { captureLog } from '../telemetry/capture-log';
 import type {
   McpServerRecord,
   McpServerRepository,
@@ -90,6 +91,7 @@ async function harness(options: HarnessOptions = {}) {
       url: OLD_URL,
       authType: 'bearer',
       credentialSecretId: old.secret.id,
+      identitySecretName: null,
       enabled: true,
       createdBy: null,
       ownerPrincipalId: '66666666-6666-4666-8666-666666666666',
@@ -155,7 +157,7 @@ describe('store.update — a retarget that carries a credential is failure-atomi
   });
 
   it('keeps the swapped connector and logs the orphan when deleting the old secret fails', async () => {
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const logged = captureLog();
     const h = await harness({ failSecretDelete: true });
     const outcome = await h.store.update(CONNECTOR_ID, {
       url: NEW_URL,
@@ -164,7 +166,7 @@ describe('store.update — a retarget that carries a credential is failure-atomi
     expect(outcome.kind).toBe('updated');
     expect(h.row().url).toBe(NEW_URL);
     expect(h.row().credentialSecretId).not.toBe(h.oldSecretId);
-    expect(logged).toHaveBeenCalledWith(expect.stringContaining(h.oldSecretId));
-    expect(logged).not.toHaveBeenCalledWith(expect.stringContaining(NEW_CREDENTIAL));
+    expect(logged.text()).toContain(h.oldSecretId);
+    expect(logged.text()).not.toContain(NEW_CREDENTIAL);
   });
 });

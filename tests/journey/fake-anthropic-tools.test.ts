@@ -203,6 +203,130 @@ describe('the fake Anthropic API that calls the orders tool', () => {
   });
 });
 
+describe('the fake Anthropic API that writes a granted file out (issue #1687)', () => {
+  const FILES = 'e2e-files-9z8y7x';
+  const READ = { name: 'Read', input_schema: { type: 'object', properties: {} } };
+  const WRITE = { name: 'Write', input_schema: { type: 'object', properties: {} } };
+  const user = { role: 'user', content: `Summarise the granted file ${FILES}.` };
+  const toolUse = (id: string, name: string, input: unknown) => ({
+    role: 'assistant',
+    content: [{ type: 'tool_use', id, name, input }],
+  });
+  const toolResult = (id: string, content: unknown) => ({
+    role: 'user',
+    content: [{ type: 'tool_result', tool_use_id: id, content }],
+  });
+  type Reply = {
+    stop_reason: string;
+    content: { type: string; name?: string; input?: unknown; text?: string }[];
+  };
+
+  it('[US-STO-06][api][run] reads in/<token>.txt first, then writes its first line to outputs/out/<token>.md, then answers', async () => {
+    const requests: FakeRequestRecord[] = [];
+    const toolRequests: ToolRequestRecord[] = [];
+    const url = await serveTools(requests, toolRequests);
+    const tools = [READ, WRITE];
+
+    const first = (await (await ask({ tools, messages: [user] }, url)).json()) as Reply;
+    expect(first.stop_reason).toBe('tool_use');
+    expect(first.content[0]).toMatchObject({
+      name: 'Read',
+      input: { file_path: `in/${FILES}.txt` },
+    });
+
+    // The CLI's Read result is `cat -n` formatted: the first line sits behind a line number.
+    const text = '     1→granted line one\n     2→granted line two\n';
+    const second = (await (
+      await ask(
+        {
+          tools,
+          messages: [user, toolUse('t1', 'Read', first.content[0]?.input), toolResult('t1', text)],
+        },
+        url,
+      )
+    ).json()) as Reply;
+    expect(second.content[0]).toMatchObject({
+      name: 'Write',
+      input: { file_path: `outputs/out/${FILES}.md`, content: 'granted line one\n' },
+    });
+
+    const third = (await (
+      await ask(
+        {
+          tools,
+          messages: [
+            user,
+            toolUse('t1', 'Read', {}),
+            toolResult('t1', [{ type: 'text', text }]),
+            toolUse('t2', 'Write', second.content[0]?.input),
+            toolResult('t2', 'File created successfully'),
+          ],
+        },
+        url,
+      )
+    ).json()) as Reply;
+    expect(third.content[0]?.text).toBe(`Fake Anthropic wrote outputs/out/${FILES}.md`);
+    expect(requests.at(-1)?.reply).toBe(`Fake Anthropic wrote outputs/out/${FILES}.md`);
+    expect(toolRequests.map((record) => record.toolUse?.name ?? null)).toEqual([
+      'Read',
+      'Write',
+      null,
+    ]);
+  });
+
+  it('[US-STO-06][api][run] uses absolute paths under the Working directory of the system prompt', async () => {
+    const url = await serveTools([], []);
+    const system = 'Env\n Working directory: /work/run-1\n Platform: linux';
+    const body = (await (
+      await ask({ system, tools: [READ, WRITE], messages: [user] }, url)
+    ).json()) as Reply;
+    expect(body.content[0]?.input).toEqual({ file_path: `/work/run-1/in/${FILES}.txt` });
+  });
+
+  it('[US-STO-06][api][run] also reads the Primary working directory wording of newer CLI builds', async () => {
+    const url = await serveTools([], []);
+    const system = 'Env\n Primary working directory: /work/run-2\n Platform: linux';
+    const body = (await (
+      await ask({ system, tools: [READ, WRITE], messages: [user] }, url)
+    ).json()) as Reply;
+    expect(body.content[0]?.input).toEqual({ file_path: `/work/run-2/in/${FILES}.txt` });
+  });
+
+  it('[US-STO-06][api][run] a failed Read ends in a text turn and writes nothing', async () => {
+    const toolRequests: ToolRequestRecord[] = [];
+    const url = await serveTools([], toolRequests);
+    const messages = [
+      user,
+      toolUse('t1', 'Read', {}),
+      {
+        ...toolResult('t1', 'File does not exist.'),
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 't1',
+            is_error: true,
+            content: 'File does not exist.',
+          },
+        ],
+      },
+    ];
+    const body = (await (await ask({ tools: [READ, WRITE], messages }, url)).json()) as Reply;
+    expect(body.stop_reason).not.toBe('tool_use');
+    expect(body.content[0]?.text).toBe(
+      `Fake Anthropic could not read in/${FILES}.txt: File does not exist.`,
+    );
+    expect(toolRequests[0]?.toolUse).toBeNull();
+  });
+
+  it('without a Read tool offered it falls back to the slice-1 reply', async () => {
+    const toolRequests: ToolRequestRecord[] = [];
+    const url = await serveTools([], toolRequests);
+    const body = (await (await ask({ tools: [WRITE], messages: [user] }, url)).json()) as Reply;
+    expect(body.stop_reason).not.toBe('tool_use');
+    expect(toolRequests[0]?.toolUse).toBeNull();
+  });
+});
+
 describe('the loopback orders API', () => {
   it('serves its own document: servers[0] is its origin, one 21-character operation, bearer', async () => {
     const api = createOrdersApi([]);

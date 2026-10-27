@@ -3,13 +3,25 @@
 One heading per release, newest first. Released in lock-step with `@indx-workspace/contracts`,
 `sdk`, `aw` and `create`, with the same version (ADR-0082).
 
-## Unreleased
+## 0.6.11 — unreleased
+
+No changes to this package. Released in lock-step with the 0.6.11 storage and Builder release.
+
+## 0.6.10 — unreleased
 
 ### Added
 
 - Under WSL, `create` notes on stderr when the project lands on a Windows drive (`/mnt/<drive>/…`),
   where the install and the local runtime are much slower, and suggests the Linux home instead
   (BH061-034).
+- `agent-workspace doctor` gets a `storage-layout` check: how many objects each area still holds in the old per-area layout (counted up to a cap, counts only), with the advice to run the server with `AW_STORAGE_MIGRATE=adopt`.
+
+### Changed
+
+- `AW_STORAGE_URL` replaces `OBJECT_STORAGE_BACKEND/ENDPOINT/BUCKET/FORCE_PATH_STYLE` and `AW_*_ROOT` for new projects; old names work for one release with a warning. `create` renders it for the local-filesystem, AWS and GCP profiles and leaves it blank for Azure, where Terraform sets it; the bundled SeaweedFS, Vercel and Cloudflare profiles keep the old names until their deploy commands read the URL. `AW_STORAGE_SIGNED_UPLOAD_MAX_BYTES` is rendered blank, which keeps the 5 GiB server default.
+- `agent-workspace doctor` reports the storage setting: the URL in use, the old variables with the URL that replaces them, and a failure when they disagree.
+- `agent-workspace validate` probes the bucket `AW_STORAGE_URL` names and refuses the storage settings the server refuses (the URL and an old variable disagree, or the endpoint is on `AW_PUBLIC_URL`'s origin), naming variables, never values.
+- Deploy targets set `AW_STORAGE_URL`: the Terraform modules for Cloud Run, Azure Container Apps and the single-VM Compose, and `agent-workspace deploy` for Vercel and Cloudflare, which now push the URL instead of `OBJECT_STORAGE_BUCKET` and `OBJECT_STORAGE_ENDPOINT`. A `.env` with the URL next to an old location variable is refused before anything runs. The Cloud Run and Azure modules take an optional `storage_signed_upload_max_bytes`. Old platform variables already set on a Vercel or Cloudflare project are not deleted; remove them once the URL is pushed.
 
 ### Fixed
 

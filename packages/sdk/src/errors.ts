@@ -140,15 +140,29 @@ function describeCause(cause: unknown): string {
  */
 export class InvalidArgumentError extends AgentWorkspaceError {
   public readonly kind = 'argument';
-  public readonly code: 'invalid_path_segment';
-  /** The refused value: `''`, `'.'`, `'..'` or a string holding a lone surrogate. */
-  public readonly value: string;
+  public readonly code: 'invalid_path_segment' | 'unconvertible_output_schema';
+  /**
+   * The refused value: `''`, `'.'`, `'..'` or a string holding a lone surrogate for
+   * `invalid_path_segment`; `null` for `unconvertible_output_schema`, whose `cause` is the failure.
+   */
+  public readonly value: string | null;
 
-  public constructor(input: { readonly code: 'invalid_path_segment'; readonly value: string }) {
+  public constructor(
+    input:
+      | { readonly code: 'invalid_path_segment'; readonly value: string }
+      | {
+          readonly code: 'unconvertible_output_schema';
+          readonly message: string;
+          readonly cause: unknown;
+        },
+  ) {
     super(
-      `a path segment must not be empty, "." or ".." or hold a lone surrogate (got ${JSON.stringify(input.value)})`,
+      input.code === 'invalid_path_segment'
+        ? `a path segment must not be empty, "." or ".." or hold a lone surrogate (got ${JSON.stringify(input.value)})`
+        : input.message,
+      input.code === 'invalid_path_segment' ? undefined : { cause: input.cause },
     );
     this.code = input.code;
-    this.value = input.value;
+    this.value = input.code === 'invalid_path_segment' ? input.value : null;
   }
 }

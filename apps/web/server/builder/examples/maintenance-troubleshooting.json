@@ -1,0 +1,94 @@
+{
+  "name": "maintenance-troubleshooting",
+  "title": "Skill-transfer & maintenance troubleshooting agent",
+  "summary": "Guides a technician through a fault using past maintenance records.",
+  "body": {
+    "definition": {
+      "apiVersion": "agentworkspace.dev/v1",
+      "kind": "AgentDefinition",
+      "agent": {
+        "name": "maintenance-troubleshooting",
+        "instructions": "あなたは工場の設備保全部門のトラブル対応担当です。設備の前にいる若手技術者を、過去トラ・設備マニュアル・\n熟練者メモに基づいて、1ターンに1手順ずつ故障診断へ導きます。\n\n最初のメッセージには、設備番号または設備名と現象が書かれています。対応者はサインイン済みの技術者で、\nツールが自動で判別します。氏名を尋ねたり、ツールに渡したりしない。\n\n手順:\n\n1. 最初の返答は必ず安全指示（停止・主電源遮断・LOTO）から始める。`one-step-diagnosis` スキルの定型文を使う。\n2. `search_files` で過去トラ（`trouble-log/`）・熟練者メモ（`expert-notes/`）・設備マニュアル\n   （`manuals/`）を探す。検索語は空白区切りで、すべての語を含む箇所だけが返る。結果は\n   `[{ path, page, snippet }]` で、検索できるのは対応者に許されたファイルだけである。\n   まず設備番号（または設備名）で検索して `trouble-log/<ライン>/<設備番号>.json` を見つけ、次に現象で\n   熟練者メモとマニュアルを検索する。スニペットだけで答えず、使うファイルは `Read` で開いて読み、\n   出典はファイルに書かれた〔〕をそのまま写す。\n   設備番号・設備名で検索しても `trouble-log/` に記録がなければ、機種や似た設備を推測して検索し直さず、\n   手順も出典も書かずに、`handoff_to_person` を呼び、次の1行（この設備の過去トラ・マニュアルは登録されていません。熟練者に引き継ぎます。）\n   で引き継ぐ。\n3. 当てはまる原因のうち、確認が簡単で可能性の高いものから1つ選び、確認の手順を1つだけ出す。\n   同じ設備のファイルの記録を、同じ機種の別設備の記録（`model` が同じ）より優先する。\n   技術者が「設定（リリーフ弁の圧力など）を変えていいか」と聞いたときは、設定の話から始め、\n   「設定は変えないでください」と答えて、出典の設定値（例: 設定圧 21.0 MPa）を単位付きで添える。\n   そのうえで手順1は、同じ現象の過去トラの `cause` に対する確認・処置そのものにする（T-0007 ならリリーフ弁の\n   分解清掃でゴミ噛みを確認する）。設定を変えない確認にする。音・油面・圧力計など症状を確かめ直す手順を\n   手順1にしない。\n   写真が添付されている（「Attached (read-only): …」の行がある）ときは、`Read` で写真を読み、\n   写っている部位の状態（漏れ・焼け・摩耗・脱落など）を次の1手順の根拠にする。写真に写っていないことは推測しない。\n4. 技術者の返答（結果）を読み、その原因が否定されたら次の候補へ進む。各ターンで、引用する出典を\n   ツールで読み直してから書く。\n5. 候補をすべて確認しても解決しないときは、`handoff_to_person` を呼んで熟練者に引き継ぎ（`reason` に確認済みの\n   原因を短く書く）、手順を出さずにスキルの定型文で返す。\n6. 解決したら `logResolution` に設備番号、現象、原因、処置を `body` に渡して記録し（対応者の氏名は記録側が付ける）、スキルの【解決】の形で返す。\n   `logResolution` は技術者の承認を待ってから実行される。承認されず実行されなかったときは、記録したと書かず、\n   記録されていないことをそのまま伝える。同じ内容で再試行しない。\n\n1回の返答に書く「手順N：」の行は1つだけ。最初の返答も、【安全】の行のあとに手順1だけを書く\n（設備の記録がないときは、手順1の代わりに上の引き継ぎの1行を書く）。\n次の候補・後続の手順・「うまくいかなければ…」は書かず、技術者の結果を聞いた次のターンで出す。\n\n推測で手順を作らない。出典のない手順は出さない。数値（圧力・温度・時間）は出典のまま単位付きで書く。\n",
+        "permissions": {
+          "readFiles": true,
+          "writeFiles": false,
+          "runCommands": false,
+          "unrestrictedNetwork": false
+        },
+        "model": null,
+        "modelConnectionName": "default",
+        "runtimeProfileName": null
+      },
+      "policy": {
+        "engine": "claude-agent-sdk",
+        "tools": {
+          "base": "claude_code_preset",
+          "autoApprove": ["mcp__agent-workspace__search_files"],
+          "deny": [
+            "Write",
+            "Edit",
+            "NotebookEdit",
+            "Bash",
+            "BashOutput",
+            "KillShell",
+            "WebFetch",
+            "WebSearch"
+          ],
+          "permissionMode": "default",
+          "allowDangerouslySkipPermissions": false
+        },
+        "handoff": true,
+        "skills": {
+          "mode": "allowlist",
+          "names": ["one-step-diagnosis"]
+        },
+        "limits": {
+          "maxTurns": 10,
+          "maxBudgetUsd": 0.3
+        }
+      },
+      "policySource": "stored",
+      "resources": {
+        "files": [
+          {
+            "path": "trouble-log",
+            "access": "read"
+          },
+          {
+            "path": "expert-notes",
+            "access": "read"
+          },
+          {
+            "path": "manuals",
+            "access": "read"
+          }
+        ],
+        "skills": ["one-step-diagnosis"],
+        "connectors": ["maintenance"]
+      }
+    },
+    "surfaces": [
+      {
+        "name": "floor",
+        "agent": "maintenance-troubleshooting",
+        "title": "設備トラブル対応",
+        "layout": "page",
+        "parts": {
+          "greeting": "設備番号（または設備名）と、起きている現象を入力してください。故障部位の写真を添付すると、写真を見て次の手順を出します。",
+          "suggestedPrompts": [
+            "プレス2号機 油圧が上がらない",
+            "マシニングセンタ5号機 主軸から異音",
+            "射出成形機4号機 型締め圧が上がらない"
+          ],
+          "disclaimer": "作業は必ず停止・LOTO の後に。判断に迷ったら作業を止めて班長に連絡してください。",
+          "toolTrace": "hidden",
+          "feedback": true,
+          "attachments": true
+        },
+        "limits": {
+          "turnsPerConversation": 20
+        }
+      }
+    ]
+  }
+}

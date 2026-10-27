@@ -49,7 +49,7 @@ rendered from the same setup answers.
 - On a terminal, create asks the setup questions in order, showing each one's choices or
   grammar and its recommended answer; an empty line takes the recommendation, and an answer that
   does not fit is asked again. It then lists the files and asks `Write these 6 files into
-  <directory>?` as a Yes/No menu (Yes is the default); a No writes nothing.
+<directory>?` as a Yes/No menu (Yes is the default); a No writes nothing.
 - After writing, on a terminal, it asks `Install dependencies now?` and then `Start it now?`
   (Yes is the default for both). The install runs the package manager that ran `npm create`
   (`npm_config_user_agent`: npm, pnpm, yarn or bun) in the project directory, and starting runs
@@ -62,7 +62,7 @@ rendered from the same setup answers.
 - When no person is at a terminal (stdin or stdout is not a TTY, or `CI` is set) and `--yes` is not
   given, create takes the recommended answers (and your flags) and says so on stderr:
   `no terminal: used the recommended answers (to choose others, pass flags or --answers <file>;
-  see --help)`. It installs or starts only when `--install` or `--start` is given. It never reads
+see --help)`. It installs or starts only when `--install` or `--start` is given. It never reads
   answers from stdin.
 - Exit codes: 0 when the project was written and everything create ran succeeded; 2 for a usage
   error (an unknown flag, a value a flag does not accept); 1 for any other refusal and for a
@@ -261,7 +261,7 @@ see the moves without writing, then `agent-workspace start` to run the new image
 were not re-rendered.
 
 `render` rewrites only the image keys of `.env`. A profile edit that changes another `.env` value —
-`storage.objects` (the `OBJECT_STORAGE_*` keys), `identity.bootstrapAdmin` (`BOOTSTRAP_ADMIN`), the
+`storage.objects` (`AW_STORAGE_URL`), `identity.bootstrapAdmin` (`BOOTSTRAP_ADMIN`), the
 runtime or the secret backend — still needs that line edited by hand (ADR-0090).
 
 ### Deploying a project
@@ -380,16 +380,22 @@ ADR-0055.
 
 ## Doctor
 
-`agent-workspace doctor [directory] [--json]` runs four checks and prints one line for each result,
+`agent-workspace doctor [directory] [--json]` runs six checks and prints one line for each result,
 `pass`, `warn` or `fail`, with one line of advice under every warning and failure. It fixes
 nothing.
 
-| Check           | Pass                                        | Warn                                                                               | Fail                                                 |
-| --------------- | ------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| `profile`       | `agent-workspace.yaml` validates            | it has no `apiVersion`                                                             | it is missing or refused; the refusal names the line |
-| `stores`        | the store answered the `validate` probe     | the store was not probed, or its bucket is not created yet                         | the store did not answer, or `.env` is malformed     |
-| `prerequisites` | the tool is on `PATH`; its version is shown | an optional tool is missing, or a tool printed no version                          | a tool the target needs is missing                   |
-| `version-skew`  | the server serves this CLI's contracts      | `AGENT_WORKSPACE_URL` is unset, the server is unreachable, or it states no version | the server is outside the range this CLI supports    |
+| Check            | Pass                                           | Warn                                                                                                  | Fail                                                           |
+| ---------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `profile`        | `agent-workspace.yaml` validates               | it has no `apiVersion`                                                                                | it is missing or refused; the refusal names the line           |
+| `storage`        | `AW_STORAGE_URL` is set and agrees with `.env` | old storage variables are set (the line names them and the URL that replaces them), or nothing is set | `AW_STORAGE_URL` is invalid, or disagrees with an old variable |
+| `stores`         | the store answered the `validate` probe        | the store was not probed, or its bucket is not created yet                                            | the store did not answer, or `.env` is malformed               |
+| `storage-layout` | an area has no objects in the old layout       | objects remain (a count, capped), or the area cannot be counted from this host                        | never                                                          |
+| `prerequisites`  | the tool is on `PATH`; its version is shown    | an optional tool is missing, or a tool printed no version                                             | a tool the target needs is missing                             |
+| `version-skew`   | the server serves this CLI's contracts         | `AGENT_WORKSPACE_URL` is unset, the server is unreachable, or it states no version                    | the server is outside the range this CLI supports              |
+
+The storage line decides with the function the server starts up with, so a disagreement fails
+with the server's own reason. It names variables and prints the URL only after parsing it, never
+a value it refused.
 
 A store is not probed when `.env` holds no credential for it, or when it is on the Compose
 project's internal network; the detail says how to check it. A bucket the platform creates on
@@ -397,6 +403,13 @@ first boot is a warning until it exists. The store probes are the ones `validate
 stop at the first store that does not answer: that store fails and the others are reported as not
 checked. The version check is the one `validate` and `start` run (ADR-0078). When the profile is
 refused, the store and tool checks are reported as not checked; the version check still runs.
+
+The storage layout check counts the objects each area still holds in the old per-area naming
+(the prefixes the server's `AW_STORAGE_MIGRATE=adopt` stage lists), read-only: a `file://` root on
+this host is walked, and a bucket is listed after the `stores` check reached it. Each area is
+counted up to 10,000 and then reads "at least 10,000". Only counts are printed, never a key or a
+path. A root this host cannot see, or a bucket the `stores` check did not reach, is a warning
+"not counted", never a zero.
 
 The tools checked depend on the profile:
 
@@ -490,7 +503,7 @@ and mints new secrets, so it cannot be re-run in place. Three ways work today:
   settings across.
 - Edit the existing project's `.env`: replace the digest in `WEB_IMAGE`, `GATEWAY_IMAGE`,
   `RUNNER_IMAGE` and `AGENT_WORKSPACE_RUNTIME_IMAGE_CLAUDE_AGENT_SDK` with the digest of
-  `ghcr.io/indxdev/agent-workspace/<name>:0.1.2` (`web`, `gateway`, `runner`,
+  `ghcr.io/indxjp/agent-workspace/<name>:0.1.2` (`web`, `gateway`, `runner`,
   `runtime-claude-agent-sdk`), for example from `docker buildx imagetools inspect`. Keep each value a
   digest reference (`...@sha256:...`); the Compose file refuses a tag. Then run
   `agent-workspace start` again.

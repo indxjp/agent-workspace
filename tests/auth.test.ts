@@ -1004,6 +1004,13 @@ describe('the running server refuses every /api/** request without a session', (
     '/api/auth/cli-verify',
     // ADR-0120 clause 7: Vercel Cron carries no session; the route checks `CRON_SECRET` itself.
     '/api/cron/retention',
+    // ADR-0144 D5: the schedule pass authenticates the same `CRON_SECRET` bearer itself.
+    '/api/cron/triggers',
+    // Issue #1674: the storage cleanup authenticates the same `CRON_SECRET` bearer itself.
+    '/api/cron/storage-cleanup',
+    // Issue #1562: the readiness probe a kubelet calls with no credential; it reveals only whether
+    // the deployment is ready and, if not, which variable is wrong.
+    '/api/readyz',
     // ADR-0135 amendment (#1076): the A2A agent card is public discovery metadata. Only the card is
     // exempt; the JSON-RPC route of the same agent keeps its 401 in the POST probes below.
     '/api/a2a/agents/probe-agentName/.well-known/agent-card.json',
@@ -1011,11 +1018,15 @@ describe('the running server refuses every /api/** request without a session', (
   const INVITATION_ACCEPT_PROBE = '/api/invitations/probe-id/accept';
   const POST_EXEMPT = new Set([
     '/api/setup',
+    // Issue #1846: the aw-control door verifies a run token itself and refuses anything else.
+    '/api/builder/mcp',
     '/api/auth/callback',
     '/api/auth/workspace',
     '/api/auth/cli-device',
     '/api/auth/cli-token',
     INVITATION_ACCEPT_PROBE,
+    // ADR-0144: the secret in the path is the authentication; the route answers 404 without it.
+    '/api/triggers/probe-id/fire/probe-secret',
   ]);
   const protectedGetProbes = probes.filter((pathname) => !GET_EXEMPT.has(pathname));
 

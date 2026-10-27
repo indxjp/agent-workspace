@@ -98,7 +98,7 @@ theorem a_real_request_compiles_identically :
     compileTarget claudeAgentSdkCapabilities request "w" "/workspace/w/s/.claude" =
       .compiled (assembledEnv request "w" "/workspace/w/s/.claude") ∧
     compileCurrent request "w" "/workspace/w/s/.claude" =
-      some (assembledEnv request "w" "/workspace/w/s/.claude") := by decide
+      some (assembledEnv request "w" "/workspace/w/s/.claude") := by decide +kernel
 
 /-- A policy arm the adapter cannot read is refused by name, never compiled with a default.
 
@@ -128,6 +128,6 @@ theorem a_master_key_still_refuses_on_both :
         env := [("ANTHROPIC_API_KEY", "provider-master-key")] }
     compileTarget claudeAgentSdkCapabilities request "w" "/w/.claude" =
       .refused .engineCredentialRefused ∧
-    compileCurrent request "w" "/w/.claude" = none := by decide
+    compileCurrent request "w" "/w/.claude" = none := by decide +kernel
 
 end AgentWorkspace.Theorems.Refinement.EnginePortCompile

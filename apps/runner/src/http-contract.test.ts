@@ -42,7 +42,7 @@ import { fileURLToPath } from 'node:url';
 
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { toAgentFrames } from '@agent-workspace/core';
+import { toAgentFrames } from '@agent-workspace/run-protocol';
 import type { EngineFrame } from '@agent-workspace/engine';
 
 import { installedEngines } from './engines.js';

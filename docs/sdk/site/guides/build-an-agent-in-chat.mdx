@@ -1,0 +1,108 @@
+---
+title: "Build an agent in chat"
+description: "Describe the agent you want and the Builder drafts it with you: what it asks before it saves, tries or runs evaluations, what the approval card shows, and what to do after a save."
+---
+
+<Info>
+
+- **Read this when:** you want to create or change an agent by describing it, in the console or on
+  the command line, instead of filling in the form.
+- **You will learn:** what the Builder does, what it always asks you first, how to read the approval
+  card, where to go after a save, and what is planned for agents that build agents.
+- **You need:** a workspace where an admin has enabled the `builder` feature, and a role that can
+  create agents.
+
+</Info>
+
+The Builder is a built-in agent that drafts other agents. You describe what you want; it looks at
+what your workspace has, writes a draft, checks it, and asks you before it saves anything. It
+never promotes an agent: that stays your decision.
+
+The feature is off until an admin enables it. Until then the console shows no Chat option on the
+new-agent page, and the Builder's tools answer `builder_disabled`.
+
+**What you can do**
+
+- [Start a chat](#start-a-chat)
+- [Approve each step](#approve-each-step)
+- [Read the diff](#read-the-diff)
+- [After a save](#after-a-save)
+- [Build from the command line](#build-from-the-command-line)
+- [Let an agent build agents](#let-an-agent-build-agents)
+
+## Start a chat
+
+Open **New agent** and switch from **Form** to **Chat** (`/agents/new?mode=chat`). The chat is on the
+left. On the right is a live preview of the definition the Builder is drafting, with each change
+labelled. Type what you want, for example "an agent that helps with expense refunds".
+
+If the draft names something your workspace lacks, such as a connector, the Builder says so and asks
+you instead of guessing. Answer in the chat, or use "Ask the Builder to change this" on the preview.
+
+## Approve each step
+
+Every save, trial and evaluation (running the eval cases) stops and asks you first. Nothing is
+saved, run or scored until you approve it, and an approval admits that one call only. Validating a
+draft (`draft_check`) runs without asking, because it changes nothing.
+
+| Step  | What it does                                 | Cost cap            |
+| ----- | -------------------------------------------- | ------------------- |
+| Save  | Writes the draft as a new version on `local` | None                |
+| Trial | Runs the draft once on a sample input        | $0.30               |
+| Evaluation | Scores the draft on eval cases          | $0.30 for each case |
+
+A trial runs the agent for real, so it can change real systems through the connectors the agent
+holds. Read the card before you approve it.
+
+## Read the diff
+
+The approval card shows the exact change, taken from what the Builder is about to send, not from
+what it says in the chat. For a save it is the difference against the base version; for a trial it
+is the input and the budget cap; for an evaluation it is the case names and the cap.
+
+When a change lowers a guard, the card adds a warning you can read before approving:
+
+- the agent can skip permission checks;
+- the agent gets the whole Claude Code tool set, or one more tool in an explicit set;
+- a hard deny on a tool is removed;
+- the agent can use a tool without asking.
+
+Reject the card and nothing is written.
+
+## After a save
+
+The preview says "Saved as version N on local" and offers three links:
+
+- **Try it** opens a new chat pinned to that version.
+- **View history** opens the agent's versions, where the version shows the source "Builder".
+- **Promote** opens the Release section, where you promote the version through the eval gate.
+
+The Builder itself never promotes. Production moves only when you do it.
+
+## Build from the command line
+
+`aw agents new --from-prompt "<text>" [--out <dir>]` runs the same chat on your terminal. Every
+save, trial and evaluation shows what it will do and waits for `y`. There is no `--yes`, and it needs a
+terminal on stdin and stdout. A saved agent is written as `agents/<name>.ts` and `.md`.
+
+## Let an agent build agents
+
+<Warning>
+
+Coming soon: this is not available yet (tracked in #1851). Today only a person, through the Builder,
+can use the Builder's tools. What follows is the design intent, not current behaviour.
+
+</Warning>
+
+The plan is for an agent to be able to use the Builder's tools too, within these limits:
+
+- **Allow-list.** Only agents the deployment policy names may build.
+- **Never wider than the creator.** A draft may not give the new agent more than its creator has.
+- **No building by built agents.** An agent that was made by an agent cannot build in turn. The call
+  is refused as `not_allowed_to_build`.
+- **Daily quota.** Each workspace gets a daily quota of agents created this way.
+
+A person would still approve each save, trial and evaluation, exactly as in the chat.
+
+To drive the Builder from an outside MCP client such as Claude Code, see
+[Use the Builder tools from Claude Code](/guides/builder-tools-from-claude-code).

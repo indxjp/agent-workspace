@@ -1,33 +1,49 @@
-import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, not, sql } from 'drizzle-orm';
 
-import type { Database } from '../client.js';
 import { agentFiles, type FileAccessMode } from '../schema/agent-files.js';
 import { agentMcpServers } from '../schema/agent-mcp-servers.js';
 import { agentSkills } from '../schema/agent-skills.js';
+import { agentStorageGrants } from '../schema/agent-storage-grants.js';
 import { agents, parseAgentPermissions } from '../schema/agents.js';
 import { files } from '../schema/files.js';
 import { mcpServers } from '../schema/mcp-servers.js';
+import { skillRevisions } from '../schema/skill-revisions.js';
 import { skills } from '../schema/skills.js';
+import { narrowStorageGrants, type StorageGrantRef } from './agent-versions-resolution.js';
+import type { Executor } from './agent-versions-shared.js';
+import { underAttachmentsPrefix } from './project-files.js';
 import { requireWorkspaceScope, type WorkspaceScope } from './scope.js';
 
 export interface AgentResourceAssignments {
   readonly files: readonly { readonly fileId: string; readonly access: FileAccessMode }[];
   readonly skillIds: readonly string[];
+  /** Published revision each pinned skill follows, by skill id; absent skills follow `latest`. */
+  readonly skillRevisions?: Readonly<Record<string, number>> | undefined;
   readonly connectorIds: readonly string[];
+  /** Written only by a materialised version; {@link AgentResourceRepository.replace} keeps them. */
+  readonly storageGrants: readonly StorageGrantRef[];
 }
+
+/** What a writer of assignments sends: the storage grants are not its to set. */
+export type AgentResourceAssignmentsInput = Omit<AgentResourceAssignments, 'storageGrants'> & {
+  readonly storageGrants?: readonly StorageGrantRef[] | undefined;
+};
 
 export type ReplaceAgentResourcesOutcome =
   | { readonly kind: 'updated'; readonly assignments: AgentResourceAssignments }
   | { readonly kind: 'not-found' }
   | { readonly kind: 'unknown-file'; readonly id: string }
   | { readonly kind: 'unknown-skill'; readonly id: string }
+  /** A delete of the skill is under way: it cannot be assigned any more (the mark is never undone). */
+  | { readonly kind: 'skill-deleting'; readonly id: string }
+  | { readonly kind: 'unknown-skill-revision'; readonly id: string; readonly revision: number }
   | { readonly kind: 'unknown-connector'; readonly id: string };
 
 export interface AgentResourceRepository {
   get(agentId: string): Promise<AgentResourceAssignments | null>;
   replace(
     agentId: string,
-    assignments: AgentResourceAssignments,
+    assignments: AgentResourceAssignmentsInput,
   ): Promise<ReplaceAgentResourcesOutcome>;
 }
 
@@ -36,7 +52,7 @@ export interface AgentResourceRepositoryProvider {
 }
 
 export function createDatabaseAgentResourceRepositoryProvider(
-  db: Database,
+  db: Executor,
 ): AgentResourceRepositoryProvider {
   return {
     forScope(scope: WorkspaceScope): AgentResourceRepository {
@@ -51,14 +67,25 @@ export function createDatabaseAgentResourceRepositoryProvider(
           .limit(1);
         const agentRow = agent[0];
         if (agentRow === undefined) return null;
-        const [fileRows, skillRows, connectorRows] = await Promise.all([
+        const [fileRows, skillRows, connectorRows, storageRows] = await Promise.all([
           db
             .select({ fileId: agentFiles.fileId, access: agentFiles.access })
             .from(agentFiles)
-            .where(and(eq(agentFiles.workspaceId, workspaceId), eq(agentFiles.agentId, agentId)))
+            .innerJoin(
+              files,
+              and(eq(files.id, agentFiles.fileId), eq(files.workspaceId, agentFiles.workspaceId)),
+            )
+            // A grant on a row that is not ready (removed, awaiting cleanup) is not a grant.
+            .where(
+              and(
+                eq(agentFiles.workspaceId, workspaceId),
+                eq(agentFiles.agentId, agentId),
+                eq(files.status, 'ready'),
+              ),
+            )
             .orderBy(asc(agentFiles.fileId)),
           db
-            .select({ id: agentSkills.skillId })
+            .select({ id: agentSkills.skillId, revision: agentSkills.revision })
             .from(agentSkills)
             .where(and(eq(agentSkills.workspaceId, workspaceId), eq(agentSkills.agentId, agentId)))
             .orderBy(asc(agentSkills.skillId)),
@@ -72,6 +99,20 @@ export function createDatabaseAgentResourceRepositoryProvider(
               ),
             )
             .orderBy(asc(agentMcpServers.mcpServerId)),
+          db
+            .select({
+              connectionId: agentStorageGrants.connectionId,
+              prefix: agentStorageGrants.prefix,
+              access: agentStorageGrants.access,
+            })
+            .from(agentStorageGrants)
+            .where(
+              and(
+                eq(agentStorageGrants.workspaceId, workspaceId),
+                eq(agentStorageGrants.agentId, agentId),
+              ),
+            )
+            .orderBy(asc(agentStorageGrants.connectionId), asc(agentStorageGrants.prefix)),
         ]);
         // Verification round 1, finding 1: `replace` below narrows a `'read-write'` grant to
         // `'read'` at write time, but a grant already sitting at `'read-write'` in the database
@@ -88,15 +129,21 @@ export function createDatabaseAgentResourceRepositoryProvider(
         // `docs/adr/W9-PROJ-125-project-resources-narrow-never-widen.md` already applies to a
         // project's contribution.
         const permissions = parseAgentPermissions(agentRow.permissions);
-        const files = permissions.writeFiles
+        const granted = permissions.writeFiles
           ? fileRows
           : fileRows.map((row) =>
               row.access === 'read-write' ? { ...row, access: 'read' as const } : row,
             );
+        const pins = skillRows.flatMap((row) =>
+          row.revision === null ? [] : [[row.id, row.revision] as const],
+        );
         return {
-          files,
+          files: granted,
           skillIds: skillRows.map((row) => row.id),
+          ...(pins.length > 0 ? { skillRevisions: Object.fromEntries(pins) } : {}),
           connectorIds: connectorRows.map((row) => row.id),
+          // The same read-time ceiling as files: a stale `read-write` row is never read as one.
+          storageGrants: narrowStorageGrants(storageRows, permissions),
         };
       };
 
@@ -124,7 +171,7 @@ export function createDatabaseAgentResourceRepositoryProvider(
           // Narrowing here alone is not sufficient — see `read`'s own comment above for why a row
           // written while `writeFiles` was on must also be narrowed on every read, not just here.
           const permissions = parseAgentPermissions(agentRow.permissions);
-          const assignments: AgentResourceAssignments = permissions.writeFiles
+          const assignments: AgentResourceAssignmentsInput = permissions.writeFiles
             ? requested
             : {
                 ...requested,
@@ -155,7 +202,17 @@ export function createDatabaseAgentResourceRepositoryProvider(
               : await db
                   .select({ id: files.id })
                   .from(files)
-                  .where(and(eq(files.workspaceId, workspaceId), inArray(files.id, fileIds)));
+                  .where(
+                    and(
+                      eq(files.workspaceId, workspaceId),
+                      inArray(files.id, fileIds),
+                      // ADR-0146 D6: a visitor upload under `.attachments/` is not assignable; it
+                      // answers as an unknown file, so the refusal does not confirm it exists.
+                      not(underAttachmentsPrefix),
+                      // A pending upload is not a file yet (the storage design, §04).
+                      eq(files.status, 'ready'),
+                    ),
+                  );
           const existingSkills =
             skillIds.length === 0
               ? []
@@ -185,6 +242,29 @@ export function createDatabaseAgentResourceRepositoryProvider(
           if (unknownFile !== undefined) return { kind: 'unknown-file', id: unknownFile };
           const unknownSkill = skillIds.find((id) => !foundSkills.has(id));
           if (unknownSkill !== undefined) return { kind: 'unknown-skill', id: unknownSkill };
+          // A pin on a skill that is not being assigned is never written, so it is not checked.
+          const pins = Object.entries(assignments.skillRevisions ?? {}).filter(([id]) =>
+            foundSkills.has(id),
+          );
+          if (pins.length > 0) {
+            const published = await db
+              .select({ skillId: skillRevisions.skillId, number: skillRevisions.number })
+              .from(skillRevisions)
+              .where(
+                and(
+                  eq(skillRevisions.workspaceId, workspaceId),
+                  eq(skillRevisions.pending, false),
+                  inArray(
+                    skillRevisions.skillId,
+                    pins.map(([skillId]) => skillId),
+                  ),
+                ),
+              );
+            const found = new Set(published.map((row) => `${row.skillId}@${String(row.number)}`));
+            const missing = pins.find(([skillId, n]) => !found.has(`${skillId}@${String(n)}`));
+            if (missing !== undefined)
+              return { kind: 'unknown-skill-revision', id: missing[0], revision: missing[1] };
+          }
           const unknownConnector = connectorIds.find((id) => !foundConnectors.has(id));
           if (unknownConnector !== undefined)
             return { kind: 'unknown-connector', id: unknownConnector };
@@ -195,13 +275,26 @@ export function createDatabaseAgentResourceRepositoryProvider(
           // row first also takes its row lock, which serialises concurrent replaces of one agent.
           // `aw dev`'s sync guard (S2-07b) reads `materialised_version_id` as the edit marker.
           const replaced = await db.transaction(async (tx) => {
+            // Under a share lock on the skill rows, so a delete marking one either lands first
+            // (and is seen here) or waits for this assignment and then finds it in use.
+            if (skillIds.length > 0) {
+              const locked = await tx
+                .select({ id: skills.id, pendingDelete: skills.pendingDelete })
+                .from(skills)
+                .where(and(eq(skills.workspaceId, workspaceId), inArray(skills.id, skillIds)))
+                .orderBy(asc(skills.id))
+                .for('share');
+              const deleting = locked.find((row) => row.pendingDelete !== null);
+              if (deleting !== undefined)
+                return { kind: 'skill-deleting', id: deleting.id } as const;
+            }
             const bumped = await tx
               .update(agents)
               .set({ updatedAt: sql`now()`, materialisedVersionId: null })
               .where(and(eq(agents.workspaceId, workspaceId), eq(agents.id, agentId)))
               .returning({ id: agents.id });
             // Deleted between the pre-check and this transaction: write nothing.
-            if (bumped.length === 0) return false;
+            if (bumped.length === 0) return { kind: 'not-found' } as const;
             const ownAgent = (
               table: typeof agentFiles | typeof agentSkills | typeof agentMcpServers,
             ) => and(eq(table.workspaceId, workspaceId), eq(table.agentId, agentId));
@@ -213,16 +306,21 @@ export function createDatabaseAgentResourceRepositoryProvider(
                 .insert(agentFiles)
                 .values(assignments.files.map((grant) => ({ workspaceId, agentId, ...grant })));
             if (skillIds.length > 0)
-              await tx
-                .insert(agentSkills)
-                .values(skillIds.map((skillId) => ({ workspaceId, agentId, skillId })));
+              await tx.insert(agentSkills).values(
+                skillIds.map((skillId) => ({
+                  workspaceId,
+                  agentId,
+                  skillId,
+                  revision: assignments.skillRevisions?.[skillId] ?? null,
+                })),
+              );
             if (connectorIds.length > 0)
               await tx
                 .insert(agentMcpServers)
                 .values(connectorIds.map((mcpServerId) => ({ workspaceId, agentId, mcpServerId })));
-            return true;
+            return { kind: 'replaced' } as const;
           });
-          if (!replaced) return { kind: 'not-found' };
+          if (replaced.kind !== 'replaced') return replaced;
           const updated = await read(agentId);
           if (updated === null) return { kind: 'not-found' };
           return { kind: 'updated', assignments: updated };

@@ -78,10 +78,29 @@ export type FileKind = (typeof FILE_KINDS)[number];
 export const MAX_UPLOAD_BYTES = 64 * 1024 * 1024;
 
 /**
+ * The most bytes one signed upload link may carry: the largest single S3 `PUT` (the storage
+ * design, §04 "Size limits"). A deployment may set a lower limit; a mint above it is a `413`
+ * `request_body_too_large`.
+ */
+export const SIGNED_UPLOAD_HARD_MAX_BYTES = 5 * 1024 ** 3;
+
+/**
  * The largest folder subtree one `PATCH`/`DELETE /api/files/:id` acts on; a bigger one is a
  * `413` `subtree_too_large`, never a partial walk.
  */
 export const MAX_SUBTREE_OBJECTS = 500;
+
+/**
+ * The most unfinished (pending) uploads one workspace may hold; a new signed upload link past it is
+ * a `429` `too_many_pending_uploads` (the storage design, §05).
+ */
+export const MAX_PENDING_UPLOADS_PER_WORKSPACE = 100;
+
+/**
+ * Upload and download link requests one workspace may make per minute, per server; the next is a
+ * `429` `link_rate_limited` with `Retry-After` (the storage design, §05).
+ */
+export const LINK_REQUESTS_PER_MINUTE_PER_WORKSPACE = 60;
 
 /**
  * Problem codes the files routes own, with the status each one travels under. The common
@@ -91,7 +110,7 @@ export const MAX_SUBTREE_OBJECTS = 500;
 export const FILES_PROBLEM_CODES = {
   /** A `path` query, `x-file-path`, `x-folder-path` or `newPath` that `key-safety` refuses. */
   invalid_path: 400,
-  /** `.claude/**` (runner state) or the internal empty-folder marker name. */
+  /** `.claude/**` (runner state), `skill-revisions/**` (immutable) or the internal empty-folder marker name. */
   reserved_path: 400,
   missing_file_path: 400,
   unsupported_path_encoding: 400,
@@ -103,10 +122,24 @@ export const FILES_PROBLEM_CODES = {
   self_descendant: 409,
   /** `DELETE` on a non-empty folder without `?recursive=true`. */
   folder_not_empty: 409,
+  /** A pending upload holds the path, or a path under the folder being moved, until it is confirmed. */
+  upload_in_progress: 409,
+  /** `POST /api/files/:id/upload-complete` found no object, a smaller one, or one over the limit (deleted). */
+  upload_not_verified: 409,
   subtree_too_large: 413,
+  /** The workspace holds {@link MAX_PENDING_UPLOADS_PER_WORKSPACE} unfinished uploads; no link is minted. */
+  too_many_pending_uploads: 429,
+  /** More than {@link LINK_REQUESTS_PER_MINUTE_PER_WORKSPACE} link requests this minute; see `Retry-After`. */
+  link_rate_limited: 429,
   store_inconsistent: 500,
   rename_inconsistent: 500,
   files_runtime_not_configured: 503,
+  /** A `q` with no searchable term, an out-of-range `limit`, or an unknown search parameter. */
+  invalid_search_query: 400,
+  /** The search could not read the text cache or the object store; the cause is logged, not sent. */
+  search_unavailable: 500,
+  /** The configured object store cannot sign URLs (local filesystem, in-memory); use the relay routes. */
+  direct_transfer_unsupported: 501,
 } as const;
 
 export type FilesProblemCode = keyof typeof FILES_PROBLEM_CODES;
@@ -147,16 +180,23 @@ export const FileListResponseSchema = z
 
 export type FileListResponse = z.infer<typeof FileListResponseSchema>;
 
-/** The body of `PATCH /api/files/:id`. */
-export interface MoveFileInput {
-  readonly newPath: string;
-}
+/** The body of `PATCH /api/files/:id`. An unknown field is refused, not ignored. */
+export const MoveFileRequestSchema = z
+  .object({ newPath: z.string().min(1) })
+  .strict()
+  .readonly();
+
+/** The body of `PATCH /api/files/:id`, as {@link MoveFileRequestSchema} parses it. */
+export type MoveFileInput = z.infer<typeof MoveFileRequestSchema>;
 
 /**
  * The `200` of `PATCH /api/files/:id` when the path names a folder. A `partial` outcome is a
- * declared state, not an error: every object was copied but `moved` of `total` originals could
- * be removed (`remaining` lists the leftovers), or the copy itself stopped at `moved`. Retrying
- * the same move converges — an already-copied object is not a collision.
+ * declared state, not an error, and `phase` names the step that stopped: `copy` stopped after
+ * `moved` of `total` objects; `catalog` copied every object but could not rewrite the catalog, so
+ * every original is still in place (`remaining`); `delete` finished the move but could not remove
+ * the originals in `remaining`. Retrying the same move after `copy` or `catalog` converges — an
+ * already-copied object is not a collision. After `delete` the rows already sit at the
+ * destination, so a retry answers `409` `name_conflict`: delete the keys in `remaining` instead.
  */
 export const SubtreeMoveOutcomeSchema = z
   .discriminatedUnion('status', [
@@ -167,6 +207,7 @@ export const SubtreeMoveOutcomeSchema = z
     z
       .object({
         status: z.literal('partial'),
+        phase: z.enum(['copy', 'catalog', 'delete']).optional(),
         moved: z.number().int().nonnegative(),
         total: z.number().int().nonnegative(),
         remaining: z.array(z.string().min(1)).readonly().optional(),
@@ -212,3 +253,109 @@ export type SubtreeDeleteOutcome = z.infer<typeof SubtreeDeleteOutcomeSchema>;
 export const RemoveFileResponseSchema = SubtreeDeleteOutcomeSchema.nullable();
 
 export type RemoveFileResponse = z.infer<typeof RemoveFileResponseSchema>;
+
+/** The shortest, longest and default lifetime of a presigned URL, in seconds. */
+export const PRESIGNED_URL_MIN_TTL_SECONDS = 60;
+export const PRESIGNED_URL_MAX_TTL_SECONDS = 900;
+export const PRESIGNED_URL_DEFAULT_TTL_SECONDS = 300;
+
+const PresignedTtlSchema = z
+  .number()
+  .int()
+  .min(PRESIGNED_URL_MIN_TTL_SECONDS)
+  .max(PRESIGNED_URL_MAX_TTL_SECONDS);
+
+/**
+ * The body of `POST /api/files/:id/upload-urls`: what the holder is about to PUT. S3 and GCS sign
+ * the declared type and length, so an upload that differs is refused by the store, not the control
+ * plane; an Azure SAS binds no length, so Azure refuses to mint one for a `session` token. `sizeBytes` is bounded by {@link SIGNED_UPLOAD_HARD_MAX_BYTES}; the deployment's own limit may be lower.
+ */
+export const CreateUploadUrlRequestSchema = z
+  .object({
+    contentType: z.string().min(1).max(255).nullable().optional(),
+    sizeBytes: z.number().int().min(0).max(SIGNED_UPLOAD_HARD_MAX_BYTES),
+    ttlSeconds: PresignedTtlSchema.optional(),
+  })
+  .strict()
+  .readonly();
+
+export type CreateUploadUrlRequest = z.infer<typeof CreateUploadUrlRequestSchema>;
+
+/** The body of `POST /api/files/:id/download-urls`. */
+export const CreateDownloadUrlRequestSchema = z
+  .object({ ttlSeconds: PresignedTtlSchema.optional() })
+  .strict()
+  .readonly();
+
+export type CreateDownloadUrlRequest = z.infer<typeof CreateDownloadUrlRequestSchema>;
+
+/**
+ * The `201` of both presign routes: a short-lived URL on the object store itself. The holder sends
+ * `method` to `url` with exactly `headers` (every one is part of the signature) and the bytes as
+ * the body; the control plane never sees them. `expiresAt` is when the store stops accepting it.
+ */
+export const PresignedUrlSchema = z
+  .object({
+    url: z.url({ protocol: /^https?$/u }),
+    method: z.enum(['PUT', 'GET']),
+    headers: z.record(z.string(), z.string()).readonly(),
+    expiresAt: IsoDateTimeSchema,
+    path: z.string().min(1),
+  })
+  .strict()
+  .readonly();
+
+export type PresignedUrl = z.infer<typeof PresignedUrlSchema>;
+
+/** The longest `q` of `GET /api/files/search`, in characters after trimming. */
+export const MAX_SEARCH_QUERY_CHARS = 256;
+
+/** The most hits one `GET /api/files/search` returns; the default is {@link DEFAULT_SEARCH_LIMIT}. */
+export const MAX_SEARCH_LIMIT = 50;
+export const DEFAULT_SEARCH_LIMIT = 10;
+
+/**
+ * The query string of `GET /api/files/search`. Lexical search over the text of the files the
+ * caller may read (ADR-0147): `q` is words, not an operator language.
+ */
+export const FileSearchQuerySchema = z
+  .object({
+    q: z.string().trim().min(1).max(MAX_SEARCH_QUERY_CHARS),
+    limit: z.coerce.number().int().min(1).max(MAX_SEARCH_LIMIT).default(DEFAULT_SEARCH_LIMIT),
+  })
+  .strict()
+  .readonly();
+
+export type FileSearchQuery = z.input<typeof FileSearchQuerySchema>;
+
+/**
+ * One passage that matched. `page` is the PDF page or the 1-based sheet number of a workbook, and
+ * `null` for a format with no pages. `snippet` is the text around the match, ready to quote;
+ * `score` orders hits (larger is better) and means nothing across searches.
+ */
+export const FileSearchHitSchema = z
+  .object({
+    path: z.string().min(1),
+    page: z.number().int().min(1).nullable(),
+    snippet: z.string(),
+    score: z.number().nonnegative(),
+  })
+  .strict()
+  .readonly();
+
+export type FileSearchHit = z.infer<typeof FileSearchHitSchema>;
+
+/**
+ * The `200` of `GET /api/files/search`. Text is extracted on demand, a bounded number of files per
+ * request, so `pending` counts the in-scope files not yet searchable: when it is above zero the
+ * answer is partial and the same request, repeated, continues the work.
+ */
+export const FileSearchResponseSchema = z
+  .object({
+    hits: z.array(FileSearchHitSchema).readonly(),
+    pending: z.number().int().nonnegative(),
+  })
+  .strict()
+  .readonly();
+
+export type FileSearchResponse = z.infer<typeof FileSearchResponseSchema>;

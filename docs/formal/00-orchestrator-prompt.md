@@ -539,8 +539,8 @@ testing. `fast-check` is absent even from the lockfile. Table-driven tests use `
 twice, so do not trust the numbering blindly). The ADR format is: title `# ADR-00NN — <sentence>`;
 header lines `Status:`, `Date:`, `Decided by:`, `Scope:`; then the sections Context, Decision
 (numbered), Alternatives considered and Consequences. Task-scoped decisions use `<TASK-ID>-kebab.md`,
-so this programme's ones are `FORMAL-<phase>-<topic>.md`. Regenerate the ADR index with
-`docs/adr/regenerate-index.sh`.
+so this programme's ones are `FORMAL-<phase>-<topic>.md`. The ADR index is not committed
+(`pnpm --silent adr:index` prints it), so adding a record touches no other file.
 
 **Contracts.** There are 19 subpath exports and about 111 schemas; zod is the only dependency. The
 closed enums the model must mirror exactly are:

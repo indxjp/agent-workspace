@@ -16,10 +16,9 @@
  */
 import { createElement, useEffect, useState, type ChangeEvent } from 'react';
 
+import { browserClient } from '../../lib/browser-client';
+
 import {
-  readAgentOptions,
-  readConnectorOptions,
-  readFileOptions,
   type CatalogOption,
   type ProjectDraft,
   type ProjectVisibility,
@@ -27,6 +26,7 @@ import {
 } from './model';
 import { describeInheritance } from '../models/catalog';
 import { ModelSelector, ModelUnavailableNotice, useModelCatalog } from '../models/model-selector';
+import { loadProjectCatalogs } from './project-requests-model';
 
 // ── Transcribed class strings — the same tokens `../agents/agent-form.tsx` spends ─────────────
 export const BTN =
@@ -70,33 +70,10 @@ export function useProjectCatalogs(): ProjectCatalogsState {
   const [state, setState] = useState<ProjectCatalogsState>({ kind: 'loading' });
   useEffect(() => {
     let active = true;
-    const optional = (response: Response, key: string): Promise<unknown> =>
-      response.ok ? (response.json() as Promise<unknown>) : Promise.resolve({ [key]: [] });
-    void Promise.all([
-      fetch('/api/agents', { headers: { accept: 'application/json' } }),
-      fetch('/api/files', { headers: { accept: 'application/json' } }),
-      fetch('/api/connectors', { headers: { accept: 'application/json' } }),
-    ])
-      .then(async ([agentsResponse, filesResponse, connectorsResponse]) => {
-        if (!agentsResponse.ok) {
-          throw new Error(`Agents request returned ${String(agentsResponse.status)}.`);
-        }
-        return Promise.all([
-          agentsResponse.json() as Promise<unknown>,
-          optional(filesResponse, 'files'),
-          optional(connectorsResponse, 'connectors'),
-        ]);
-      })
-      .then(([agentsBody, filesBody, connectorsBody]) => {
+    void loadProjectCatalogs(browserClient())
+      .then((catalogs) => {
         if (!active) return;
-        setState({
-          kind: 'ready',
-          catalogs: {
-            agents: readAgentOptions(agentsBody),
-            files: readFileOptions(filesBody),
-            connectors: readConnectorOptions(connectorsBody),
-          },
-        });
+        setState({ kind: 'ready', catalogs });
       })
       .catch((error: unknown) => {
         if (!active) return;

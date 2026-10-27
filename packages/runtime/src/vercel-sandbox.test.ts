@@ -469,6 +469,7 @@ describe('vercel-sandbox driver (ADR-0120)', () => {
       gpu: false,
       managedByProvider: true,
       typicalStartMs: null,
+      fileTransfer: 'push-archive',
     });
     expect(vercelSandboxRuntimeCapabilities('pro').maxSessionSeconds).toBe(86_400);
   });

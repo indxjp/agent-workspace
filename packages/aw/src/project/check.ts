@@ -6,6 +6,7 @@ import {
 } from '@indx-workspace/contracts/agent-versions';
 import type { AgentResource } from '@indx-workspace/contracts/agents';
 import type { EngineId } from '@indx-workspace/contracts/engines';
+import { BUILTIN_SKILL_NAMES } from '@indx-workspace/contracts/skills';
 import { ApiProblemError, type AgentWorkspaceClient } from '@indx-workspace/sdk';
 
 import { UsageError, type CliIo } from '../io.js';
@@ -433,7 +434,7 @@ export async function checkProject(options: ProjectRunOptions): Promise<CheckRep
     return { ok: false, problems, agents, secrets, tools, bundles: [] };
   }
 
-  const known = new Set(folders.names);
+  const known = new Set<string>([...BUILTIN_SKILL_NAMES, ...folders.names]);
   let skillListError: unknown;
   if (
     load.agents.some((agent) => agent.body.definition.resources.skills.some((n) => !known.has(n)))

@@ -21,6 +21,7 @@ then the guides, then the resource-by-resource detail.
 - [Claude Development Instructions](CLAUDE.md): Instructions for Claude Code in this repository: what to read first and the per-task procedure.
 - [Engineering Guidelines](ENGINEERING_GUIDELINES.md): The rules for production code, tests and agent changes; a repository-wide gate is weakened only by an ADR.
 - [Architecture](docs/architecture.md): System shape, what each application and package owns and must not own, the dependency direction and the trust boundaries — enforced by dependency-cruiser.
+- [Testing strategy](docs/testing-strategy.md): Where a test goes, the CI gates that keep tests honest (no skips, coverage floors, ratchets) and how to run each lane locally.
 - [Agent Workspace docs site](docs/sdk/site/README.md): How the docs site is previewed, checked and generated, and the Today / Target callout convention every page follows.
 
 ## Product and design
@@ -33,7 +34,7 @@ then the guides, then the resource-by-resource detail.
 - [SDK structure map](docs/sdk/07-structure-map.md): One page to read before touching a migration unit: the package map with the allowed import direction, one resource through the four layers, the ER diagram of the tables the SDK surfaces, and the resource-to-route-to-SDK-to-CLI table.
 - [Claude Agent Workspace refactoring plan](docs/architecture/refactoring/claude-agent-workspace-refactoring-plan.md): The refactoring programme: the target architecture of the platform and the RF-nnn units that reach it.
 - [Claude Agent Workspace refactoring decision ledger](docs/architecture/refactoring/claude-agent-workspace-refactoring-decisions.md): The decision ledger of the refactoring programme.
-- [Architecture Decision Records](docs/adr/README.md): The architecture decision log for the whole programme, with its generated index of every record.
+- [Architecture Decision Records](docs/adr/README.md): The architecture decision log for the whole programme, and how to print its index of every record.
 - [ADR-0052 — The SDK is contracts-first, and the application is its first consumer](docs/adr/0052-the-sdk-is-contracts-first-and-the-application-is-its-first-consumer.md): Why the SDK is two packages with one dependency direction, why the application is its first consumer, and why the packages are not published yet.
 - [ADR-0054 — Developer documentation is a Mintlify site whose reference pages are generated from the contracts and the SDK](docs/adr/0054-developer-documentation-is-a-mintlify-site-generated-from-the-contracts.md): Why the developer documentation is a Mintlify site whose reference pages are generated from the contracts, the SDK and the CLI, with staleness as a CI failure.
 
@@ -55,10 +56,12 @@ then the guides, then the resource-by-resource detail.
 
 ## Docs site: 1 · Run your first agent
 
-- [Chapter 1: Run your first agent](docs/sdk/site/path/first-agent.mdx): Have a customer-support agent answering on your laptop, in the browser and in the terminal, with one Node process and no Docker.
-- [Installation](docs/sdk/site/getting-started/installation.mdx): Install the Agent Workspace SDK, its testing subpath, the React chat component and the aw command line from npm.
-- [Quickstart](docs/sdk/site/getting-started/quickstart.mdx): Your first agent: npm create, npm run dev, then talk to it. One Node process, no Docker.
+- [Chapter 1: Run your first agent](docs/sdk/site/path/first-agent.mdx): Have a customer-support agent answering on your laptop, in the browser and in the terminal, with one Node process and no Docker. About a minute from the first command.
+- [Installation](docs/sdk/site/getting-started/installation.mdx): Before you begin: Node 24, an Anthropic API key, a non-elevated shell, about 600 MB of disk and one minute. Then, to add Agent Workspace to an app you already have: the SDK and the aw command line from npm.
+- [Quickstart](docs/sdk/site/getting-started/quickstart.mdx): Your first agent in about a minute: set the key, npm create, npm run dev, then chat with it in the browser and the terminal, change it and watch it update, and run its evaluations. One Node process, no Docker.
+- [Console tour](docs/sdk/site/getting-started/console-tour.mdx): Sign in to the web console of your local runtime and see each screen: the agent and its versions, runs, skills, files, connectors, models, runtimes and API keys, and which chapter uses each.
 - [aw chat](docs/sdk/site/cli/chat.mdx): Talk to an agent from the terminal: the interactive loop, one-shot mode, and the SDK calls behind both.
+- [Troubleshooting](docs/sdk/site/getting-started/troubleshooting.mdx): Fixes for the problems a first install can hit: a missing or rejected key, a busy port, an elevated Windows shell, Windows Node under WSL, the Docker sandbox, the widget on another origin, and the known issues of 0.6.9.
 
 ## Docs site: 2 · Build your agent
 
@@ -67,9 +70,13 @@ then the guides, then the resource-by-resource detail.
 - [Design an agent](docs/sdk/site/building/agents.mdx): Create an agent with least-privilege permissions, give it files, skills and connectors, pick its engine, and know what each setting controls at runtime.
 - [Choose models and runtimes](docs/sdk/site/building/models-and-runtimes.mdx): Connect a model provider, pick the model for an agent or a single run, and choose where the agent's code runs.
 - [Author a skill](docs/sdk/site/building/skills.mdx): Write a SKILL.md directory, import and update it, give it to an agent, and keep it in a project.
-- [Tools from code](docs/sdk/site/guides/tools-from-code.mdx): Give an agent a function from your codebase with defineTool(), run by a tool host that aw dev starts, or a read-only HTTP API with openapiTool() and secret().
+- [Tools from code](docs/sdk/site/guides/tools-from-code.mdx): Give an agent a function from your codebase with defineTool(), run by a tool host that aw dev starts, or an HTTP API with openapiTool() and secret(), where a write runs only for an approved call.
+- [Tell a tool who is asking](docs/sdk/site/guides/caller-identity.mdx): Start a run with a subject, opt a connector in with identity, and check the signed x-aw-identity header in your own server with verifyIdentity().
 - [Connect an MCP server](docs/sdk/site/building/mcp-servers.mdx): Register an MCP server as a connector, test it, store its credential safely and give it to an agent, and see how it reaches the model.
+- [Build an agent in chat](docs/sdk/site/guides/build-an-agent-in-chat.mdx): Describe the agent you want and the Builder drafts it with you: what it asks before it saves, tries or runs evaluations, what the approval card shows, and what to do after a save.
+- [Use the Builder tools from Claude Code](docs/sdk/site/guides/builder-tools-from-claude-code.mdx): Register a Builder client, connect Claude Code to your workspace with one claude mcp add command, and read the catalogue, the examples and the draft checks as yourself.
 - [Secrets](docs/sdk/site/resources/secrets.mdx): Store credentials a workspace's agents and connections need, and rotate them without ever reading them back.
+- [Use your own bucket](docs/sdk/site/guides/storage-connections.mdx): Connect an S3, Google Cloud Storage or Azure Blob bucket, or a local folder, give an agent a folder in it, run the agent and read what it wrote back.
 
 ## Docs site: 3 · Test and improve it
 
@@ -89,6 +96,7 @@ then the guides, then the resource-by-resource detail.
 - [Integrate a backend](docs/sdk/site/building/backend.mdx): Run agents from your own server or CI job: which role to mint an API key with, start-and-wait vs. streaming, polling instead of webhooks, stopping a run, and mapping SDK errors onto your own API.
 - [Call the API without the SDK](docs/sdk/site/building/http-api.mdx): Call /api/** from Python, Go, a shell script or any HTTP stack: authenticate, read responses and errors, stream a run, move files, and generate a typed client from the OpenAPI document.
 - [Streaming](docs/sdk/site/guides/streaming.mdx): Watch a run live: follow its events and print the agent's answer, survive dropped connections, resume from a saved cursor, parse a stream you already hold, and render tool calls and usage from the neutral agent.* events.
+- [Get typed data back from a run](docs/sdk/site/guides/structured-output.mdx): Ask a run for a value of your own shape instead of parsing its text: pass a Zod schema from code or a JSON Schema file from the CLI, and read the result typed.
 
 ## Docs site: 5 · Ship it to your servers
 
@@ -146,7 +154,7 @@ then the guides, then the resource-by-resource detail.
 - [Errors](docs/sdk/site/guides/errors.mdx): Every SDK call fails in one of four typed ways. Branch on the class and a stable code, and know at a glance which failures are worth retrying.
 - [Timeouts and cancellation](docs/sdk/site/guides/timeouts-and-cancellation.mdx): timeoutMs covers response headers only; a caller's own AbortSignal is the only way to end a call or a stream at any later point.
 - [Pagination](docs/sdk/site/guides/pagination.mdx): Walk every run, session or audit event with one cursor loop or a built-in listAll. Every other list method returns the whole collection in one call.
-- [Retries and idempotency](docs/sdk/site/guides/retries-and-idempotency.mdx): The SDK retries nothing on its own except follow()'s reconnect, and supports no idempotency key. What is safe to retry yourself, and how to avoid starting a run twice.
+- [Retries and idempotency](docs/sdk/site/guides/retries-and-idempotency.mdx): The SDK retries nothing on its own except follow()'s reconnect. What is safe to retry yourself, and how an idempotency key keeps a retried runs.start from starting a run twice.
 
 ## Docs site: Resource guides
 
@@ -160,12 +168,15 @@ then the guides, then the resource-by-resource detail.
 - [Engines](docs/sdk/site/resources/engines.mdx): Discover which harnesses a deployment can run an agent on, and what each one can honour.
 - [Models](docs/sdk/site/resources/models.mdx): Store model-provider credentials as connections, and discover the models each one offers.
 - [Runtimes](docs/sdk/site/resources/runtimes.mdx): Define where an agent executes — the driver, its sizing, and its network and filesystem policy.
+- [Triggers](docs/sdk/site/resources/triggers.mdx): Start a run of one agent from a webhook URL, without a person at the keyboard.
 
 ## Docs site: CLI
 
 - [aw overview](docs/sdk/site/cli/overview.mdx): What the aw CLI does, how to install it, and the few commands that connect to a control plane, run an agent and drive a project.
+- [aw dev in depth](docs/sdk/site/cli/dev.mdx): Everything aw dev prints and accepts: the ready screen line by line, its flags, the port rules, the model and runtime profile the first run uses, what npm create asks, aw init, and stopping it.
 - [Configuration](docs/sdk/site/cli/configuration.mdx): Point aw at a control plane, switch between several with profiles, pass a key safely in scripts and CI, set a timeout, and send aw dev's model calls through your own gateway, with the exact precedence and every flag.
 - [Output and exit codes](docs/sdk/site/cli/output-and-exit-codes.mdx): How aw renders a result for a person or a script, the stderr error format, and what each exit code means.
+- [Storage connections](docs/sdk/site/cli/storage.mdx): Connect a bucket or folder, rotate its credential and list it from the terminal with aw storage.
 - [aw vs. the SDK](docs/sdk/site/cli/cli-vs-sdk.mdx): When to reach for the CLI instead of the SDK, a command-to-method table, and what only the SDK can do.
 
 ## Docs site: Where it is going
@@ -181,15 +192,15 @@ then the guides, then the resource-by-resource detail.
 
 ## Docs site: Enterprise use-case gallery
 
-- [1. Manual search agent](docs/sdk/site/tutorials/manual-search.mdx): An agent that searches thousands of pages of maintenance manuals, writes its own queries, and answers with a 〔document p.page §section〕 citation the backend checks against what it actually read. Built with defineAgent, a skill, your own MCP search server and a surface.
-- [2. CAD drawing agent](docs/sdk/site/tutorials/cad-drafting.mdx): An agent that finds past drawings similar to a new part, shows three candidates with their differences, and drafts a DXF from the one the designer picks, changing only what the requirements change and marking it 未検図. Built with defineAgent, a skill that runs a Node script, your own MCP drawing index, a page surface and a backend that checks every dimension.
-- [3. Quotation agent](docs/sdk/site/tutorials/quotation.mdx): An agent that drafts a sheet-metal quote from a customer's part spec: it reads similar past orders and the rate table from a read-only ERP through openapiTool, prices the part with a cost-model script, and the backend refuses any draft whose numbers differ from that script. A person approves before anything is sent or booked.
-- [4. Ringi review agent](docs/sdk/site/tutorials/ringi-review.mdx): An agent that reviews each ringi (approval request) filed in your workflow system against the authority matrix, the ringi rules and past precedents, and writes a review sheet with a clause for every finding. It never approves. Your backend starts it from a webhook, runs it once per revision, re-checks the approval route and posts the sheet back.
-- [5. Customer inquiry agent](docs/sdk/site/tutorials/customer-inquiry.mdx): A chat agent on the company site that searches one customer's tickets, e-mails, call notes and orders, answers in keigo, and hands identity checks, refunds and complaints to an operator. Built with defineAgent, defineSurface, a skill and your own MCP server that enforces the customer's scope with a signed token and masks personal data.
-- [6. Excel consolidation & analysis agent](docs/sdk/site/tutorials/excel-consolidation.mdx): An agent that finds each branch's sales workbook, reads five incompatible layouts, proposes a column mapping a person confirms, consolidates with a script that keeps every value's file!sheet!cell, and explains the month-over-month change. The backend refuses an explanation that quotes a number the script did not compute.
-- [7. Contract review agent](docs/sdk/site/tutorials/contract-review.mdx): An agent that reads a counterparty's Word draft clause by clause, applies the legal team's playbook through a deterministic detector script, and returns a risk table with playbook citations and redline proposals. The backend refuses to call a review complete when the table leaves out a must-flag finding.
-- [8. Meeting minutes & action-item agent](docs/sdk/site/tutorials/meeting-minutes.mdx): An agent that turns a Teams or Zoom transcript into formal 議事録 in the house format, resolves 来週金曜 and 3営業日後 to real dates, and registers action items in the task tracker only after a person approves them, using two runs, a date script, and your own tracker MCP server.
-- [9. Skill-transfer & maintenance troubleshooting agent](docs/sdk/site/tutorials/maintenance-troubleshooting.mdx): A shop-floor agent that starts with lockout, then guides a junior technician through a fault one cited step at a time from past trouble records, equipment manuals and retiring experts' notes, logs the fix through your own MCP tool, and hands unsolved cases to the expert. The backend checks every turn.
+- [1. Manual search agent](docs/sdk/site/tutorials/manual-search.mdx): An agent that searches thousands of pages of maintenance manuals, writes its own queries, and answers with a 〔document p.page §section〕 citation the backend checks against what it actually found. Built with defineAgent, a skill, the platform's search_files and a surface.
+- [2. CAD drawing agent](docs/sdk/site/tutorials/cad-drafting.mdx): An agent that finds the past drawing closest to a new part, proposes a change set the designer approves, and drafts a DXF from it, changing only what the requirements change and marking it 未検図. Built with defineAgent, a skill that runs a Node script, the platform's search_files, a gated Write, a page surface and a backend that checks every dimension.
+- [3. Quotation agent](docs/sdk/site/tutorials/quotation.mdx): An agent that drafts a sheet-metal quote from a customer's part spec: it reads similar past orders and the rate table from the ERP through openapiTool, prices the part with a cost-model script, and the backend refuses any draft whose numbers differ from that script. The agent books the quote in the ERP itself, and only for a call a person approved.
+- [4. Ringi review agent](docs/sdk/site/tutorials/ringi-review.mdx): An agent that reviews each ringi (approval request) filed in your workflow system against the authority matrix, the ringi rules and past precedents, and writes a review sheet with a clause for every finding. It can comment but never approve or reject. Your backend starts it once per revision for the person who filed the ringi, narrowed to the departments' precedents they may read; the run answers in the sheet, your backend re-checks the approval route, and the agent posts the sheet as a comment once a person approves that call.
+- [5. Customer inquiry agent](docs/sdk/site/tutorials/customer-inquiry.mdx): A chat agent on the company site that reads one customer's tickets, e-mails, call notes and orders through a read-only openapiTool the CRM answers for the caller's signed identity, searches the FAQ with the built-in search_files, answers in keigo, and hands identity checks, refunds and complaints to an operator. Built with defineAgent, defineSurface, a skill and a CRM API that scopes by identity and masks personal data.
+- [6. Excel consolidation & analysis agent](docs/sdk/site/tutorials/excel-consolidation.mdx): An agent that finds each branch's sales workbook with search_files, reads five incompatible layouts, proposes a column mapping a person confirms, consolidates with a script that keeps every value's file!sheet!cell, and explains the month-over-month change. The backend refuses an explanation that quotes a number the script did not compute.
+- [7. Contract review agent](docs/sdk/site/tutorials/contract-review.mdx): An agent that reads a counterparty's Word draft clause by clause, applies the legal team's playbook through a deterministic detector script, and returns a risk table with playbook citations and redline proposals. Legal approves the redline before the Word file is made, and the backend refuses a review whose table leaves out a must-flag finding.
+- [8. Meeting minutes & action-item agent](docs/sdk/site/tutorials/meeting-minutes.mdx): An agent that turns a Teams or Zoom transcript into formal 議事録 in the house format, resolves 来週金曜 and 3営業日後 to real dates, and registers action items in the task tracker only after a person approves them, using one run and one approval per item, a date script, an approved `openapiTool` write, and your own read-only tracker MCP server.
+- [9. Skill-transfer & maintenance troubleshooting agent](docs/sdk/site/tutorials/maintenance-troubleshooting.mdx): A shop-floor agent that starts with lockout, then guides a junior technician through a fault one cited step at a time from past trouble records, equipment manuals and retiring experts' notes found with the built-in file search, narrowed to the signed-in technician's production lines, logs the fix in the maintenance system once the technician approves the call, and hands unsolved cases to the expert. The backend checks every turn.
 - [10. Quality defect and past-trouble analysis agent](docs/sdk/site/tutorials/quality-defect.mdx): An agent that takes a new defect, finds similar past troubles (過去トラ), quotes 4M counts the database computed, and drafts a なぜなぜ chain and an 8D report for design review, with a backend that checks every Q-number, every count and the recurrence flag. Confidential: a policy ceiling keeps it offline.
 
 ## Optional
@@ -218,11 +229,14 @@ then the guides, then the resource-by-resource detail.
 - [ModelsClient](docs/sdk/site/reference/sdk/models.mdx): Every method of ModelsClient, its parameters, return type, and route.
 - [RuntimesClient](docs/sdk/site/reference/sdk/runtimes.mdx): Every method of RuntimesClient, its parameters, return type, and route.
 - [SecretsClient](docs/sdk/site/reference/sdk/secrets.mdx): Every method of SecretsClient, its parameters, return type, and route.
+- [StorageClient](docs/sdk/site/reference/sdk/storage.mdx): Every method of StorageClient, its parameters, return type, and route.
+- [TriggersClient](docs/sdk/site/reference/sdk/triggers.mdx): Every method of TriggersClient, its parameters, return type, and route.
 - [contracts](docs/sdk/site/reference/contracts/index.mdx): The @indx-workspace/contracts root entry: identifiers and the error envelope.
 - [a2a](docs/sdk/site/reference/contracts/a2a.mdx): The @indx-workspace/contracts/a2a exports, sorted alphabetically.
 - [agent-versions](docs/sdk/site/reference/contracts/agent-versions.mdx): The @indx-workspace/contracts/agent-versions exports, sorted alphabetically.
 - [agents](docs/sdk/site/reference/contracts/agents.mdx): The @indx-workspace/contracts/agents exports, sorted alphabetically.
 - [api-keys](docs/sdk/site/reference/contracts/api-keys.mdx): The @indx-workspace/contracts/api-keys exports, sorted alphabetically.
+- [builder](docs/sdk/site/reference/contracts/builder.mdx): The @indx-workspace/contracts/builder exports, sorted alphabetically.
 - [cli-auth](docs/sdk/site/reference/contracts/cli-auth.mdx): The @indx-workspace/contracts/cli-auth exports, sorted alphabetically.
 - [connectors](docs/sdk/site/reference/contracts/connectors.mdx): The @indx-workspace/contracts/connectors exports, sorted alphabetically.
 - [endpoint-clients](docs/sdk/site/reference/contracts/endpoint-clients.mdx): The @indx-workspace/contracts/endpoint-clients exports, sorted alphabetically.
@@ -230,6 +244,7 @@ then the guides, then the resource-by-resource detail.
 - [evaluations](docs/sdk/site/reference/contracts/evaluations.mdx): The @indx-workspace/contracts/evaluations exports, sorted alphabetically.
 - [feedback](docs/sdk/site/reference/contracts/feedback.mdx): The @indx-workspace/contracts/feedback exports, sorted alphabetically.
 - [files](docs/sdk/site/reference/contracts/files.mdx): The @indx-workspace/contracts/files exports, sorted alphabetically.
+- [identity-assertion](docs/sdk/site/reference/contracts/identity-assertion.mdx): The @indx-workspace/contracts/identity-assertion exports, sorted alphabetically.
 - [invitations](docs/sdk/site/reference/contracts/invitations.mdx): The @indx-workspace/contracts/invitations exports, sorted alphabetically.
 - [local-runtime](docs/sdk/site/reference/contracts/local-runtime.mdx): The @indx-workspace/contracts/local-runtime exports, sorted alphabetically.
 - [models](docs/sdk/site/reference/contracts/models.mdx): The @indx-workspace/contracts/models exports, sorted alphabetically.
@@ -249,10 +264,14 @@ then the guides, then the resource-by-resource detail.
 - [setup](docs/sdk/site/reference/contracts/setup.mdx): The @indx-workspace/contracts/setup exports, sorted alphabetically.
 - [shares](docs/sdk/site/reference/contracts/shares.mdx): The @indx-workspace/contracts/shares exports, sorted alphabetically.
 - [skills](docs/sdk/site/reference/contracts/skills.mdx): The @indx-workspace/contracts/skills exports, sorted alphabetically.
+- [storage-connections](docs/sdk/site/reference/contracts/storage-connections.mdx): The @indx-workspace/contracts/storage-connections exports, sorted alphabetically.
+- [storage-settings](docs/sdk/site/reference/contracts/storage-settings.mdx): The @indx-workspace/contracts/storage-settings exports, sorted alphabetically.
+- [storage-url](docs/sdk/site/reference/contracts/storage-url.mdx): The @indx-workspace/contracts/storage-url exports, sorted alphabetically.
 - [surfaces](docs/sdk/site/reference/contracts/surfaces.mdx): The @indx-workspace/contracts/surfaces exports, sorted alphabetically.
 - [team](docs/sdk/site/reference/contracts/team.mdx): The @indx-workspace/contracts/team exports, sorted alphabetically.
 - [tokens](docs/sdk/site/reference/contracts/tokens.mdx): The @indx-workspace/contracts/tokens exports, sorted alphabetically.
 - [tool-connectors](docs/sdk/site/reference/contracts/tool-connectors.mdx): The @indx-workspace/contracts/tool-connectors exports, sorted alphabetically.
+- [triggers](docs/sdk/site/reference/contracts/triggers.mdx): The @indx-workspace/contracts/triggers exports, sorted alphabetically.
 - [workspaces](docs/sdk/site/reference/contracts/workspaces.mdx): The @indx-workspace/contracts/workspaces exports, sorted alphabetically.
 - [CLI commands](docs/sdk/site/reference/cli/commands.mdx): Every `aw` command, its usage and summary, plus the global flags and exit codes.
 - [Agent Workspace API (OpenAPI 3.1)](docs/sdk/site/openapi.json): Every public /api/** route as one OpenAPI 3.1 document, generated from the contracts; generate a client in any language from it.

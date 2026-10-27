@@ -25,7 +25,8 @@
  * * `engine_policy_invalid` — an arm `OpenAiAgentsRunPolicy` cannot read; a grant that does not
  *   normalise or lands in {@link OPENAI_AGENTS_PROTECTED_CONFIG_DIRECTORY}; a connector record this
  *   adapter cannot read.
- * * `engine_capability_unsupported` — a skill (`skills: false`, ADR-0074), a fork, a
+ * * `engine_capability_unsupported` — an `outputSchema` Zod cannot read for validation (the answer
+ *   would go unchecked), a skill (`skills: false`, ADR-0074), a fork, a
  *   `maxBudgetUsd` on a model the provisional price table cannot price (ADR-0074 D7), a wire protocol this engine does not speak, an
  *   MCP tool whose policy asks for a human approval (no HITL, ADR-0065 D9), or an Anthropic-family
  *   connection with no model named.
@@ -36,6 +37,7 @@ import type {
   OpenAiAgentsReasoningEffort,
   OpenAiAgentsToolName,
 } from '@indx-workspace/contracts/agents';
+import { McpServerRecordSchema } from '@indx-workspace/contracts';
 import { ENGINE_CATALOGUE } from '@indx-workspace/contracts/engines';
 import {
   forkRefusal,
@@ -166,52 +168,16 @@ export type OpenAiAgentsCompiled = {
   };
   /** Always `true`. Stated in the configuration so a replay can assert it (ADR-0074). */
   readonly tracingDisabled: true;
+  /** The caller's `outputSchema`, verbatim (ADR-0143), or `null` when the run asks for none. */
+  readonly outputSchema: Readonly<Record<string, unknown>> | null;
 };
-
-const McpToolPolicy = z
-  .object({
-    name: z.string().min(1),
-    permission_policy: z.enum(['always_allow', 'always_ask', 'always_deny']).optional(),
-    org_max_permission: z.enum(['allow', 'ask', 'blocked']).optional(),
-  })
-  .strict();
-
-const McpTimeout = z.number().int().min(1000).optional();
-
-/**
- * The connector record `packages/core`'s `McpServerConfig` stores, restated as a parse. Restated
- * rather than imported because this adapter may not depend on `packages/core`; `compile.test.ts`
- * holds the two to the same accepted and refused shapes.
- */
-const McpServerRecord = z.union([
-  z
-    .object({
-      type: z.enum(['http', 'sse']),
-      url: z.url(),
-      headers: z.record(z.string().min(1), z.string()).optional(),
-      tools: z.array(McpToolPolicy).optional(),
-      timeout: McpTimeout,
-      alwaysLoad: z.boolean().optional(),
-    })
-    .strict(),
-  z
-    .object({
-      type: z.literal('stdio').optional(),
-      command: z.string().min(1),
-      args: z.array(z.string()).optional(),
-      env: z.record(z.string().min(1), z.string()).optional(),
-      timeout: McpTimeout,
-      alwaysLoad: z.boolean().optional(),
-    })
-    .strict(),
-]);
 
 function compileMcpServers(
   records: Readonly<Record<string, unknown>>,
 ): { readonly ok: true; readonly servers: OpenAiAgentsMcpServer[] } | EngineRefusal {
   const servers: OpenAiAgentsMcpServer[] = [];
   for (const name of Object.keys(records).sort()) {
-    const parsed = McpServerRecord.safeParse(records[name]);
+    const parsed = McpServerRecordSchema.safeParse(records[name]);
     if (!parsed.success) {
       return refuse(
         'engine_policy_invalid',
@@ -360,6 +326,20 @@ export function compileOpenAiAgentsRun(
   const sandbox = sandboxRefusal(request.env, gateway.token);
   if (sandbox !== null) return sandbox;
 
+  // The SDK only JSON-parses a plain JSON Schema, so the boundary validates the answer itself with
+  // Zod; a schema Zod cannot read is refused here rather than left unchecked.
+  const outputSchema = request.outputSchema ?? null;
+  if (outputSchema !== null) {
+    try {
+      z.fromJSONSchema(outputSchema);
+    } catch {
+      return refuse(
+        'engine_capability_unsupported',
+        `${OPENAI_AGENTS_ENGINE_ID} validates the answer to an outputSchema itself, and this outputSchema uses a keyword it cannot read, so it cannot be honoured. Simplify the outputSchema or choose another engine.`,
+      );
+    }
+  }
+
   const hasReadOnlyGrant = grants.grants.some((grant) => grant.access === 'read');
   const plan = openAiAgentsToolPlan(request.portable.permissions, hasReadOnlyGrant);
 
@@ -408,6 +388,7 @@ export function compileOpenAiAgentsRun(
         projectKey: request.projectKey,
       },
       tracingDisabled: true,
+      outputSchema,
     },
   };
 }

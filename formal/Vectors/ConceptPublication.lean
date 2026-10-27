@@ -73,7 +73,8 @@ private def fkJson (t : TableName) (fk : ForeignKey) : Json :=
 
 private def uniqueJson (u : UniqueKey) : Json :=
   Json.mkObj [("name", u.name), ("columns", strs u.columns), ("kind", WireEnum.toWire u.kind),
-    ("partialNullColumns", strs u.partialNullColumns)]
+    ("partialNullColumns", strs u.partialNullColumns),
+    ("partialNotNullColumns", strs u.partialNotNullColumns)]
 
 private def checkJson (t : TableName) : Check → Json
   | .oneOf n c vs => Json.mkObj [("name", n), ("kind", "one-of"), ("column", c), ("values", strs vs)]

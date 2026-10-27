@@ -141,7 +141,7 @@ def isAsciiAlnum (c : Char) : Bool :=
 /-- `PROJECT_KEY_PATTERN = /^[A-Za-z0-9_-]{1,64}$/`, which is also the SDK's own validator for
 `CLAUDE_CODE_PROJECT_DIR_NAME` (`SDK_PROJECT_DIR_NAME`). -/
 @[aw_spec (ts := "packages/contracts/src/sessions.ts#PROJECT_KEY_PATTERN")
-  (ts := "packages/core/src/schemas.ts#SDK_PROJECT_DIR_NAME")]
+  (ts := "packages/run-protocol/src/schemas.ts#SDK_PROJECT_DIR_NAME")]
 def isProjectKey (s : String) : Bool :=
   let cs := s.toList
   1 ≤ cs.length && cs.length ≤ 64 && cs.all isKeyChar
@@ -150,7 +150,7 @@ def isProjectKey (s : String) : Bool :=
 def lowerAscii (c : Char) : Char := if 'A' ≤ c && c ≤ 'Z' then Char.ofNat (c.toNat + 32) else c
 
 /-- `SDK_WINDOWS_DEVICE_NAME = /^(?:con|prn|aux|nul|com[0-9]|lpt[0-9])$/i`. -/
-@[aw_spec (ts := "packages/core/src/schemas.ts#SDK_WINDOWS_DEVICE_NAME")]
+@[aw_spec (ts := "packages/run-protocol/src/schemas.ts#SDK_WINDOWS_DEVICE_NAME")]
 def isWindowsDeviceName (s : String) : Bool :=
   match s.toList.map lowerAscii with
   | ['c', 'o', 'n'] | ['p', 'r', 'n'] | ['a', 'u', 'x'] | ['n', 'u', 'l'] => true
@@ -160,7 +160,7 @@ def isWindowsDeviceName (s : String) : Bool :=
 /-- `validateTenantSessionScope` for string inputs: the config directory is not blank, and the
 project key passes the SDK's validator and is not a Windows device name. A scope that fails is
 one the SDK would silently ignore, keying the session under a path shared across tenants. -/
-@[aw_spec (ts := "packages/core/src/schemas.ts#validateTenantSessionScope")
+@[aw_spec (ts := "packages/run-protocol/src/schemas.ts#validateTenantSessionScope")
   (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
 def tenantScopeOk (projectKey configDir : String) : Bool :=
   !ModelConnection.isBlank configDir && isProjectKey projectKey &&

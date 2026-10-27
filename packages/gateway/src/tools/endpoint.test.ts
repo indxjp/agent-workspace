@@ -1,6 +1,7 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
+import { canonicalCall } from '@indx-workspace/contracts/agents';
 import { OpenApiToolConfigSchema } from '@indx-workspace/contracts/tool-connectors';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -16,6 +17,8 @@ const RUN_A = '11111111-1111-4111-8111-111111111111';
 const CONNECTOR = '66666666-6666-4666-8666-666666666666';
 const DISABLED = '77777777-7777-4777-8777-777777777777';
 const RUN_B_CONNECTOR = '88888888-8888-4888-8888-888888888888';
+
+const APPROVED_ARGUMENTS = { body: { name: 'Rex' } };
 
 let upstream: Server;
 let upstreamUrl = '';
@@ -67,9 +70,20 @@ function toolResolver(): ToolConnectorResolver & { readonly calls: string[] } {
             baseUrl: upstreamUrl,
             auth: 'bearer',
             allow: ['GET /**'],
-            operations: [{ name: 'listPets', method: 'GET', path: '/pets' }],
+            operations: [
+              { name: 'listPets', method: 'GET', path: '/pets' },
+              { name: 'addPet', method: 'POST', path: '/pets' },
+            ],
           }),
-          parameters: { listPets: [{ name: 'limit', in: 'query', required: false }] },
+          parameters: {
+            listPets: [{ name: 'limit', in: 'query', required: false }],
+            addPet: [{ name: 'body', in: 'body', required: true }],
+          },
+          approval: {
+            serverKey: 'pets',
+            approvedToolCalls: [canonicalCall('mcp__pets__addPet', APPROVED_ARGUMENTS)],
+            consume: () => Promise.resolve('consumed'),
+          },
           credential: () => Promise.resolve(CREDENTIAL),
         },
       });
@@ -185,7 +199,9 @@ describe('POST /v1/tools/:connectorId/mcp', () => {
     });
 
     const listed = await application.fetch(rpc(token, CONNECTOR, LIST));
-    expect(await listed.json()).toMatchObject({ result: { tools: [{ name: 'listPets' }] } });
+    expect(await listed.json()).toMatchObject({
+      result: { tools: [{ name: 'listPets' }, { name: 'addPet' }] },
+    });
 
     upstreamAuthorization.length = 0;
     const called = await application.fetch(rpc(token, CONNECTOR, CALL));
@@ -193,6 +209,30 @@ describe('POST /v1/tools/:connectorId/mcp', () => {
       result: { isError: false, content: [{ type: 'text', text: '[{"id":1,"name":"Rex"}]' }] },
     });
     expect(upstreamAuthorization).toEqual([`Bearer ${CREDENTIAL}`]);
+  });
+
+  it('runs a write the run approved and refuses the same write with other arguments', async () => {
+    const { application, token } = await setup();
+    const write = (args: unknown) => ({
+      jsonrpc: '2.0',
+      id: 4,
+      method: 'tools/call',
+      params: { name: 'addPet', arguments: args },
+    });
+    upstreamAuthorization.length = 0;
+    const approved = await application.fetch(rpc(token, CONNECTOR, write(APPROVED_ARGUMENTS)));
+    expect(await approved.json()).toMatchObject({ result: { isError: false } });
+    expect(upstreamAuthorization).toHaveLength(1);
+
+    upstreamAuthorization.length = 0;
+    const other = await application.fetch(rpc(token, CONNECTOR, write({ body: { name: 'Max' } })));
+    expect(await other.json()).toMatchObject({
+      result: {
+        isError: true,
+        structuredContent: { error: { code: 'approval_required', status: 403 } },
+      },
+    });
+    expect(upstreamAuthorization).toHaveLength(0);
   });
 
   it('re-authorises every request and never reaches the model resolver', async () => {

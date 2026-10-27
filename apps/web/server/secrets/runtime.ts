@@ -1,24 +1,17 @@
 /**
  * The single seam between the secrets routes and the rest of the application — who the caller is,
- * and where secrets are stored. Copies `apps/web/server/agents/runtime.ts`'s shape and reasoning
- * exactly; read that file's header for why a `globalThis`-anchored registry and not a module-level
- * `let` (Next.js compiles route handlers and `instrumentation.ts` into separate module graphs).
+ * and where secrets are stored.
  *
  * ## The unconfigured case fails, it does not fall through (ADR-0015)
  *
- * Until something calls {@link configureSecretsRuntime}, {@link currentSecretsRuntime} returns
- * `null` and every secrets route answers `503 secrets_runtime_not_configured` — not `401`, because
- * nothing checked anything yet, and not `200` with an empty list, which would claim a capability
- * nobody configured.
+ * The composition root installs it as `ApplicationContext.secrets`. Until it is `serving` — no
+ * context installed, or `unavailable` — every secrets route answers
+ * `503 secrets_runtime_not_configured`: not `401`, because nothing checked anything yet, and not
+ * `200` with an empty list, which would claim a capability nobody configured.
  *
- * Wiring the real implementation into `apps/web/instrumentation.ts` (constructing
- * `@agent-workspace/core/secrets`'s `createSecretsService`, which needs the configured master-key
- * provider and `DATABASE_URL`, and calling {@link configureSecretsRuntime} with it) is **left to the
- * integrator** — `instrumentation.ts` is not in this task's `Owns:` globs, and every Wave 2
- * resource track needs the same composition-root wiring done in the same file
- * (the Wave 2 plan's sub-wave 2b runs five such tracks in parallel). Until that wiring
- * lands, every `/api/secrets/**` route in a real deployment answers 503 by name, which is the
- * correct, honest statement about a capability that exists in code and is not yet installed.
+ * `unavailable` is what `createSecretsService` (`@agent-workspace/core/secrets`) throwing leaves
+ * behind: no master key, a malformed one, or a store it cannot reach. The composition root logs
+ * which, and never substitutes an in-memory service.
  */
 import type { SecretsStoreProvider } from './store';
 
@@ -43,23 +36,15 @@ export interface SecretsRuntime {
   secrets: SecretsStoreProvider;
 }
 
-interface SecretsRuntimeRegistry {
-  __agentWorkspaceSecretsRuntime__?: SecretsRuntime;
-}
-
-const registry = globalThis as typeof globalThis & SecretsRuntimeRegistry;
-
-/** Install the runtime the secrets routes use. Called once, from application wiring. */
-export function configureSecretsRuntime(runtime: SecretsRuntime): void {
-  registry.__agentWorkspaceSecretsRuntime__ = runtime;
-}
-
-/** Remove the installed runtime. Exists so a test can assert the unconfigured path really fails. */
-export function clearSecretsRuntime(): void {
-  delete registry.__agentWorkspaceSecretsRuntime__;
-}
-
-/** The installed runtime, or `null` when nothing has been wired yet. Never throws. */
-export function currentSecretsRuntime(): SecretsRuntime | null {
-  return registry.__agentWorkspaceSecretsRuntime__ ?? null;
-}
+/** The secrets routes as the application context holds them. */
+export type Secrets =
+  | { readonly kind: 'serving'; readonly runtime: SecretsRuntime }
+  | {
+      readonly kind: 'unavailable';
+      /**
+       * Present only when the deployment meant to configure secrets and got it wrong: a
+       * `MASTER_ENCRYPTION_KEY` that is set but malformed (issue #1562, owner decision D9). The
+       * readiness probe reports it; an unset key carries no reason and leaves readiness alone.
+       */
+      readonly reason?: 'malformed-master-key';
+    };

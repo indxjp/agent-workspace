@@ -21,6 +21,7 @@ const OWNER = {
   principalId: '36377a6a-7a0b-4610-8efc-d31547dcc38a',
   ownerPrincipalId: '36377a6a-7a0b-4610-8efc-d31547dcc38a',
   userId: null,
+  actorLabel: 'owner key',
 };
 
 interface Harness {
@@ -68,6 +69,7 @@ describe('createAgentFromVersion', () => {
       skillIds: ['s1'],
       connectorIds: [],
       files: [],
+      storageGrants: [],
     });
     expect((await h.store.list(body.agent.id))?.pointers).toMatchObject([
       { environment: 'local', number: 1 },
@@ -164,6 +166,26 @@ describe('createAgentFromVersion', () => {
     );
     expect(result.status).toBe(201);
     expect(h.provider.pointerCount()).toBe(1);
+  });
+
+  it("refuses via 'builder' from a client with 400 invalid_agent_version, creating nothing", async () => {
+    const h = await harness();
+    const body = fromVersionRequest();
+    const request = { ...body, version: { ...body.version, via: 'builder' } };
+    const result = await createAgentFromVersion(request, OWNER, {
+      store: h.store,
+      agents: h.agents,
+    });
+    expect(result).toMatchObject({
+      status: 400,
+      body: {
+        error: {
+          code: 'invalid_agent_version',
+          details: [expect.stringMatching(/^version\.via: /u)],
+        },
+      },
+    });
+    expect(await h.agents.list()).toEqual([]);
   });
 
   it('answers a dry run and a save of a blank agent name the same 400, writing nothing', async () => {

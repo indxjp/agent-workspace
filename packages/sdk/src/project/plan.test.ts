@@ -458,6 +458,63 @@ describe('planProjectResources: MCP connectors (C10)', () => {
     });
   });
 
+  describe('identity (ADR-0142 D1)', () => {
+    const IDENTITY = { secret: 'GITHUB_IDENTITY_KEY' };
+    const declared = (identity?: typeof IDENTITY): ProjectDocument =>
+      project({
+        connectors: {
+          github: { ...GITHUB, ...(identity === undefined ? {} : { identity }) },
+        },
+      });
+    const tokens = secrets({ GITHUB_TOKEN: SENT });
+
+    it('creates a connector with the identity it declares', () => {
+      const result = plan({ project: declared(IDENTITY), secrets: tokens });
+      expect(result.refusals).toStrictEqual([]);
+      expect(result.creates[0]?.input).toMatchObject({ name: 'github', identity: IDENTITY });
+    });
+
+    it('patches an identity that changed, and nothing for one that did not', () => {
+      const existing = (identity?: typeof IDENTITY): PlanProjectResourcesInput['existing'] => ({
+        modelConnections: [DEFAULT],
+        connectors: [{ ...github, ...(identity === undefined ? {} : { identity }) }],
+      });
+      expect(
+        plan({ project: declared(IDENTITY), existing: existing(), secrets: tokens }).updates,
+      ).toStrictEqual([
+        {
+          kind: 'connector',
+          path: 'connectors.github',
+          id: github.id,
+          patch: { identity: IDENTITY },
+          secret: 'GITHUB_TOKEN',
+        },
+      ]);
+      expect(
+        plan({
+          project: declared({ secret: 'OTHER_KEY' }),
+          existing: existing(IDENTITY),
+          secrets: tokens,
+        }).updates[0],
+      ).toMatchObject({ patch: { identity: { secret: 'OTHER_KEY' } } });
+      expect(
+        plan({ project: declared(IDENTITY), existing: existing(IDENTITY), secrets: tokens }),
+      ).toStrictEqual(EMPTY);
+    });
+
+    it('removes the opt-in with null when the project stops declaring it', () => {
+      const result = plan({
+        project: declared(),
+        existing: {
+          modelConnections: [DEFAULT],
+          connectors: [{ ...github, identity: IDENTITY }],
+        },
+        secrets: tokens,
+      });
+      expect(result.updates[0]).toMatchObject({ patch: { identity: null } });
+    });
+  });
+
   it('patches a changed url with the secret, which a retarget requires', () => {
     const result = plan({
       project: project({
@@ -622,6 +679,28 @@ describe('planProjectResources: tools (C15)', () => {
         },
       ],
     });
+  });
+
+  it('sends the identity an openapiTool declares, and re-registers when it changed or went (ADR-0142)', () => {
+    const identity = { secret: 'ORDERS_IDENTITY_KEY' };
+    const declared = plan({
+      tools: [openApi({ ...ORDERS, identity })],
+      secrets: secrets({ ORDERS_TOKEN: UNRECORDED }),
+    });
+    expect(declared.creates[0]?.input).toMatchObject({ identity });
+    const saved = { ...ordersApi, identity };
+    const existing = { modelConnections: [DEFAULT], connectors: [saved, ordersDb] };
+    expect(
+      plan({ tools: [openApi({ ...ORDERS, identity })], existing, secrets: tokens }),
+    ).toStrictEqual(EMPTY);
+    const removed = plan({ tools: [openApi(ORDERS)], existing, secrets: tokens });
+    expect(removed.updates[0]).not.toHaveProperty('patch.identity');
+    const added = plan({
+      tools: [openApi({ ...ORDERS, identity })],
+      existing: withTools,
+      secrets: tokens,
+    });
+    expect(added.updates[0]).toMatchObject({ patch: { identity } });
   });
 
   it('does nothing for the same digest, allow and auth, or postgres at the default maxRows', () => {

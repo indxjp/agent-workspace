@@ -29,7 +29,7 @@
  * either constraint sees it, so `"Acme"` and `"acme"` collide as the same `conflict` outcome
  * rather than passing the format check twice and landing two rows that only differ by case.
  */
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 
 import type { Database } from '../client.js';
 import { memberships, type MembershipRole } from '../schema/memberships.js';
@@ -111,6 +111,11 @@ export interface WorkspaceRepository {
    */
   getForMember(id: string, userId: string): Promise<WorkspaceMembershipView | null>;
   /**
+   * The `membership` principal of the workspace's earliest Owner, or `null` when it has none (or
+   * the workspace is gone). For background jobs that must attribute rows to someone real.
+   */
+  ownerPrincipalId(id: string): Promise<string | null>;
+  /**
    * Insert the workspace and its creator's Owner membership in one transaction: a membership
    * insert that fails leaves no workspace row, and a workspace insert that fails leaves no
    * membership (issue #119's "failed creation leaves no orphan workspace or membership").
@@ -174,6 +179,29 @@ export function createDatabaseWorkspaceRepository(db: Database): WorkspaceReposi
         .where(and(eq(workspaces.id, id), eq(memberships.userId, userId)))
         .limit(1);
       return rows[0] ?? null;
+    },
+    async ownerPrincipalId(id) {
+      const rows = await db
+        .select({ id: workspacePrincipals.id })
+        .from(memberships)
+        .innerJoin(
+          workspacePrincipals,
+          and(
+            eq(workspacePrincipals.workspaceId, memberships.workspaceId),
+            eq(workspacePrincipals.membershipId, memberships.id),
+          ),
+        )
+        .where(
+          and(
+            eq(memberships.workspaceId, id),
+            eq(memberships.role, 'owner'),
+            eq(workspacePrincipals.kind, 'membership'),
+            isNull(workspacePrincipals.revokedAt),
+          ),
+        )
+        .orderBy(asc(memberships.createdAt), asc(memberships.id))
+        .limit(1);
+      return rows[0]?.id ?? null;
     },
     async create(input) {
       const slug = normaliseSlug(input.slug);

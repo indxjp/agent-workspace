@@ -47,7 +47,8 @@ def renameColumn (old new : String) (s : TableSpec) : TableSpec :=
     foreignKeys := s.foreignKeys.map fun fk => { fk with columns := renameIn old new fk.columns }
     uniques := s.uniques.map fun u =>
       { u with columns := renameIn old new u.columns,
-               partialNullColumns := renameIn old new u.partialNullColumns }
+               partialNullColumns := renameIn old new u.partialNullColumns,
+               partialNotNullColumns := renameIn old new u.partialNotNullColumns }
     checks := s.checks.map fun
       | .oneOf n c vs => .oneOf n (if c == old then new else c) vs
       | ck => ck }
@@ -83,7 +84,7 @@ def siblingKey (name c : String) (t : TableName) : ForeignKey :=
 /-! ## The target schema -/
 
 /-- A share subject's column: one nullable, tenant-paired reference per subject type. -/
-@[aw_spec (ts := "apps/web/server/composition/register.ts#subjectOwnership")
+@[aw_spec (ts := "apps/web/server/composition/wiring/projects.ts#subjectOwnership")
   (doc := "docs/sdk/site/concepts/ownership-and-sharing.mdx#beyond-one-workspace")]
 def subjectColumn : Concepts.Share.SubjectType → String
   | .agent => "subject_agent_id"
@@ -282,7 +283,8 @@ def violations (st : State) : List String :=
 that agree on `cols` are the same row. -/
 def coversKey (s : TableSpec) (cols : List String) : Bool :=
   s.primaryKey.all cols.contains ||
-    s.uniques.any fun u => u.partialNullColumns.isEmpty && u.columns.all cols.contains
+    s.uniques.any fun u =>
+      u.partialNullColumns.isEmpty && u.partialNotNullColumns.isEmpty && u.columns.all cols.contains
 
 /-- The mermaid cardinality of a foreign key: `||` when every key column is `NOT NULL` (exactly one
 parent), `|o` otherwise; `o|` on the child side when the key's columns cover a key of the child
@@ -427,18 +429,22 @@ def glossary : List Term :=
      ["created_by", "createdBy", "invited_by", "initiatingUserId"], []⟩,
    ⟨"agent", "an agents row", [], [.agents]⟩,
    ⟨"skill", "a skills row, addressed by its slug name", [], [.skills]⟩,
+   ⟨"skill revision", "one published, immutable, numbered copy of a skill's files that an assignment may pin",
+     [], [.skillRevisions]⟩,
    ⟨"file", "a node of the workspace tree: a file or a folder", ["folder"], [.files]⟩,
+   ⟨"file text", "one extracted, searchable passage of a file, cached for lexical search",
+     [], [.fileTexts]⟩,
    ⟨"connector", "an MCP server reached by stdio, http or sse",
      ["MCP server", "mcp_servers", "mcp_server_id", "mcpServerIds"], [.mcpServers]⟩,
    ⟨"assignment", "an agent may load or call a catalogued resource",
      ["resources", "capabilities", "file grant", "read-only grant"],
-     [.agentFiles, .agentSkills, .agentMcpServers]⟩,
+     [.agentFiles, .agentSkills, .agentStorageGrants, .agentMcpServers]⟩,
    ⟨"project link", "a project contributes a resource to its sessions", ["project resources"],
      [.projectFiles, .projectMcpServers]⟩,
    ⟨"grant", "a member (by principal) may run an agent", ["Viewer grant", "permitted"],
      [.agentGrants]⟩,
    ⟨"agent version", "one immutable, numbered snapshot of an agent's definition", [],
-     [.agentVersions]⟩,
+     [.agentVersions, .agentVersionStorageGrants]⟩,
    ⟨"version pointer", "the version of an agent that is live in one environment", [],
      [.agentVersionPointers]⟩,
    ⟨"pointer move", "one recorded move of a version pointer: a set, a promotion or a rollback", [],
@@ -462,6 +468,8 @@ def glossary : List Term :=
    ⟨"runtime connection", "the endpoint and credential a driver needs",
      ["RuntimeConnection", "RUNTIME_CONNECTION__ secret"], []⟩,
    ⟨"secret", "one envelope-encrypted value of a workspace", [], [.secrets]⟩,
+   ⟨"storage connection", "a bucket or folder a workspace connected; its credential is a secret",
+     [], [.storageConnections]⟩,
    ⟨"secret purpose", "plain, model-connection credential or runtime connection", [], []⟩,
    ⟨"project", "a container of sessions, instructions, defaults and links", [], [.projects]⟩,
    ⟨"session", "one conversation with one agent", ["conversation"], [.sessions]⟩,
@@ -491,6 +499,14 @@ def glossary : List Term :=
    ⟨"run token", "a gateway credential minted for one run", [], [.runTokens]⟩,
    ⟨"surface session key", "the hashed key that lets a browser resume one surface session",
      ["resumeKey"], [.surfaceSessionKeys]⟩,
+   ⟨"trigger", "what starts runs of one agent without a person at the keyboard: a webhook or a schedule",
+     [], [.triggers]⟩,
+   ⟨"trigger delivery", "the claimed slot of one firing of a trigger, naming the run it started",
+     [], [.triggerDeliveries]⟩,
+   ⟨"builder tool call", "one tool call of a Builder run, as its journal keeps it", [],
+     [.builderToolCalls]⟩,
+   ⟨"storage migration run", "one verify pass of the move off the old object naming", [],
+     [.storageMigrationRuns]⟩,
    ⟨"audit event", "one recorded control-plane action", [], [.auditEvents]⟩,
    ⟨"share", "one published subject of one workspace", [], [.shares]⟩,
    ⟨"subject", "what a share publishes: a typed reference", ["subject_id"], []⟩,

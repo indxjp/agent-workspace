@@ -5,30 +5,42 @@ description: 契約書ドラフトを第N条ごとに分け、審査基準（プ
 
 # 契約書を審査基準で読む
 
-Word の契約書は、`run_skill_script` ツールでこのスキルの `scripts/clauses.mjs` に渡す。`.docx` は
-スクリプト自身が段落に分けて読むので、パイプも別のコマンドも要らない。
+このスキルは Word を開かない。`.docx` は組み込みの `office-reader` スキル（`ooxml.mjs docx`）で段落の
+JSON `{ "paragraphs": [{ "style", "text" }] }` に読み（`["docx", "<パス>", "drafts/<ファイル名>.json"]`
+で `drafts/<ファイル名>.json` に書かれる）、`run_skill_script` ツールでこのスキルの `scripts/clauses.mjs` に渡す。
 Node だけで動き、追加のパッケージは不要。
 
 ```json
 {
   "skill": "contract-playbook",
   "script": "clauses.mjs",
-  "args": ["check", "contracts/<ファイル>.docx", "--playbook", "playbook"]
+  "args": ["check", "drafts/<ファイル名>.json", "--playbook", "playbook"]
 }
 ```
+
+`.docx` を直接渡すと、`office-reader` で読むよう伝えて終了コード 1 で止まる。
 
 - `split` は条項に分けるだけ: `{ title, preamble, clauses: [{ number, label: "第8条", heading, text }] }`。
   見出しスタイルでも本文でも、段落の先頭が「第N条」（全角数字・漢数字も可）なら条の始まり。
 - `check` は検出ルールを当てる: `{ title, clauses, findings: [{ rule: "PB-01", clause: "第8条" | null,
   severity, mustFlag, kind: "present" | "absent", evidence, reason, standard }] }`。
   `clause: null` と `kind: "absent"` は「その条項が契約書のどこにもない」という指摘。
+- `redline` は修正案つきの段落 JSON を標準出力に出す:
+  `["redline", "drafts/<ファイル名>.json", "--playbook", "playbook"]`。
+  原文の段落のあとに、`mustFlag: true` または重大度「高」の指摘ごとに `【修正案 PB-xx】` の段落（標準条項）が付く。
+  結果は `{ paragraphs }`。これを一字も変えずに `Write` で `drafts/<ファイル名>_修正案.json` に書く
+  （法務の承認を求める唯一の `Write`。承認されるまで実行されない）。Word にするのは承認のあとで、
+  `office-reader` スキルの `["write", "drafts/<ファイル名>_修正案.json", "outputs/<ファイル名>_修正案.docx"]`。
+  末尾に `.json` の出力先を渡すと、標準出力に出さずそこへ書く。
+  書き込めるのは依頼文が示す作業フォルダ（`drafts/<チーム>/`）と `outputs/` だけ。
+  以上の `drafts/<ファイル名>…` は、そのフォルダの中のパス。
 
 ## 検出ルールの扱い
 
 検出ルールは正規表現とキーワードで書かれた最低ライン。審査そのものではない。
 
 - `mustFlag: true` の指摘は、必ずリスク表に1行として載せる。リスクが低いと判断した場合も行は残し、
-  理由にそう判断した根拠を書く。システムがこの行の有無を照合し、欠けていれば審査は未完了になる。
+  理由にそう判断した根拠を書く。システムがこの行の有無を照合し、欠けていれば審査は差し戻される。
 - 検出ルールが拾わない問題（片務的な条項、定義の不備、他の条との矛盾）に気づいたら、表の前に短く書き、
   表の行にしない。
 - 行は `check` が返した指摘と1対1。標準どおりの条項と、`check` が返していないルールの〔PB-xx〕は書かない。

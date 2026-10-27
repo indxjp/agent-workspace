@@ -1,3 +1,4 @@
+import { log as webLogger } from '../telemetry/logger';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -490,7 +491,7 @@ describe('a refused verification', () => {
   });
 
   it('keeps a key the manager echoed as its error code out of the setup failure', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     const error = await failureOf(Response.json({ error: KEY }, { status: 500 }));
     expect(error.code).toBe(KEY);
     const failure = setupStepFailure('runtime test', error, [KEY], error.safeCause);

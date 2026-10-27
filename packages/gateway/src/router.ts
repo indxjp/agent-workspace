@@ -1,3 +1,6 @@
+import { redacted } from '@agent-workspace/core/telemetry';
+import { inSpan, SpanKind, SpanStatusCode } from '@agent-workspace/core/tracing';
+
 import type {
   AnthropicMessageRequest,
   GatewayRoute,
@@ -8,6 +11,7 @@ import type {
   WireProtocol,
   WireProtocolForwarder,
 } from './types.js';
+import { ModelConnectionIncompleteError } from './types.js';
 import { protocolNotSupported } from './providers/passthrough.js';
 import { z } from 'zod';
 
@@ -43,6 +47,7 @@ type GatewayErrorType =
   | 'gateway_context_required'
   | 'invalid_request_error'
   | 'method_not_allowed'
+  | 'model_connection_incomplete'
   | 'not_found_error'
   | 'provider_not_registered'
   | 'provider_operation_not_supported';
@@ -231,6 +236,42 @@ async function listModels(
   });
 }
 
+/** The run's credential, for {@link redacted}; an empty one would mask every character. */
+function credentialOf(context: RequestContext): readonly string[] {
+  return context.credential === '' ? [] : [context.credential];
+}
+
+/**
+ * One model call as a CLIENT span (ADR-0155): the operation, the run's provider id, the requested
+ * model and the upstream status. Never the prompt, the reply, a header or a key. The model name is
+ * caller text, so it is redacted and capped like a log field, with the run's credential masked too.
+ */
+function inModelSpan<T>(
+  operation: string,
+  providerId: string,
+  model: string,
+  secrets: readonly string[],
+  call: () => Promise<T>,
+): Promise<T> {
+  return inSpan(
+    `${operation} ${providerId}`,
+    SpanKind.CLIENT,
+    {
+      'gen_ai.operation.name': operation,
+      'gen_ai.provider.name': providerId,
+      'gen_ai.request.model': redacted(model, secrets),
+    },
+    async (span) => {
+      const result = await call();
+      if (result instanceof Response) {
+        span.setAttribute('http.response.status_code', result.status);
+        if (result.status >= 400) span.setStatus({ code: SpanStatusCode.ERROR });
+      }
+      return result;
+    },
+  );
+}
+
 function asForwarder(
   provider: ModelProvider,
   protocol: WireProtocol,
@@ -263,7 +304,9 @@ async function forwardProtocol(
   if (body instanceof Response) return body;
   const validated = gatewayRequest(body, context);
   if (validated instanceof Response) return validated;
-  return forwarder.forward(validated, protocol, contextForRequest(verified, request));
+  return inModelSpan('chat', verified.providerId, validated.model, credentialOf(verified), () =>
+    forwarder.forward(validated, protocol, contextForRequest(verified, request)),
+  );
 }
 
 async function createMessage(
@@ -278,7 +321,10 @@ async function createMessage(
   if (body instanceof Response) return body;
   const validated = gatewayRequest(body, context);
   if (validated instanceof Response) return validated;
-  return provider.createMessage(validated, contextForRequest(context as RequestContext, request));
+  const verified = context as RequestContext;
+  return inModelSpan('chat', verified.providerId, validated.model, credentialOf(verified), () =>
+    provider.createMessage(validated, contextForRequest(verified, request)),
+  );
 }
 
 async function countTokens(
@@ -301,8 +347,16 @@ async function countTokens(
   if (body instanceof Response) return body;
   const validated = gatewayRequest(body, context);
   if (validated instanceof Response) return validated;
+  const verified = context as RequestContext;
+  const countTokensWith = provider.countTokens.bind(provider);
   return json(
-    await provider.countTokens(validated, contextForRequest(context as RequestContext, request)),
+    await inModelSpan(
+      'count_tokens',
+      verified.providerId,
+      validated.model,
+      credentialOf(verified),
+      () => countTokensWith(validated, contextForRequest(verified, request)),
+    ),
   );
 }
 
@@ -314,40 +368,51 @@ async function countTokens(
 export function createRouter(providers: readonly ModelProvider[]): GatewayRouter {
   const providerTable = assertProviderTable(providers);
 
+  async function dispatch(request: Request, context?: RequestContext): Promise<Response> {
+    const { pathname } = new URL(request.url);
+    const method = request.method.toUpperCase();
+
+    if (pathname === '/health' && method === 'GET') {
+      return json({ status: 'ok' });
+    }
+    if (pathname === '/v1/models' && method === 'GET') {
+      return listModels(request, providerTable, context);
+    }
+    if (pathname === '/v1/messages' && method === 'POST') {
+      return createMessage(request, providerTable, context);
+    }
+    if (pathname === '/v1/messages/count_tokens' && method === 'POST') {
+      return countTokens(request, providerTable, context);
+    }
+    const relayed = RELAYED_PROTOCOLS[pathname];
+    if (relayed !== undefined && method === 'POST') {
+      return forwardProtocol(request, relayed, providerTable, context);
+    }
+
+    const knownPath = ROUTES.find((route) => route.path === pathname);
+    if (knownPath !== undefined) {
+      return problem(
+        405,
+        'method_not_allowed',
+        `${method} is not allowed for ${pathname}.`,
+        context,
+        { allow: knownPath.method },
+      );
+    }
+    return problem(404, 'not_found_error', `The gateway has no route for ${pathname}.`, context);
+  }
+
   return {
     routes: ROUTES,
     async fetch(request, context) {
-      const { pathname } = new URL(request.url);
-      const method = request.method.toUpperCase();
-
-      if (pathname === '/health' && method === 'GET') {
-        return json({ status: 'ok' });
+      try {
+        return await dispatch(request, context);
+      } catch (error) {
+        if (error instanceof ModelConnectionIncompleteError) {
+          return problem(409, 'model_connection_incomplete', error.message, context);
+        }
+        throw error;
       }
-      if (pathname === '/v1/models' && method === 'GET') {
-        return listModels(request, providerTable, context);
-      }
-      if (pathname === '/v1/messages' && method === 'POST') {
-        return createMessage(request, providerTable, context);
-      }
-      if (pathname === '/v1/messages/count_tokens' && method === 'POST') {
-        return countTokens(request, providerTable, context);
-      }
-      const relayed = RELAYED_PROTOCOLS[pathname];
-      if (relayed !== undefined && method === 'POST') {
-        return forwardProtocol(request, relayed, providerTable, context);
-      }
-
-      const knownPath = ROUTES.find((route) => route.path === pathname);
-      if (knownPath !== undefined) {
-        return problem(
-          405,
-          'method_not_allowed',
-          `${method} is not allowed for ${pathname}.`,
-          context,
-          { allow: knownPath.method },
-        );
-      }
-      return problem(404, 'not_found_error', `The gateway has no route for ${pathname}.`, context);
     },
   };
 }

@@ -19,4 +19,6 @@ export default defineSurface({
     history: true,
     feedback: true,
   },
+  // The tracker's tasks render as a table. The key is the tool's bare name: a run's engine prefix is ignored.
+  toolResults: { list_tasks: 'table' },
 });

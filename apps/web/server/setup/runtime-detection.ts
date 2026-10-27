@@ -1,4 +1,5 @@
 import { currentWebRuntimeRegistry, type RuntimeRegistryEntry } from '../runtimes/registry';
+import { defineSlot } from '../runtime-slot';
 
 /** One driver the first-run wizard offers, as `GET /api/setup/runtime-detect` reports it. */
 type DetectedRuntimeDriver = Readonly<{
@@ -95,11 +96,7 @@ type DetectionSlot = {
   cached: { expiresAt: number; result: Promise<RuntimeDetection> } | null;
 };
 
-interface GlobalDetection {
-  __agentWorkspaceSetupRuntimeDetection__?: DetectionSlot;
-}
-
-const globalDetection = globalThis as typeof globalThis & GlobalDetection;
+const slot = defineSlot<DetectionSlot>('__agentWorkspaceSetupRuntimeDetection__');
 
 /**
  * The inputs for a deployment whose runner manager (if any) runs `managedDriverId`. Only a runner
@@ -121,11 +118,11 @@ export function setupRuntimeDetectionInputs(
 
 /** Installed by the composition root once it knows this deployment's runner manager. */
 export function configureSetupRuntimeDetection(inputs: RuntimeDetectionInputs): void {
-  globalDetection.__agentWorkspaceSetupRuntimeDetection__ = { inputs, cached: null };
+  slot.set({ inputs, cached: null });
 }
 
 export function clearSetupRuntimeDetection(): void {
-  delete globalDetection.__agentWorkspaceSetupRuntimeDetection__;
+  slot.clear();
 }
 
 /**
@@ -135,17 +132,17 @@ export function clearSetupRuntimeDetection(): void {
  * inputs, the answer is the registry's alone with no runner manager — the local default.
  */
 export function currentSetupRuntimeDetection(now: number = Date.now()): Promise<RuntimeDetection> {
-  const slot = globalDetection.__agentWorkspaceSetupRuntimeDetection__;
-  if (slot === undefined) {
+  const detection = slot.current();
+  if (detection === null) {
     return detectSetupRuntimes({ dockerManager: null });
   }
-  if (slot.cached !== null && slot.cached.expiresAt > now) return slot.cached.result;
-  const result = detectSetupRuntimes(slot.inputs);
+  if (detection.cached !== null && detection.cached.expiresAt > now) return detection.cached.result;
+  const result = detectSetupRuntimes(detection.inputs);
   const cached = { expiresAt: now + DETECTION_TTL_MS, result };
-  slot.cached = cached;
+  detection.cached = cached;
   // A failed detection is not an answer worth repeating for the next five seconds.
   void result.catch(() => {
-    if (slot.cached === cached) slot.cached = null;
+    if (detection.cached === cached) detection.cached = null;
   });
   return result;
 }

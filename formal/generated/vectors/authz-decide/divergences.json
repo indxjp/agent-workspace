@@ -2,7 +2,7 @@
  [{"witnesses":
    ["AgentWorkspace.Theorems.Normative.AuthzDecide.revoke_capability_matches_roles",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.decide_and_the_revoke_gate_agree_for_every_role",
-    "AgentWorkspace.Theorems.Meta.AuthzDecide.granted_builder_cannot_run_the_agent_a_granted_viewer_can",
+    "AgentWorkspace.Theorems.Meta.AuthzDecide.granted_builder_runs_the_agent_a_granted_viewer_can",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.admin_run_verbs_adrs_disagree_at_one_cell",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.run_scope_id_accepts_equivalent_uuid_spelling",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.run_scope_passes_every_get_on_its_runs_shapes",
@@ -18,7 +18,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.AuthzDecide.revoke_capability_matches_roles",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.decide_and_the_revoke_gate_agree_for_every_role",
-    "AgentWorkspace.Theorems.Meta.AuthzDecide.granted_builder_cannot_run_the_agent_a_granted_viewer_can",
+    "AgentWorkspace.Theorems.Meta.AuthzDecide.granted_builder_runs_the_agent_a_granted_viewer_can",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.admin_run_verbs_adrs_disagree_at_one_cell",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.run_scope_id_accepts_equivalent_uuid_spelling",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.run_scope_passes_every_get_on_its_runs_shapes",
@@ -34,7 +34,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.AuthzDecide.revoke_capability_matches_roles",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.decide_and_the_revoke_gate_agree_for_every_role",
-    "AgentWorkspace.Theorems.Meta.AuthzDecide.granted_builder_cannot_run_the_agent_a_granted_viewer_can",
+    "AgentWorkspace.Theorems.Meta.AuthzDecide.granted_builder_runs_the_agent_a_granted_viewer_can",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.admin_run_verbs_adrs_disagree_at_one_cell",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.run_scope_id_accepts_equivalent_uuid_spelling",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.run_scope_passes_every_get_on_its_runs_shapes",
@@ -55,7 +55,7 @@
     "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
     "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.decide_and_the_revoke_gate_agree_for_every_role",
-    "AgentWorkspace.Theorems.Meta.AuthzDecide.granted_builder_cannot_run_the_agent_a_granted_viewer_can",
+    "AgentWorkspace.Theorems.Meta.AuthzDecide.granted_builder_runs_the_agent_a_granted_viewer_can",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.admin_run_verbs_adrs_disagree_at_one_cell",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.run_scope_id_accepts_equivalent_uuid_spelling",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.run_scope_passes_every_get_on_its_runs_shapes",
@@ -64,8 +64,8 @@
    "id": "point-11/builder/POST /api/agents/:id/runs",
    "expected":
    {"outcomes":
-    {"facts": {"resource": "agents", "operation": "run", "grant": "own"},
-     "effects": {"unknown": "deny", "permitted": "deny", "own": "allow", "other": "deny", "not-applicable": "allow"},
+    {"facts": {"resource": "agents", "operation": "run", "grant": "permitted"},
+     "effects": {"unknown": "deny", "permitted": "allow", "own": "allow", "other": "deny", "not-applicable": "deny"},
      "code": null,
      "because": null}}},
   {"witnesses":
@@ -76,7 +76,7 @@
     "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
     "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.decide_and_the_revoke_gate_agree_for_every_role",
-    "AgentWorkspace.Theorems.Meta.AuthzDecide.granted_builder_cannot_run_the_agent_a_granted_viewer_can",
+    "AgentWorkspace.Theorems.Meta.AuthzDecide.granted_builder_runs_the_agent_a_granted_viewer_can",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.admin_run_verbs_adrs_disagree_at_one_cell",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.run_scope_id_accepts_equivalent_uuid_spelling",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.run_scope_passes_every_get_on_its_runs_shapes",
@@ -86,7 +86,7 @@
    "expected":
    {"outcomes":
     {"facts": {"resource": "agents", "operation": "run", "grant": "permitted"},
-     "effects": {"unknown": "deny", "permitted": "allow", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "effects": {"unknown": "deny", "permitted": "allow", "own": "allow", "other": "deny", "not-applicable": "deny"},
      "code": null,
      "because": null}}},
   {"witnesses":
@@ -97,7 +97,7 @@
     "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
     "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.decide_and_the_revoke_gate_agree_for_every_role",
-    "AgentWorkspace.Theorems.Meta.AuthzDecide.granted_builder_cannot_run_the_agent_a_granted_viewer_can",
+    "AgentWorkspace.Theorems.Meta.AuthzDecide.granted_builder_runs_the_agent_a_granted_viewer_can",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.admin_run_verbs_adrs_disagree_at_one_cell",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.run_scope_id_accepts_equivalent_uuid_spelling",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.run_scope_passes_every_get_on_its_runs_shapes",
@@ -119,7 +119,7 @@
     "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
     "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.decide_and_the_revoke_gate_agree_for_every_role",
-    "AgentWorkspace.Theorems.Meta.AuthzDecide.granted_builder_cannot_run_the_agent_a_granted_viewer_can",
+    "AgentWorkspace.Theorems.Meta.AuthzDecide.granted_builder_runs_the_agent_a_granted_viewer_can",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.admin_run_verbs_adrs_disagree_at_one_cell",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.run_scope_id_accepts_equivalent_uuid_spelling",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.run_scope_passes_every_get_on_its_runs_shapes",
@@ -145,7 +145,7 @@
     "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
     "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.decide_and_the_revoke_gate_agree_for_every_role",
-    "AgentWorkspace.Theorems.Meta.AuthzDecide.granted_builder_cannot_run_the_agent_a_granted_viewer_can",
+    "AgentWorkspace.Theorems.Meta.AuthzDecide.granted_builder_runs_the_agent_a_granted_viewer_can",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.admin_run_verbs_adrs_disagree_at_one_cell",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.run_scope_id_accepts_equivalent_uuid_spelling",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.run_scope_passes_every_get_on_its_runs_shapes",
@@ -171,7 +171,7 @@
     "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
     "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.decide_and_the_revoke_gate_agree_for_every_role",
-    "AgentWorkspace.Theorems.Meta.AuthzDecide.granted_builder_cannot_run_the_agent_a_granted_viewer_can",
+    "AgentWorkspace.Theorems.Meta.AuthzDecide.granted_builder_runs_the_agent_a_granted_viewer_can",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.admin_run_verbs_adrs_disagree_at_one_cell",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.run_scope_id_accepts_equivalent_uuid_spelling",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.run_scope_passes_every_get_on_its_runs_shapes",
@@ -193,7 +193,7 @@
     "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
     "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.decide_and_the_revoke_gate_agree_for_every_role",
-    "AgentWorkspace.Theorems.Meta.AuthzDecide.granted_builder_cannot_run_the_agent_a_granted_viewer_can",
+    "AgentWorkspace.Theorems.Meta.AuthzDecide.granted_builder_runs_the_agent_a_granted_viewer_can",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.admin_run_verbs_adrs_disagree_at_one_cell",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.run_scope_id_accepts_equivalent_uuid_spelling",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.run_scope_passes_every_get_on_its_runs_shapes",
@@ -215,7 +215,7 @@
     "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
     "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.decide_and_the_revoke_gate_agree_for_every_role",
-    "AgentWorkspace.Theorems.Meta.AuthzDecide.granted_builder_cannot_run_the_agent_a_granted_viewer_can",
+    "AgentWorkspace.Theorems.Meta.AuthzDecide.granted_builder_runs_the_agent_a_granted_viewer_can",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.admin_run_verbs_adrs_disagree_at_one_cell",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.run_scope_id_accepts_equivalent_uuid_spelling",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.run_scope_passes_every_get_on_its_runs_shapes",
@@ -224,8 +224,8 @@
    "id": "archive-capability/admin/POST /api/projects/:id/archive",
    "expected":
    {"outcomes":
-    {"facts": {"resource": "projects", "operation": "write", "grant": "none"},
-     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+    {"facts": {"resource": "projects", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
      "code": null,
      "because": null}}},
   {"witnesses":
@@ -236,7 +236,7 @@
     "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
     "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.decide_and_the_revoke_gate_agree_for_every_role",
-    "AgentWorkspace.Theorems.Meta.AuthzDecide.granted_builder_cannot_run_the_agent_a_granted_viewer_can",
+    "AgentWorkspace.Theorems.Meta.AuthzDecide.granted_builder_runs_the_agent_a_granted_viewer_can",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.admin_run_verbs_adrs_disagree_at_one_cell",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.run_scope_id_accepts_equivalent_uuid_spelling",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.run_scope_passes_every_get_on_its_runs_shapes",

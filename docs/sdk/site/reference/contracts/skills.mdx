@@ -5,6 +5,18 @@ description: "The @indx-workspace/contracts/skills exports, sorted alphabeticall
 
 <Note>This page is generated from `packages/contracts/src/skills.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
 
+## BUILTIN_SKILL_NAMES
+
+The skills the platform ships with every workspace. A definition names one with the SDK's
+`builtinSkill()`; the control plane installs its files into the workspace on demand, as an
+ordinary skill, so the run path needs no special case.
+
+- `'office-reader'`
+
+## BuiltinSkillName
+
+`"office-reader"`
+
 ## ImportSkillInput
 
 The body of `POST /api/skills`, which both creates a skill (one `SKILL.md`) and imports a
@@ -17,13 +29,37 @@ the workspace (`409 skill_already_exists`).
 | `name` | `string` | Yes |  |
 | `files` | `readonly SkillFile[]` | Yes |  |
 
+## isBuiltinSkillName
+
+```ts
+isBuiltinSkillName(name: string): name is BuiltinSkillName
+```
+
 ## MAX_SKILL_REQUEST_BODY_BYTES
 
-The most bytes one `POST` or `PATCH /api/skills` request body may carry, base64 included; a
-larger body is a `413 request_body_too_large`, refused while it streams. There is no per-file
-or file-count bound: the body ceiling is the only size limit.
+The most bytes one `POST` or `PATCH /api/skills` request body may carry: the whole multipart
+body of an import, or the whole JSON body of the deprecated form (where the base64 text counts,
+not the bytes it encodes). A larger body is a `413 request_body_too_large`, refused while it
+streams. There is no per-file or file-count bound: the body ceiling is the only size limit.
 
 Value: `16 * 1024 * 1024`
+
+## PublishSkillRevisionRequest
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `files` | `readonly SkillFile[]` | Yes |  |
+
+## PublishSkillRevisionRequestSchema
+
+The body of `POST /api/skills/:name/revisions`. `files` is validated exactly as an import's is
+(`SKILL.md` required, admissible and non-colliding paths, the `MAX_SKILL_REQUEST_BODY_BYTES`
+body ceiling): it replaces the skill's current files, and the result is frozen as the next
+revision.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `files` | `readonly SkillFile[]` | Yes |  |
 
 ## SKILL_FILE_BASE64_PATTERN
 
@@ -42,6 +78,24 @@ space, none `.` or `..`) and refuses anything else as `400 inadmissible_path`; t
 the server's to state, so only its byte ceiling is published here.
 
 Value: `4096`
+
+## SKILL_IMPORT_JSON_DEPRECATED_AT_SECONDS
+
+When the JSON + base64 form of `POST /api/skills` was deprecated (RFC 9745 `Deprecation` header
+value is `@` plus these seconds since the epoch). Its removal waits for the next major release.
+
+Value: `Date.UTC(2026, 9, 24) / 1000`
+
+## SKILL_IMPORT_MULTIPART
+
+The wire shape of `POST /api/skills` as `multipart/form-data`: first a text part `name`, then
+one `file` part per skill file, `SKILL.md` first, each part's filename the file's relative path.
+
+| Key | Value |
+| --- | --- |
+| `mediaType` | `'multipart/form-data'` |
+| `nameField` | `'name'` |
+| `fileField` | `'file'` |
 
 ## SKILL_MD_FILENAME
 
@@ -63,6 +117,19 @@ path segment outside it is a `404 skill_not_found` (no such skill could ever hav
 
 Value: `/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/`
 
+## SKILL_REVISION_MAX_NUMBER
+
+The most revisions one skill can have, and the largest number a pin can name: the database
+column is a 32-bit integer.
+
+Value: `2_147_483_647`
+
+## SKILL_REVISION_PINS_MAX
+
+The most skills one assignment set or agent definition can pin to a revision.
+
+Value: `1_000`
+
 ## SkillDetail
 
 | Name | Type | Required | Description |
@@ -78,6 +145,7 @@ Value: `/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/`
 | `fileCount` | `number` | Yes | Every file under the skill's directory, `SKILL.md` included. |
 | `createdAt` | `string` | Yes |  |
 | `updatedAt` | `string` | Yes |  |
+| `revisions` | `undefined \| readonly SkillRevision[]` | No | The published revisions, newest first. Present on `GET /api/skills/:name` and the `POST` and `PATCH` answers; absent when a server predates revisions, so a newer client still parses an older server's answer. |
 
 ## SkillDetailSchema
 
@@ -103,6 +171,7 @@ platform does not parse; `instructions` is its Markdown body and `allowedTools` 
 | `fileCount` | `number` | Yes | Every file under the skill's directory, `SKILL.md` included. |
 | `createdAt` | `string` | Yes |  |
 | `updatedAt` | `string` | Yes |  |
+| `revisions` | `undefined \| readonly SkillRevision[]` | No | The published revisions, newest first. Present on `GET /api/skills/:name` and the `POST` and `PATCH` answers; absent when a server predates revisions, so a newer client still parses an older server's answer. |
 
 ## SkillExport
 
@@ -197,6 +266,59 @@ The body of `GET /api/skills/:name`, `PATCH /api/skills/:name` and the `201` of 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `skill` | `SkillDetail` | Yes |  |
+
+## SkillRevision
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `number` | `number` | Yes |  |
+| `fileCount` | `number` | Yes | Every file of the revision, `SKILL.md` included. |
+| `publishedAt` | `string` | Yes |  |
+
+## SkillRevisionNumberSchema
+
+A revision number: 1, 2, 3 … per skill, allocated by `POST /api/skills/:name/revisions`.
+
+`number`
+
+## SkillRevisionPinsByIdSchema
+
+The revisions an agent's assignments pin, keyed by skill id (`/api/agents/:id/resources`). A
+skill with no key follows `latest`: the skill's current files. There is no `"latest"` literal
+on the wire.
+
+`Readonly<Record<string, number>>`
+
+## SkillRevisionPinsByNameSchema
+
+The same pins in an agent definition, keyed by skill name (`agent.json`).
+
+`Readonly<Record<string, number>>`
+
+## SkillRevisionResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `revision` | `SkillRevision` | Yes |  |
+
+## SkillRevisionResponseSchema
+
+The `201` of `POST /api/skills/:name/revisions`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `revision` | `SkillRevision` | Yes |  |
+
+## SkillRevisionSchema
+
+One immutable, published revision of a skill: a frozen copy of its files that an agent can
+pin. `number` counts from 1 per skill; the bytes never change once published.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `number` | `number` | Yes |  |
+| `fileCount` | `number` | Yes | Every file of the revision, `SKILL.md` included. |
+| `publishedAt` | `string` | Yes |  |
 
 ## SKILLS_PROBLEM_CODES
 

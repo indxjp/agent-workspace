@@ -18,7 +18,7 @@
  * directory. The permission model follows links that already exist, so the containment check is
  * ours; it is the second check after the runner refusing to place a link at all.
  */
-import { normaliseGrants, type NormalisedGrant } from './path-grant.js';
+import { normaliseGrants } from './path-grant.js';
 import type { EngineRunRequest } from './port.js';
 
 export const RUN_SKILL_SCRIPT_TOOL = 'run_skill_script';
@@ -130,6 +130,9 @@ function directScripts(files: readonly { readonly path: string }[]): readonly st
   return [...new Set(names)].sort();
 }
 
+/** The working-directory folder a run's collected files live in. */
+const RUN_OUTPUTS_DIRECTORY = 'outputs';
+
 /**
  * The tool's setup for a run, or `null` when it is not offered: `runCommands` is off, or no granted
  * skill ships a script. Whether a read-only grant exists does not matter — that is the point.
@@ -149,15 +152,27 @@ export function skillScriptSetup(
   // A grant that does not normalise already refuses the run in every adapter's compile; offering no
   // write access is the safe reading if one reaches here anyway.
   const grants = normaliseGrants(request.resources.files, protectedConfigDirectory);
-  const writable: readonly NormalisedGrant[] =
+  const grantedPaths =
     permissions.writeFiles && grants.ok
-      ? grants.grants.filter((grant) => grant.access === 'read-write')
+      ? grants.grants.filter((grant) => grant.access === 'read-write').map((grant) => grant.path)
       : [];
+  // `outputs` is where a completed run's files are collected into the run's record, so a script of a
+  // `writeFiles` agent may write there without a grant — unless a read-only grant is `outputs` or lies
+  // under it, because `--allow-fs-write` never names a read-only grant (ADR-0137).
+  const outputsHoldsReadOnly =
+    grants.ok &&
+    grants.grants.some(
+      (grant) => grant.access !== 'read-write' && grant.segments[0] === RUN_OUTPUTS_DIRECTORY,
+    );
+  const writable =
+    permissions.writeFiles && grants.ok && !outputsHoldsReadOnly
+      ? [...new Set([...grantedPaths, RUN_OUTPUTS_DIRECTORY])]
+      : grantedPaths;
   return {
     cwd: request.cwd.replace(/\/+$/u, ''),
     skillsDirectory: `${protectedConfigDirectory}/skills`,
     skills: granted.map((skill) => ({ name: skill.name, scripts: directScripts(skill.files) })),
-    writable: writable.map((grant) => grant.path),
+    writable,
   };
 }
 

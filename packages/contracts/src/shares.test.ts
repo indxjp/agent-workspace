@@ -5,12 +5,15 @@ import {
   SHARE_MODES,
   SHARE_PASSPHRASE_MAX_LENGTH,
   SHARE_SUBJECT_TYPES,
+  SHARE_TRANSCRIPT_MAX_BYTES,
+  SHARE_TRANSCRIPT_MAX_RUNS,
   SHARE_VISIBILITIES,
   SHARES_PROBLEM_CODES,
   ShareIncludeSchema,
   ShareListItemSchema,
   ShareListResponseSchema,
   ShareResourceSchema,
+  ShareTranscriptSelectionSchema,
 } from './shares.js';
 
 const share = {
@@ -123,5 +126,38 @@ describe('vocabulary', () => {
     expect(SHARES_PROBLEM_CODES.invalid_share).toBe(400);
     expect(SHARES_PROBLEM_CODES.share_not_found).toBe(404);
     expect(SHARES_PROBLEM_CODES.shares_runtime_not_configured).toBe(503);
+  });
+});
+
+describe('ShareTranscriptSelectionSchema', () => {
+  const ids = (count: number) =>
+    Array.from(
+      { length: count },
+      (_, index) => `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+    );
+  const run = '11111111-1111-4111-8111-111111111111';
+
+  it('accepts one to the maximum distinct run ids', () => {
+    expect(ShareTranscriptSelectionSchema.safeParse({ runIds: [run] }).success).toBe(true);
+    expect(
+      ShareTranscriptSelectionSchema.safeParse({ runIds: ids(SHARE_TRANSCRIPT_MAX_RUNS) }).success,
+    ).toBe(true);
+  });
+
+  it('refuses text, an empty or oversized selection, duplicates, non-UUIDs and unknown keys', () => {
+    for (const value of [
+      [{ kind: 'agent', text: 'I never said this.' }],
+      { runIds: [] },
+      { runIds: ids(SHARE_TRANSCRIPT_MAX_RUNS + 1) },
+      { runIds: [run, run.toUpperCase()] },
+      { runIds: ['run-1'] },
+      { runIds: [run], turns: [{ prompt: 'x', answer: 'y' }] },
+    ]) {
+      expect(ShareTranscriptSelectionSchema.safeParse(value).success).toBe(false);
+    }
+  });
+
+  it('bounds the published transcript to one MiB', () => {
+    expect(SHARE_TRANSCRIPT_MAX_BYTES).toBe(1_048_576);
   });
 });

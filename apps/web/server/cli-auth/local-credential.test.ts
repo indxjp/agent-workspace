@@ -6,6 +6,7 @@
  * S1-24 (issue #509): the fake records every directory call in order, so the tests pin that the
  * ownership repair runs before the sweep and the create, and that the key acts for the issuer.
  */
+import { captureLog } from '../telemetry/capture-log';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { API_KEY_PATTERN } from '@indx-workspace/contracts/api-keys';
@@ -379,16 +380,14 @@ describe('issueLocalApiKey', () => {
   });
 
   it('writes neither the key nor its hash to the console or an error message', async () => {
-    const spies = (['log', 'info', 'warn', 'error', 'debug'] as const).map((method) =>
-      vi.spyOn(console, method).mockImplementation(() => undefined),
-    );
+    const capture = captureLog();
     const directory = fakeDirectory();
     const credential = await issueLocalApiKey(input, { directory: directory.root });
     await credential.revoke();
     directory.takenOnce.count = 2;
     const failure = await rejection(issueLocalApiKey(input, { directory: directory.root }));
 
-    const written = JSON.stringify(spies.flatMap((spy) => spy.mock.calls));
+    const written = capture.text();
     expect(written).not.toContain('ak_live_');
     const [stored] = directory.keys;
     expect(stored).toBeDefined();

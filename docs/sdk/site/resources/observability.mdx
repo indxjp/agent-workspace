@@ -139,13 +139,15 @@ Reference: [`observability.metrics.recentRuns`](/reference/sdk/observability#met
 
 ## audit.list
 
-`GET /api/audit-events?limit=&cursor=`
+`GET /api/audit-events?limit=&cursor=&action=`
 
 Owner only. One page of the trail, newest rows first, at most `limit` of them, and `nextCursor`
 for the next page (`null` on the last). Pass `nextCursor` back unchanged as `cursor`; a cursor
 minted for another workspace or another list, or altered, is `400 invalid_cursor`. Pages are keyed
 on each row's immutable `(createdAt, id)`, so rows written while you walk never shift a page
-([Pagination](/guides/pagination)).
+([Pagination](/guides/pagination)). `action` keeps the rows of one action (for example
+`file-deleted`); paging, order and cursors are unchanged, and an unknown action is
+`400 invalid_action`.
 
 ```ts title="illustrative" claim="illustrative"
 export const AUDIT_LIST_DEFAULT_LIMIT = 100;
@@ -154,6 +156,7 @@ export const AUDIT_LIST_MAX_LIMIT = 500;
 export interface AuditListQuery {
   readonly limit?: number;
   readonly cursor?: string;
+  readonly action?: AuditAction;
 }
 ```
 
@@ -219,17 +222,19 @@ hold is still a valid `action`, and a row's `subjectId` may point at something a
 
 | Code                           | Status | Meaning                                                                     |
 | ------------------------------ | ------ | --------------------------------------------------------------------------- |
-| `audit_runtime_not_configured` | 503    | This deployment has no audit trail configured.                              |
+| `rbac_runtime_not_configured`  | 503    | This deployment has no directory or identity resolver configured.           |
 | `unauthenticated`              | 401    | The request carried no usable session or key.                               |
 | `forbidden`                    | 403    | The caller's role is not Owner; only an Owner reads the audit trail.        |
 | `invalid_limit`                | 400    | `limit` is present and is not an integer from 1 to 500.                     |
 | `invalid_cursor`               | 400    | `cursor` is not a `nextCursor` this list minted for the caller's workspace. |
+| `invalid_action`               | 400    | `action` is not one of the audit actions.                                   |
 
 <CodeGroup>
 ```sh title="aw (illustrative)" claim="illustrative"
 aw audit list
 aw audit list --limit 500 --cursor <next-cursor>
 aw audit list --all
+aw audit list --action file-deleted
 ```
 </CodeGroup>
 

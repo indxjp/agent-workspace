@@ -12,8 +12,9 @@
  * section `/api/memberships` cites for the same reason (ADR-0026).
  */
 import { createInvitation, listInvitations } from '../../../server/invitations/handlers';
-import { currentInvitationsRuntime } from '../../../server/invitations/runtime';
-import { authorise, problem, readJsonBody, toResponse } from '../../../server/rbac/http';
+import { applicationContext } from '../../../server/application-context';
+import { readJsonBody } from '../../../server/http/result';
+import { authorise, problem, toResponse } from '../../../server/rbac/http';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -39,7 +40,7 @@ export async function GET(request: Request): Promise<Response> {
 /** `POST /api/invitations` — invite an address to one of §21's four roles this caller may confer. */
 export async function POST(request: Request): Promise<Response> {
   const result = await authorise(request, 'not-applicable', async ({ directory, principal }) => {
-    const invitations = currentInvitationsRuntime();
+    const invitations = applicationContext()?.invitations ?? null;
     if (invitations === null) return invitationsRuntimeUnconfigured();
     const body = await readJsonBody(request);
     if (!body.ok) return body.result;

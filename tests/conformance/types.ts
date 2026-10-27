@@ -10,11 +10,23 @@ import type {
   AgentConnection,
   RuntimeCapabilities,
   RuntimeConfig,
-  RuntimeDriver,
+  RuntimeDriver as ProductionRuntimeDriver,
   RuntimeHandle,
-} from '@agent-workspace/runtime';
+} from '@agent-workspace/runtime/driver';
 
-export type { AgentConnection, RuntimeCapabilities, RuntimeConfig, RuntimeDriver, RuntimeHandle };
+export type { AgentConnection, RuntimeCapabilities, RuntimeConfig, RuntimeHandle };
+
+/**
+ * The production driver port plus the harness's own optional file-transfer pair.
+ *
+ * No production driver has `putFiles`/`getFiles` any more (files reach a driver through
+ * `RuntimeCapabilities.fileTransfer`); scenarios 3 and 9 keep their second branch for fixture
+ * drivers that hold content outside any mount, and only this type carries the pair.
+ */
+export type RuntimeDriver<TRequest, TEvent> = ProductionRuntimeDriver<TRequest, TEvent> & {
+  putFiles?(runtime: RuntimeHandle, archive: ReadableStream): Promise<void>;
+  getFiles?(runtime: RuntimeHandle, paths: string[]): Promise<ReadableStream>;
+};
 
 /**
  * The ten A.12 scenarios, stable internal identifiers.

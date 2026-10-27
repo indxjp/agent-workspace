@@ -92,7 +92,7 @@ private theorem getForMember_eq (repo : WorkspaceRepo)
   · congr 1
     congr 1
     funext m
-    cases m.workspaceId == id <;> cases m.userId == u <;> decide
+    cases m.workspaceId == id <;> cases m.userId == u <;> decide +kernel
   · rename_i hn
     symm
     rw [Option.map_eq_none_iff, List.find?_eq_none]
@@ -196,14 +196,14 @@ private def oneRun : State
   | _ => []
 
 example : rowTenant .runs ⟨[("id", "r1"), ("workspace_id", "w2")]⟩ ≠ some "w1" ∧
-    IdsDistinct (addRow oneRun .runs ⟨[("id", "r2"), ("workspace_id", "w2")]⟩ .runs) := by decide
+    IdsDistinct (addRow oneRun .runs ⟨[("id", "r2"), ("workspace_id", "w2")]⟩ .runs) := by decide +kernel
 
 example : workspaceView oneRun .runs "w1" =
-    workspaceView (addRow oneRun .runs ⟨[("id", "r2"), ("workspace_id", "w2")]⟩) .runs "w1" := by decide
+    workspaceView (addRow oneRun .runs ⟨[("id", "r2"), ("workspace_id", "w2")]⟩) .runs "w1" := by decide +kernel
 
-example : requireWorkspaceScope (.minted ⟨"w1"⟩) = some ⟨"w1"⟩ := by decide
+example : requireWorkspaceScope (.minted ⟨"w1"⟩) = some ⟨"w1"⟩ := by decide +kernel
 
 example : ∀ m ∈ ([⟨"w", "u", "owner"⟩] : List WorkspaceMember), (["w"] : List String).contains m.workspaceId = true := by
-  decide
+  decide +kernel
 
 end AgentWorkspace.Theorems.Adversarial.AuthzTenancy

@@ -137,7 +137,7 @@ export interface TranscriptStore {
 /** A parse that either produced a value or says, in one sentence, why it did not. */
 export type Parsed<T> = { readonly ok: true; readonly value: T } | ParseRejection;
 
-export interface ParseRejection {
+interface ParseRejection {
   readonly ok: false;
   readonly reason: string;
 }
@@ -156,7 +156,7 @@ function describe(value: unknown): string {
  * The SDK's own validator for `CLAUDE_CODE_PROJECT_DIR_NAME`, which becomes `projectKey`.
  *
  * Read out of the shipped `sdk.mjs` by R-01 §7 and quoted there: the resolver is gated on
- * `/^[A-Za-z0-9_-]{1,64}$/`. `packages/core/src/schemas.ts` applies the same pair to the run
+ * `/^[A-Za-z0-9_-]{1,64}$/`. `packages/run-protocol/src/schemas.ts` applies the same pair to the run
  * request; this copy exists because the control plane must reject a key the *SDK* accepted but
  * the platform did not issue, and it is reached from a Next.js route that does not depend on the
  * runner.
@@ -164,10 +164,10 @@ function describe(value: unknown): string {
 export const PROJECT_KEY_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 
 /** Reserved Windows device names. R-01 §7 rule 2: the SDK ignores one of these, silently. */
-export const WINDOWS_DEVICE_NAME_PATTERN = /^(?:con|prn|aux|nul|com[0-9]|lpt[0-9])$/i;
+const WINDOWS_DEVICE_NAME_PATTERN = /^(?:con|prn|aux|nul|com[0-9]|lpt[0-9])$/i;
 
 /** RFC 4122 text form, which is what `Options.sessionId` and `resume` both require (R-01 §6). */
-export const SESSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const SESSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * A `subpath` this store will accept as a key suffix.
@@ -289,7 +289,45 @@ export function parseTranscriptKey(input: unknown): Parsed<TranscriptKey> {
 }
 
 /** The largest single batch this store accepts, in entries. */
-export const MAX_BATCH_ENTRIES = 5_000;
+const MAX_BATCH_ENTRIES = 5_000;
+
+/** A UTF-16 surrogate with no partner; with the `u` flag a well-formed pair is one code point. */
+const LONE_SURROGATE = /\p{Cs}/u;
+
+/** Nesting beyond this is refused, so the walk below cannot overflow the stack on hostile input. */
+const MAX_ENTRY_DEPTH = 128;
+
+/** A NUL or a lone surrogate: text PostgreSQL's `jsonb` refuses to store. */
+function unstorable(text: string): boolean {
+  return text.includes('\u0000') || LONE_SURROGATE.test(text);
+}
+
+/**
+ * Where in `value` a string (or an object key) PostgreSQL cannot store sits, as a path such as
+ * `message.content[0].text`, or `null` when there is none.
+ *
+ * Both stores refuse such an entry, so the durable one cannot answer an append the in-memory one
+ * accepted with a raw database error (W3-4, `store.test.ts`).
+ */
+export function unstorableTextPath(value: unknown, path = 'entry', depth = 0): string | null {
+  if (depth > MAX_ENTRY_DEPTH)
+    return `${path} (nested deeper than ${String(MAX_ENTRY_DEPTH)} levels)`;
+  if (typeof value === 'string') return unstorable(value) ? path : null;
+  if (typeof value !== 'object' || value === null) return null;
+  if (Array.isArray(value)) {
+    for (const [index, item] of value.entries()) {
+      const found = unstorableTextPath(item, `${path}[${String(index)}]`, depth + 1);
+      if (found !== null) return found;
+    }
+    return null;
+  }
+  for (const [key, item] of Object.entries(value)) {
+    if (unstorable(key)) return `${path} (a key)`;
+    const found = unstorableTextPath(item, `${path}.${key}`, depth + 1);
+    if (found !== null) return found;
+  }
+  return null;
+}
 
 /**
  * Parse one transcript entry.
@@ -320,6 +358,13 @@ export function parseTranscriptEntry(input: unknown): Parsed<TranscriptEntry> {
     return {
       ok: false,
       reason: `'timestamp' must be a string when present; got ${describe(timestamp)}.`,
+    };
+  }
+  const unstorable = unstorableTextPath(record);
+  if (unstorable !== null) {
+    return {
+      ok: false,
+      reason: `${unstorable} cannot be stored: it carries a NUL character or an unpaired surrogate, or nests too deeply.`,
     };
   }
   return { ok: true, value: record as TranscriptEntry };

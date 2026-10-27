@@ -9,8 +9,8 @@ import {
   installWidgetSurfaceRuntime,
   WIDGET_WORKSPACE_SLUG,
 } from '../../../../../server/surfaces/loader/test-runtime';
-import { clearSurfaceSessionsRuntime } from '../../../../../server/surfaces/public/runtime';
 import { GET } from './route';
+import { clearApplicationContext } from '../../../../../server/application-context';
 
 const ORIGIN = 'http://127.0.0.1:4310';
 
@@ -31,7 +31,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
-  clearSurfaceSessionsRuntime();
+  clearApplicationContext();
   vi.unstubAllEnvs();
 });
 

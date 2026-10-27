@@ -1,43 +1,24 @@
-import { runtimeDriverIds, type RuntimeDriverId } from '@agent-workspace/core';
-import {
-  cloudflareSandboxRuntimeCapabilities,
-  type RuntimeRunSpec,
-} from '@agent-workspace/runtime';
+import { runtimeDriverIds, type RuntimeDriverId } from '@agent-workspace/run-protocol';
+import { type RuntimeRunSpec } from '@agent-workspace/runtime/driver';
+import { cloudflareSandboxRuntimeCapabilities } from '@agent-workspace/runtime/driver/cloudflare-sandbox';
 import { ProjectPolicySchema, type ProjectPolicy } from '@indx-workspace/contracts/policy-ceiling';
+import {
+  configuredPath as configuredPathIn,
+  resolveStorageSettings as resolveStorageSettingsWith,
+  type ResolvedStorageSettings,
+} from '@indx-workspace/contracts/storage-settings';
 
 import { defaultRuntimeNetworkPolicy, type RuntimeNetworkPolicy } from '../../contracts/runtimes';
 
-/** The environment variable naming the directory `/api/files*` stores objects under. */
-export const FILE_STORAGE_ROOT_ENV = 'AW_FILE_STORAGE_ROOT';
-
-/** The environment variable naming the skills platform's private object-store root. */
-export const SKILL_STORAGE_ROOT_ENV = 'AW_SKILL_STORAGE_ROOT';
-
-/**
- * The environment variable naming the directory session state is kept in.
- *
- * Already part of this deployment's contract — `compose.yaml`, the Helm chart, `packages/cli`'s
- * rendered `.env` and `scripts/environment-audit.mjs` all carry it — and ENG-06 (#305) is what
- * finally reads it in `apps/web`: it is the local-filesystem root of the object store a
- * session-state **blob** is written to. Stream entries are database rows and need no root.
- */
-export const SESSION_STATE_STORAGE_ROOT_ENV = 'AW_SESSION_TRANSCRIPT_ROOT';
-
-export const OBJECT_STORAGE_BUCKET_ENV = 'OBJECT_STORAGE_BUCKET';
-
-/** The native object-store adapter. Unset preserves the historic S3-when-bucket behavior. */
-export const OBJECT_STORAGE_BACKEND_ENV = 'OBJECT_STORAGE_BACKEND';
-
-export type ObjectStorageBackend = 's3' | 'gcs' | 'azure-blob';
-
-export function configuredObjectStorageBackend(
-  env: Readonly<Record<string, string | undefined>> = process.env,
-): ObjectStorageBackend | null {
-  const raw = env[OBJECT_STORAGE_BACKEND_ENV]?.trim();
-  if (raw === undefined || raw === '') return null;
-  if (raw === 's3' || raw === 'gcs' || raw === 'azure-blob') return raw;
-  throw new Error(`${OBJECT_STORAGE_BACKEND_ENV} must be s3, gcs, or azure-blob.`);
-}
+// The storage settings are resolved by contracts, so `agent-workspace doctor` decides the same way.
+export {
+  STORAGE_URL_ENV,
+  legacyAreaPrefixes,
+  storageAreaPlace,
+  type StorageArea,
+  type StorageAreaPlace,
+  type StorageSettings,
+} from '@indx-workspace/contracts/storage-settings';
 
 /** The environment variable carrying the deployment's policy ceiling (C13, ADR-0102 SD6). */
 export const DEPLOYMENT_POLICY_ENV = 'AW_DEPLOYMENT_POLICY';
@@ -67,12 +48,12 @@ export function readDeploymentPolicy(
   throw new Error(`${DEPLOYMENT_POLICY_ENV} is invalid: ${issues.join('; ')}`);
 }
 
-/** A non-empty, trimmed environment value, or `null`. */
-export function configuredPath(name: string): string | null {
-  const value = process.env[name];
-  if (value === undefined) return null;
-  const trimmed = value.trim();
-  return trimmed.length === 0 ? null : trimmed;
+/** A non-empty, trimmed environment value, or `null`; reads `process.env` by default. */
+export function configuredPath(
+  name: string,
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): string | null {
+  return configuredPathIn(name, env);
 }
 
 /**
@@ -263,4 +244,15 @@ export async function storageRootsOverlap(firstRoot: string, secondRoot: string)
     return relative === '' || (!relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
   };
   return isInside(first, second) || isInside(second, first);
+}
+
+/**
+ * Where this deployment keeps files, skills and session state (the storage design, §03 and §04),
+ * including the `storage_endpoint_same_origin` refusal; see the contracts resolver.
+ */
+// @story US-STO-10
+export function resolveStorageSettings(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): ResolvedStorageSettings {
+  return resolveStorageSettingsWith(env);
 }

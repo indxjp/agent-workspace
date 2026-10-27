@@ -5,6 +5,8 @@
  * found — is asserted step by step, because each step is a lock and a lock that is never tried is
  * not known to be locked (ADR-0015).
  */
+import { clearApplicationContext } from '../application-context';
+import { installTestDomains } from '../application-context-fixtures';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { SessionListResponseSchema } from '@indx-workspace/contracts/sessions';
@@ -26,7 +28,8 @@ import {
 } from '@agent-workspace/core/db';
 import { encodeListCursor } from '../pagination/list-cursor';
 import { sessionPageOf } from '../pagination/testing';
-import { installSessionApi, resetSessionApi, type SessionPrincipal } from './environment';
+import type { SessionApiPrincipal } from './environment';
+import { createRepositorySessionsStoreProvider } from './store';
 import { InMemoryTranscriptStore } from './memory-store';
 import { InMemorySessionStateStore } from './state-memory-store';
 import type { TranscriptStore } from './transcript';
@@ -36,7 +39,7 @@ const OTHER_WORKSPACE = 'c8b1f0de-6a2e-4a1f-9d3b-000000000002';
 const USER = 'c8b1f0de-6a2e-4a1f-9d3b-000000000009';
 const SESSION = '11111111-2222-4333-8444-555555555555';
 
-const PRINCIPAL: SessionPrincipal = {
+const PRINCIPAL: SessionApiPrincipal = {
   kind: 'user',
   principalId: USER,
   ownerPrincipalId: USER,
@@ -46,12 +49,12 @@ const PRINCIPAL: SessionPrincipal = {
 };
 
 /**
- * What an API key resolves to here. `SessionPrincipal` has no `api-key` variant: a key becomes a
+ * What an API key resolves to here. `SessionApiPrincipal` has no `api-key` variant: a key becomes a
  * `kind: 'user'` principal whose `userId` is `null`, because `Principal.fromApiKey` carries no
  * human (`apps/web/server/composition/session-rbac.ts`). S-21's default must hold for it too —
  * §5.11 promises the omitted key defaults "for both a user and an API-key principal".
  */
-const API_KEY_PRINCIPAL: SessionPrincipal = { ...PRINCIPAL, userId: null };
+const API_KEY_PRINCIPAL: SessionApiPrincipal = { ...PRINCIPAL, userId: null };
 
 /** Both callers the S-21 default is promised for, as `it.each` rows. */
 const DEFAULTING_PRINCIPALS = [
@@ -63,17 +66,19 @@ function install(
   options: {
     authenticated?: boolean;
     store?: TranscriptStore;
-    principal?: SessionPrincipal;
+    principal?: SessionApiPrincipal;
   } = {},
 ): {
   store: TranscriptStore;
 } {
   const store = options.store ?? new InMemoryTranscriptStore();
   const principal = options.principal ?? PRINCIPAL;
-  installSessionApi({
-    authenticate: () => Promise.resolve((options.authenticated ?? true) ? principal : null),
-    canAccessSession: () => Promise.resolve(true),
-    store,
+  installTestDomains({
+    sessions: {
+      authenticate: () => Promise.resolve((options.authenticated ?? true) ? principal : null),
+      canAccessSession: () => Promise.resolve(true),
+      store,
+    },
   });
   return { store };
 }
@@ -144,15 +149,20 @@ function installLifecycle(status: 'active' | 'archived' = 'active') {
         row = { ...row, status: 'active' };
         return Promise.resolve({ kind: 'updated', session: row });
       },
+      discardIfUnused: () => Promise.resolve(false),
     }),
   };
-  installSessionApi({
-    authenticate: () => Promise.resolve(PRINCIPAL),
-    canAccessSession: (_principal, id) =>
-      Promise.resolve(id === row.id || id === row.engineSessionId),
-    store: new InMemoryTranscriptStore(),
-    sessions: provider,
-    scopes: createInMemoryWorkspaceScopeResolver([{ id: WORKSPACE, slug: 'workspace' }]),
+  installTestDomains({
+    sessions: {
+      authenticate: () => Promise.resolve(PRINCIPAL),
+      canAccessSession: (_principal, id) =>
+        Promise.resolve(id === row.id || id === row.engineSessionId),
+      store: new InMemoryTranscriptStore(),
+      sessions: createRepositorySessionsStoreProvider({
+        repositories: provider,
+        scopes: createInMemoryWorkspaceScopeResolver([{ id: WORKSPACE, slug: 'workspace' }]),
+      }),
+    },
   });
   return () => row;
 }
@@ -165,7 +175,7 @@ async function errorCode(response: Response): Promise<string> {
 }
 
 afterEach(() => {
-  resetSessionApi();
+  clearApplicationContext();
 });
 
 describe('nothing installed', () => {
@@ -396,10 +406,12 @@ describe('GET …/transcript — load', () => {
   it('refuses a same-workspace session that the authenticated user does not own', async () => {
     const store = new InMemoryTranscriptStore();
     await store.append({ projectKey: WORKSPACE, sessionId: SESSION }, [{ type: 'user' }]);
-    installSessionApi({
-      authenticate: () => Promise.resolve(PRINCIPAL),
-      canAccessSession: () => Promise.resolve(false),
-      store,
+    installTestDomains({
+      sessions: {
+        authenticate: () => Promise.resolve(PRINCIPAL),
+        canAccessSession: () => Promise.resolve(false),
+        store,
+      },
     });
 
     const response = await loadTranscript(get(`${TRANSCRIPT}?projectKey=${WORKSPACE}`), SESSION);
@@ -527,24 +539,29 @@ describe('GET …/transcript and …/subkeys over the engine-scoped store', () =
     };
     const legacy = new InMemoryTranscriptStore();
     const state = new InMemorySessionStateStore();
-    installSessionApi({
-      authenticate: () => Promise.resolve(PRINCIPAL),
-      canAccessSession: () => Promise.resolve(true),
-      store: legacy,
-      stateStore: state,
+    installTestDomains({
       sessions: {
-        forScope: () => ({
-          ensure: () => Promise.resolve({ kind: 'existing', session: record }),
-          get: (id) => Promise.resolve(id === record.id ? record : null),
-          getByEngineSessionId: (id) =>
-            Promise.resolve(id === record.engineSessionId ? record : null),
-          list: (input) => Promise.resolve(sessionPageOf([record], input)),
-          update: () => Promise.resolve({ kind: 'no-op', session: record }),
-          archive: () => Promise.resolve({ kind: 'no-op', session: record }),
-          restore: () => Promise.resolve({ kind: 'no-op', session: record }),
+        authenticate: () => Promise.resolve(PRINCIPAL),
+        canAccessSession: () => Promise.resolve(true),
+        store: legacy,
+        stateStore: state,
+        sessions: createRepositorySessionsStoreProvider({
+          repositories: {
+            forScope: () => ({
+              ensure: () => Promise.resolve({ kind: 'existing', session: record }),
+              get: (id) => Promise.resolve(id === record.id ? record : null),
+              getByEngineSessionId: (id) =>
+                Promise.resolve(id === record.engineSessionId ? record : null),
+              list: (input) => Promise.resolve(sessionPageOf([record], input)),
+              update: () => Promise.resolve({ kind: 'no-op', session: record }),
+              archive: () => Promise.resolve({ kind: 'no-op', session: record }),
+              restore: () => Promise.resolve({ kind: 'no-op', session: record }),
+              discardIfUnused: () => Promise.resolve(false),
+            }),
+          },
+          scopes: createInMemoryWorkspaceScopeResolver([{ id: WORKSPACE, slug: 'workspace' }]),
         }),
       },
-      scopes: createInMemoryWorkspaceScopeResolver([{ id: WORKSPACE, slug: 'workspace' }]),
     });
     return { legacy, state };
   }
@@ -737,49 +754,21 @@ describe('GET …/transcript and …/subkeys over the engine-scoped store', () =
 });
 
 describe('GET /api/sessions', () => {
-  it('lists this workspace’s resumable sessions and nobody else’s', async () => {
-    const { store } = install();
-    await store.append({ projectKey: WORKSPACE, sessionId: SESSION }, [{ type: 'user' }]);
-    await store.append(
-      { projectKey: OTHER_WORKSPACE, sessionId: '22222222-2222-4333-8444-555555555555' },
-      [{ type: 'user' }],
-    );
-    const response = await listSessions(get('/api/sessions'));
-    expect(response.status).toBe(200);
-    const body = (await response.json()) as {
-      sessions: Array<{ sessionId: string }>;
-      projectKey: string;
-    };
-    expect(body.projectKey).toBe(WORKSPACE);
-    expect(body.sessions.map((one) => one.sessionId)).toEqual([SESSION]);
-  });
-
-  it('ignores a projectKey the caller puts in the query string', async () => {
-    const { store } = install();
-    await store.append(
-      { projectKey: OTHER_WORKSPACE, sessionId: '22222222-2222-4333-8444-555555555555' },
-      [{ type: 'user' }],
-    );
-    // The tenant comes from the principal. A query parameter naming another tenant changes
-    // nothing, which is why the listing route reads none.
-    const response = await listSessions(get(`/api/sessions?projectKey=${OTHER_WORKSPACE}`));
-    const body = (await response.json()) as { sessions: unknown[] };
-    expect(body.sessions).toEqual([]);
-  });
-
   it('answers 500, not 200, when the workspace id could not be a projectKey', async () => {
-    installSessionApi({
-      authenticate: () =>
-        Promise.resolve({
-          kind: 'user',
-          principalId: USER,
-          ownerPrincipalId: USER,
-          userId: USER,
-          workspaceId: 'not a valid project key',
-          role: 'builder',
-        }),
-      canAccessSession: () => Promise.resolve(true),
-      store: new InMemoryTranscriptStore(),
+    installTestDomains({
+      sessions: {
+        authenticate: () =>
+          Promise.resolve({
+            kind: 'user',
+            principalId: USER,
+            ownerPrincipalId: USER,
+            userId: USER,
+            workspaceId: 'not a valid project key',
+            role: 'builder',
+          }),
+        canAccessSession: () => Promise.resolve(true),
+        store: new InMemoryTranscriptStore(),
+      },
     });
     const response = await listSessions(get('/api/sessions'));
     expect(response.status).toBe(500);
@@ -789,7 +778,7 @@ describe('GET /api/sessions', () => {
 
 describe('complete session lifecycle', () => {
   it('lists only sessions owned by the exact API-key principal when user ids are null', async () => {
-    const apiKeyA: SessionPrincipal = {
+    const apiKeyA: SessionApiPrincipal = {
       kind: 'user',
       principalId: 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa',
       ownerPrincipalId: 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa',
@@ -797,7 +786,7 @@ describe('complete session lifecycle', () => {
       workspaceId: WORKSPACE,
       role: 'builder',
     };
-    const apiKeyB: SessionPrincipal = {
+    const apiKeyB: SessionApiPrincipal = {
       kind: 'user',
       principalId: 'bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb',
       ownerPrincipalId: 'bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb',
@@ -834,14 +823,19 @@ describe('complete session lifecycle', () => {
         update: unused,
         archive: unused,
         restore: unused,
+        discardIfUnused: () => Promise.resolve(false),
       }),
     };
-    installSessionApi({
-      authenticate: () => Promise.resolve(caller),
-      canAccessSession: () => Promise.resolve(true),
-      store: new InMemoryTranscriptStore(),
-      sessions: provider,
-      scopes: createInMemoryWorkspaceScopeResolver([{ id: WORKSPACE, slug: 'workspace' }]),
+    installTestDomains({
+      sessions: {
+        authenticate: () => Promise.resolve(caller),
+        canAccessSession: () => Promise.resolve(true),
+        store: new InMemoryTranscriptStore(),
+        sessions: createRepositorySessionsStoreProvider({
+          repositories: provider,
+          scopes: createInMemoryWorkspaceScopeResolver([{ id: WORKSPACE, slug: 'workspace' }]),
+        }),
+      },
     });
 
     const listedForA = (await (await listSessions(get('/api/sessions'))).json()) as {
@@ -930,7 +924,7 @@ describe('GET /api/sessions cursor pages (S-5)', () => {
     rowAt('00000000-0000-4000-8000-000000000004', OWNER_A, '2026-09-01T00:00:01.000Z'),
     rowAt('00000000-0000-4000-8000-000000000005', OWNER_B, '2026-09-01T00:00:02.000Z'),
   ];
-  const caller = (role: 'owner' | 'builder', principalId = OWNER_A): SessionPrincipal => ({
+  const caller = (role: 'owner' | 'builder', principalId = OWNER_A): SessionApiPrincipal => ({
     kind: 'user',
     principalId,
     ownerPrincipalId: principalId,
@@ -939,35 +933,36 @@ describe('GET /api/sessions cursor pages (S-5)', () => {
     role,
   });
 
-  function installRows(principal: SessionPrincipal, withRepository = true): string[] {
+  function installRows(principal: SessionApiPrincipal): string[] {
     const listed: string[] = [];
     const unused = (): Promise<never> => Promise.reject(new Error('not used by session listing'));
-    installSessionApi({
-      authenticate: () => Promise.resolve(principal),
-      canAccessSession: () => Promise.resolve(true),
-      store: new InMemoryTranscriptStore(),
-      ...(withRepository
-        ? {
-            sessions: {
-              forScope: (scope) => ({
-                ensure: unused,
-                get: unused,
-                getByEngineSessionId: unused,
-                list: (input) => {
-                  listed.push(scope.workspaceId);
-                  return Promise.resolve(sessionPageOf(ROWS, input));
-                },
-                update: unused,
-                archive: unused,
-                restore: unused,
-              }),
-            } satisfies SessionRepositoryProvider,
-            scopes: createInMemoryWorkspaceScopeResolver([
-              { id: WORKSPACE, slug: 'workspace' },
-              { id: OTHER_WORKSPACE, slug: 'other' },
-            ]),
-          }
-        : {}),
+    installTestDomains({
+      sessions: {
+        authenticate: () => Promise.resolve(principal),
+        canAccessSession: () => Promise.resolve(true),
+        store: new InMemoryTranscriptStore(),
+        sessions: createRepositorySessionsStoreProvider({
+          repositories: {
+            forScope: (scope) => ({
+              ensure: unused,
+              get: unused,
+              getByEngineSessionId: unused,
+              list: (input) => {
+                listed.push(scope.workspaceId);
+                return Promise.resolve(sessionPageOf(ROWS, input));
+              },
+              update: unused,
+              archive: unused,
+              restore: unused,
+              discardIfUnused: () => Promise.resolve(false),
+            }),
+          } satisfies SessionRepositoryProvider,
+          scopes: createInMemoryWorkspaceScopeResolver([
+            { id: WORKSPACE, slug: 'workspace' },
+            { id: OTHER_WORKSPACE, slug: 'other' },
+          ]),
+        }),
+      },
     });
     return listed;
   }
@@ -1050,13 +1045,13 @@ describe('GET /api/sessions cursor pages (S-5)', () => {
     },
   );
 
-  it('refuses paging where no session repository keeps an order, and lists whole without it', async () => {
-    installRows(caller('owner'), false);
-    const paged = await listSessions(get('/api/sessions?limit=1'));
-    expect(paged.status).toBe(400);
-    expect(await errorCode(paged)).toBe('pagination_unavailable');
-    const whole = await listSessions(get('/api/sessions'));
-    expect(whole.status).toBe(200);
-    await expect(whole.json()).resolves.toMatchObject({ nextCursor: null });
+  it('ignores a projectKey the caller puts in the query string', async () => {
+    const listed = installRows(caller('owner'));
+    // The tenant comes from the principal. A query parameter naming another tenant changes
+    // nothing, which is why the listing route reads none.
+    const response = await listSessions(get(`/api/sessions?projectKey=${OTHER_WORKSPACE}`));
+    expect(response.status).toBe(200);
+    expect(((await response.json()) as { projectKey: string }).projectKey).toBe(WORKSPACE);
+    expect(listed).toEqual([WORKSPACE]);
   });
 });

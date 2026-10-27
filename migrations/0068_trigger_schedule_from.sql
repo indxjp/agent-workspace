@@ -1,0 +1,1 @@
+ALTER TABLE "triggers" ADD COLUMN "schedule_from" timestamp with time zone;

@@ -25,12 +25,13 @@ private def usage : JValue := .obj
 private def run : JValue := .obj
   [("id", .str "run"), ("workspaceId", .str "ws"), ("agentId", .str "agent"),
    ("projectId", .null), ("initiatingUserId", .null), ("sessionId", .str "session"),
-   ("status", .str "queued"), ("createdAt", .str "2026-01-02T03:04:05Z"),
+   ("agentVersion", .null), ("status", .str "queued"), ("createdAt", .str "2026-01-02T03:04:05Z"),
    ("startedAt", .null), ("endedAt", .null), ("durationMs", .null),
    ("model", .null), ("provider", .null), ("modelConnectionId", .null),
    ("engine", .str "claude-agent-sdk"), ("engineVersion", .null),
    ("usage", usage), ("cost", cost (.str "0.000000") (.str "USD")),
-   ("error", .null), ("accountingState", .str "pending"), ("accountingError", .null)]
+   ("error", .null), ("output", .null), ("accountingState", .str "pending"),
+   ("accountingError", .null), ("pendingApproval", .null)]
 
 private def session : JValue := .obj
   [("id", .str "session"), ("workspaceId", .str "ws"), ("agentId", .str "agent"),
@@ -43,6 +44,16 @@ private def req (extra : JValue.Fields := []) : JValue :=
   .obj ([("prompt", .str "go")] ++ extra)
 
 private def uuid : JValue := .str "123e4567-e89b-42d3-a456-426614174000"
+
+private def attachment (fileId : String) : JValue := .obj [("fileId", .str fileId)]
+
+/-- `n` attachments with distinct one-letter ids `a`, `b`, … -/
+private def attachmentList (n : Nat) : JValue :=
+  .arr ((List.range n).map fun i => attachment (String.singleton (Char.ofNat (97 + i))))
+
+/-- `n` distinct paths `p0`, `p1`, … -/
+private def pathList (n : Nat) : JValue :=
+  .arr ((List.range n).map fun i => .str s!"p{i}")
 
 def schemaVectors : List Vector :=
   let requestCases : List (String × JValue) :=
@@ -58,6 +69,32 @@ def schemaVectors : List Vector :=
      ("model-only", req [("model", .str "m")]),
      ("connection-only", req [("modelConnectionId", uuid)]),
      ("model-empty", req [("modelConnectionId", uuid), ("model", .str "")]),
+     ("attachments-one", req [("attachments", attachmentList 1)]),
+     ("attachments-ten", req [("attachments", attachmentList 10)]),
+     ("attachments-empty", req [("attachments", .arr [])]),
+     ("attachments-eleven", req [("attachments", attachmentList 11)]),
+     ("attachments-duplicate", req [("attachments", .arr [attachment "a", attachment "a"])]),
+     ("attachments-unknown-item-key",
+       req [("attachments", .arr [.obj [("fileId", .str "a"), ("access", .str "write")]])]),
+     ("attachments-empty-id", req [("attachments", .arr [attachment ""])]),
+     ("output-schema", req [("outputSchema", .obj [("type", .str "object")])]),
+     ("output-schema-string-root", req [("outputSchema", .obj [("type", .str "string")])]),
+     ("file-scope-one", req [("fileScope", .arr [.str "docs/alice"])]),
+     ("file-scope-max", req [("fileScope", pathList 100)]),
+     ("file-scope-empty", req [("fileScope", .arr [])]),
+     ("file-scope-over-max", req [("fileScope", pathList 101)]),
+     ("file-scope-duplicate", req [("fileScope", .arr [.str "a", .str "a"])]),
+     ("file-scope-parent-segment", req [("fileScope", .arr [.str "a/../b"])]),
+     ("file-scope-dot-segment", req [("fileScope", .arr [.str "a/./b"])]),
+     ("file-scope-leading-slash", req [("fileScope", .arr [.str "/a"])]),
+     ("file-scope-trailing-slash", req [("fileScope", .arr [.str "a/"])]),
+     ("file-scope-backslash", req [("fileScope", .arr [.str "a\\b"])]),
+     ("file-scope-empty-path", req [("fileScope", .arr [.str ""])]),
+     ("file-scope-max-length",
+       req [("fileScope", .arr [.str (String.ofList (List.replicate 1024 'a'))])]),
+     ("file-scope-over-length",
+       req [("fileScope", .arr [.str (String.ofList (List.replicate 1025 'a'))])]),
+     ("file-scope-not-array", req [("fileScope", .str "a")]),
      ("unknown-key", req [("extra", .bool true)]),
      ("not-object", .arr []), ("missing-prompt", .obj [])]
   let requestVs := requestCases.map fun (id, j) =>
@@ -89,6 +126,22 @@ def schemaVectors : List Vector :=
     [("queued", run),
      ("missing", .obj [("id", .str "r")]),
      ("unknown-key", .obj (match run with | .obj fs => fs ++ [("extra", .null)] | _ => [])),
+     ("with-output", .obj (match run with
+       | .obj fs => fs.filter (·.1 != "output") ++
+           [("output", .obj [("text", .str "done"), ("structured", .obj [("total", .num 3 0)])])]
+       | _ => [])),
+     ("output-without-structured", .obj (match run with
+       | .obj fs => fs.filter (·.1 != "output") ++ [("output", .obj [("text", .str "done")])]
+       | _ => [])),
+     ("awaiting-approval", .obj (match run with
+       | .obj fs => fs.filter (fun f => f.1 != "status" && f.1 != "pendingApproval") ++
+           [("status", .str "awaiting_approval"), ("pendingApproval",
+             .obj [("toolName", .str "Bash"), ("canonicalCall", .str "Bash(ls)")])]
+       | _ => [])),
+     ("pending-approval-empty-call", .obj (match run with
+       | .obj fs => fs.filter (·.1 != "pendingApproval") ++
+           [("pendingApproval", .obj [("toolName", .str "Bash"), ("canonicalCall", .str "")])]
+       | _ => [])),
      ("bad-status", .obj (match run with
        | .obj fs => fs.filter (·.1 != "status") ++ [("status", .str "paused")]
        | _ => [])),
@@ -139,7 +192,29 @@ def schemaVectors : List Vector :=
      ("RevokeRunTokensResponseSchema", "bad-outcome", .obj [("revoked", .num 0 0), ("outcome", .str "lost")], revokeRunTokensResponse)]
   let envelopeVs := envelope.map fun (schema, id, j, p) =>
     vector schema id j p "constants_match_exports"
-  requestVs ++ costVs ++ usageVs ++ resourceVs ++ sessionVs ++ sessionEnvelopeVs ++ envelopeVs
+  let approvalCases : List (String × String × JValue × (JValue → Bool)) :=
+    [("RunApprovalRequestSchema", "approve", .obj [("decision", .str "approve")], runApprovalRequest),
+     ("RunApprovalRequestSchema", "reject-comment",
+       .obj [("decision", .str "reject"), ("comment", .str "use the staging bucket")], runApprovalRequest),
+     ("RunApprovalRequestSchema", "max-comment", .obj [("decision", .str "approve"),
+       ("comment", .str (String.ofList (List.replicate 1000 'a')))], runApprovalRequest),
+     ("RunApprovalRequestSchema", "over-max-comment", .obj [("decision", .str "approve"),
+       ("comment", .str (String.ofList (List.replicate 1001 'a')))], runApprovalRequest),
+     ("RunApprovalRequestSchema", "blank-comment",
+       .obj [("decision", .str "approve"), ("comment", .str " 
+")], runApprovalRequest),
+     ("RunApprovalRequestSchema", "bad-decision", .obj [("decision", .str "maybe")], runApprovalRequest),
+     ("RunApprovalRequestSchema", "missing-decision", .obj [], runApprovalRequest),
+     ("RunApprovalRequestSchema", "unknown-key",
+       .obj [("decision", .str "approve"), ("extra", .bool true)], runApprovalRequest),
+     ("RunApprovalResponseSchema", "valid",
+       .obj [("run", run), ("events", .str "/api/runs/run/events")], runApprovalResponse),
+     ("RunApprovalResponseSchema", "empty-events",
+       .obj [("run", run), ("events", .str "")], runApprovalResponse)]
+  let approvalVs := approvalCases.map fun (schema, id, j, p) =>
+    vector schema id j p "approval_constants_match_exports"
+  requestVs ++ costVs ++ usageVs ++ resourceVs ++ sessionVs ++ sessionEnvelopeVs ++ envelopeVs ++
+    approvalVs
 
 private def queryVector (id : String) (query : Json) (model : RunListQuery) : Vector :=
   let entries := runListSearchParams model

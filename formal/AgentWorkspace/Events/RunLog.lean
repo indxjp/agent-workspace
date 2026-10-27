@@ -26,8 +26,8 @@ def defaultMaxEvents : Nat := 50000
 
 /-- In-memory append allocates `max + 1`, retains only the newest `limit` events, and refuses a
 closed log. The database adapter makes the same allocation under its advisory lock. -/
-@[aw_spec (ts := "apps/web/server/runs/store.ts#RunEventLog")
-  (ts := "packages/core/src/db/repositories/runs.ts#createDatabaseRunEventRepositoryProvider")]
+@[aw_spec (ts := "apps/web/server/runs/memory-store.ts#RunEventLog")
+  (ts := "packages/core/src/db/repositories/runs/events.ts#createDatabaseRunEventRepositoryProvider")]
 def append (limit : Nat) (log : Log) (name : String) (data : JValue) : Option (Log × Event) :=
   if log.closed then none
   else
@@ -35,7 +35,7 @@ def append (limit : Nat) (log : Log) (name : String) (data : JValue) : Option (L
     let kept := (log.retained ++ [event]).drop ((log.retained.length + 1) - limit)
     some (⟨event.id, kept, false⟩, event)
 
-@[aw_spec (ts := "apps/web/server/runs/store.ts#RunEventLog")]
+@[aw_spec (ts := "apps/web/server/runs/memory-store.ts#RunEventLog")]
 def close (log : Log) : Log := { log with closed := true }
 
 def oldest (log : Log) : Nat :=
@@ -50,8 +50,8 @@ inductive Reset where
 
 /-- Both stores announce a gap when the requested beginning has been evicted, including a first
 connection without a cursor. -/
-@[aw_spec (ts := "apps/web/server/runs/store.ts#InMemoryRunStore")
-  (ts := "apps/web/server/runs/store.ts#createRepositoryRunStore")]
+@[aw_spec (ts := "apps/web/server/runs/memory-store.ts#InMemoryRunStore")
+  (ts := "apps/web/server/runs/repository-store.ts#createRepositoryRunStore")]
 def resetFor (log : Log) (after : Option Nat) : Option Reset :=
   match after with
   | none =>
@@ -71,12 +71,12 @@ def pending (log : Log) (cursor : Nat) : List Event :=
   log.retained.filter (·.id > cursor)
 
 /-- The in-memory loop sends all retained events before testing its closed-and-caught-up exit. -/
-@[aw_spec (ts := "apps/web/server/runs/store.ts#RunEventLog")]
+@[aw_spec (ts := "apps/web/server/runs/memory-store.ts#RunEventLog")]
 def memoryMayEnd (log : Log) (cursor : Nat) : Bool :=
   log.closed && cursor ≥ log.lastId
 
 /-- The repository loop returns after it reads a terminal run and drains the durable tail. -/
-@[aw_spec (ts := "apps/web/server/runs/store.ts#createRepositoryRunStore")]
+@[aw_spec (ts := "apps/web/server/runs/repository-store.ts#createRepositoryRunStore")]
 def repositoryMayEndCurrent (terminal : Bool) : Bool := terminal
 
 /-- The intended exit test includes the event-log tail. -/

@@ -20,21 +20,28 @@
  * uses for `SecretResource`. The raw value lives only in {@link ParsedCreateConnectorInput.credential}
  * for the single moment between reading the request body and sealing it as a secret.
  */
-import type { McpAuthType, McpTransport, ToolConnectorKind } from '@agent-workspace/core/db';
 import {
   CONNECTOR_AUTH_TYPES,
   CONNECTOR_KINDS,
   CONNECTOR_TRANSPORTS,
   ConnectorUrlSchema,
+  type ConnectorAuthType,
+  type ConnectorTransport,
 } from '@indx-workspace/contracts/connectors';
+import {
+  ConnectorIdentitySchema,
+  type ConnectorIdentity,
+} from '@indx-workspace/contracts/identity-assertion';
 import {
   OpenApiToolConfigSchema,
   PostgresToolConfigSchema,
   type OpenApiToolConfig,
   type PostgresToolConfig,
+  type ToolConnectorKind,
 } from '@indx-workspace/contracts/tool-connectors';
 
-export type { McpAuthType, McpTransport };
+export type McpAuthType = ConnectorAuthType;
+export type McpTransport = ConnectorTransport;
 
 /** The field a resolved credential is placed under, for one `(transport, authType)` pair. `null`
  *  for `authType: 'none'`, which carries no credential at all. See this file's header. */
@@ -78,6 +85,8 @@ export interface ConnectorResource {
   readonly ownerPrincipalId: string;
   readonly createdAt: string;
   readonly updatedAt: string;
+  /** The identity opt-in (ADR-0142 D1): the signing secret's name, never its value. */
+  readonly identity?: ConnectorIdentity | undefined;
 }
 
 /**
@@ -103,6 +112,7 @@ export interface ToolConnectorResource {
   readonly updatedAt: string;
   readonly openapi?: OpenApiToolConfig;
   readonly postgres?: PostgresToolConfig;
+  readonly identity?: ConnectorIdentity | undefined;
 }
 
 /** Any connector a route hands back: narrow on `kind` (absent for MCP). */
@@ -116,11 +126,17 @@ export interface ToolConnectorRow {
   readonly kind: ToolConnectorKind;
   readonly toolConfig: Readonly<Record<string, unknown>>;
   readonly credentialSecretId: string | null;
+  readonly identitySecretName: string | null;
   readonly enabled: boolean;
   readonly createdBy: string | null;
   readonly ownerPrincipalId: string;
   readonly createdAt: Date;
   readonly updatedAt: Date;
+}
+
+/** The resource's `identity` member for a stored secret name, or nothing when not opted in. */
+export function identityOf(secretName: string | null): { readonly identity?: ConnectorIdentity } {
+  return secretName === null ? {} : { identity: { secret: secretName } };
 }
 
 /**
@@ -149,6 +165,7 @@ export function toToolConnectorResource(row: ToolConnectorRow): ToolConnectorRes
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     ...half,
+    ...identityOf(row.identitySecretName),
   };
 }
 
@@ -164,6 +181,8 @@ export interface ParsedCreateConnectorInput {
   /** The raw credential value, present iff `authType !== 'none'`. Never stored verbatim — sealed
    *  as a secret (create) or used only in-memory for the duration of a probe (test-connection). */
   readonly credential: string | null;
+  /** The identity opt-in (ADR-0142 D1); a `stdio` connector cannot carry one. */
+  readonly identity?: ConnectorIdentity;
 }
 
 const NAME_PATTERN = /^.{1,200}$/u;
@@ -265,6 +284,13 @@ export function parseCreateConnectorBody(
     errors.push('"credential" must not be supplied when "authType" is "none"');
   }
 
+  let identity: ConnectorIdentity | undefined;
+  if (body['identity'] !== undefined) {
+    const parsedIdentity = ConnectorIdentitySchema.safeParse(body['identity']);
+    if (parsedIdentity.success) identity = parsedIdentity.data;
+    else errors.push('"identity" must be { "secret": NAME }, the name of a workspace secret');
+  }
+
   if (errors.length > 0) return { ok: false, errors };
 
   return {
@@ -277,6 +303,7 @@ export function parseCreateConnectorBody(
       url,
       authType: authType as McpAuthType,
       credential,
+      ...(identity === undefined ? {} : { identity }),
     },
   };
 }

@@ -107,7 +107,7 @@ def scenarios : List Scenario :=
   (routes.flatMap fun route =>
     [⟨routeName route ++ "-503", route, "unconfigured", "owner", "none", "own"⟩,
      ⟨routeName route ++ "-401", route, "unauthenticated", "owner", "none", "own"⟩]) ++
-  [⟨"start-viewer-denied", .start, "none", "viewer", "none", "own"⟩,
+  [⟨"start-viewer-denied", .start, "none", "viewer", "none", "other"⟩,
    ⟨"start-role-missing", .start, "none", "missing", "none", "own"⟩,
    ⟨"start-run-scope", .start, "none", "owner", "run", "own"⟩,
    ⟨"start-session-scope", .start, "none", "owner", "session", "own"⟩,

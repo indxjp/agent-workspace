@@ -136,6 +136,7 @@ describe('connector kinds (ADR-0113 SD1, C15)', () => {
       'updatedAt',
       'openapi',
       'postgres',
+      'identity',
     ]);
     expect(refusedKeys({ ...openapiConnector, credential: 'x' })).toEqual(['']);
     expect(refusedKeys({ ...remote, kind: 'graphql' })).toEqual(['kind']);
@@ -188,7 +189,8 @@ describe('connector kinds (ADR-0113 SD1, C15)', () => {
     expect(Object.isFrozen(CONNECTOR_REQUEST_BODY_MAX_BYTES_BY_KIND)).toBe(true);
     expect(CONNECTORS_PROBLEM_CODES).toMatchObject(TOOL_CONNECTOR_PROBLEM_CODES);
     expect(CONNECTORS_PROBLEM_CODES.invalid_body).toBe(400);
-    expect(CONNECTORS_PROBLEM_CODES.connector_write_unsupported).toBe(422);
+    expect(CONNECTORS_PROBLEM_CODES).not.toHaveProperty('connector_write_unsupported');
+    expect(CONNECTORS_PROBLEM_CODES.connector_identity_unsupported).toBe(422);
   });
 
   it('fits a 1 MiB document of quotes and newlines, escaped as a JSON string, in the openapi cap', () => {
@@ -291,6 +293,19 @@ describe('ConnectorResourceSchema', () => {
   it('rejects an unknown key', () => {
     expect(ConnectorResourceSchema.safeParse({ ...remote, description: 'x' }).success).toBe(false);
   });
+
+  it('accepts an identity secret reference and refuses a value, a string or an extra key', () => {
+    const identity = { secret: 'IDENTITY_KEY' };
+    expect(ConnectorResourceSchema.parse({ ...remote, identity }).identity).toStrictEqual(identity);
+    for (const bad of [
+      { secret: 'literal value with spaces' },
+      'IDENTITY_KEY',
+      { secret: 'IDENTITY_KEY', value: 'x' },
+      {},
+    ]) {
+      expect(ConnectorResourceSchema.safeParse({ ...remote, identity: bad }).success).toBe(false);
+    }
+  });
 });
 
 describe('ConnectorListResponseSchema', () => {
@@ -380,6 +395,8 @@ describe('ConnectorUpdateRequestSchema (S-20)', () => {
       { args: null },
       { authType: 'bearer', credential: 'token' },
       { credential: 'rotated' },
+      { identity: { secret: 'SIGNING_KEY' } },
+      { identity: null },
     ]) {
       expect(ConnectorUpdateRequestSchema.safeParse(body).success, JSON.stringify(body)).toBe(true);
     }
@@ -404,6 +421,8 @@ describe('ConnectorUpdateRequestSchema (S-20)', () => {
       { credential: ' ' },
       { authType: 'basic' },
       { enabled: 'false' },
+      { identity: 'SIGNING_KEY' },
+      { identity: { secret: 'SIGNING_KEY', value: 'x' } },
       null,
     ]) {
       expect(ConnectorUpdateRequestSchema.safeParse(body).success, JSON.stringify(body)).toBe(

@@ -1,0 +1,86 @@
+---
+title: "Get typed data back from a run"
+description: "Ask a run for a value of your own shape instead of parsing its text: pass a Zod schema from code or a JSON Schema file from the CLI, and read the result typed."
+---
+
+<Info>
+
+- **Read this when:** your code parses an agent's answer by hand, or you want a run to return data
+  such as an invoice, a verdict or a list of fields.
+- **You will learn:** how to ask for a shape with `outputSchema`, how to read it typed with
+  `runs.result`, the same flow from `aw`, and what each failure looks like.
+- **Used in:** [Integrate a backend](/building/backend) and [the runs resource](/resources/runs).
+
+</Info>
+
+A run answers in text. Give it a schema and it also answers with a value of that shape, so your
+code stops parsing prose.
+
+**What you can do**
+
+- [Ask for a typed answer in code](#ask-for-a-typed-answer-in-code)
+- [Do the same from the CLI](#do-the-same-from-the-cli)
+- [Know what a failure looks like](#know-what-a-failure-looks-like)
+
+## Ask for a typed answer in code
+
+Pass a Zod schema as `outputSchema` when you start the run, then read the answer with
+`runs.result`, giving it the same schema:
+
+```ts title="invoice.ts (illustrative)" claim="illustrative"
+import { z } from 'zod';
+
+const Invoice = z.object({ total: z.number(), currency: z.string() });
+
+const { run } = await aw.runs.start(agentId, {
+  prompt: 'Read the invoice and report its total.',
+  outputSchema: Invoice,
+});
+const { text, output } = await aw.runs.result(run.id, { schema: Invoice });
+// output: { total: number; currency: string } | null
+```
+
+`result` follows the run to its end. `output` is the parsed value, `text` is the final text the
+agent wrote, and both are `null` when the run did not complete (the reason is in `run.error`). The
+SDK sends a Zod schema as JSON Schema; a plain JSON Schema object is sent as is.
+
+## Do the same from the CLI
+
+Save the schema as a JSON file, with `type: "object"` at the root:
+
+```json title="invoice.schema.json (illustrative)" claim="illustrative"
+{
+  "type": "object",
+  "properties": {
+    "total": { "type": "number" },
+    "currency": { "type": "string" }
+  },
+  "required": ["total", "currency"]
+}
+```
+
+Start the run with `--output-schema`, wait for it, and read the value from the settled record:
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw runs start <agent> --prompt "Read the invoice and report its total." \
+  --output-schema invoice.schema.json --wait --json | jq .output.structured
+
+aw runs get <run-id> --json | jq .output.structured   # later, from another shell
+```
+
+`aw runs get` without `--json` shows `output` as one line. The CLI reads the file and checks the
+same limits as the server before it sends anything, so a bad file exits with status 2 and starts
+no run. A schema file is the only form the CLI accepts; it does not load Zod or TypeScript.
+
+## Know what a failure looks like
+
+| You see                                                          | Why                                                                                                                             | What to do                                                            |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `aw` exits 2 with `root_type`, `size`, `dialect`, `ref`, `depth` | The schema is over a limit: root `type: "object"`, 32 KiB, draft 2020-12, local `#/$defs/<name>` refs, at most 16 nested levels | Fix the schema. The SDK raises `400 invalid_body` with the same word. |
+| `422 engine_capability_unsupported`                              | The agent's engine cannot produce structured output                                                                             | Use an engine that can; no run was created.                           |
+| Run `failed` with `output_schema_unsatisfied`                    | The engine could not produce an answer that satisfies the schema                                                                | Loosen the schema or the prompt, then start a new run.                |
+| `ContractViolationError` from `runs.result`                      | The value came back but does not parse with the Zod schema you passed                                                           | Align the two schemas; do not retry.                                  |
+| `output` is `null`                                               | The run is not `completed`, or it was started without `outputSchema`                                                            | Read `run.error`, or start a new run with `outputSchema`.             |
+
+The decision behind the limits is ADR-0143. The full option list is in
+[`runs.start`](/resources/runs#start) and [`runs.result`](/resources/runs#result).

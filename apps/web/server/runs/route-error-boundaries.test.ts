@@ -1,10 +1,12 @@
+import { log as webLogger } from '../telemetry/logger';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { POST as startRunRoute } from '../../app/api/agents/[id]/runs/route';
 import { GET as readRunRoute, POST as revokeRunRoute } from '../../app/api/runs/[id]/route';
 import { GET as streamRunRoute } from '../../app/api/runs/[id]/events/route';
-import { installRunApi, resetRunApi, type RunApiEnvironment } from './environment';
-import { InMemoryRunStore } from './store';
+import type { RunApiEnvironment } from './environment';
+import { InMemoryRunStore } from './memory-store';
+import { installTestRunApi, resetTestRunApi } from '../application-context-fixtures';
 
 const RUN_ID = '11111111-1111-4111-8111-111111111111';
 const SENTINEL = 'postgresql://admin:SECRET_SENTINEL@internal.example/workspace';
@@ -32,12 +34,12 @@ async function expectSafeFailure(response: Response): Promise<void> {
 
 describe('run route error boundaries', () => {
   beforeEach(() => {
-    vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    installRunApi(failingEnvironment());
+    vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
+    installTestRunApi(failingEnvironment());
   });
 
   afterEach(() => {
-    resetRunApi();
+    resetTestRunApi();
     vi.restoreAllMocks();
   });
 
@@ -61,7 +63,7 @@ describe('run route error boundaries', () => {
   });
 
   it('preserves expected validation failures as stable 4xx responses', async () => {
-    installRunApi({
+    installTestRunApi({
       ...failingEnvironment(),
       authenticate: () =>
         Promise.resolve({

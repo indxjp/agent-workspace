@@ -77,6 +77,7 @@ function harness(
     readonly cancelled?: Event | null;
     readonly capabilities?: EngineAdapterSpec<null, Event>['capabilities'];
     readonly refuse?: boolean;
+    readonly structuredOutput?: boolean;
     readonly placeSkills?: EngineAdapterSpec<null, Event>['placeSkills'];
   } = {},
 ): Harness {
@@ -86,6 +87,9 @@ function harness(
     version: '0.0.0',
     capabilities: options.capabilities ?? ENGINE_CATALOGUE.pi.capabilities,
     protectedConfigDirectory: '.demo',
+    ...(options.structuredOutput === undefined
+      ? {}
+      : { structuredOutput: options.structuredOutput }),
     ...(options.placeSkills === undefined ? {} : { placeSkills: options.placeSkills }),
     compile: () =>
       options.refuse === true
@@ -274,6 +278,27 @@ describe('createEngineAdapter: compile and skills', () => {
     expect(() => adapter.start(request())).toThrow(
       'startRun: the arm is wrong. Call compile() first and act on its refusal.',
     );
+  });
+
+  it('refuses an outputSchema before compile unless the spec declares structuredOutput', () => {
+    const outputSchema = { type: 'object' };
+    const { adapter } = harness();
+    const refused = adapter.compile(request({ outputSchema }));
+    expect(refused).toMatchObject({ ok: false, code: 'engine_capability_unsupported' });
+    expect(refused.ok ? '' : refused.reason).toContain('outputSchema');
+    expect(adapter.compile(request())).toEqual({ ok: true, compiled: null });
+    expect(harness({ structuredOutput: true }).adapter.compile(request({ outputSchema }))).toEqual({
+      ok: true,
+      compiled: null,
+    });
+  });
+
+  it('start throws the compile-first sentence for an outputSchema it refuses', () => {
+    const { adapter, seen } = harness();
+    expect(() => adapter.start(request({ outputSchema: { type: 'object' } }))).toThrow(
+      /^startRun: demo declares structuredOutput: false.* Call compile\(\) first and act on its refusal\.$/u,
+    );
+    expect(seen.eventsCalled).toBe(0);
   });
 
   it('passes the compile result through', () => {

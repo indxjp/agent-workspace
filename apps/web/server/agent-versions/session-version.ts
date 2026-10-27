@@ -10,12 +10,14 @@
  */
 import {
   narrowFileGrants,
+  narrowStorageGrants,
+  type StorageGrantRef,
   type AgentVersionEnvironment,
   type AgentVersionPointerRecord,
   type AgentVersionRecord,
-  type AgentVersionRepository,
+  type AgentVersionRows,
   type ResolveDefinitionOutcome,
-} from '@agent-workspace/core/db';
+} from './store';
 import type {
   AGENT_VERSION_PROBLEM_CODES,
   AgentVersionToolBundle,
@@ -25,6 +27,7 @@ import type {
   AgentPermissions,
   AgentResourceAssignments,
 } from '@indx-workspace/contracts/agents';
+import { parseStorageGrantPath } from '@indx-workspace/contracts/storage-connections';
 
 import type { AgentRecord } from '../agents/contract';
 import type { AgentResourceStoreProvider } from '../agents/resource-store';
@@ -34,6 +37,7 @@ import { DomainError } from '../errors';
 import { toAgentVersionResource } from './contract';
 import { materialise } from './materialise';
 import { definitionReferences } from './pipeline';
+import { storageGrantUnavailable } from './storage-grants';
 
 export type SessionVersionDecision<V> =
   | { readonly kind: 'pin'; readonly version: V }
@@ -104,7 +108,8 @@ export interface RunAgent {
 export async function runAgentFromVersion(
   row: AgentRecord,
   record: AgentVersionRecord,
-  versions: Pick<AgentVersionRepository, 'resolveDefinition' | 'list' | 'agentsByName'>,
+  versions: Pick<AgentVersionRows, 'resolveDefinition' | 'list' | 'agentsByName'>,
+  storedGrants: () => Promise<readonly StorageGrantRef[]> = () => Promise.resolve([]),
 ): Promise<RunAgent> {
   const { definition, toolBundles, subagents } = toAgentVersionResource(record).body;
   const resolution = await versions.resolveDefinition(definitionReferences(definition));
@@ -125,7 +130,12 @@ export async function runAgentFromVersion(
     assignments: {
       files: narrowFileGrants(references.files, materialised.permissions),
       skillIds: references.skillIds,
+      skillRevisions: references.skillRevisions,
       connectorIds: references.connectorIds,
+      storageGrants: narrowStorageGrants(
+        await versionStorageGrants(definition, record, storedGrants),
+        materialised.permissions,
+      ),
     },
     toolBundles: toolBundles ?? [],
     subagents: await resolveSubagents(
@@ -137,6 +147,38 @@ export async function runAgentFromVersion(
       versions,
     ),
   };
+}
+
+/**
+ * The version's storage grants: the connection ids its own deploy resolved and stored
+ * (`agent_version_storage_grants`; the storage design, §05), never its `storage://<name>/…` paths
+ * resolved again by name, because a connection deleted and recreated under the same name is
+ * another connection. The loader reads each id in the run's workspace and names the folder after
+ * the connection as it is called now. A folder with no stored row (its connection was deleted, or
+ * the version predates per-version grants) cannot be bound, so the run is refused rather than
+ * delivered a partial set.
+ */
+// @story US-STO-12
+async function versionStorageGrants(
+  definition: AgentDefinition,
+  record: AgentVersionRecord,
+  stored: () => Promise<readonly StorageGrantRef[]>,
+): Promise<readonly StorageGrantRef[]> {
+  const granted = new Set(
+    definition.resources.files.flatMap(({ path }) => {
+      const parsed = parseStorageGrantPath(path);
+      return parsed === null ? [] : [`${parsed.connection}\n${parsed.prefix}`];
+    }),
+  );
+  if (granted.size === 0) return [];
+  const grants = await stored();
+  const folders = new Set(grants.map(({ connectionId, prefix }) => `${connectionId}\n${prefix}`));
+  if (folders.size < granted.size) {
+    throw storageGrantUnavailable(
+      `agent version ${String(record.number)} grants a storage folder whose connection no longer exists, or that was deployed before storage grants were recorded per version`,
+    );
+  }
+  return grants;
 }
 
 function subagentUnusable(name: string, reason: string): DomainError {
@@ -182,7 +224,7 @@ async function resolveSubagents(
   names: readonly string[],
   parentDefinition: AgentDefinition,
   parentPermissions: AgentPermissions,
-  versions: Pick<AgentVersionRepository, 'resolveDefinition' | 'list' | 'agentsByName'>,
+  versions: Pick<AgentVersionRows, 'resolveDefinition' | 'list' | 'agentsByName'>,
 ): Promise<readonly RunSubagent[]> {
   if (names.length === 0) return [];
   const parentPointers = (await versions.list(parentId))?.pointers ?? [];
@@ -237,11 +279,12 @@ function unresolvedVersion(
   record: AgentVersionRecord,
   resolution: Extract<ResolveDefinitionOutcome, { readonly kind: 'unresolved' }>,
 ): DomainError {
-  const missing = resolution.missing.length > 0;
+  const gone = [...resolution.missing, ...(resolution.deleting ?? [])];
+  const missing = gone.length > 0;
   const code: keyof typeof AGENT_VERSION_PROBLEM_CODES = missing
     ? 'agent_definition_references_missing'
     : 'agent_definition_reference_ambiguous';
-  const references = missing ? resolution.missing : resolution.ambiguous;
+  const references = missing ? gone : resolution.ambiguous;
   const names = references.map((reference) => `${reference.kind}:${reference.name}`).join(', ');
   return new DomainError({
     category: 'validation',
@@ -254,12 +297,7 @@ export interface RunAgentSources {
   readonly agents: AgentStoreProvider;
   readonly assignments: AgentResourceStoreProvider;
   /** One workspace's versions, or `null` when the workspace is gone. */
-  readonly versions: (
-    workspaceId: string,
-  ) => Promise<Pick<
-    AgentVersionRepository,
-    'findById' | 'resolveDefinition' | 'list' | 'agentsByName'
-  > | null>;
+  readonly versions: (workspaceId: string) => Promise<AgentVersionRows | null>;
 }
 
 /**
@@ -288,6 +326,8 @@ export function createRunAgentReader(
     if (versions === null || record === null || record.agentId !== agentId) {
       throw new Error(`agent version ${agentVersionId} of agent ${agentId} is gone`);
     }
-    return runAgentFromVersion(row, record, versions);
+    // Read by the run's own version id: no other version's grants can be paired with it.
+    const storedGrants = () => versions.storageGrantsOf(record.id);
+    return runAgentFromVersion(row, record, versions, storedGrants);
   };
 }

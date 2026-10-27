@@ -11,9 +11,11 @@
  */
 import { useEffect, useState } from 'react';
 
+import { browserClient } from '../../lib/browser-client';
 import { DismissibleNotice } from '../shell/dismissible-notice';
 
-import { readCatalog, type Catalog, type CatalogModel, type ModelSelectionValue } from './catalog';
+import type { Catalog, CatalogModel, ModelSelectionValue } from './catalog';
+import { loadCatalog } from './connections-model';
 
 export type ModelCatalogState =
   | { readonly kind: 'loading' }
@@ -22,7 +24,7 @@ export type ModelCatalogState =
 
 /**
  * `GET /api/models` (discovered models) and `GET /api/model-connections` (names, readiness),
- * joined by {@link readCatalog}. Both are optional subsystems — the same idiom every other
+ * read by {@link loadCatalog}. Both are optional subsystems — the same idiom every other
  * workspace-scoped screen in this application already applies: a `503` (the models runtime is not
  * configured, e.g. no `MASTER_ENCRYPTION_KEY`) contributes an empty catalog rather than an error
  * this control has no room to show, because "no models are configured yet" and "the subsystem is
@@ -34,18 +36,10 @@ export function useModelCatalog(): ModelCatalogState {
   const [state, setState] = useState<ModelCatalogState>({ kind: 'loading' });
   useEffect(() => {
     let active = true;
-    const optional = (response: Response): Promise<unknown> =>
-      response.ok ? (response.json() as Promise<unknown>) : Promise.resolve({ models: [] });
-    void Promise.all([
-      fetch('/api/models', { headers: { accept: 'application/json' } }),
-      fetch('/api/model-connections', { headers: { accept: 'application/json' } }),
-    ])
-      .then(([discoveryResponse, connectionsResponse]) =>
-        Promise.all([optional(discoveryResponse), optional(connectionsResponse)]),
-      )
-      .then(([discoveryBody, connectionsBody]) => {
+    void loadCatalog(browserClient())
+      .then((catalog) => {
         if (!active) return;
-        setState({ kind: 'ready', catalog: readCatalog(discoveryBody, connectionsBody) });
+        setState({ kind: 'ready', catalog });
       })
       .catch((error: unknown) => {
         if (!active) return;

@@ -1,6 +1,6 @@
 # ADR-0065 — An agent's engine is an extension point behind one port
 
-Status: accepted
+Status: accepted; D9 amended by ADR-0145
 Date: 2026-09-26
 Decided by: the Owner (agent-engines programme, tracker #299, unit ENG-01 #300)
 Scope: `docs/spec.md` §5, §42 and §53; `docs/sdk/04-api-specification.md` §1.1 and §6;
@@ -193,9 +193,9 @@ These are not part of this decision and do not become part of it by implication.
 own record if it is ever wanted:
 
 - **Interactive approvals (HITL) through the API.** No engine offers them in a shape the platform
-  could expose today; Claude runs with static allow/deny lists.
+  could expose today; Claude runs with static allow/deny lists. (Amended by ADR-0145.)
 - **Handoffs, subagents and multi-agent graphs as platform concepts.** An engine may have them; the
-  platform does not model them.
+  platform does not model them. (Handoff to a person amended by ADR-0145.)
 - **Vendor-hosted tools** that execute at the model vendor (hosted web search, code interpreter,
   hosted MCP). They bypass the sandbox and the gateway, which is exactly what the platform
   guarantees they cannot do.
@@ -236,3 +236,17 @@ own record if it is ever wanted:
 - `docs/spec.md` §5, §42, §53 — amended by this record.
 - Tracker [#299](https://github.com/indxjp/agent-workspace/issues/299) — the eleven units
   that implement it.
+
+## Amendment — approvals and handoffs (ADR-0145, issue #1297, 2026-10-18)
+
+Decided by the Owner. [ADR-0145](0145-a-run-stops-for-approval-or-handoff-and-continues-in-its-session.md)
+is the record D9 said such a wish would need.
+
+- The first two D9 bullets are lifted, only in the shape ADR-0145 gives: a run stops for an
+  approval or a handoff and continues in its session, the Claude arm declares
+  `engine.requireApproval` and `engine.handoff`, and no run waits live. Handoffs to a person are a
+  platform concept in that shape; subagents and multi-agent graphs are still not.
+- Every other engine still refuses `approvals` by name (D3), so the reason `openai-agents` and
+  Mastra refuse them stands.
+- The other three D9 bullets (vendor-hosted tools, publishing `packages/engine`, switching an
+  existing session's engine) stand unchanged, as do D1–D8.

@@ -11,10 +11,11 @@
  * cannot be handed a skill from another. `tenancy.test.ts` is what holds that for every table,
  * this one included, without anybody remembering to check.
  */
-import { foreignKey, index, pgTable, unique, uuid } from 'drizzle-orm/pg-core';
+import { foreignKey, index, integer, pgTable, unique, uuid } from 'drizzle-orm/pg-core';
 
 import { agents } from './agents.js';
 import { createdAt, primaryKeyId } from './columns.js';
+import { skillRevisions } from './skill-revisions.js';
 import { skills } from './skills.js';
 import { workspaces } from './workspaces.js';
 
@@ -29,6 +30,12 @@ export const agentSkills = pgTable(
     agentId: uuid('agent_id').notNull(),
     /** Tenant-paired below as `agent_skills_skill_workspace_fk`; no reference of its own. */
     skillId: uuid('skill_id').notNull(),
+    /**
+     * The published revision this agent is pinned to (SDK-19, N-1); `NULL` follows the skill's
+     * current content. Tenant-paired below as `agent_skills_skill_revision_fk`, which a `NULL`
+     * here does not check (MATCH SIMPLE).
+     */
+    revision: integer('revision'),
     createdAt: createdAt(),
   },
   (table) => [
@@ -52,6 +59,15 @@ export const agentSkills = pgTable(
       columns: [table.skillId, table.workspaceId],
       foreignColumns: [skills.id, skills.workspaceId],
       name: 'agent_skills_skill_workspace_fk',
+    }).onDelete('cascade'),
+    // The target columns are in the order of `skill_revisions_workspace_skill_number_key`, so
+    // the reference names that key column for column (the formal model's exact-key rule). It
+    // cascades like every other link reference: a revision only goes with its skill, which takes
+    // the assignment anyway.
+    foreignKey({
+      columns: [table.workspaceId, table.skillId, table.revision],
+      foreignColumns: [skillRevisions.workspaceId, skillRevisions.skillId, skillRevisions.number],
+      name: 'agent_skills_skill_revision_fk',
     }).onDelete('cascade'),
   ],
 );

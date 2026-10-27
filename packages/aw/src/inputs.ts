@@ -17,7 +17,10 @@ import {
   AgentPolicySchema,
   AgentResourceAssignmentsSchema,
 } from '@indx-workspace/contracts/agents';
-import { CONNECTOR_AUTH_TYPES } from '@indx-workspace/contracts/connectors';
+import {
+  CONNECTOR_AUTH_TYPES,
+  REMOTE_CONNECTOR_TRANSPORTS,
+} from '@indx-workspace/contracts/connectors';
 import { MODEL_PROVIDERS } from '@indx-workspace/contracts/runs';
 import {
   RUNTIME_DRIVERS,
@@ -156,7 +159,11 @@ export const CreateConnectorBody = z.discriminatedUnion('transport', [
     })
     .strict(),
   z
-    .object({ ...connectorCredentialFields, transport: z.enum(['http', 'sse']), url: z.string() })
+    .object({
+      ...connectorCredentialFields,
+      transport: z.enum(REMOTE_CONNECTOR_TRANSPORTS),
+      url: z.string(),
+    })
     .strict(),
 ]);
 

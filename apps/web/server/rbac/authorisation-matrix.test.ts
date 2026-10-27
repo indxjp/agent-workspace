@@ -148,10 +148,19 @@ const PUBLIC_ROUTES = new Set([
   'POST /api/auth/cli-token',
   // ADR-0120 clause 7: called by Vercel Cron with `CRON_SECRET` as the bearer, never by a person.
   'GET /api/cron/retention',
+  // ADR-0144 D5: the schedule pass, called by the platform cron with the same `CRON_SECRET` bearer.
+  'GET /api/cron/triggers',
+  // Issue #1674: the storage cleanup, called by the platform cron with the same `CRON_SECRET` bearer.
+  'GET /api/cron/storage-cleanup',
+  // ADR-0144: the secret in the path is the whole authentication of a trigger fire.
+  'POST /api/triggers/:id/fire/:secret',
+  // Issue #1562: the readiness probe a kubelet calls with no credential.
+  'GET /api/readyz',
   // ADR-0134 part 3: the OAuth discovery documents (RFC 8414, RFC 9728) are public by protocol,
   // and the token and revocation endpoints authenticate the endpoint client itself, never a member.
   'GET /.well-known/oauth-authorization-server',
   'GET /.well-known/oauth-protected-resource/mcp/projects/:name',
+  'GET /.well-known/oauth-protected-resource/mcp/builder',
   'GET /.well-known/oauth-protected-resource/api/a2a/agents/:agentName',
   'POST /oauth/token',
   'POST /oauth/revoke',
@@ -186,10 +195,17 @@ const IDENTITY_ONLY_ROUTES = new Set([
   // ADR-0134 part 2: an mcp-project endpoint client's tool endpoint, reached with its endpoint API
   // key; the handler runs decide() for POST on each agent's runs route, as the A2A endpoint does.
   'POST /mcp/projects/:name',
+  // Issue #1846 slice 5b: the read-only Builder door for an outside MCP client. The handler
+  // accepts only a `builder`-kind OAuth token and answers every write tool `read_only_client`.
+  'POST /mcp/builder',
   // ADR-0134 part 3: the consent page. The handler requires a browser session through identify()
   // and refuses an API key or an OAuth token; the grant it issues is scoped to one endpoint client.
   'GET /oauth/authorize',
   'POST /oauth/authorize',
+  // Issue #1846: the aw-control MCP door. A run token is the whole identity proof and the handler
+  // refuses every other credential, so no route-level role gate applies; the Builder tools decide
+  // what the person behind the run may do.
+  'POST /api/builder/mcp',
 ]);
 
 const allRoutes = declaredRoutes();
@@ -218,10 +234,11 @@ describe('the authorisation matrix is derived from the route declarations', () =
     expect(new Set(allRoutes.map(key)).size).toBe(allRoutes.length);
   });
 
-  it('keeps the pre-authentication surface to exactly these fourteen method/path pairs', () => {
+  it('keeps the pre-authentication surface to exactly these nineteen method/path pairs', () => {
     const expected = [
       'GET /.well-known/oauth-authorization-server',
       'GET /.well-known/oauth-protected-resource/mcp/projects/:name',
+      'GET /.well-known/oauth-protected-resource/mcp/builder',
       'GET /.well-known/oauth-protected-resource/api/a2a/agents/:agentName',
       'POST /oauth/token',
       'POST /oauth/revoke',
@@ -234,12 +251,16 @@ describe('the authorisation matrix is derived from the route declarations', () =
       'GET /api/auth/cli-verify',
       'POST /api/auth/cli-token',
       'GET /api/cron/retention',
+      'GET /api/cron/triggers',
+      'GET /api/cron/storage-cleanup',
+      'POST /api/triggers/:id/fire/:secret',
+      'GET /api/readyz',
     ];
     expect(publicRoutes.map(key).sort()).toEqual([...expected].sort());
     expect([...PUBLIC_ROUTES].sort()).toEqual([...expected].sort());
   });
 
-  it('keeps the identity-only, not-role-gated surface to exactly these nine routes', () => {
+  it('keeps the identity-only, not-role-gated surface to exactly these eleven routes', () => {
     const expected = [
       'DELETE /api/auth/cli-token',
       'GET /api/a2a/agents/:agentName/.well-known/agent-card.json',
@@ -247,7 +268,9 @@ describe('the authorisation matrix is derived from the route declarations', () =
       'POST /api/a2a/agents/:agentName',
       'POST /api/auth/cli-verify',
       'POST /api/auth/cli-workspace',
+      'POST /api/builder/mcp',
       'POST /api/invitations/:id/accept',
+      'POST /mcp/builder',
       'POST /mcp/projects/:name',
       'POST /oauth/authorize',
     ];
@@ -426,8 +449,26 @@ describe('the matrix says what spec §21 says', () => {
     expect(decisionFor('PATCH /api/agents/:id', 'builder', 'unknown').effect).toBe('deny');
   });
 
-  it('refuses a Viewer every run, because §21’s "permitted agents" has no mechanism', () => {
-    const run = decisionFor('POST /api/agents/:id/runs', 'viewer', 'own');
+  it('never lets a lower role reach what a higher one is refused (ADR-0152)', () => {
+    // A Builder named by an `agent_grants` row runs that agent, as a Viewer with the same row does;
+    // a Builder runs its own; neither runs an agent it neither owns nor was granted.
+    for (const role of ['builder', 'viewer'] as const) {
+      expect(decisionFor('POST /api/agents/:id/runs', role, 'permitted').effect, role).toBe(
+        'allow',
+      );
+      expect(decisionFor('POST /api/agents/:id/runs', role, 'own').effect, role).toBe('allow');
+      expect(decisionFor('POST /api/agents/:id/runs', role, 'other').effect, role).toBe('deny');
+      expect(decisionFor('POST /api/agents/:id/runs', role, 'unknown').effect, role).toBe('deny');
+    }
+    // An Admin reads and edits every project, as a Builder does its own.
+    expect(decisionFor('GET /api/projects/:id', 'builder', 'own').effect).toBe('allow');
+    expect(decisionFor('GET /api/projects/:id', 'admin', 'other').effect).toBe('allow');
+    expect(decisionFor('PATCH /api/projects/:id', 'admin', 'other').effect).toBe('allow');
+    expect(decisionFor('POST /api/projects', 'admin', 'not-applicable').effect).toBe('allow');
+  });
+
+  it('refuses a Viewer an agent it neither owns nor was granted — §21’s "permitted agents"', () => {
+    const run = decisionFor('POST /api/agents/:id/runs', 'viewer', 'other');
     expect(run.effect).toBe('deny');
     expect(run.because).toContain('permitted');
     // …and a Viewer can still see the agent list, which is what makes §21's Viewer clause a
@@ -691,6 +732,44 @@ describe('a browser token’s scope narrows decide(), before §21’s table is e
       scope: { kind: 'run', id: 'run-1' },
     });
     expect(runScoped.effect === 'deny' && runScoped.code).toBe('token_out_of_scope');
+  });
+
+  it('deciding a paused run (issue #1301) is the run verb on own runs, and no token scope reaches it', () => {
+    expect(routes.some((r) => r.method === 'POST' && r.path === '/api/runs/:id/approval')).toBe(
+      true,
+    );
+    for (const role of ['owner', 'builder', 'viewer'] as const) {
+      const approval = decide({
+        role,
+        ownership: 'own',
+        method: 'POST',
+        path: '/api/runs/run-1/approval',
+        scope: null,
+      });
+      expect(approval.effect, role).toBe('allow');
+      expect(approval.effect !== 'refuse' && approval.facts?.operation, role).toBe('run');
+    }
+    // Another member's run is a deny for a role whose grant is `own`.
+    const foreign = decide({
+      role: 'viewer',
+      ownership: 'other',
+      method: 'POST',
+      path: '/api/runs/run-1/approval',
+      scope: null,
+    });
+    expect(foreign.effect).toBe('deny');
+    for (const scope of [
+      { kind: 'run' as const, id: 'run-1' },
+      { kind: 'session' as const, id: 'session-1' },
+    ]) {
+      const scoped = decide({
+        ...OWNER_ARGS,
+        method: 'POST',
+        path: '/api/runs/run-1/approval',
+        scope,
+      });
+      expect(scoped.effect === 'deny' && scoped.code, scope.kind).toBe('token_out_of_scope');
+    }
   });
 
   it('a scope only narrows: the ordinary role/ownership check still applies inside the grammar', () => {

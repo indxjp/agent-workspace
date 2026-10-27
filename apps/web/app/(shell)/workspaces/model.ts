@@ -6,12 +6,16 @@
  * event, so anything a test needs to drive through a click or a keystroke has to be a function a
  * test can call directly.
  *
- * The read model (`WorkspaceMembership`, `parseWorkspaceList`, `describeWorkspacesFailure`,
- * `canAdministerWorkspace`, …) lives in `apps/web/components/shell/workspaces-directory.ts`
- * instead of here, because the sidebar switcher needs the identical parsing of the identical
- * `GET /api/workspaces` response and a second copy would be exactly the drift `jscpd`'s
- * duplication gate exists to catch.
+ * The read model (`WorkspaceMembership`, `canAdministerWorkspace`, …) lives in
+ * `apps/web/components/shell/workspaces-directory.ts`, and the requests (list, create, update,
+ * through the SDK) in `apps/web/components/shell/workspaces-requests-model.ts`, instead of here,
+ * because the sidebar switcher needs the identical read model and requests and a second copy would
+ * be exactly the drift `jscpd`'s duplication gate exists to catch.
  */
+import type {
+  CreateWorkspaceInput,
+  UpdateWorkspacePatch,
+} from '@indx-workspace/contracts/workspaces';
 
 /**
  * A lower-case, hyphenated suggestion for the slug field, derived from the name field — never sent
@@ -35,15 +39,15 @@ export function isCreateFormValid(name: string, slug: string): boolean {
   return name.trim() !== '' && slug.trim() !== '';
 }
 
-export function buildCreatePayload(name: string, slug: string): unknown {
+export function buildCreatePayload(name: string, slug: string): CreateWorkspaceInput {
   return { name: name.trim(), slug: slug.trim() };
 }
 
-export function buildRenamePayload(name: string): unknown {
+export function buildRenamePayload(name: string): UpdateWorkspacePatch {
   return { name: name.trim() };
 }
 
-export function buildArchivePayload(archived: boolean): unknown {
+export function buildArchivePayload(archived: boolean): UpdateWorkspacePatch {
   return { archived };
 }
 

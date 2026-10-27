@@ -3,14 +3,18 @@ import { randomUUID } from 'node:crypto';
 import { Storage } from '@google-cloud/storage';
 import { describe, expect, it } from 'vitest';
 
-import { defineObjectStoreContract, type ObjectStoreContractFixture } from './contract.js';
+import {
+  defineObjectStoreContract,
+  defineObjectStoreV2Contract,
+  type ObjectStoreV2ContractFixture,
+} from './contract.js';
 import { createGcsObjectStoreProviderFromConfig } from './gcs-store.js';
 
 const bucket = process.env['TEST_GCS_BUCKET']?.trim();
 const projectId = process.env['TEST_GCP_PROJECT']?.trim();
 const hasLiveBucket = bucket !== undefined && bucket !== '';
 
-async function setup(): Promise<ObjectStoreContractFixture> {
+async function setup(): Promise<ObjectStoreV2ContractFixture> {
   if (bucket === undefined || bucket === '') {
     throw new Error('TEST_GCS_BUCKET is required for the live GCS suite.');
   }
@@ -38,6 +42,7 @@ if (!hasLiveBucket) {
 } else {
   describe('GCS live-service proof', () => {
     defineObjectStoreContract('Google Cloud Storage (live service)', setup);
+    defineObjectStoreV2Contract('Google Cloud Storage (live service)', setup);
 
     it('round-trips the files and skills prefixes without crossing them', async () => {
       if (bucket === undefined || bucket === '') throw new Error('TEST_GCS_BUCKET is required');

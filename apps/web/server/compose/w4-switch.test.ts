@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createAgent } from '../agents/handlers';
 import { createInMemoryAgentStoreProvider } from '../agents/memory-store';
 import type { RunTokenIssuer } from '../gateway/issuer';
-import { InMemoryRunStore } from '../runs/store';
+import { InMemoryRunStore } from '../runs/memory-store';
 import { buildRunRequestFor } from './run-request';
 
 describe('Wave 4 model switching exit', () => {
@@ -76,7 +76,7 @@ describe('Wave 4 model switching exit', () => {
         },
         {
           agent: stored,
-          assignments: { files: [], skillIds: [], connectorIds: [] },
+          assignments: { files: [], skillIds: [], connectorIds: [], storageGrants: [] },
           toolBundles: [],
           subagents: [],
         },

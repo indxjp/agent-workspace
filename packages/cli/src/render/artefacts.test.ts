@@ -263,7 +263,7 @@ describe('the artefact set each cloud renders', () => {
     it('gives every service that publishes a port at least one non-internal network', async () => {
       const { services, networks } = await document();
       const published = Object.entries(services).filter(([, service]) => service.ports);
-      expect(published.map(([name]) => name)).toEqual(['web']);
+      expect(published.map(([name]) => name)).toEqual(['seaweedfs', 'web']);
       for (const [name, service] of published) {
         const external = (service.networks ?? []).filter(
           (network) => networks[network]?.internal !== true,

@@ -16,6 +16,7 @@ import { createSecretsService, type SecretsService } from '../../secrets/index.j
 import { mcpServers, type NewMcpServer } from '../schema/mcp-servers.js';
 import { memberships } from '../schema/memberships.js';
 import { modelConnections } from '../schema/model-connections.js';
+import { storageConnections } from '../schema/storage-connections.js';
 import { users } from '../schema/users.js';
 import { workspacePrincipals } from '../schema/workspace-principals.js';
 import { workspaces } from '../schema/workspaces.js';
@@ -376,7 +377,11 @@ describe.skipIf(!hasDatabase)('McpServerRepository against real PostgreSQL', () 
     const refused = await secretsService.delete(scopeA, sealed.secret.id);
     expect(refused).toEqual({
       kind: 'in-use',
-      referrers: { connectorIds: [connector.server.id], modelConnectionIds: [] },
+      referrers: {
+        connectorIds: [connector.server.id],
+        modelConnectionIds: [],
+        storageConnectionIds: [],
+      },
     });
     expect(JSON.stringify(refused)).not.toContain('referenced-value');
 
@@ -396,7 +401,40 @@ describe.skipIf(!hasDatabase)('McpServerRepository against real PostgreSQL', () 
     });
     await expect(secretsService.delete(scopeA, owned.secret.id)).resolves.toEqual({
       kind: 'in-use',
-      referrers: { connectorIds: [], modelConnectionIds: [modelConnectionId] },
+      referrers: {
+        connectorIds: [],
+        modelConnectionIds: [modelConnectionId],
+        storageConnectionIds: [],
+      },
+    });
+
+    // A storage connection owns the secret its id names, by the STORAGE_CONNECTION_* convention.
+    const storageConnectionId = crypto.randomUUID();
+    const credential = await secretsService.create(scopeA, {
+      name: `STORAGE_CONNECTION_${storageConnectionId.replace(/-/g, '').toUpperCase()}`,
+      value: Buffer.from('storage-key', 'utf8'),
+    });
+    if (credential.kind !== 'created') throw new Error('fixture setup failed');
+    await isolated.db.insert(storageConnections).values({
+      id: storageConnectionId,
+      workspaceId: workspaceA.id,
+      name: 'Storage connection',
+      provider: 's3',
+      url: 's3://bucket/exports',
+      allowedPrefixes: [],
+    });
+    await expect(secretsService.delete(scopeA, credential.secret.id)).resolves.toEqual({
+      kind: 'in-use',
+      referrers: {
+        connectorIds: [],
+        modelConnectionIds: [],
+        storageConnectionIds: [storageConnectionId],
+      },
+    });
+    // Once the connection row is gone the secret is an orphan, and a delete clears it.
+    await isolated.db.delete(storageConnections);
+    await expect(secretsService.delete(scopeA, credential.secret.id)).resolves.toMatchObject({
+      kind: 'deleted',
     });
 
     // Once the connector stops referencing it, the delete succeeds and the row is gone.
@@ -529,6 +567,51 @@ describe.skipIf(!hasDatabase)('McpServerRepository against real PostgreSQL', () 
       await refusedBy({ transport: 'stdio' }, 'mcp_servers_stdio_has_command');
       await refusedBy({ transport: 'http' }, 'mcp_servers_remote_has_url');
       await refusedBy({ ...http, args: ['-y'] }, 'mcp_servers_args_are_stdio_only');
+    });
+
+    it('stores an identity secret name only on http/sse MCP and openapi rows (ADR-0142 D1)', async () => {
+      const identity = { identitySecretName: 'IDENTITY_KEY' };
+      await refusedBy({ ...stdio, ...identity }, 'mcp_servers_identity_transport');
+      await refusedBy(
+        {
+          kind: 'postgres',
+          toolConfig: postgresConfig,
+          credentialSecretId: secretInA,
+          ...identity,
+        },
+        'mcp_servers_identity_transport',
+      );
+      await refusedBy({ ...http, identitySecretName: '  ' }, 'mcp_servers_identity_transport');
+      for (const row of [
+        { ...http, ...identity },
+        { ...sse, ...identity },
+        { kind: 'openapi' as const, toolConfig: openapiConfig, ...identity },
+      ]) {
+        await expect(insertRaw(row)).resolves.toBeDefined();
+      }
+    });
+
+    it('round-trips the identity secret name through the repository, and clears it with null', async () => {
+      const ws = await freshWorkspace();
+      const repo = createDatabaseMcpServerRepositoryProvider(isolated.db).forScope(ws.scope);
+      const created = await repo.create({
+        name: 'Signed MCP',
+        transport: 'http',
+        command: null,
+        args: null,
+        url: 'https://mcp.example.test/mcp',
+        authType: 'none',
+        credentialSecretId: null,
+        identitySecretName: 'IDENTITY_KEY',
+        enabled: true,
+        ownerPrincipalId: ws.principalId,
+      });
+      if (created.kind !== 'created') throw new Error(`fixture failed: ${created.kind}`);
+      expect(created.server.identitySecretName).toBe('IDENTITY_KEY');
+      expect((await repo.get(created.server.id))?.identitySecretName).toBe('IDENTITY_KEY');
+
+      const cleared = await repo.update(created.server.id, { identitySecretName: null });
+      expect(cleared).toMatchObject({ kind: 'updated', server: { identitySecretName: null } });
     });
 
     it('refuses an unknown kind', async () => {

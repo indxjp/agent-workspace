@@ -67,10 +67,16 @@ export interface SurfaceStrings {
   readonly rateLimited: (retryAfterSeconds: number | null) => string;
   /** `429 surface_turn_limit_reached`: this conversation takes no more messages. */
   readonly turnLimitReached: string;
+  /** The attach button's accessible name (the `attachments` part). */
+  readonly attachFiles: string;
+  /** The accessible name of the button that drops one chosen file. */
+  readonly removeFile: (name: string) => string;
   /** The widget's sentence for a failure the visitor cannot fix, such as a missing model (#661). */
   readonly unavailable: string;
   /** The session request got no readable answer: the server is down or refused this origin. */
   readonly unreachable: string;
+  /** Shown once the agent has handed the conversation to a person (`agent.handoff`). */
+  readonly handedOff: string;
 }
 
 const EN: SurfaceStrings = {
@@ -110,8 +116,11 @@ const EN: SurfaceStrings = {
       ? 'Too many messages. Try again shortly.'
       : `Too many messages. Try again in ${String(seconds)} s.`,
   turnLimitReached: 'This conversation has reached its message limit.',
+  attachFiles: 'Attach files',
+  removeFile: (name) => `Remove ${name}`,
   unavailable: 'The assistant is not available right now. Please try again later.',
   unreachable: 'The assistant could not be reached. Please try again later.',
+  handedOff: 'This conversation has been handed to a person.',
 };
 
 const JA: SurfaceStrings = {
@@ -149,9 +158,12 @@ const JA: SurfaceStrings = {
       ? 'メッセージが多すぎます。しばらくしてからもう一度お試しください。'
       : `メッセージが多すぎます。${String(seconds)} 秒後にもう一度お試しください。`,
   turnLimitReached: 'この会話はメッセージの上限に達しました。',
+  attachFiles: 'ファイルを添付',
+  removeFile: (name) => `${name}を削除`,
   unavailable:
     'ただいまアシスタントをご利用いただけません。しばらくしてからもう一度お試しください。',
   unreachable: 'アシスタントに接続できませんでした。しばらくしてからもう一度お試しください。',
+  handedOff: '担当者におつなぎします。',
 };
 
 const STRINGS: Readonly<Record<SurfaceLocale, SurfaceStrings>> = { en: EN, ja: JA };

@@ -72,16 +72,16 @@ import { ownerPrincipalIdOf } from '../rbac/owner-principal';
 import { apiError, isUuid, json, readJsonBody } from '../runs/http';
 import type { EngineId } from '@indx-workspace/contracts/engines';
 import { SESSION_LIST_MAX_LIMIT } from '@indx-workspace/contracts/sessions';
-import type { KeysetPosition, SessionRecord, SessionVisibility } from '@agent-workspace/core/db';
 import { engineStreamKey } from '@agent-workspace/engine';
 import { encodeListCursor, readListCursor } from '../pagination/list-cursor';
+import { applicationContext } from '../application-context';
 import {
-  getSessionApi,
   SESSION_API_NOT_CONFIGURED_MESSAGE,
   type SessionApiEnvironment,
-  type SessionPrincipal,
+  type SessionApiPrincipal,
 } from './environment';
 import type { SessionStateStore } from './state';
+import type { KeysetPosition, SessionRecord, SessionVisibility } from './store';
 import {
   parseProjectKey,
   parseSubpath,
@@ -100,7 +100,11 @@ function unauthenticated(): Response {
 
 /** What every handler needs before it can do anything, or the response that says why it cannot. */
 export type Ready =
-  | { readonly ok: true; readonly env: SessionApiEnvironment; readonly principal: SessionPrincipal }
+  | {
+      readonly ok: true;
+      readonly env: SessionApiEnvironment;
+      readonly principal: SessionApiPrincipal;
+    }
   | { readonly ok: false; readonly response: Response };
 
 /**
@@ -109,8 +113,8 @@ export type Ready =
  * of these four lines would be a second place the 503 and the 401 could drift apart.
  */
 export async function ready(request: Request): Promise<Ready> {
-  const env = getSessionApi();
-  if (env === null) return { ok: false, response: notConfigured() };
+  const env = applicationContext()?.sessions;
+  if (env === undefined) return { ok: false, response: notConfigured() };
   const principal = await env.authenticate(request);
   if (principal === null) return { ok: false, response: unauthenticated() };
   return { ok: true, env, principal };
@@ -139,7 +143,7 @@ async function canAccess(
  * anyway, and this is where that disagreement is still caught.
  */
 function keyFor(
-  principal: SessionPrincipal,
+  principal: SessionApiPrincipal,
   engineSessionId: string,
   declaredProjectKey: unknown,
   declaredSubpath: unknown,
@@ -216,7 +220,7 @@ function query(request: Request, name: string): string | undefined {
  * SDK's session id, not the row's platform id. `userId` is attribution only and is null for every
  * API-key principal, so it cannot prove ownership.
  */
-function visibilityOf(principal: SessionPrincipal): SessionVisibility {
+function visibilityOf(principal: SessionApiPrincipal): SessionVisibility {
   if (principal.kind === 'runner') {
     return { kind: 'engine-session', engineSessionId: principal.sessionId };
   }
@@ -288,53 +292,23 @@ export async function listSessions(request: Request): Promise<Response> {
   }
   const query = parseSessionPageQuery(request, state.principal.workspaceId);
   if (!query.ok) return query.response;
-  if (state.env.sessions !== undefined && state.env.scopes !== undefined) {
-    const scope = await state.env.scopes.forWorkspaceId(state.principal.workspaceId);
-    if (scope === null)
-      return apiError(403, 'session_forbidden', 'The workspace no longer exists.');
-    const page = await state.env.sessions.forScope(scope).list({
-      visibility: visibilityOf(state.principal),
-      ...(query.status === undefined ? {} : { status: query.status }),
-      ...(query.limit === undefined ? {} : { limit: query.limit }),
-      cursor: query.cursor,
-    });
-    return json(
-      {
-        sessions: page.items.map(serializeSession),
-        projectKey: owned.value,
-        nextCursor:
-          page.nextCursor === null
-            ? null
-            : encodeListCursor('sessions', state.principal.workspaceId, page.nextCursor),
-      },
-      200,
-    );
-  }
-  // A deployment with no session repository mints no cursor, so none can be valid here, and it
-  // has no stable order to page by: the transcript store's listing is answered whole.
-  if (query.cursor !== null || query.limit !== undefined) {
-    return apiError(
-      400,
-      'pagination_unavailable',
-      'this deployment has no session repository, so GET /api/sessions is not paged here.',
-    );
-  }
-  const sessions = await state.env.store.listSessions(owned.value);
-  // What this lists is every session whose state is durable — which is exactly the set a client
-  // may offer a *Resume* button for. It is deliberately not a join over the `sessions` table:
-  // that table is reached through a repository this task does not own, and a list that mixed
-  // rows-with-state and rows-without would be a list a client cannot act on.
-  const access = await Promise.all(
-    sessions.map(async (session) => ({
-      session,
-      allowed: await state.env.canAccessSession(state.principal, session.sessionId),
-    })),
-  );
+  const sessions = await state.env.sessions.forWorkspaceId(state.principal.workspaceId);
+  if (sessions === null)
+    return apiError(403, 'session_forbidden', 'The workspace no longer exists.');
+  const page = await sessions.list({
+    visibility: visibilityOf(state.principal),
+    ...(query.status === undefined ? {} : { status: query.status }),
+    ...(query.limit === undefined ? {} : { limit: query.limit }),
+    cursor: query.cursor,
+  });
   return json(
     {
-      sessions: access.filter((one) => one.allowed).map((one) => one.session),
+      sessions: page.items.map(serializeSession),
       projectKey: owned.value,
-      nextCursor: null,
+      nextCursor:
+        page.nextCursor === null
+          ? null
+          : encodeListCursor('sessions', state.principal.workspaceId, page.nextCursor),
     },
     200,
   );
@@ -342,9 +316,7 @@ export async function listSessions(request: Request): Promise<Response> {
 
 /** Exported for `./state-api.ts`; see {@link ready}. */
 export async function sessionRepository(state: Extract<Ready, { readonly ok: true }>) {
-  if (state.env.sessions === undefined || state.env.scopes === undefined) return null;
-  const scope = await state.env.scopes.forWorkspaceId(state.principal.workspaceId);
-  return scope === null ? null : state.env.sessions.forScope(scope);
+  return state.env.sessions.forWorkspaceId(state.principal.workspaceId);
 }
 
 /** The wire shape of one session row as `GET|PATCH /api/sessions/:id` render it (`{ session }`). */
@@ -475,7 +447,7 @@ const CLAUDE_ENGINE: EngineId = 'claude-agent-sdk';
 
 /**
  * Where the engine-scoped store keeps this Claude session's state, or `null` when it cannot be
- * asked — no store installed, no row for this id, or a row pinned to another engine. `null` sends a
+ * asked — no row for this id, or a row pinned to another engine. `null` sends a
  * read to the legacy store, which is the pre-ENG-06 answer.
  */
 function claudeStateSession(
@@ -487,7 +459,7 @@ function claudeStateSession(
   readonly sessionId: string;
 } | null {
   const store = state.env.stateStore;
-  if (store === undefined || row === null) return null;
+  if (row === null) return null;
   if (row.engine !== null && row.engine !== CLAUDE_ENGINE) return null;
   return { store, workspaceId: state.principal.workspaceId, sessionId: row.id };
 }
@@ -514,14 +486,6 @@ async function readWholeStream(
     for (const one of page) collected.push(one.entry as TranscriptEntry);
     afterSequence = last.sequence;
   }
-}
-
-/** The JSON body of `POST …/transcript`. */
-export interface AppendTranscriptBody {
-  /** Omit to default to the principal's own workspace key (issue #235, S-21). */
-  readonly projectKey?: string;
-  readonly subpath?: string;
-  readonly entries: readonly TranscriptEntry[];
 }
 
 /**
@@ -574,7 +538,7 @@ export async function appendTranscript(
         typeof entry.uuid === 'string' ? { entryKey: entry.uuid, entry } : { entry },
       ),
     );
-  } else if (row !== null && state.env.stateStore !== undefined && row.engine !== null) {
+  } else if (row !== null && row.engine !== null) {
     // Pinned to another engine: its state is not a Claude transcript, and writing one into the
     // legacy tables would be a 204 for an append no read of this session ever serves.
     return apiError(
@@ -584,8 +548,8 @@ export async function appendTranscript(
         `${JSON.stringify(CLAUDE_ENGINE)} state.`,
     );
   } else {
-    // No engine-scoped store to write to (a deployment without session rows): the legacy store is
-    // the only one any read of this deployment consults.
+    // No session row for this id, so no engine-scoped stream to write to: the legacy store is
+    // the only one a read of this session consults.
     await state.env.store.append(key.key, entries.value);
   }
   return new Response(null, { status: 204, headers: { 'cache-control': 'no-store' } });

@@ -65,6 +65,7 @@ inductive Kind where
   | runFailed
   | streamReset
   | runStatus
+  | runWarning
   | runtime (name : String)
   deriving DecidableEq, Repr
 
@@ -74,6 +75,7 @@ def classifyName (name : String) : Kind :=
   else if name == "run-failed" then .runFailed
   else if name == "stream-reset" then .streamReset
   else if name == "run.status" then .runStatus
+  else if name == "run.warning" then .runWarning
   else .runtime name
 
 end AgentWorkspace.Events.SdkSse

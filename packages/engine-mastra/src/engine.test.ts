@@ -20,6 +20,7 @@ import {
   expectConformance,
   type EngineConformanceSubject,
 } from '@agent-workspace/engine/testing';
+import { ENGINE_CATALOGUE } from '@indx-workspace/contracts/engines';
 import { describe, expect, it } from 'vitest';
 
 import { MASTRA_CORE_VERSION, type MastraRunStarter } from './boundary.js';
@@ -149,6 +150,7 @@ function subject(
       ),
     connectorsCompiled: (compiled) => compiled.mcpServers.map((server) => server.name),
     subagentsCompiled: (compiled) => compiled.subagents.map((subagent) => subagent.name),
+    outputSchemaCompiled: (compiled) => compiled.outputSchema ?? undefined,
   };
 }
 
@@ -214,6 +216,10 @@ describe('the Mastra adapter', () => {
       maxBudget: 'adapter',
       wireProtocols: ['anthropic-messages', 'openai-responses', 'openai-chat-completions'],
     });
+  });
+
+  it('declares structured output in the catalogue', () => {
+    expect(ENGINE_CATALOGUE.mastra.structuredOutput).toBe(true);
   });
 
   it('passes every scenario of the engine conformance kit, MCP as an honoured connector', async () => {

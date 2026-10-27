@@ -116,7 +116,8 @@ def relationshipVectors : List Vector :=
       witnesses := w }
 
 def uniqueVectors : List Vector :=
-  tables.flatMap fun t => ((catalogue t).uniques.filter (·.partialNullColumns.isEmpty)).map fun u =>
+  tables.flatMap fun t => ((catalogue t).uniques.filter fun u =>
+    u.partialNullColumns.isEmpty && u.partialNotNullColumns.isEmpty).map fun u =>
     { id := s!"unique/{u.name}",
       input := Json.mkObj [("table", TableName.toWire t), ("unique", u.name)],
       expected := Json.mkObj [("columns", strs u.columns)],

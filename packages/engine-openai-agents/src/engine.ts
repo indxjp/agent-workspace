@@ -4,7 +4,7 @@
  * The second adapter, and the one the port was designed to be proved against (ADR-0065
  * Consequences): `compile` is `./compile.ts`, events are `./frames.ts`, the session is
  * `./session.ts`, and the only SDK import is `./boundary.ts`. The runner reaches it through
- * {@link OPENAI_AGENTS_ENGINE_ADAPTER} and nothing else.
+ * {@link createOpenAiAgentsEngine} and nothing else.
  *
  * ## The session identity
  *
@@ -52,7 +52,7 @@ export const OPENAI_AGENTS_ADAPTER_VERSION = `0.0.0+${OPENAI_AGENTS_SDK_VERSION}
  */
 export const OPENAI_AGENTS_CAPABILITIES = ENGINE_CATALOGUE['openai-agents'].capabilities;
 
-/** Build the adapter. {@link OPENAI_AGENTS_ENGINE_ADAPTER} is this with the real SDK. */
+/** Build the adapter — the package root's only export (W3-8). With no arguments it runs the real SDK. */
 export function createOpenAiAgentsEngine(
   runStarter: OpenAiAgentsRunStarter = startOpenAiAgentsRun,
 ): AgentEngine<OpenAiAgentsCompiled> {
@@ -60,6 +60,7 @@ export function createOpenAiAgentsEngine(
     id: OPENAI_AGENTS_ENGINE_ID,
     version: OPENAI_AGENTS_ADAPTER_VERSION,
     capabilities: OPENAI_AGENTS_CAPABILITIES,
+    structuredOutput: ENGINE_CATALOGUE['openai-agents'].structuredOutput,
     // `skills: false`: the kit places nothing, and `compile` refuses a granted skill by name.
     protectedConfigDirectory: OPENAI_AGENTS_PROTECTED_CONFIG_DIRECTORY,
     compile: compileOpenAiAgentsRun,
@@ -90,7 +91,3 @@ export function createOpenAiAgentsEngine(
     },
   });
 }
-
-/** The adapter the runner's registry loads. */
-export const OPENAI_AGENTS_ENGINE_ADAPTER: AgentEngine<OpenAiAgentsCompiled> =
-  createOpenAiAgentsEngine();

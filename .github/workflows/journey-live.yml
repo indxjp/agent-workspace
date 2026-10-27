@@ -32,7 +32,7 @@ name: Developer journey against the real model
 
 on:
   schedule:
-    - cron: '23 3 * * *'
+    - cron: '23 3 * * 1'
   workflow_dispatch:
   pull_request:
     branches: [main]
@@ -47,8 +47,8 @@ permissions:
 jobs:
   journey-live:
     name: developer journey against the real model (B1, B3)
-    if: ${{ github.event_name != 'pull_request' }}
-    runs-on: ubuntu-latest
+    if: github.repository_owner == 'INDXDev' && (github.event_name != 'pull_request')
+    runs-on: [self-hosted, ms-a2]
     # The same arithmetic as ci.yml's journey-e2e: install (8) + build (10) + the journey (80)
     # + the deploy plan (10, #621) + the first-hour stopwatch (25, #700) + setup and uploads,
     # inside 145.
@@ -73,10 +73,9 @@ jobs:
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
 
       - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
-          cache: pnpm
 
       - name: Install
         timeout-minutes: 8
@@ -151,7 +150,8 @@ jobs:
   # fake Anthropic API (tests/e2e/tool-sandbox-provider.mjs) and, for `aw eval`, a scripted model.
   build-deploy-journey:
     name: build-to-deploy journey · create, eval, deploy, push, tool turn, promote
-    runs-on: ubuntu-latest
+    if: github.repository_owner == 'INDXDev'
+    runs-on: [self-hosted, ms-a2]
     # install (8) + build (10) + packing and the images (45, BD_PREPARE_TIMEOUT_MS) + the journey
     # steps and the evidence upload, inside 90.
     timeout-minutes: 90
@@ -188,10 +188,9 @@ jobs:
 
       - name: Set up Node
         if: steps.scope.outputs.applies == 'true'
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
-          cache: pnpm
 
       - name: Install
         if: steps.scope.outputs.applies == 'true'
@@ -228,7 +227,8 @@ jobs:
   # container; there is no model and no vendor CLI, and nothing is sent to any platform.
   platforms-journey:
     name: platforms journey · create, export to every platform, goldens, refusals, round trip
-    runs-on: ubuntu-latest
+    if: github.repository_owner == 'INDXDev'
+    runs-on: [self-hosted, ms-a2]
     # install (8) + build (10) + packing (15, PJ_PREPARE_TIMEOUT_MS) + the journey steps and the
     # evidence upload, inside 40.
     timeout-minutes: 40
@@ -265,10 +265,9 @@ jobs:
 
       - name: Set up Node
         if: steps.scope.outputs.applies == 'true'
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
-          cache: pnpm
 
       - name: Install
         if: steps.scope.outputs.applies == 'true'
@@ -306,8 +305,8 @@ jobs:
   # container. The key is passed only to the refusal step and the lane step, never as an argument.
   platforms-live-managed-agents:
     name: platforms live lane · publish to Claude Managed Agents with ant, read back, remove
-    if: ${{ github.event_name == 'workflow_dispatch' }}
-    runs-on: ubuntu-latest
+    if: github.repository_owner == 'INDXDev' && (github.event_name == 'workflow_dispatch')
+    runs-on: [self-hosted, ms-a2]
     # install (8) + build (10) + ant (2) + the lane (20, packing 12) + the evidence upload,
     # inside 45.
     timeout-minutes: 45
@@ -331,10 +330,9 @@ jobs:
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
 
       - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
-          cache: pnpm
 
       - name: Install
         timeout-minutes: 8

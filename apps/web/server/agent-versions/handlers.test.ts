@@ -61,6 +61,23 @@ describe('createAgentVersion', () => {
     expect(listing?.versions[0]?.body).toMatchObject({ definition: { policySource: 'stored' } });
   });
 
+  it("refuses via 'builder' from a client with 400 invalid_agent_version, and saves nothing", async () => {
+    const { agent, store } = await setUp();
+    const result = await createAgentVersion(
+      { ...versionRequest(), via: 'builder' },
+      agent,
+      PRINCIPAL,
+      { store },
+    );
+    expect(result).toMatchObject({
+      status: 400,
+      body: {
+        error: { code: 'invalid_agent_version', details: [expect.stringMatching(/^via: /u)] },
+      },
+    });
+    expect((await store.list(agent.id))?.versions).toEqual([]);
+  });
+
   it('refuses a version that pins a bundle the workspace does not hold, and saves nothing (issue #790)', async () => {
     const { agent, store } = await setUp();
     const digest = 'a'.repeat(64);

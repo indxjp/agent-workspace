@@ -115,7 +115,7 @@ refused, and the refusal names the variable. -/
 @[aw_spec (tier := T3) (ts := "packages/engine/src/sandbox-env.ts#sandboxEnvironmentVerdict")]
 theorem an_unheard_of_provider_key_is_refused :
     verdict "run-token" [("PATH", "/usr/bin"), ("SOME_FUTURE_API_KEY", "sk-live-real")] =
-      .refused "SOME_FUTURE_API_KEY" := by decide
+      .refused "SOME_FUTURE_API_KEY" := by decide +kernel
 
 /-- The positive witness: the environment every Claude run composes today is accepted. -/
 @[aw_spec (tier := T3) (ts := "packages/engine-claude-agent-sdk/src/compile.ts#compileRunRequest")]
@@ -123,6 +123,6 @@ theorem todays_composed_environment_is_accepted :
     accepts "run-token"
       [("PATH", "/usr/bin"), ("ANTHROPIC_BASE_URL", "https://gateway.internal"),
        ("ANTHROPIC_AUTH_TOKEN", "run-token"), ("AW_SESSION_MIRROR_TOKEN", "run-token"),
-       ("NODE_USE_ENV_PROXY", "1")] = true := by decide
+       ("NODE_USE_ENV_PROXY", "1")] = true := by decide +kernel
 
 end AgentWorkspace.Theorems.Adversarial.EngineSandboxEnv

@@ -536,6 +536,24 @@ describe('project-file engine, models, connectors and policy (S2-01a, #524)', ()
     },
   });
 
+  it('accepts a connector identity secret reference and refuses anything else there', () => {
+    const connector = { url: 'https://x.example.com/mcp' };
+    const parsed = ProjectDocumentSchema.parse(
+      project({ connectors: { x: { ...connector, identity: { secret: 'X_IDENTITY_KEY' } } } }),
+    );
+    expect(parsed.connectors?.['x']?.identity).toStrictEqual({ secret: 'X_IDENTITY_KEY' });
+    for (const identity of [
+      { secret: 'literal value with spaces' },
+      'X_IDENTITY_KEY',
+      { secret: 'X_IDENTITY_KEY', value: 'x' },
+    ]) {
+      expect(
+        ProjectDocumentSchema.safeParse(project({ connectors: { x: { ...connector, identity } } }))
+          .success,
+      ).toBe(false);
+    }
+  });
+
   it('accepts engine, models, connectors and policy together, frozen', () => {
     const parsed = ProjectDocumentSchema.parse(full);
     expect(parsed).toEqual(full);
@@ -576,11 +594,6 @@ describe('project-file engine, models, connectors and policy (S2-01a, #524)', ()
         },
       },
       ['connectors', 'x', 'auth', 'scheme'],
-    ],
-    [
-      'policy.maxCostPerDayUsd',
-      { policy: { maxCostPerDayUsd: 5 } },
-      ['policy', 'maxCostPerDayUsd'],
     ],
     ['policy.network', { policy: { network: 'open' } }, ['policy', 'network']],
     ['policy.approval', { policy: { approval: 'always' } }, ['policy', 'approval']],

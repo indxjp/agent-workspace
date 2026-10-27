@@ -22,7 +22,7 @@ import {
   type SurfaceHistoryStorage,
 } from './history.js';
 import { surfaceStrings } from './locale.js';
-import { openSurfaceSession, postRunFeedback } from './session.js';
+import { openSurfaceSession, postRunFeedback, uploadSurfaceAttachment } from './session.js';
 import { messageParagraphs, surfaceAgentSpeaker, type SurfaceTurn } from './surface-chat-model.js';
 import {
   browserSurfaceChatTransport,
@@ -146,6 +146,8 @@ function chat(
       openSession: (name, request) => openSurfaceSession(name, relative(net.sessions), request),
       postFeedback: (bearer, runId, request) =>
         postRunFeedback(runId, bearer, request, relative(net.feedback)),
+      uploadAttachment: (opened, file) =>
+        uploadSurfaceAttachment(opened.sessionId, opened.token, file, relative(net.api)),
       clientFor: (opened) =>
         createClient({
           baseUrl: ORIGIN,
@@ -276,6 +278,131 @@ describe('sendSurfaceMessage (S1-17, #455)', () => {
     ]);
     expect(driver.session.current?.token).toBe(NEW);
     expect(shown.at(-1)?.failure).toBeNull();
+  });
+
+  describe('with attachments (ADR-0146, #1308)', () => {
+    const SCAN = new File(['scan bytes'], 'scan 1.pdf', { type: 'application/pdf' });
+    const NOTE = new File(['note'], 'note.txt');
+    const stored = (name: string) => ({
+      fileId: `file-${name}`,
+      path: `.attachments/${SESSION_A}/u/${name}`,
+      size: 4,
+    });
+    const isUpload = (request: RecordedRequest): boolean =>
+      request.url.pathname.endsWith('/attachments');
+
+    it('uploads each file with the session token, then starts the run with their fileIds', async () => {
+      const { driver, network, shown } = harness([FIRST], (request) => {
+        if (isUpload(request)) {
+          return jsonResponse(201, stored(request.url.searchParams.get('name') ?? ''));
+        }
+        return request.method === 'POST' ? startAnswer() : eventStreamResponse(STREAM);
+      });
+
+      await sendSurfaceMessage(driver, 'visitor-1', 'Read these', [SCAN, NOTE]);
+
+      const [first, second, start] = network.calls;
+      expect(first?.url.pathname).toBe(`/api/sessions/${SESSION_A}/attachments`);
+      expect(first?.url.searchParams.get('name')).toBe('scan 1.pdf');
+      expect(first?.headers.get('authorization')).toBe(`Bearer ${FIRST}`);
+      expect(first?.headers.get('content-type')).toBe('application/pdf');
+      expect(first?.init.body).toBe(SCAN);
+      expect(second?.headers.get('content-type')).toBe('application/octet-stream');
+      expect(start?.json).toMatchObject({
+        prompt: 'Read these',
+        attachments: [{ fileId: 'file-scan 1.pdf' }, { fileId: 'file-note.txt' }],
+      });
+      expect(shown.at(-1)?.messages.map(messageParagraphs)[0]).toEqual([
+        'Read these\n\nscan 1.pdf\nnote.txt',
+      ]);
+    });
+
+    it('uploads a large photo downscaled on the send path (#1422 review)', async () => {
+      vi.stubGlobal('createImageBitmap', () =>
+        Promise.resolve({ width: 4096, height: 3072, close: () => undefined }),
+      );
+      vi.stubGlobal('document', {
+        createElement: () => ({
+          getContext: () => ({ drawImage: () => undefined }),
+          toBlob: (done: (blob: Blob) => void, type: string) => {
+            done(new Blob(['s'], { type }));
+          },
+        }),
+      });
+      const photo = new File(['large photo bytes'], 'photo.jpg', { type: 'image/jpeg' });
+      const { driver, network } = harness([FIRST], (request) => {
+        if (isUpload(request)) return jsonResponse(201, stored('photo.jpg'));
+        return request.method === 'POST' ? startAnswer() : eventStreamResponse(STREAM);
+      });
+
+      try {
+        await sendSurfaceMessage(driver, 'visitor-1', 'Look', [photo]);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+
+      const body = network.calls[0]?.init.body;
+      expect(body).not.toBe(photo);
+      expect(body instanceof File && body.size).toBe(1);
+      expect(network.calls[0]?.headers.get('content-type')).toBe('image/jpeg');
+    });
+
+    it('sends no attachments field when there are no files', async () => {
+      const { driver, network } = harness([FIRST], runs);
+      await sendSurfaceMessage(driver, 'visitor-1', 'Hi');
+      expect(network.calls[0]?.json).not.toHaveProperty('attachments');
+    });
+
+    it('opens one new session when an upload answers 401, and uploads again there', async () => {
+      const { driver, network, bootstraps } = harness([OLD, NEW], (request) => {
+        if (isUpload(request)) {
+          return request.headers.get('authorization') === `Bearer ${OLD}`
+            ? jsonResponse(401, { error: { code: 'unauthenticated', message: 'Token expired.' } })
+            : jsonResponse(201, stored('note.txt'));
+        }
+        return request.method === 'POST' ? startAnswer() : eventStreamResponse(STREAM);
+      });
+
+      await sendSurfaceMessage(driver, 'visitor-1', 'Read', [NOTE]);
+
+      expect(bootstraps()).toBe(2);
+      expect(network.calls.map((call) => call.headers.get('authorization'))).toEqual([
+        `Bearer ${OLD}`,
+        `Bearer ${NEW}`,
+        `Bearer ${NEW}`,
+        `Bearer ${NEW}`,
+      ]);
+    });
+
+    it('does not upload a file twice when the start, not the upload, answers 401', async () => {
+      const { driver, network } = harness([OLD, NEW], (request) => {
+        if (isUpload(request)) return jsonResponse(201, stored('note.txt'));
+        if (request.method !== 'POST') return eventStreamResponse(STREAM);
+        return request.headers.get('authorization') === `Bearer ${OLD}`
+          ? jsonResponse(401, { error: { code: 'unauthenticated', message: 'Token expired.' } })
+          : startAnswer();
+      });
+
+      await sendSurfaceMessage(driver, 'visitor-1', 'Read', [NOTE]);
+
+      expect(network.calls.filter(isUpload)).toHaveLength(1);
+    });
+
+    it('shows an upload refusal with its code and starts no run', async () => {
+      const { driver, network, shown } = harness([FIRST], () =>
+        jsonResponse(413, {
+          error: { code: 'attachments_quota_exceeded', message: 'A session stores at most 20.' },
+        }),
+      );
+
+      await sendSurfaceMessage(driver, 'visitor-1', 'Read', [NOTE]);
+
+      expect(network.calls).toHaveLength(1);
+      expect(shown.at(-1)?.failure).toEqual({
+        code: 'attachments_quota_exceeded',
+        message: 'A session stores at most 20.',
+      });
+    });
   });
 
   it('shows the refusal when the renewed session is refused too, and retries no further', async () => {

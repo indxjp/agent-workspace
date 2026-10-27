@@ -18,6 +18,7 @@ promote it from development to staging to production, or hand it to a teammate.
 **What you can do**
 
 - [Copy an agent to another workspace](#copy-an-agent-to-another-workspace)
+- [Export to code](#export-to-code)
 - [Review what the file carries](#what-the-file-carries)
 - [Import when some resources are missing](#import-when-some-resources-are-missing)
 
@@ -61,6 +62,23 @@ console.log(`created ${agent.id}; skipped ${skipped.length} references`);
 ```
 
 </Accordion>
+
+## Export to code
+
+`aw agents export` also writes an agent as files for an [agents-as-code](/guides/agents-as-code) project:
+
+```bash title="illustrative" claim="illustrative"
+aw agents export 7c9e… --format ts          # writes agents/<name>.ts and agents/<name>.md
+aw check && aw push                         # the exported files push back as the same version
+```
+
+- It writes the version the `local` pointer names, or the newest. `--agent-version <n>` names another.
+- It writes under `--out`, by default the current directory. It never overwrites a file without
+  `--force`: it lists the files that exist and writes none.
+- It never writes `agent-workspace.yaml`. An agent that uses an `mcp()` connector needs that
+  connector declared under `connectors:` in the project file in `--out`; an agent that uses an
+  OpenAPI, Postgres or code tool from a project module cannot be written yet. Either way the command
+  exits 1, names the path in the version, and writes nothing.
 
 ## What the file carries
 

@@ -249,6 +249,8 @@ was derived from, capped at `AGENT_FRAME_RAW_MAX_BYTES`).
 | `agent.result`        | `stopReason: AgentStopReason`, `turns: number \| null`, `engineCostUsd: number \| null`                                      | How the engine's turn ended: `end_turn`, `max_turns`, `max_budget`, `refusal`, `cancelled` or `error` (aligned with ACP's prompt-turn stop reasons). The **run's** own outcome is `run.status`. |
 | `agent.native`        | `type: string`, `payload: unknown`                                                                                           | Everything the engine emitted that has no neutral meaning. Never dropped, never interpreted — `type` is the engine's own name for the message. This frame is what makes the closed set safe.    |
 | `agent.malformed`     | `reason: string`                                                                                                             | The engine produced something its adapter could not parse. Distinct from `agent.native`, which is well-formed and merely unmapped.                                                              |
+| `agent.approval.requested` | `toolCallId: string`, `toolName: string`, `canonicalCall: string`                                                       | The engine stopped before a tool call the agent requires approval for. The run waits in `awaiting_approval` until a person approves or rejects the call.                                        |
+| `agent.handoff`       | `reason?: string`                                                                                                            | The agent handed the conversation to a person; the run still ends `completed`. `reason` is for the operator: a visitor's (session-scoped token's) stream omits it.                              |
 
 `AgentMessageBlock` is `{ type: 'text'; text }` or `{ type: 'reasoning'; text }`. Tool use is not a
 block: it is its own frame.
@@ -297,7 +299,7 @@ payload, per the SSE grammar in WHATWG HTML §9.2. Three kinds arrive, told apar
    durable, replayable event the control plane appends on every run status change.
 3. **Neutral agent frames** — `AGENT_FRAME_NAMES`: `agent.session`, `agent.message`,
    `agent.message.delta`, `agent.tool.call`, `agent.tool.result`, `agent.usage`, `agent.result`,
-   `agent.native`, `agent.malformed`. One closed, engine-neutral vocabulary: an adapter meeting
+   `agent.native`, `agent.malformed`, `agent.approval.requested`, `agent.handoff`. One closed, engine-neutral vocabulary: an adapter meeting
    something it cannot express emits `agent.native` rather than inventing a name. Every frame names
    its `engine` and carries the engine-native message in `raw`.
 

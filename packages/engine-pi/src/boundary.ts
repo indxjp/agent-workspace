@@ -61,7 +61,7 @@ import {
 import { piToolCallVerdict } from './workspace.js';
 
 /** The pinned pi version. `engine.test.ts` holds it to this package's manifest. */
-export const PI_CODING_AGENT_VERSION = '1.1.0';
+export const PI_CODING_AGENT_VERSION = '1.4.0';
 
 /**
  * The in-memory `SettingsManager` every run starts from: install telemetry off (no file I/O to
@@ -287,7 +287,8 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
  * `max_turns` (the `turn_end` count reached with work still to do), `max_budget` (pi's priced
  * usage reaching the cap) and `cancelled` (the caller's interrupt) each end the run through
  * `session.abort()` and a terminal event; a model call that failed is re-thrown, so the runner
- * reports it as the run's error rather than as a turn that ended normally.
+ * reports it as the run's error rather than as a turn that ended normally. A stop whose
+ * `session.abort()` rejects fails the run the same way, since pi never confirmed it.
  */
 export async function* startPiRun(
   compiled: PiCompiled,
@@ -377,10 +378,21 @@ export async function* startPiRun(
         mirrorFailure ??= error;
       });
   };
+  // Every abort is awaited after the drain: one pi could not confirm fails the run, like a refused
+  // session-store write, rather than reporting a stop that may not have happened.
+  const aborts: Promise<void>[] = [];
+  let abortFailure: unknown = null;
+  const abortSession = (): void => {
+    aborts.push(
+      session.abort().catch((error: unknown) => {
+        abortFailure ??= error;
+      }),
+    );
+  };
   const stop = (reason: 'max_turns' | 'max_budget'): void => {
     if (state.limit !== null) return;
     state.limit = reason;
-    void session.abort();
+    abortSession();
   };
 
   const unsubscribe = session.subscribe((event) => {
@@ -403,9 +415,7 @@ export async function* startPiRun(
       }
     }
   });
-  const onAbort = (): void => {
-    void session.abort();
-  };
+  const onAbort = abortSession;
   if (deps.signal.aborted) onAbort();
   else deps.signal.addEventListener('abort', onAbort, { once: true });
 
@@ -432,6 +442,12 @@ export async function* startPiRun(
       throw mirrorFailure instanceof Error
         ? mirrorFailure
         : new Error('the session store refused a write with a non-Error value.');
+    }
+    await Promise.all(aborts);
+    if (abortFailure !== null) {
+      throw abortFailure instanceof Error
+        ? abortFailure
+        : new Error('pi refused an abort with a non-Error value.');
     }
 
     let stopReason: 'end_turn' | 'max_turns' | 'max_budget' | 'cancelled';

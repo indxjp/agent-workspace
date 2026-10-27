@@ -30,10 +30,6 @@ test('the driver band stays dismissed across reloads and returns for another dri
 
   await page.goto(SHARE);
   const band = page.getByTestId('driver-in-force');
-  test.skip(
-    (await band.count()) === 0,
-    'RUNTIME_DRIVER names a configured non-local driver, which shows no band.',
-  );
   await expect(band).toBeVisible();
 
   // The × is in the server markup, so retry until hydration has attached its handler.

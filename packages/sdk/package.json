@@ -1,6 +1,6 @@
 {
   "name": "@indx-workspace/sdk",
-  "version": "0.6.9",
+  "version": "0.6.11",
   "description": "The typed, isomorphic TypeScript client for the Agent Workspace API, with agents and surfaces as code at /define, the project file and starter project at /project, and a test double and contract-valid fixtures at /testing.",
   "license": "Apache-2.0",
   "homepage": "https://docs.agentworkspace.indx.jp",
@@ -93,13 +93,13 @@
   },
   "dependencies": {
     "@indx-workspace/contracts": "workspace:*",
-    "zod": "4.6.6",
+    "zod": "4.6.7",
     "yaml": "2.9.1"
   },
   "devDependencies": {
     "@typescript/native": "npm:typescript@7.0.2",
     "typescript": "npm:@typescript/typescript6@6.0.2",
-    "vitest": "5.0.3"
+    "vitest": "5.0.5"
   },
   "nx": {
     "targets": {

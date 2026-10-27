@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { clearApplicationContext } from '../application-context';
+import { installTestDomains } from '../application-context-fixtures';
 import {
   GET as getGrantsRoute,
   PUT as putGrantsRoute,
 } from '../../app/api/agents/[id]/grants/route';
 import { createInMemoryAgentStoreProvider } from './memory-store';
 import { resolveAgentRunOwnership } from './run-ownership';
-import { clearAgentsRuntime, configureAgentsRuntime } from './runtime';
-import { clearRbacRuntime } from '../rbac/runtime';
 import { installRbacHarness, TEST_WORKSPACE_ID } from '../rbac/testing';
 
 const OWNER = {
@@ -82,32 +82,34 @@ describe('GET/PUT /api/agents/:id/grants', () => {
     grants.clear();
     agents = createInMemoryAgentStoreProvider();
     harness = installRbacHarness([OWNER, ADMIN, BUILDER, OTHER_BUILDER, VIEWER]);
-    configureAgentsRuntime({
-      agents,
-      resolveWorkspace: () =>
-        Promise.resolve({ kind: 'workspace', workspaceId: TEST_WORKSPACE_ID }),
-      agentGrants: {
-        forWorkspace: () => ({
-          hasGrant: (candidateAgentId, userId) =>
-            Promise.resolve(
-              (grants.get(candidateAgentId) ?? []).some(
-                (principalId) => principalUsers.get(principalId) === userId,
+    installTestDomains({
+      agents: {
+        agents,
+        resolveWorkspace: () =>
+          Promise.resolve({ kind: 'workspace', workspaceId: TEST_WORKSPACE_ID }),
+        agentGrants: {
+          forWorkspace: () => ({
+            hasGrant: (candidateAgentId, userId) =>
+              Promise.resolve(
+                (grants.get(candidateAgentId) ?? []).some(
+                  (principalId) => principalUsers.get(principalId) === userId,
+                ),
               ),
-            ),
-          listPrincipalIds: (candidateAgentId) =>
-            Promise.resolve(grants.get(candidateAgentId) ?? []),
-          replacePrincipalIds: (candidateAgentId, principalIds) => {
-            const missing = principalIds.find((principalId) => !principalUsers.has(principalId));
-            if (missing !== undefined) {
-              return Promise.resolve({
-                kind: 'principal-not-found' as const,
-                principalId: missing,
-              });
-            }
-            grants.set(candidateAgentId, [...principalIds]);
-            return Promise.resolve({ kind: 'updated' as const, principalIds });
-          },
-        }),
+            listPrincipalIds: (candidateAgentId) =>
+              Promise.resolve(grants.get(candidateAgentId) ?? []),
+            replacePrincipalIds: (candidateAgentId, principalIds) => {
+              const missing = principalIds.find((principalId) => !principalUsers.has(principalId));
+              if (missing !== undefined) {
+                return Promise.resolve({
+                  kind: 'principal-not-found' as const,
+                  principalId: missing,
+                });
+              }
+              grants.set(candidateAgentId, [...principalIds]);
+              return Promise.resolve({ kind: 'updated' as const, principalIds });
+            },
+          }),
+        },
       },
     });
     const created = await agents.forWorkspace(TEST_WORKSPACE_ID).create(CREATE_INPUT, {
@@ -119,8 +121,7 @@ describe('GET/PUT /api/agents/:id/grants', () => {
   });
 
   afterEach(() => {
-    clearAgentsRuntime();
-    clearRbacRuntime();
+    clearApplicationContext();
   });
 
   for (const route of [

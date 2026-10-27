@@ -6,11 +6,12 @@ import { NAME_KEY_PATTERN } from './project-file.js';
 import { ToolOperationNameSchema } from './tool-connectors.js';
 
 /**
- * What an endpoint client names (ADR-0134): an MCP project tool endpoint or one agent's A2A
- * endpoint. A credential is bound to exactly one client, so revoking the client revokes everything
- * that could reach the resource.
+ * What an endpoint client names (ADR-0134): an MCP project tool endpoint, one agent's A2A endpoint,
+ * or the Builder's MCP door (`/mcp/builder`, issue #1846). A credential is bound to exactly one
+ * client, so revoking the client revokes everything that could reach the resource. A `builder`
+ * client binds no agent: the member who consents to it is the principal of its tokens.
  */
-export const ENDPOINT_CLIENT_KINDS = ['mcp-project', 'a2a-agent'] as const;
+export const ENDPOINT_CLIENT_KINDS = ['mcp-project', 'a2a-agent', 'builder'] as const;
 export type EndpointClientKind = (typeof ENDPOINT_CLIENT_KINDS)[number];
 
 /** The most agents one `mcp-project` client lists; equal to `TOOL_SANDBOX_TOOLS_MAX`. */
@@ -50,7 +51,16 @@ const RedirectUrisSchema = z
   .readonly();
 
 const AgentIdsSchema = z.array(UuidSchema).min(1).max(ENDPOINT_CLIENT_AGENTS_MAX).readonly();
+/** What a client lists: one to 64 agents, or none at all for a `builder` client. */
+const BoundAgentIdsSchema = z.array(UuidSchema).max(ENDPOINT_CLIENT_AGENTS_MAX).readonly();
 const ToolNamesSchema = z.array(ToolOperationNameSchema).max(ENDPOINT_CLIENT_TOOLS_MAX).readonly();
+
+/** How many agents each kind of client lists, and how the refusal says it. */
+const AGENT_COUNT = {
+  'mcp-project': { fits: (n: number) => n >= 1, article: 'an', wanted: 'at least one agent' },
+  'a2a-agent': { fits: (n: number) => n === 1, article: 'an', wanted: 'exactly one agent' },
+  builder: { fits: (n: number) => n === 0, article: 'a', wanted: 'no agent' },
+} as const satisfies Record<EndpointClientKind, unknown>;
 
 /**
  * One endpoint client as every item of `GET /api/endpoint-clients` and the body of the single
@@ -62,7 +72,7 @@ export const EndpointClientResourceSchema = z
     id: z.string().min(1),
     name: z.string().regex(NAME_KEY_PATTERN),
     kind: z.enum(ENDPOINT_CLIENT_KINDS),
-    agentIds: AgentIdsSchema,
+    agentIds: BoundAgentIdsSchema,
     toolNames: ToolNamesSchema.nullable(),
     redirectUris: RedirectUrisSchema,
     hasClientSecret: z.boolean(),
@@ -80,26 +90,31 @@ export type EndpointClientResource = z.infer<typeof EndpointClientResourceSchema
 /**
  * The body of `POST /api/endpoint-clients`. An `a2a-agent` client lists exactly one agent and no
  * `toolNames`; an `mcp-project` client lists 1 to {@link ENDPOINT_CLIENT_AGENTS_MAX} agents and may
- * narrow the tools with `toolNames` (`null` or absent means every code tool of those agents).
+ * narrow the tools with `toolNames` (`null` or absent means every code tool of those agents); a
+ * `builder` client lists no agent and no `toolNames`.
  */
 export const CreateEndpointClientRequestSchema = z
   .object({
     name: z.string().regex(NAME_KEY_PATTERN),
     kind: z.enum(ENDPOINT_CLIENT_KINDS),
-    agentIds: AgentIdsSchema,
+    agentIds: BoundAgentIdsSchema,
     toolNames: ToolNamesSchema.nullable().optional(),
   })
   .strict()
   .superRefine((request, context) => {
-    if (request.kind !== 'a2a-agent') return;
-    if (request.agentIds.length !== 1) {
+    const rule = AGENT_COUNT[request.kind];
+    if (!rule.fits(request.agentIds.length)) {
       context.addIssue({
         code: 'custom',
         path: ['agentIds'],
-        message: 'an a2a-agent client names exactly one agent',
+        message: `${rule.article} ${request.kind} client names ${rule.wanted}`,
       });
     }
-    if (request.toolNames !== undefined && request.toolNames !== null) {
+    if (
+      request.kind !== 'mcp-project' &&
+      request.toolNames !== undefined &&
+      request.toolNames !== null
+    ) {
       context.addIssue({
         code: 'custom',
         path: ['toolNames'],

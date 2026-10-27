@@ -6,20 +6,18 @@
  */
 import type { NextRequest } from 'next/server';
 
-import { errorResponse } from '../../../../../server/http/error-response';
+import { route } from '../../../../../server/http/route';
 import { startRun } from '../../../../../server/runs/api';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-export async function POST(
+async function servePost(
   request: NextRequest,
   context: RouteContext<'/api/agents/[id]/runs'>,
 ): Promise<Response> {
-  try {
-    const { id } = await context.params;
-    return await startRun(request, id);
-  } catch (cause) {
-    return errorResponse(cause, { component: 'runs', operation: 'start' });
-  }
+  const { id } = await context.params;
+  return startRun(request, id);
 }
+
+export const POST = route({ component: 'runs', operation: 'start' }, servePost);

@@ -49,7 +49,7 @@ import {
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
 const BUILD_ID = '0f1e2d3c-4b5a-4968-8776-655443322110';
-const IMAGE = 'ghcr.io/indxdev/agent-workspace/runtime-claude-agent-sdk:0.6.0';
+const IMAGE = 'ghcr.io/indxjp/agent-workspace/runtime-claude-agent-sdk:0.6.0';
 const KEY = 'e2b_test_key_value';
 
 interface Call {
@@ -374,7 +374,7 @@ describe('template resources (#827)', () => {
 describe('defaultRuntimeImage', () => {
   it('is the released claude-agent-sdk runtime image', () => {
     expect(defaultRuntimeImage()).toMatch(
-      /^ghcr\.io\/indxdev\/agent-workspace\/runtime-claude-agent-sdk:\d+\.\d+\.\d+/u,
+      /^ghcr\.io\/indxjp\/agent-workspace\/runtime-claude-agent-sdk:\d+\.\d+\.\d+/u,
     );
   });
 });
@@ -740,7 +740,9 @@ describe('e2b-template workflow', () => {
   it('is manual, main only, in providers-live, and passes the key only through env', () => {
     expect(workflow).toMatch(/^on:\n {2}workflow_dispatch:/mu);
     expect(workflow).not.toMatch(/^ {2}(?:push|pull_request|schedule):/mu);
-    expect(workflow).toContain("if: github.ref == 'refs/heads/main'");
+    expect(workflow).toContain(
+      "if: github.repository_owner == 'INDXDev' && (github.ref == 'refs/heads/main')",
+    );
     expect(workflow).toContain('environment: providers-live');
     expect(workflow).toContain('E2B_API_KEY: ${{ secrets.E2B_API_KEY }}');
     expect(workflow.match(/secrets\.E2B_API_KEY/gu)).toHaveLength(1);

@@ -734,4 +734,77 @@ describe('the real SDK behind the adapter', () => {
     expect(gateway.requests).toHaveLength(2);
     expect(frames.at(-1)).toMatchObject({ frame: 'agent.result', stopReason: 'end_turn' });
   });
+  describe('outputSchema (ADR-0143)', () => {
+    const SCHEMA = {
+      type: 'object',
+      properties: { verdict: { type: 'string' } },
+      required: ['verdict'],
+    };
+    const textFormat = (index: number): unknown =>
+      (gateway.requests[index]?.body['text'] as { format?: unknown } | undefined)?.format;
+
+    it('sends the caller’s schema as the response format and reports the parsed answer', async () => {
+      const cwd = workspace({});
+      gateway.script([{ text: '{"verdict":"yes"}' }]);
+
+      const frames = await run(requestFor(cwd, 'openai-responses', { outputSchema: SCHEMA }));
+
+      expect(textFormat(0)).toMatchObject({
+        type: 'json_schema',
+        name: 'output',
+        strict: false,
+        schema: SCHEMA,
+      });
+      expect(frames.at(-1)).toMatchObject({
+        frame: 'agent.result',
+        stopReason: 'end_turn',
+        output: { text: '{"verdict":"yes"}', structured: { verdict: 'yes' } },
+      });
+    });
+
+    it.each([
+      ['an answer that does not match the schema', '{"verdict":7}'],
+      ['an answer that is not JSON', 'I think so.'],
+    ])(
+      'fails the run after the frames on %s, naming neither the schema nor the answer',
+      async (_name, answer) => {
+        const cwd = workspace({});
+        gateway.script([{ text: answer }]);
+        const connection = createOpenAiAgentsEngine().start(
+          requestFor(cwd, 'openai-responses', { outputSchema: SCHEMA }),
+          {},
+        );
+        const frames: EngineFrame[] = [];
+        let failure: unknown;
+        try {
+          for await (const frame of connection.frames) frames.push(frame);
+        } catch (error) {
+          failure = error;
+        }
+
+        expect(failure).toBeInstanceOf(Error);
+        const message = (failure as Error).message;
+        expect(message).toMatch(/^output_schema_unsatisfied: /u);
+        expect(message).not.toContain('verdict');
+        expect(message).not.toContain(answer);
+        const result = frames.at(-1);
+        expect(result).toMatchObject({ frame: 'agent.result', stopReason: 'end_turn' });
+        expect(result).not.toHaveProperty('output');
+        expect(frames.some((frame) => frame.frame === 'agent.usage')).toBe(true);
+      },
+    );
+
+    it('asks for no response format and reports structured: null without a schema', async () => {
+      const cwd = workspace({});
+      gateway.script([{ text: 'Plain answer.' }]);
+
+      const frames = await run(requestFor(cwd, 'openai-responses'));
+
+      expect(textFormat(0)).toBeUndefined();
+      expect(frames.at(-1)).toMatchObject({
+        frame: 'agent.result',
+        output: { text: 'Plain answer.', structured: null },
+      });
+    });
+  });
 });

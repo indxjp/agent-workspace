@@ -33,7 +33,7 @@ import {
   workspaceWriteAllowed,
   type OpenAiAgentsEvent,
   type OpenAiAgentsWireProtocol,
-} from '@agent-workspace/engine-openai-agents';
+} from '@agent-workspace/engine-openai-agents/testing';
 import {
   AgentPolicySchema,
   policyNarrowedPermissions,

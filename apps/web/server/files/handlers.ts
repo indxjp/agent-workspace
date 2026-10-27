@@ -1,11 +1,11 @@
 /**
- * The files operations, as functions of a `WorkspaceObjectStore` and already-parsed input.
+ * The files operations, as functions of the catalog service and already-parsed input.
  *
  * Mirrors `apps/web/server/agents/handlers.ts`'s split: nothing here touches `Request` or
  * `Response` (that is `http.ts`), and nothing here is a Next.js route file (that is
- * `apps/web/app/api/files/**`). A handler is testable by calling it with a fake store.
+ * `apps/web/app/api/files/**`). A handler is testable by calling it with a fake catalog service.
  *
- * ## What spec §16 asks for, and what this covers with four `ObjectStore` methods
+ * ## What spec §16 asks for, and what this covers
  *
  * §16's list, quoted in full — all eight bullets, not the first six:
  *
@@ -14,15 +14,12 @@
  *
  * Six of the eight are here. `list` covers folders and preview metadata (every entry it returns
  * already carries `sizeBytes`/`contentType`/`lastModified`); `put`/`get`/`delete` cover
- * upload/download/delete directly. `rename` is composed — `renameFile` below is `get` then `put`
- * then `delete` — exactly the shape R-15 §1c describes for a `put`/`get`/`delete`-only store
- * ("Local FS is `fs.rename`, which is atomic within a filesystem" — this composition is *not*
- * atomic, which is declared in this task's PR rather than asserted away).
+ * upload/download/delete directly. `rename` updates catalog rows and copies no object.
  *
  * **Declared gap — §16's last two bullets are not implemented anywhere in this task.**
  * "Assign folders/files to an agent" and "read-only or read-write access" are both *per-principal
  * authorisation over a path*, and this module has no principal: `http.ts`'s
- * `withWorkspaceObjectStore` resolves a workspace and nothing finer, so every member of a
+ * `withCatalogService` resolves a workspace and nothing finer, so every member of a
  * workspace has identical, read-write reach over every key in it. Implementing either needs a
  * grant table and the agent/permission repositories in `packages/core/src/db/repositories/**`
  * (W2-DB-02's) plus W2-CP-06's RBAC decision point — none of them in this task's `Owns` globs.
@@ -44,23 +41,32 @@
  * member could upload `<script>…</script>` as `text/html` and have the application's own origin
  * serve it as active content to another member.
  */
+import { PRESIGNED_URL_DEFAULT_TTL_SECONDS } from '@indx-workspace/contracts/files';
+
+import { problemBody } from '../http/result';
+import { log } from '../telemetry/logger';
+import { SKILL_REVISIONS_PREFIX, SKILL_ROWS_ROOT } from '../skills/keys';
 import { decodeFileId, encodeFileId } from './file-id';
-import { toObjectKey, toObjectPrefix, UnsafeObjectKeyError } from './object-store-bridge';
-import type { ObjectStore } from './object-store-bridge';
-import type { ResourceCatalogRepository } from '@agent-workspace/core/db';
+import { isUploadInProgress } from './store';
+import {
+  toObjectKey,
+  toObjectPrefix,
+  UnsafeObjectKeyError,
+} from '@agent-workspace/core/storage/keys';
+import {
+  SignedUrlUnsupportedError,
+  type SignedUrl,
+  type SignedUrlRequest,
+} from '@agent-workspace/core/storage';
+
+import type { StorageContext, StorageService } from '../storage/service';
+import type { CatalogFile, CatalogPort } from '../storage/store';
 
 /**
- * The internal marker object an explicit empty folder is stored as. Exported for
- * `subtree`-adjacent code in this module (`deleteSubtree`, `moveSubtree`) and for tests; not part
- * of the public HTTP surface — see `createFolder`'s use of it below for what it stands for.
+ * The name an old per-area store kept an explicit empty folder under. No route writes it any more;
+ * it stays a reserved path segment so it is never created as a file name.
  */
 export const EMPTY_FOLDER_MARKER = '.agent-workspace-empty-folder';
-
-async function pathIsFolder(store: ObjectStore, path: string): Promise<boolean> {
-  if ((await store.get(`${path}/${EMPTY_FOLDER_MARKER}`)) !== null) return true;
-  const parent = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
-  return (await store.list(parent)).some((entry) => entry.kind === 'folder' && entry.key === path);
-}
 
 /**
  * Exported so the PATCH/DELETE routes can apply the same reservation to a subtree's own path.
@@ -77,8 +83,19 @@ export function targetsRunnerPrivateDirectory(path: string): boolean {
   return first?.toLowerCase() === '.claude';
 }
 
-/** A status and a body, before either becomes an HTTP `Response`. Mirrors `agents/handlers.ts`. */
-export type ApiResult =
+/**
+ * The workspace's published skill revisions live in this same object store, so the files routes must
+ * not be able to write, move or delete anything in them: a published revision never changes (SDK-19).
+ */
+export function targetsPublishedSkillRevisions(path: string): boolean {
+  return path.split('/', 1)[0]?.toLowerCase() === SKILL_REVISIONS_PREFIX;
+}
+
+const revisionsImmutable = (): FileResult =>
+  problem(400, 'reserved_path', 'Published skill revisions are immutable.');
+
+/** A status and a body, before either becomes an HTTP `Response`. `kind` tags the json, binary and empty arms. */
+export type FileResult =
   | { readonly status: number; readonly kind: 'json'; readonly body: unknown }
   | {
       readonly status: number;
@@ -89,30 +106,53 @@ export type ApiResult =
       /** The file's own name, for `http.ts`'s `Content-Disposition: attachment`. */
       readonly filename: string;
     }
+  | {
+      readonly status: number;
+      readonly kind: 'stream';
+      /** Handed to the response as is: the object is never held whole in memory. */
+      readonly body: ReadableStream<Uint8Array>;
+      readonly sizeBytes: number;
+      /** Reduced by {@link downloadContentType}, as for the binary arm. */
+      readonly contentType: string;
+      readonly filename: string;
+    }
   | { readonly status: 204; readonly kind: 'empty' };
-
-export interface ApiProblem {
-  readonly error: {
-    readonly code: string;
-    readonly message: string;
-    readonly details?: readonly string[];
-  };
-}
 
 export function problem(
   status: number,
   code: string,
   message: string,
   details?: readonly string[],
-): ApiResult {
-  const error =
-    details === undefined || details.length === 0
-      ? { code, message }
-      : { code, message, details: [...details] };
-  return { status, kind: 'json', body: { error } satisfies ApiProblem };
+): FileResult {
+  return { status, kind: 'json', body: problemBody(code, message, details) };
 }
 
-function json(status: number, body: unknown): ApiResult {
+/**
+ * `409 upload_in_progress`: a pending upload holds the path, or a path under the folder being
+ * moved, until it is confirmed or removed. Nothing was written (FX-7).
+ */
+export function uploadInProgress(): FileResult {
+  return problem(
+    409,
+    'upload_in_progress',
+    'An upload to this path is still in progress; retry once it has finished.',
+  );
+}
+
+/** `409 upload_in_progress` when a catalog write failed on a pending upload, else `null` (FX-7). */
+export function uploadInProgressRefusal(error: unknown): FileResult | null {
+  return isUploadInProgress(error) ? uploadInProgress() : null;
+}
+
+/** Whether a pending upload holds `path` in the catalog (FX-7). */
+export async function pathIsPending(
+  catalog: Pick<CatalogPort, 'get'>,
+  path: string,
+): Promise<boolean> {
+  return (await catalog.get(path, { includePending: true }))?.status === 'pending';
+}
+
+function json(status: number, body: unknown): FileResult {
   return { status, kind: 'json', body };
 }
 
@@ -126,7 +166,7 @@ export interface FileResource {
   readonly lastModified: string | null;
 }
 
-function toResource(
+export function toResource(
   entry:
     | {
         readonly kind: 'file';
@@ -163,7 +203,7 @@ function toResource(
  */
 export function requireFilePath(
   rawId: unknown,
-): { ok: true; path: string } | { ok: false; result: ApiResult } {
+): { ok: true; path: string } | { ok: false; result: FileResult } {
   if (typeof rawId !== 'string') {
     return { ok: false, result: problem(404, 'file_not_found', 'No file has that id.') };
   }
@@ -185,118 +225,18 @@ export function requireFilePath(
   }
 }
 
-/** `GET /api/files?path=…` — every file and folder one level under `path` (`''` for the root). */
-export async function listFiles(store: ObjectStore, rawPrefix: string | null): Promise<ApiResult> {
-  try {
-    const prefix = toObjectPrefix(rawPrefix ?? '');
-    const entries = await store.list(prefix);
-    return json(200, {
-      files: entries
-        .filter(
-          (entry) =>
-            !entry.key.endsWith(`/${EMPTY_FOLDER_MARKER}`) && entry.key !== EMPTY_FOLDER_MARKER,
-        )
-        .map(toResource),
-    });
-  } catch (error) {
-    if (error instanceof UnsafeObjectKeyError) {
-      return problem(
-        400,
-        'invalid_path',
-        `The "path" query parameter is not valid: ${error.message}`,
-      );
-    }
-    throw error;
-  }
-}
-
-/** What a `POST /api/files` upload carries, already parsed out of the request. */
-export interface UploadFileInput {
-  readonly path: string;
-  readonly contentType: string | null;
-  readonly body: Uint8Array;
-}
-
-/** Persist an explicit empty folder in flat object storage via an implementation-private marker. */
-export async function createFolder(store: ObjectStore, rawPath: string): Promise<ApiResult> {
-  try {
-    const path = toObjectKey(rawPath);
-    if (targetsRunnerPrivateDirectory(path))
-      return problem(400, 'reserved_path', 'The .claude directory is reserved for runner state.');
-    if (path.endsWith(`/${EMPTY_FOLDER_MARKER}`) || path === EMPTY_FOLDER_MARKER)
-      return problem(400, 'reserved_path', 'That folder path is reserved for internal metadata.');
-    if ((await store.get(path)) !== null)
-      return problem(409, 'name_conflict', `${path} already exists as a file.`);
-    const prefix = toObjectPrefix(path);
-    const existing = await store.list(prefix);
-    if (existing.length > 0) return problem(409, 'name_conflict', `${path} already exists.`);
-    await store.put(`${path}/${EMPTY_FOLDER_MARKER}`, {
-      body: new Uint8Array(),
-      contentType: 'application/x.agent-workspace-folder',
-    });
-    return json(201, { file: toResource({ kind: 'folder', key: path }) });
-  } catch (error) {
-    if (error instanceof UnsafeObjectKeyError)
-      return problem(400, 'invalid_path', `"path" is not a valid folder path: ${error.message}`);
-    throw error;
-  }
-}
-
 /**
- * `POST /api/files` — write (or overwrite) one file.
- *
- * The `try` covers the store calls, not only this function's own `toObjectKey`. The guard runs
- * again inside `createScopedObjectStore` and a third time inside the backend, and verification
- * round 1 found an input the first application accepted and a later one refused — `%252e%252e%252fx`
- * — whose `UnsafeObjectKeyError` then escaped this route as a framework 500 while the comment here
- * claimed a 400. `key-safety.ts` is a filter now, so the accepted set is closed under the guard and
- * that input cannot exist (`key-safety.test.ts`, "the accepted set is closed under the guard"); the
- * wider `try` is the second, independent reason the claim in this sentence is true, so it does not
- * rest on that proof alone.
+ * The refusal for a write to a reserved path, or `null`. One admission for the relay and presigned
+ * uploads and for both rename destinations; the marker is refused in any segment, so no write can
+ * nest under a key that reads as a folder marker.
  */
-export async function uploadFile(store: ObjectStore, input: UploadFileInput): Promise<ApiResult> {
-  try {
-    const key = toObjectKey(input.path);
-    if (targetsRunnerPrivateDirectory(key))
-      return problem(400, 'reserved_path', 'The .claude directory is reserved for runner state.');
-    if (key.endsWith(`/${EMPTY_FOLDER_MARKER}`) || key === EMPTY_FOLDER_MARKER)
-      return problem(400, 'reserved_path', 'That file path is reserved for internal metadata.');
-    if (await pathIsFolder(store, key))
-      return problem(409, 'name_conflict', `${key} already exists as a folder.`);
-    await store.put(key, { body: input.body, contentType: input.contentType });
-    const object = await store.get(key);
-    if (object === null) {
-      // Written, then immediately unreadable: this is the backend disagreeing with itself, not a
-      // client error, and ADR-0015 says a check that cannot run must fail rather than guess a body.
-      return problem(500, 'store_inconsistent', `${key} was written but could not be read back.`);
-    }
-    return json(201, {
-      file: toResource({
-        kind: 'file',
-        key,
-        sizeBytes: object.sizeBytes,
-        contentType: object.contentType,
-        lastModified: object.lastModified,
-      }),
-    });
-  } catch (error) {
-    if (error instanceof UnsafeObjectKeyError) {
-      return problem(400, 'invalid_path', `"path" is not a valid file path: ${error.message}`);
-    }
-    throw error;
-  }
-}
-
-/** Whether a file object exists at `path`, without reading its bytes. `false` for a path the key guard refuses. */
-export async function fileObjectExists(store: ObjectStore, path: string): Promise<boolean> {
-  let key: string;
-  try {
-    key = toObjectKey(path);
-  } catch (error) {
-    if (error instanceof UnsafeObjectKeyError) return false;
-    throw error;
-  }
-  return (await store.listPrefix(key)).some((entry) => entry.kind === 'file' && entry.key === key);
+export function reservedFileWriteRefusal(key: string): FileResult | null {
+  if (targetsPublishedSkillRevisions(key)) return revisionsImmutable();
+  if (targetsRunnerPrivateDirectory(key))
+    return problem(400, 'reserved_path', 'The .claude directory is reserved for runner state.');
+  if (key.split('/').includes(EMPTY_FOLDER_MARKER))
+    return problem(400, 'reserved_path', 'That file path is reserved for internal metadata.');
+  return null;
 }
 
 /**
@@ -339,117 +279,138 @@ export function downloadContentType(stored: string | null): string {
   return 'application/octet-stream';
 }
 
-/** `GET /api/files/:id` — the file's bytes, or its metadata if it is a folder. */
-export async function downloadFile(store: ObjectStore, path: string): Promise<ApiResult> {
-  const object = await store.get(path);
-  if (object === null) {
-    // Might be a folder (a real object store's `get` never returns one) rather than nothing.
-    const parent = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
-    const siblings = await store.list(parent);
-    const asFolder = siblings.find((entry) => entry.kind === 'folder' && entry.key === path);
-    if (asFolder !== undefined) return json(200, { file: toResource(asFolder) });
-    return problem(404, 'file_not_found', 'No file has that id.');
+/**
+ * `GET /api/files?path=…` from the catalog: the ready files of the area one level under `path`, and
+ * the folders between (an explicit folder row, or one implied by a file beneath it). Pending and
+ * removed rows are not ready, so they never appear. A catalog row carries no timestamp, so
+ * `lastModified` is `null`.
+ *
+ * ponytail: reads every ready row at or under `path` to build one level (twice: files through the
+ * service, folder rows through the catalog); a one-level `list` on the catalog port if a folder
+ * holds many.
+ */
+// @story US-STO-01
+export async function listCatalogFolder(
+  storage: StorageService,
+  catalog: CatalogPort,
+  ctx: StorageContext,
+  rawPath: string | null,
+): Promise<FileResult> {
+  let folder: string;
+  try {
+    folder = toObjectPrefix(rawPath ?? '');
+  } catch (error) {
+    if (error instanceof UnsafeObjectKeyError) {
+      return problem(
+        400,
+        'invalid_path',
+        `The "path" query parameter is not valid: ${error.message}`,
+      );
+    }
+    throw error;
   }
+  const base = folder === '' ? '' : `${folder}/`;
+  const entries = new Map<string, FileResource>();
+  const folderAt = (path: string, id: string): FileResource => ({
+    id,
+    path,
+    kind: 'folder',
+    sizeBytes: null,
+    contentType: null,
+    lastModified: null,
+  });
+
+  let cursor: string | undefined;
+  do {
+    const page = await storage.list(
+      ctx,
+      'files',
+      folder,
+      cursor === undefined ? undefined : { cursor },
+    );
+    for (const row of page.rows) {
+      if (!row.path.startsWith(base)) continue;
+      const rest = row.path.slice(base.length);
+      const slash = rest.indexOf('/');
+      if (slash === -1) {
+        entries.set(row.path, {
+          id: row.id,
+          path: row.path,
+          kind: 'file',
+          sizeBytes: row.sizeBytes,
+          contentType: row.contentType,
+          lastModified: null,
+        });
+      } else {
+        const directory = `${base}${rest.slice(0, slash)}`;
+        if (!entries.has(directory))
+          entries.set(directory, folderAt(directory, encodeFileId(directory)));
+      }
+    }
+    cursor = page.cursor ?? undefined;
+  } while (cursor !== undefined);
+
+  cursor = undefined;
+  do {
+    const page = await catalog.list(folder, cursor === undefined ? undefined : { cursor });
+    for (const row of page.rows) {
+      if (row.kind !== 'folder' || !row.path.startsWith(base)) continue;
+      // Saving a skill adds folder rows above it; a user's file under `.skills/` still implies its
+      // folder through the files loop above.
+      // @story US-STO-08
+      if (isUnderSkillRows(row.path)) continue;
+      const rest = row.path.slice(base.length);
+      if (rest !== '' && !rest.includes('/')) entries.set(row.path, folderAt(row.path, row.id));
+    }
+    cursor = page.cursor ?? undefined;
+  } while (cursor !== undefined);
+
+  const files = [...entries.values()].sort((a, b) =>
+    a.path < b.path ? -1 : a.path > b.path ? 1 : 0,
+  );
+  return json(200, { files });
+}
+
+/**
+ * `GET /api/files/:id` from the catalog: the ready file's object as a stream, or a folder's
+ * metadata. A pending, removed or other-area row answers `404`, as does a row whose object is gone.
+ */
+// @story US-STO-05
+export async function downloadCatalogRow(
+  storage: StorageService,
+  catalog: CatalogPort,
+  ctx: StorageContext,
+  path: string,
+): Promise<FileResult> {
+  const notFound = () => problem(404, 'file_not_found', 'No file has that id.');
+  const row = await storage.get(ctx, 'files', path);
+  if (row === null) {
+    const folder = await catalog.get(path);
+    if (folder?.kind !== 'folder') return notFound();
+    return json(200, {
+      file: {
+        id: folder.id,
+        path: folder.path,
+        kind: 'folder',
+        sizeBytes: null,
+        contentType: null,
+        lastModified: null,
+      } satisfies FileResource,
+    });
+  }
+  const opened = await storage.open(ctx, row);
+  if (opened === null) return notFound();
   return {
     status: 200,
-    kind: 'binary',
-    body: object.body,
-    contentType: downloadContentType(object.contentType),
+    kind: 'stream',
+    body: opened.body,
+    sizeBytes: opened.meta.sizeBytes,
+    contentType: downloadContentType(row.contentType),
     filename: path.includes('/') ? path.slice(path.lastIndexOf('/') + 1) : path,
   };
 }
 
-/** `DELETE /api/files/:id`. Idempotent at the `ObjectStore` layer; reported as `204` either way. */
-export async function deleteFile(store: ObjectStore, path: string): Promise<ApiResult> {
-  const marker = `${path}/${EMPTY_FOLDER_MARKER}`;
-  if ((await store.get(marker)) !== null) await store.delete(marker);
-  else await store.delete(path);
-  return { status: 204, kind: 'empty' };
-}
-
-/** What a `PATCH /api/files/:id` rename carries. */
-export interface RenameFileInput {
-  readonly newPath: string;
-}
-
-/**
- * `PATCH /api/files/:id` — rename (move) a file. Composed from `get`/`put`/`delete`
- * (see this file's header for why, and for the atomicity this does not have).
- */
-export async function renameFile(
-  store: ObjectStore,
-  path: string,
-  input: RenameFileInput,
-): Promise<ApiResult> {
-  // Same shape as `uploadFile`: the `try` covers the store calls too, so a refusal from any of the
-  // guard's applications is the documented 400 rather than an uncaught 500.
-  try {
-    const newKey = toObjectKey(input.newPath);
-    if (targetsRunnerPrivateDirectory(newKey))
-      return problem(400, 'reserved_path', 'The .claude directory is reserved for runner state.');
-    if (newKey.endsWith(`/${EMPTY_FOLDER_MARKER}`) || newKey === EMPTY_FOLDER_MARKER)
-      return problem(400, 'reserved_path', 'That file path is reserved for internal metadata.');
-    const object = await store.get(path);
-    if (object === null) {
-      return problem(404, 'file_not_found', 'No file has that id.');
-    }
-    if (newKey === path) {
-      return json(200, {
-        file: toResource({
-          kind: 'file',
-          key: path,
-          sizeBytes: object.sizeBytes,
-          contentType: object.contentType,
-          lastModified: object.lastModified,
-        }),
-      });
-    }
-    const existing = await store.get(newKey);
-    if (existing !== null) {
-      return problem(409, 'name_conflict', `${newKey} already exists.`);
-    }
-    if (await pathIsFolder(store, newKey))
-      return problem(409, 'name_conflict', `${newKey} already exists as a folder.`);
-    await store.put(newKey, { body: object.body, contentType: object.contentType });
-    await store.delete(path);
-    const moved = await store.get(newKey);
-    if (moved === null) {
-      return problem(
-        500,
-        'store_inconsistent',
-        `${newKey} was written but could not be read back.`,
-      );
-    }
-    return json(200, {
-      file: toResource({
-        kind: 'file',
-        key: newKey,
-        sizeBytes: moved.sizeBytes,
-        contentType: moved.contentType,
-        lastModified: moved.lastModified,
-      }),
-    });
-  } catch (error) {
-    if (error instanceof UnsafeObjectKeyError) {
-      return problem(400, 'invalid_path', `"newPath" is not a valid file path: ${error.message}`);
-    }
-    throw error;
-  }
-}
-
-/**
- * The largest subtree `moveSubtree`/`deleteSubtree` will act on in one request. Issue #131's
- * "Deliberately not built" is explicit that a bigger tree gets a hard refusal, not an unbounded
- * loop or a streamed/paginated operation — this is that cap. The number itself is not spec-given;
- * it is chosen small enough that a boundedness test can actually build a tree past it in a test's
- * timeout, and is a declared, documented choice rather than a discovered one.
- */
-export const MAX_SUBTREE_OBJECTS = 500;
-
-/** `a` and `b` name the same key except for letter case — a rename this module refuses outright.
- * See `moveSubtree`'s header for why: the copy-then-delete this module composes a move from is not
- * safe to run against a store whose backend folds case, and nothing here can tell which stores do
- * without asking the filesystem, so every store refuses it uniformly instead. */
+/** `a` and `b` name the same key except for letter case, a rename this module refuses. */
 function isCaseOnlyRename(a: string, b: string): boolean {
   return a !== b && a.toLowerCase() === b.toLowerCase();
 }
@@ -459,207 +420,319 @@ function isPathOrDescendant(base: string, candidate: string): boolean {
   return candidate === base || candidate.startsWith(`${base}/`);
 }
 
-function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.byteLength !== b.byteLength) return false;
-  for (let i = 0; i < a.byteLength; i += 1) {
-    if (a[i] !== b[i]) return false;
-  }
-  return true;
-}
-
 /**
- * `null` when moving `descendants` (every object under `from`) to `to` is safe to proceed with;
- * otherwise the one destination key that stands in the way. "Safe" is content-aware rather than a
- * bare existence check, which is what makes a retry of an *interrupted* move succeed instead of
- * refusing itself: every object already at a key this move would itself write to is inspected, and
- * only counted as a collision when its bytes or content type actually differ from what the source
- * side has right now. An unrelated object at `to` that this move never intended to write over — a
- * sibling file already there, or `to` itself already existing as something else — still refuses,
- * because it is not one of this move's own keys at all.
+ * `PATCH /api/files/:id` through the catalog service: a rename or move updates rows and copies no
+ * object (the storage design, §06 Phase 3 "Done when"). The guards the object-store rename applied
+ * are kept; `rename` itself refuses a taken destination, a pending upload under the source and a
+ * missing source. The ownership decision was made by the route before this runs.
  */
-async function destinationCollision(
-  store: ObjectStore,
+// @story US-STO-03
+export async function renameCatalogPath(
+  storage: StorageService,
+  catalog: CatalogPort,
+  ctx: StorageContext,
   from: string,
-  to: string,
-  descendants: readonly { readonly key: string }[],
-): Promise<string | null> {
-  const expectedTargets = new Set(
-    descendants.map((entry) => `${to}${entry.key.slice(from.length)}`),
-  );
-  const existingAtDestination = await store.listPrefix(to);
-  for (const existing of existingAtDestination) {
-    if (!expectedTargets.has(existing.key)) return existing.key;
-    const sourceKey = `${from}${existing.key.slice(to.length)}`;
-    const [sourceObject, destinationObject] = await Promise.all([
-      store.get(sourceKey),
-      store.get(existing.key),
-    ]);
-    if (sourceObject === null || destinationObject === null) return existing.key;
-    if (
-      !bytesEqual(sourceObject.body, destinationObject.body) ||
-      sourceObject.contentType !== destinationObject.contentType
-    ) {
-      return existing.key;
-    }
-  }
-  return null;
-}
-
-/**
- * Move or rename a folder — the subtree counterpart to `renameFile` above, which only ever moved
- * one object. Composed exactly the way issue #131 asks: copy every descendant to its new key,
- * rewrite the catalog's paths in one transaction, then delete every old key — never
- * delete-then-recreate, so `renameFilesByPrefix` (`resource-catalogs.ts`) keeps every row's id and
- * every `agent_files`/`project_files` grant on it.
- *
- * **Resumability.** Every step here is naturally idempotent on its own: `copyObject` of an
- * already-copied key overwrites identically, `renameFilesByPrefix` matches zero rows once it has
- * already run, and `delete` of an already-deleted key is a no-op (R-15 §1c). What made that true in
- * theory but not in practice was the destination-collision check — content this same move had
- * already copied on a prior, interrupted attempt would otherwise read back as "the destination
- * already exists" and refuse the retry. `destinationCollision` above is what closes that: it is a
- * collision only when a destination key this move would write to already holds *different* bytes
- * or a different content type than the source does right now, so a retry of the identical request
- * after a `'partial'` response converges to `'ok'` rather than refusing itself.
- */
-export async function moveSubtree(
-  store: ObjectStore,
-  catalog: ResourceCatalogRepository | null,
-  fromPath: string,
-  input: RenameFileInput,
-): Promise<ApiResult> {
+  rawNewPath: string,
+): Promise<FileResult> {
+  let to: string;
   try {
-    const from = toObjectKey(fromPath);
-    const to = toObjectKey(input.newPath);
-    if (targetsRunnerPrivateDirectory(from) || targetsRunnerPrivateDirectory(to)) {
-      return problem(400, 'reserved_path', 'The .claude directory is reserved for runner state.');
-    }
-    if (from === to) {
-      return json(200, { status: 'ok', moved: 0 });
-    }
-    if (isCaseOnlyRename(from, to)) {
-      return problem(
-        409,
-        'name_conflict',
-        'A rename that differs only in letter case is not supported.',
-      );
-    }
-    if (isPathOrDescendant(from, to)) {
-      return problem(
-        409,
-        'self_descendant',
-        `${to} is inside ${from}, so it cannot be moved there.`,
-      );
-    }
-
-    const descendants = await store.listPrefix(from);
-    if (descendants.length === 0) {
-      return problem(404, 'file_not_found', 'No file has that id.');
-    }
-    if (descendants.length > MAX_SUBTREE_OBJECTS) {
-      return problem(
-        413,
-        'subtree_too_large',
-        `${from} contains more than ${String(MAX_SUBTREE_OBJECTS)} objects; move a smaller folder.`,
-      );
-    }
-    const collision = await destinationCollision(store, from, to, descendants);
-    if (collision !== null) {
-      return problem(409, 'name_conflict', `${collision} already exists.`);
-    }
-
-    const copied: string[] = [];
-    for (const entry of descendants) {
-      const destinationKey = `${to}${entry.key.slice(from.length)}`;
-      try {
-        await store.copyObject(entry.key, destinationKey);
-        copied.push(entry.key);
-      } catch {
-        return json(200, {
-          status: 'partial',
-          moved: copied.length,
-          total: descendants.length,
-        });
-      }
-    }
-
-    if (catalog !== null) {
-      await catalog.renameFilesByPrefix?.(from, to);
-    }
-
-    const remaining: string[] = [];
-    for (const key of copied) {
-      try {
-        await store.delete(key);
-      } catch {
-        remaining.push(key);
-      }
-    }
-    if (remaining.length > 0) {
-      return json(200, {
-        status: 'partial',
-        moved: copied.length,
-        total: descendants.length,
-        remaining,
-      });
-    }
-    return json(200, { status: 'ok', moved: copied.length });
+    to = toObjectKey(rawNewPath);
   } catch (error) {
     if (error instanceof UnsafeObjectKeyError) {
       return problem(400, 'invalid_path', `"newPath" is not a valid path: ${error.message}`);
     }
     throw error;
   }
+  if (targetsPublishedSkillRevisions(from)) return revisionsImmutable();
+  if (targetsRunnerPrivateDirectory(from)) {
+    return problem(400, 'reserved_path', 'The .claude directory is reserved for runner state.');
+  }
+  const reserved = reservedFileWriteRefusal(to);
+  if (reserved !== null) return reserved;
+  if (isCaseOnlyRename(from, to)) {
+    return problem(
+      409,
+      'name_conflict',
+      'A rename that differs only in letter case is not supported.',
+    );
+  }
+  if (from !== to && isPathOrDescendant(from, to)) {
+    return problem(409, 'self_descendant', `${to} is inside ${from}, so it cannot be moved there.`);
+  }
+  // A pending upload owns its path until it is confirmed: neither move onto it nor from it.
+  if ((await pathIsPending(catalog, to)) || (await pathIsPending(catalog, from))) {
+    return uploadInProgress();
+  }
+  if (await holdsSkillRows(catalog, from)) return skillRowsReserved();
+
+  const row = await catalog.get(from);
+  if (from === to) {
+    if (row === null) return problem(404, 'file_not_found', 'No file has that id.');
+    return json(
+      200,
+      row.kind === 'file' ? { file: catalogResource(row) } : { status: 'ok', moved: 0 },
+    );
+  }
+  const renamed = await storage.rename(ctx, 'files', from, to);
+  if (!renamed.ok) {
+    switch (renamed.code) {
+      case 'path_taken':
+        return problem(409, 'name_conflict', `${to} already exists.`);
+      case 'upload_in_progress':
+        return uploadInProgress();
+      case 'not_found':
+        return problem(404, 'file_not_found', 'No file has that id.');
+      case 'invalid_path':
+        return problem(400, 'invalid_path', '"newPath" is not a valid path.');
+    }
+  }
+  const moved = row?.kind === 'file' ? await storage.get(ctx, 'files', to) : null;
+  return json(
+    200,
+    moved === null ? { status: 'ok', moved: renamed.moved } : { file: catalogResource(moved) },
+  );
 }
 
 /**
- * Recursive folder delete — the fix for the bug issue #131 names verbatim: "deleting an
- * implied/non-empty folder can return 204 while descendants remain." `recursive` gates *removal*,
- * never discovery: this function always finds every descendant first, and answers `409` for a
- * non-empty folder when `recursive` is `false`, rather than silently deleting nothing and
- * reporting success. A path with no object and no descendant at all is reported as such (`null`)
- * rather than acted on, so the DELETE route can keep its existing idempotent-204 answer for "there
- * was never anything here" — the same contract a single-object delete already has — instead of
- * this function inventing a new one.
+ * `DELETE /api/files/:id` through the catalog service: the object goes with the row (the storage
+ * design, §04 "File states", §05). A file or a missing path answers `204`; a folder answers the
+ * `200` outcome naming the files it held. A delete that could not remove an object leaves the row
+ * `deleting` for the cleanup job, so it is not reported as partial.
  */
-export async function deleteSubtree(
-  store: ObjectStore,
-  rootPath: string,
+// @story US-STO-04
+export async function removeCatalogPath(
+  storage: StorageService,
+  catalog: CatalogPort,
+  ctx: StorageContext,
+  path: string,
   recursive: boolean,
-): Promise<ApiResult | null> {
-  const path = toObjectKey(rootPath); // already validated by the caller; re-checked defensively
-  const descendants = await store.listPrefix(path);
-  if (descendants.length === 0) return null;
-
-  const marker = `${path}/${EMPTY_FOLDER_MARKER}`;
-  const isEmptyFolder = descendants.every((entry) => entry.key === marker);
-  if (!isEmptyFolder && !recursive) {
-    return problem(
-      409,
-      'folder_not_empty',
-      `${path} is not empty. Pass ?recursive=true to delete it and its contents.`,
-    );
-  }
-  if (descendants.length > MAX_SUBTREE_OBJECTS) {
-    return problem(
-      413,
-      'subtree_too_large',
-      `${path} contains more than ${String(MAX_SUBTREE_OBJECTS)} objects; delete a smaller folder.`,
-    );
-  }
-
+): Promise<FileResult> {
+  if (targetsPublishedSkillRevisions(path)) return revisionsImmutable();
+  if (recursive && (await holdsSkillRows(catalog, path))) return skillRowsReserved();
+  const row = await catalog.get(path);
+  // ponytail: a file added under the folder between this listing and `remove` goes too, unlisted.
   const deleted: string[] = [];
-  const remaining: string[] = [];
-  for (const entry of descendants) {
-    try {
-      await store.delete(entry.key);
-      deleted.push(entry.key);
-    } catch {
-      remaining.push(entry.key);
+  if (row?.kind === 'folder' && recursive) {
+    let cursor: string | undefined;
+    do {
+      const page = await catalog.list(path, cursor === undefined ? undefined : { cursor });
+      for (const found of page.rows) if (found.kind === 'file') deleted.push(found.path);
+      cursor = page.cursor ?? undefined;
+    } while (cursor !== undefined);
+  }
+  const removed = await storage.remove(ctx, 'files', path, { recursive });
+  if (!removed.ok) {
+    switch (removed.code) {
+      case 'not_empty':
+        return problem(
+          409,
+          'folder_not_empty',
+          `${path} is not empty. Pass ?recursive=true to delete it and its contents.`,
+        );
+      case 'not_found':
+        // Nothing at this path: the same idempotent answer as a delete that finds it already gone.
+        return { status: 204, kind: 'empty' };
+      case 'invalid_path':
+        return problem(400, 'invalid_path', 'The file path is not valid.');
     }
   }
-  if (remaining.length > 0) {
-    return json(200, { status: 'partial', deleted, remaining });
+  return row?.kind === 'folder'
+    ? json(200, { status: 'ok', deleted })
+    : { status: 204, kind: 'empty' };
+}
+
+function catalogResource(row: CatalogFile): FileResource {
+  return {
+    id: row.id,
+    path: row.path,
+    kind: row.kind,
+    sizeBytes: row.kind === 'file' ? row.sizeBytes : null,
+    contentType: row.kind === 'file' ? row.contentType : null,
+    lastModified: null,
+  };
+}
+
+/**
+ * `Content-Disposition` for a download, in the two-form shape RFC 6266 §4.3 specifies: a quoted
+ * ASCII `filename` every client understands, and a `filename*` carrying the real name in
+ * `UTF-8''`-percent-encoded form for the ones that do.
+ *
+ * The ASCII form is built from a positive character set — letters, digits and a short list of
+ * punctuation — with everything else replaced, rather than by deleting the characters that would
+ * break the quoting. A key is a caller-supplied string, so a name containing `"`, `\`, a newline or
+ * a `;` must not be able to close the quoted string and add a header parameter of its own, and a
+ * substitution that starts from what is *allowed* cannot miss a case the way one that starts from
+ * what is forbidden can (ADR-0015).
+ */
+export function contentDisposition(filename: string): string {
+  const ascii = filename.replace(/[^A-Za-z0-9._-]/g, '_');
+  // `filename` comes from a key that passed `key-safety.ts`, so it is never empty and has no `/`;
+  // the fallback is here because this function must produce a well-formed header regardless.
+  const quoted = ascii === '' ? 'download' : ascii;
+  return `attachment; filename="${quoted}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
+}
+
+/** ADR-0146 decision 6: a visitor's files live under `.attachments/<sessionId>/`. */
+export function isUnderSessionPrefix(path: string, sessionId: string): boolean {
+  const prefix = `.attachments/${sessionId}/`;
+  return sessionId !== '' && path.startsWith(prefix) && path.length > prefix.length;
+}
+
+/**
+ * A session-scoped browser token reaches only its own session's files; any other path is concealed
+ * as `404` rather than refused, so a token cannot probe what other sessions hold. `null` for every
+ * other principal, whose reach `decide()` has already settled.
+ */
+export function concealOutsideSession(
+  scope: { readonly kind: string; readonly id: string } | null,
+  path: string,
+): FileResult | null {
+  if (scope === null || scope.kind !== 'session') return null;
+  return isUnderSessionPrefix(path, scope.id)
+    ? null
+    : problem(404, 'file_not_found', 'No file has that id.');
+}
+
+/** ADR-0146 decision 6: whether `path` is under the reserved `.attachments/` directory. */
+export function isReservedAttachmentPath(path: string): boolean {
+  try {
+    return toObjectKey(path).split('/', 1)[0]?.toLowerCase() === '.attachments';
+  } catch {
+    return false;
   }
-  return json(200, { status: 'ok', deleted });
+}
+
+/** Whether `path` is under `.skills/`, where the catalog keeps the files of skills (US-STO-08). */
+function isUnderSkillRows(path: string): boolean {
+  try {
+    return toObjectKey(path).split('/', 1)[0]?.toLowerCase() === SKILL_ROWS_ROOT;
+  } catch {
+    return false;
+  }
+}
+
+/** `400 reserved_path` under `.skills/`: a skill's rows move only through `/api/skills`. */
+function skillRowsReserved(): FileResult {
+  return problem(400, 'reserved_path', 'The .skills directory holds skills; use /api/skills.');
+}
+
+/**
+ * ADR-0146 decision 6: `.attachments/` holds surface visitors' uploads. For any principal but a
+ * session token, writing into it (a rename to it, a delete of a file or folder under it) is `400
+ * reserved_path` and reading it is the concealed `404`. Renaming a file out of it (promotion) is the
+ * one operation it admits, so the rename route checks only the destination. A session token is
+ * confined to its own prefix by `concealOutsideSession`, so it passes here.
+ *
+ * A `write` (a create, an upload, a rename's destination) under `.skills/` is `400` for every
+ * token, so no file row can collide with a skill row. Reads and deletes pass: skill rows are kept
+ * out of them by their area, so a user's older file under `.skills/` still reads and deletes.
+ */
+export function attachmentsRefusal(
+  scope: { readonly kind: string } | null,
+  path: string,
+  access: 'read' | 'write' | 'delete',
+): FileResult | null {
+  if (access === 'write' && isUnderSkillRows(path)) return skillRowsReserved();
+  if (scope?.kind === 'session') return null;
+  if (!isReservedAttachmentPath(path)) return null;
+  return access === 'read'
+    ? problem(404, 'file_not_found', 'No file has that id.')
+    : problem(400, 'reserved_path', 'The .attachments directory holds surface visitors’ uploads.');
+}
+
+/**
+ * Whether a skill row sits at or under `path`: a rename or recursive delete there would carry it
+ * with the user's rows, so the files API refuses it.
+ */
+// @story US-STO-08
+async function holdsSkillRows(catalog: CatalogPort, path: string): Promise<boolean> {
+  if (!isUnderSkillRows(path)) return false;
+  let cursor: string | undefined;
+  do {
+    const page = await catalog.list(path, cursor === undefined ? undefined : { cursor });
+    if (page.rows.some((row) => row.area === 'skills')) return true;
+    cursor = page.cursor ?? undefined;
+  } while (cursor !== undefined);
+  return false;
+}
+
+export function directTransferUnsupported(): FileResult {
+  return problem(
+    501,
+    'direct_transfer_unsupported',
+    'This deployment’s object store cannot sign URLs; use the upload and download routes instead.',
+  );
+}
+
+/** What a presign request carries once parsed against its contract. */
+export interface PresignInput {
+  readonly ttlSeconds?: number | undefined;
+}
+
+export interface PresignUploadInput extends PresignInput {
+  readonly contentType?: string | null | undefined;
+  readonly sizeBytes: number;
+}
+
+/**
+ * Signs `path` through `sign` and answers the `201` link, or a typed refusal. A store that cannot
+ * sign what was asked (Azure Blob cannot bind a required upload length) is the same `501` as one that
+ * cannot sign at all; any other failure is `502 storage_unavailable`, logged by the error's name
+ * only, because a provider's message can carry the very link being signed (storage design §05).
+ */
+async function presigned(
+  sign: (key: string, request: SignedUrlRequest) => Promise<SignedUrl | null>,
+  path: string,
+  request: SignedUrlRequest & { readonly expiresInSeconds: number; readonly now: Date },
+): Promise<FileResult> {
+  let signed: SignedUrl | null;
+  try {
+    signed = await sign(path, request);
+  } catch (error) {
+    if (error instanceof SignedUrlUnsupportedError) return directTransferUnsupported();
+    log.error('[files] signing failed', {
+      name: error instanceof Error ? error.name : typeof error,
+    });
+    return problem(502, 'storage_unavailable', 'The object store could not sign a link; retry.');
+  }
+  if (signed === null) return problem(404, 'file_not_found', 'No file has that id.');
+  return json(201, {
+    url: signed.url,
+    method: request.method,
+    headers: signed.headers,
+    expiresAt: new Date(request.now.getTime() + request.expiresInSeconds * 1000).toISOString(),
+    path,
+  });
+}
+
+/**
+ * `POST /api/files/:id/download-urls` from the catalog: the ready file's own object, signed by the
+ * store that holds it. A pending, removed, other-area or absent row answers `404`, as does a
+ * legacy row with no storage key or no legacy store for its area. A presign does not check that
+ * the object exists, so a link to a vanished object is still minted and fails only when fetched.
+ * The link forces the same inert delivery the relay does: a type from the closed table and
+ * `Content-Disposition: attachment`.
+ */
+// @story US-STO-05
+export async function presignCatalogDownload(
+  storage: StorageService,
+  ctx: StorageContext,
+  path: string,
+  input: PresignInput,
+  now: Date = new Date(),
+): Promise<FileResult> {
+  const row = await storage.get(ctx, 'files', path);
+  if (row === null) return problem(404, 'file_not_found', 'No file has that id.');
+  const ttl = input.ttlSeconds ?? PRESIGNED_URL_DEFAULT_TTL_SECONDS;
+  return presigned(
+    () =>
+      storage.signDownload(ctx, row, {
+        ttlSeconds: ttl,
+        responseContentType: downloadContentType(row.contentType),
+        responseDisposition: contentDisposition(path.slice(path.lastIndexOf('/') + 1)),
+        now,
+      }),
+    path,
+    { method: 'GET', expiresInSeconds: ttl, now },
+  );
 }

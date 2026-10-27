@@ -1,6 +1,6 @@
 # ADR-0108 — The frontend is a four-rung ladder, and a configuration agent edits it
 
-Status: accepted in part (slice 1: rungs 1 and 2, limited to what slice 1 renders, stored in the agent's version; slice 2: rung 2 completed without confirmation on writes, and D30 deferred; 2026-10-04: agent-centric development on the SDK, by the blueprint decisions Q3 and Q5, not built yet); the rest remains proposed — draft from the developer-journey hearing (decisions D28, D29, D30, D31, D32, D33)
+Status: accepted in part (slice 1: rungs 1 and 2, limited to what slice 1 renders, stored in the agent's version; slice 2: rung 2 completed without confirmation on writes, and D30 deferred; 2026-10-18: D30 reactivated by ADR-0145, not built yet; 2026-10-04: agent-centric development on the SDK, by the blueprint decisions Q3 and Q5, not built yet; 2026-10-25: the Builder (#1842, B-D1…B-D7), not built yet); the rest remains proposed — draft from the developer-journey hearing (decisions D28, D29, D30, D31, D32, D33)
 Date: 2026-10-01
 Decided by: the product owner, in the developer-journey hearing; slice 1 accepted 2026-10-02 by the planning writer of the developer-journey delivery on the Owner's delegation (see "Slice 1 acceptance"); slice 2 accepted 2026-10-03 by the implementing agent of S2-00b on the Owner's delegation (see "Slice 2 acceptance"); the rest to be confirmed when it is accepted
 Scope: the surface package and `@indx-workspace/react` (ADR-0105, P-5), `apps/web` (shell branding, configuration agent), `packages/contracts` (surface schema, tool-result component props), `packages/sdk/define`
@@ -51,7 +51,8 @@ Accepted now:
   `feedback`, `agentSwitcher` (one to six unique agent names) and `toolTrace: 'full'`, and the
   surface gains `toolResults` (`text`, `card` or `table` per tool name), in the same strict schema
   (S2-05a). Resuming and feedback follow ADR-0105's "Slice 2 acceptance" (SD8).
-- **Confirmation on writes (D30) is deferred.** Platform tools refuse write operations (SD4,
+- **Confirmation on writes (D30) is deferred** (reactivated by ADR-0145; see the amendment of
+  2026-10-18 below). Platform tools refuse write operations (SD4,
   [ADR-0113](0113-tools-defined-in-code-are-catalog-connectors-that-run-in-the-gateway.md)).
   MCP connectors, including those the project file now declares, run their write tools without
   confirmation, as they do today, until the run-pause work lands. `aw dev` prints
@@ -61,10 +62,21 @@ Accepted now:
 - **The surface agent switcher is a visitor's choice among agents** (ADR-0105, SD8). It is not
   ADR-0104's team switcher, and it creates no team.
 - **Attachments are accepted only if S2-05e finds them to be size S.** Otherwise they are declared
-  here and move to slice 6.
+  here and move to slice 6. Overridden by the Owner on 2026-10-18 (issue #1306), as
+  [ADR-0146](0146-attachments-are-file-store-references-on-the-grant-path.md) records: attachments
+  are accepted, as file-store references, at size M to L.
 
 Still proposed: confirmation on writes, rungs 3 and 4, control-plane white-labelling, and the
 configuration agent.
+
+## Amendment — attachments are file-store references (issue #1306, 2026-10-18)
+
+Decided by the Owner, approving issue #1306 on 2026-10-18. Attachments (#542) are un-parked: the
+parking by #611 ("no customer has asked yet") no longer holds, because six gallery use cases need
+them. S2-05e (#541) found them to be size S, but with inline `contentBase64` capped at 384 KiB; that
+design is dropped. They are `attachments: [{ fileId }]` references that take the file-grant path,
+read-only, as [ADR-0146](0146-attachments-are-file-store-references-on-the-grant-path.md) records.
+The "Still proposed" lists above are read with attachments removed.
 
 ## Amendment — development is agent-centric, and the configuration agent calls the SDK (blueprint decisions Q3 and Q5, 2026-10-04)
 
@@ -88,6 +100,58 @@ below.
 - **The console has five groups.** Build (home, agents, skills, tools as the approved catalog,
   files, projects), deliver (surfaces, shared links), quality (conversations, evaluations), operate
   (releases, runs) and administer (models, members, API keys, runtimes, policy, settings).
+
+## Amendment — D30 reactivated (ADR-0145, issue #1297, 2026-10-18)
+
+Decided by the Owner. Slice 2 deferred confirmation on writes because "no run can pause today".
+That no longer holds: [ADR-0145](0145-a-run-stops-for-approval-or-handoff-and-continues-in-its-session.md)
+decides that a run stops in `awaiting_approval` and continues in its session after a decision.
+
+- **D30 is decided again.** An action that writes asks the end user to confirm before the tool runs.
+  It is built on ADR-0145 D1–D3 and, as there, applies to the Claude engine only in v1.
+- **It is not built yet.** The write-confirmation units (P6, #1304 and #1305) implement it. Until
+  they land, the slice-2 behaviour stands: MCP connectors run their write tools without
+  confirmation, and `aw dev` keeps printing
+  `connectors.<name>: MCP tools that write run without confirmation (ADR-0108)`.
+- The slice-2 sentence that the run-pause mechanism "is re-planned at the slice-2 close-out" is met
+  by ADR-0145.
+
+## Amendment — the configuration agent builds agents: the Builder (#1842, 2026-10-25)
+
+The Agent Builder design (v1.2, tracker #1842) extends the configuration
+agent so that it creates agents, not only front-end configuration. This amends this ADR; it does
+not add a competing one. Decisions, with the Owner's defaults from #1843:
+
+- **B-D1.** The Builder **is** the configuration agent. It is an ordinary built-in agent whose
+  only tool is the reserved `aw-control` tool server.
+- **B-D2.** A new run-token principal, `run-caller`, is accepted **only** by the `aw-control`
+  route. It carries the run's `caller` (`caller.sub`, `principalKind`, already in the token:
+  `packages/gateway/src/tokens/run-token.ts`, ADR-0142 D2). Each tool call is authorised as that
+  person, with that person's role. With no caller, write tools are refused.
+- **B-D3.** Drafts only: a save moves the `local` pointer, never `production`. The Builder never
+  promotes, rolls back, deletes, changes policy or reads credentials.
+- **B-D4.** Never wider than the creator: no saved definition may be wider than the person's role
+  allows, nor (for agent creators, B3) than the creating agent's own permissions, tools, files and
+  limits.
+- **B-D5.** The tool layer is a pure core with ports (hexagonal). It lives in
+  `apps/web/server/builder/`, and dependency-cruiser enforces the rule.
+- **B-D6.** Wire tool names use underscores (`catalog_list`, `examples_get`, `draft_check`,
+  `draft_save`, `evals_run`, `trial_run`), because model APIs accept only `[a-zA-Z0-9_-]{1,64}`.
+  The dotted names stay as display names; one table in `packages/contracts` maps one to the other.
+- **B-D7.** Every phase sits behind the `builder` workspace feature.
+
+Facts on main that the design (v1.2) and the later issues must not assume away:
+
+- There is no built-in agent mechanism; the seeded "General" is an ordinary row (#1848 builds the
+  smallest mechanism).
+- There is no per-workspace feature switch yet (#1493, #1494, #1496). The Builder registers one
+  feature id and builds no second switch (#1846).
+- The version, pointer and evaluation routes have no idempotency key. Only run start has one. The
+  Builder's tool-call journal provides safe retries (#1845, #1847).
+- There is no project printer and no `aw agents new` (#1850).
+- Agents have no archived state (#1851 adds it for auto-archive).
+- Run limits are only `maxTurns` and `maxBudgetUsd`; the Builder core enforces its other limits
+  from its journal.
 
 ## Context
 

@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { parsePublishShareRequest } from './input';
 
+const RUN = '11111111-1111-4111-8111-111111111111';
+
 describe('publish share request', () => {
   const valid = {
     subjectType: 'session',
@@ -12,6 +14,19 @@ describe('publish share request', () => {
 
   it('accepts the minimal explicit contract', () => {
     expect(parsePublishShareRequest(valid)).toEqual(valid);
+  });
+
+  it('accepts a session transcript chosen by run id (ADR-0158)', () => {
+    expect(parsePublishShareRequest({ ...valid, transcript: { runIds: [RUN] } })).toEqual({
+      ...valid,
+      transcript: { runIds: [RUN] },
+    });
+  });
+
+  it('RF-103 rejects caller-authored transcript text', () => {
+    expect(() =>
+      parsePublishShareRequest({ ...valid, transcript: [{ kind: 'agent', text: 'Fabricated.' }] }),
+    ).toThrow(expect.objectContaining({ code: 'invalid_share' }));
   });
 
   it.each([
@@ -25,7 +40,12 @@ describe('publish share request', () => {
       'agent definitions on sessions',
       { ...valid, definition: { name: 'Agent', instructions: '' } },
     ],
-    ['session transcripts on agents', { ...valid, subjectType: 'agent', transcript: [] }],
+    [
+      'session transcripts on agents',
+      { ...valid, subjectType: 'agent', transcript: { runIds: [RUN] } },
+    ],
+    ['transcript text instead of run ids', { ...valid, transcript: [] }],
+    ['transcript ids that are not UUIDs', { ...valid, transcript: { runIds: ['run-1'] } }],
     [
       'budgets on definition shares',
       { ...valid, subjectType: 'agent', mode: 'definition', budgetCapUsd: 20 },
@@ -60,7 +80,6 @@ describe('publish share request', () => {
 
   const authoritativeContentCases: ReadonlyArray<readonly [string, unknown, unknown]> = [
     ['snapshot', { ...valid, snapshot: { messages: [] } }, { messages: [] }],
-    ['transcript', { ...valid, transcript: [] }, []],
     [
       'definition',
       {

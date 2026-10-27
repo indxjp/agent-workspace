@@ -9,6 +9,7 @@
  */
 import { checkEgress, loadEgressPolicyFromEnv } from '@agent-workspace/core';
 import type { ToolConnectorKind } from '@agent-workspace/core/db';
+import type { ConnectorIdentity } from '@indx-workspace/contracts/identity-assertion';
 import {
   CreateToolConnectorRequestSchema,
   POSTGRES_TOOL_OPERATION_NAMES,
@@ -16,22 +17,8 @@ import {
   TOOL_CONNECTOR_PROBLEM_CODES,
 } from '@indx-workspace/contracts/tool-connectors';
 
+import { problem, type ApiResult } from '../http/result';
 import { normaliseOpenApi } from '../openapi/normalise';
-
-/** A status and a body, the shape of `handlers.ts`'s `ApiResult` (kept here to avoid a cycle). */
-export interface ToolResult {
-  readonly status: number;
-  readonly body: unknown;
-}
-
-function problem(
-  status: number,
-  code: string,
-  message: string,
-  details: readonly string[],
-): ToolResult {
-  return { status, body: { error: { code, message, details: [...details] } } };
-}
 
 export type CheckConnectorEgress = (
   url: string,
@@ -53,6 +40,8 @@ export interface ToolConnectorWrite {
   readonly openapiDocument: string | null;
   /** The raw credential, sealed as a secret by the store and never returned. */
   readonly credential: string | null;
+  /** The identity opt-in (ADR-0142 D1); absent on a replacement removes it. `openapi` only. */
+  readonly identity?: ConnectorIdentity;
 }
 
 export type ToolAdmission =
@@ -61,14 +50,14 @@ export type ToolAdmission =
       readonly write: ToolConnectorWrite;
       readonly dryRun: boolean;
       /** The `200` a dry run answers: the `TestConnectionOutcome` the route already declares. */
-      readonly dryRunResult: ToolResult;
+      readonly dryRunResult: ApiResult;
     }
-  | { readonly ok: false; readonly result: ToolResult };
+  | { readonly ok: false; readonly result: ApiResult };
 
 function refusal(
   code: keyof typeof TOOL_CONNECTOR_PROBLEM_CODES,
   details: readonly string[],
-): { readonly ok: false; readonly result: ToolResult } {
+): { readonly ok: false; readonly result: ApiResult } {
   return {
     ok: false,
     result: problem(
@@ -84,7 +73,7 @@ function dryRunResult(
   kind: ToolConnectorKind,
   serverName: string | null,
   toolCount: number,
-): ToolResult {
+): ApiResult {
   return {
     status: 200,
     body: {
@@ -180,6 +169,7 @@ export async function admitToolConnector(
       toolConfig: { openapi: normalised.openapi, parameters: normalised.parameters },
       openapiDocument: body.document,
       credential: body.credential ?? null,
+      ...(body.identity === undefined ? {} : { identity: body.identity }),
     },
   };
 }

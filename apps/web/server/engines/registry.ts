@@ -26,6 +26,7 @@ import {
   type EngineId,
 } from '@indx-workspace/contracts/engines';
 
+import { defineSlot } from '../runtime-slot';
 import { engineIsInstalled } from './images';
 
 /**
@@ -37,7 +38,7 @@ import { engineIsInstalled } from './images';
  * "watched by a replay, not by a comment" rule as
  * `docs/adr/W2-CP-07-a-restatement-across-a-package-boundary-is-watched-by-a-replay-not-a-comment.md`.
  */
-export const CLAUDE_AGENT_SDK_VERSION = '0.3.296';
+export const CLAUDE_AGENT_SDK_VERSION = '0.3.310';
 
 /**
  * A descriptor as the *registry* holds one: the contract's {@link EngineDescriptor} with `id`
@@ -75,19 +76,19 @@ export type InstalledEngine = RegisteredEngine & Readonly<{ installed: boolean }
  * The OpenAI Agents SDK version its adapter pins (ENG-09, #308). Restated for the reason
  * {@link CLAUDE_AGENT_SDK_VERSION} is; `registry.test.ts` reads the adapter's manifest.
  */
-export const OPENAI_AGENTS_SDK_VERSION = '0.20.0';
+export const OPENAI_AGENTS_SDK_VERSION = '0.21.0';
 
 /**
  * The pi coding agent version its adapter pins (ENG-08, #307). Restated for the reason
  * {@link CLAUDE_AGENT_SDK_VERSION} is; `registry.test.ts` reads the adapter's manifest.
  */
-export const PI_CODING_AGENT_VERSION = '1.1.0';
+export const PI_CODING_AGENT_VERSION = '1.4.0';
 
 /**
  * The Mastra release its adapter pins (ENG-10, #309). Restated for the reason
  * {@link CLAUDE_AGENT_SDK_VERSION} is; `registry.test.ts` reads the adapter's manifest.
  */
-export const MASTRA_CORE_VERSION = '1.76.0';
+export const MASTRA_CORE_VERSION = '1.79.0';
 
 /**
  * The SDK version each adapter pins, by engine. A build fact of the adapter's manifest, which is
@@ -111,11 +112,7 @@ const BUILT_IN_ENGINES: readonly RegisteredEngine[] = ENGINE_IDS.map((id) =>
   }),
 );
 
-interface GlobalEngineRegistry {
-  __agentWorkspaceExtraEngines__?: readonly RegisteredEngine[];
-}
-
-const globalRegistry = globalThis as typeof globalThis & GlobalEngineRegistry;
+const extraEngines = defineSlot<readonly RegisteredEngine[]>('__agentWorkspaceExtraEngines__');
 
 /**
  * Every engine this deployment registers, `claude-agent-sdk` first.
@@ -128,7 +125,7 @@ const globalRegistry = globalThis as typeof globalThis & GlobalEngineRegistry;
  */
 export function registeredEngines(): readonly InstalledEngine[] {
   const registered: RegisteredEngine[] = [...BUILT_IN_ENGINES];
-  for (const extra of globalRegistry.__agentWorkspaceExtraEngines__ ?? []) {
+  for (const extra of extraEngines.current() ?? []) {
     const existing = registered.findIndex((engine) => engine.id === extra.id);
     if (existing === -1) registered.push(extra);
     else registered[existing] = extra;
@@ -169,13 +166,10 @@ export function registeredEngine(id: string): InstalledEngine | null {
  */
 export function registerEngineForTests(descriptor: RegisteredEngine): void {
   const validated = RegisteredEngineSchema.parse(descriptor);
-  globalRegistry.__agentWorkspaceExtraEngines__ = [
-    ...(globalRegistry.__agentWorkspaceExtraEngines__ ?? []),
-    validated,
-  ];
+  extraEngines.set([...(extraEngines.current() ?? []), validated]);
 }
 
 /** Undo every {@link registerEngineForTests}. Call it in `afterEach`. */
 export function clearEnginesRegisteredForTests(): void {
-  delete globalRegistry.__agentWorkspaceExtraEngines__;
+  extraEngines.clear();
 }

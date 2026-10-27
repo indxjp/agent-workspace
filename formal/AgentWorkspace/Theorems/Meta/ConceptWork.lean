@@ -42,7 +42,7 @@ theorem runs_carry_no_owner_principal :
       ([TableName.agents, .skills, .files, .mcpServers, .projects, .sessions].all fun t =>
         (catalogue t).isNotNull "owner_principal_id") = true ∧
       (catalogue .shares).isNotNull "publisher_principal_id" = true := by
-  decide
+  decide +kernel
 
 /-- The session with a foreign SDK id: its `engine_session_id` is not its platform id. -/
 def foreignSdkSession : Session := { Witness.session with engineSessionId := some "sdk-7" }
@@ -117,7 +117,7 @@ theorem transcript_store_is_keyed_by_the_platform_id :
     (catalogue .sessionTranscripts).foreignKeySignature? "session_transcripts_session_workspace_fk" =
       some (["session_id", "workspace_id"], .sessions, ["id", "workspace_id"], .cascade) ∧
       (catalogue .sessions).isSingleKey "engine_session_id" = false := by
-  decide
+  decide +kernel
 
 /-- The witness transcript, stored under a key that is not its workspace id. -/
 def foreignKeyTranscript : Transcript :=
@@ -169,7 +169,7 @@ theorem audit_actor_key_is_recorded_as_no_action :
     (catalogue .auditEvents).foreignKeySignature? "audit_events_actor_principal_workspace_fk" =
       some (["workspace_id", "actor_principal_id"], .workspacePrincipals, ["workspace_id", "id"],
         .noAction) := by
-  decide
+  decide +kernel
 
 /-- The "not blank" checks use one-argument `btrim`, which strips spaces only: a name or label of
 tabs or line breaks passes the database, although the project routes refuse it (they test
@@ -182,7 +182,7 @@ theorem blank_checks_trim_spaces_only :
 ")]⟩ = true ∧
       workCheckHolds "projects_name_not_blank" ⟨[("name", "   ")]⟩ = false ∧
       workCheckHolds "audit_events_actor_label_not_blank" ⟨[("actor_label", "	")]⟩ = true := by
-  decide
+  decide +kernel
 
 /-- The ledger's "recorded, at `cost_usd = '0'`" rule for unpriced responses is kept by the
 repository only: a ledger row with no price table version and a nonzero cost passes every
@@ -192,7 +192,7 @@ repository only: a ledger row with no price table version and a nonzero cost pas
 theorem ledger_admits_an_unpriced_charge :
     let u : UsageRecord := { Witness.usage with priceTableVersion := none }
     u.wellFormed = true ∧ u.isPriced = false ∧ u.unpricedIsZero = false := by
-  decide
+  decide +kernel
 
 /-! ## Witnesses -/
 

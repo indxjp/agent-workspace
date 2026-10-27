@@ -87,6 +87,7 @@ describe('guardProjectSessionCreation', () => {
       update: () => Promise.reject(new Error('unused')),
       archive: () => Promise.reject(new Error('unused')),
       restore: () => Promise.reject(new Error('unused')),
+      discardIfUnused: () => Promise.resolve(false),
     } satisfies SessionRepository;
     return { calls, sessions };
   }

@@ -21,8 +21,16 @@ An `allow` rule `selectAllowedOperations` refuses, at its path in the create bod
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `path` | `readonly ["allow", number]` | Yes |  |
-| `code` | `"connector_spec_invalid" \| "connector_write_unsupported"` | Yes |  |
+| `code` | `"connector_spec_invalid"` | Yes |  |
 | `message` | `string` | Yes |  |
+
+## AW_CONTROL_CONNECTOR
+
+The reserved tool-server id of the Builder's `aw-control` tools (design §04). The platform owns
+the name: no workspace connector may take it, so a run that lists it can only ever reach the
+control-plane tools through the gateway.
+
+Value: `'aw-control'`
 
 ## AW_DEV_TOOLS_CONNECTOR
 
@@ -69,6 +77,7 @@ The body of `POST /api/connectors` for an `openapi` connector, as a client write
 | `baseUrl` | `undefined \| string` | No |  |
 | `auth` | `undefined \| "bearer" \| "none" \| Readonly<{ header: string; }>` | No |  |
 | `credential` | `undefined \| string` | No |  |
+| `identity` | `undefined \| Readonly<{ secret: string; }>` | No | Opt in to the signed identity assertion (ADR-0142 D1): the signing secret's name. |
 | `dryRun` | `undefined \| true` | No |  |
 
 ## CreateOpenApiConnectorRequestSchema
@@ -78,7 +87,8 @@ C15).
 
 - `document`: the OpenAPI document as text, up to 1 MiB; the server never fetches one.
 - `baseUrl`: when absent, `servers[0]` decides it at registration (SD15).
-- `allow`: the `GET`/`HEAD` rules that pick the operations to expose (SD14).
+- `allow`: the rules that pick the operations to expose (SD14); a write operation is implicitly
+  `requireApproval` (SD4).
 - `auth` (default `none`) and `credential`, write-only: required when `auth` is not `none` and
   refused when it is.
 - `dryRun: true` checks the body and the document without saving.
@@ -95,6 +105,7 @@ The HTTP body carries the credential value; the define-time form (`openapiTool`)
 | `auth` | `"bearer" \| "none" \| Readonly<{ header: string; }>` | Yes |  |
 | `baseUrl` | `undefined \| string` | No |  |
 | `credential` | `undefined \| string` | No |  |
+| `identity` | `undefined \| Readonly<{ secret: string; }>` | No | Opt in to the signed identity assertion (ADR-0142 D1): the signing secret's name. |
 | `dryRun` | `undefined \| true` | No |  |
 
 ## CreatePostgresConnectorInput
@@ -107,7 +118,7 @@ The body of `POST /api/connectors` for a `postgres` connector, as a client write
 | `name` | `string` | Yes |  |
 | `credential` | `string` | Yes |  |
 | `tables` | `readonly string[]` | Yes |  |
-| `readOnly` | `false \| true` | Yes |  |
+| `readOnly` | `true` | Yes |  |
 | `maxRows` | `undefined \| number` | No |  |
 | `dryRun` | `undefined \| true` | No |  |
 
@@ -117,8 +128,8 @@ The body of `POST /api/connectors` for a `postgres` connector (ADR-0113 SD1, SD4
 
 - `credential`: the connection URL, write-only, sealed as a secret and never returned.
 - `tables`: the 1–64 qualified tables it may read.
-- `readOnly: true`, required: slice 2 offers only structured, parameterised reads (SD4);
-  `false` is `422 connector_write_unsupported`.
+- `readOnly: true`, required: a postgres connector offers only structured, parameterised reads
+  (SD4); anything else is `400 invalid_body`.
 - `maxRows` (default 100, at most 1000) and `dryRun: true`.
 
 | Name | Type | Required | Description |
@@ -143,7 +154,7 @@ A tool connector create body, as a client writes it.
 The body of `POST /api/connectors` for a tool connector, discriminated by `kind` (C15). A body
 without `kind` is an MCP connector (`CreateConnectorInput`).
 
-- `Readonly<{ kind: "openapi"; name: string; document: string; allow: readonly string[]; auth: "bearer" | "none" | Readonly<{ header: string; }>; baseUrl?: string | undefined; credential?: string | undefined; dryRun?: true | undefined; }>`
+- `Readonly<{ kind: "openapi"; name: string; document: string; allow: readonly string[]; auth: "bearer" | "none" | Readonly<{ header: string; }>; baseUrl?: string | undefined; credential?: string | undefined; identity?: Readonly<{ secret: string; }> | undefined; dryRun?: true | undefined; }>`
 - `Readonly<{ kind: "postgres"; name: string; credential: string; tables: readonly string[]; readOnly: true; maxRows: number; dryRun?: true | undefined; }>`
 
 ## describeToolRule
@@ -156,6 +167,14 @@ only; never store or send the result back as a rule. Pure.
 ```ts
 describeToolRule(rule: string, connectorNames: Readonly<Record<string, string>>): string
 ```
+
+## GATEWAY_AW_CONTROL_PATH
+
+The gateway path an engine reaches the `AW_CONTROL_CONNECTOR` tools through (#1846). The
+gateway forwards it to the control plane's `/api/builder/mcp` at the one origin its deployment
+sets, never at one a request, a header or a run row names.
+
+Value: `` `/v1/tools/${AW_CONTROL_CONNECTOR}/mcp` ``
 
 ## GATEWAY_TOOL_ROUTE
 
@@ -189,6 +208,15 @@ so a value that is not a UUID is a programming error and throws a `RangeError`.
 gatewayToolPath(connectorId: string): string
 ```
 
+## isReservedConnectorName
+
+Whether `name` is a connector name the platform keeps for itself (`AW_CONTROL_CONNECTOR`),
+compared after trimming and lower-casing so no spelling of it slips through.
+
+```ts
+isReservedConnectorName(name: string): boolean
+```
+
 ## OPENAPI_ALLOW_MAX_RULES
 
 The most rules one `allow` list may hold (C15).
@@ -198,8 +226,10 @@ Value: `256`
 ## OPENAPI_AUTH_HEADER_REFUSED_NAMES
 
 Header names an `openapi` connector may never put its credential in, compared ignoring case:
-they frame the request, so a credential there would change what is sent.
+they frame the request, so a credential there would change what is sent. The identity
+assertion's header is here too: only the platform may write it (ADR-0142 D1).
 
+- `IDENTITY_ASSERTION_HEADER`
 - `'host'`
 - `'content-length'`
 - `'content-type'`
@@ -226,13 +256,13 @@ Value: `128`
 
 ## OpenApiAllowRuleSchema
 
-One `allow` rule (ADR-0113 SD4, SD14, C15): `GET <glob>`, `HEAD <glob>` or `operationId:<id>`.
+One `allow` rule (ADR-0113 SD4, SD14, C15): `<METHOD> <glob>` or `operationId:<id>`.
 
 A glob starts with `/`; each segment is a literal (printable ASCII without `/ ? # *`), `*` (one
-segment) or `**` (zero or more, last segment only). `GET` and `HEAD` are upper case. Another
-HTTP method in any case (`POST /refunds`, `post /refunds`) is refused with `params.problemCode`
-`connector_write_unsupported`. An
-operation id is 1–256 characters with no whitespace or control character.
+segment) or `**` (zero or more, last segment only). The method is one of
+`TOOL_OPERATION_METHODS`, in upper case. A rule admitting a `TOOL_WRITE_METHODS`
+method is allowed: its operations are implicitly `requireApproval` (`toolApprovalRules`).
+An operation id is 1–256 characters with no whitespace or control character.
 
 `string`
 
@@ -474,9 +504,11 @@ problemCodeOfIssue(issue: z.core.$ZodIssue): ToolConnectorProblemCode | null
 ## RESERVED_MCP_SERVER_KEYS
 
 MCP server keys a run's other components own, which no connector may take (ADR-0113 SD13): the
-Claude adapter's skill-script server.
+Claude adapter's skill-script server and the Builder's `AW_CONTROL_CONNECTOR` tools, so a
+workspace connector stored under that name can never appear as `mcp__aw-control__*`.
 
 - `'agent-workspace'`
+- `AW_CONTROL_CONNECTOR`
 
 ## selectAllowedOperations
 
@@ -487,9 +519,9 @@ A path rule admits each operation of its method whose template matches segment b
 template segment `{x}` is one segment, `*` matches exactly one, a trailing `**` zero or more and
 a literal itself only. `GET /orders/*` admits `/orders/{orderId}`, not `/orders/{orderId}/items`.
 A path rule that admits no operation is refused as `connector_spec_invalid`. An `operationId:`
-rule admits its operation when that is `GET` or `HEAD`; one naming another method is refused as
-`connector_write_unsupported`, one naming no operation as `connector_spec_invalid`. A rule the
-schema would refuse is refused here the same way.
+rule admits its operation whatever its method is among `TOOL_OPERATION_METHODS`; one naming
+an operation with another method (`OPTIONS`, `TRACE`) or no operation is refused as
+`connector_spec_invalid`. A rule the schema would refuse is refused here the same way.
 
 A candidate whose path is not a valid template (it does not start with `/`, is too long, or
 holds whitespace or a control character) is never admitted, by any rule.
@@ -500,8 +532,8 @@ selectAllowedOperations(allow: readonly string[], candidates: readonly Candidate
 
 ## TOOL_CONNECTOR_KINDS
 
-The tool connectors (ADR-0113 SD1, plan C15): a connector of kind `openapi` (a read-only HTTP
-API described by an OpenAPI document) or `postgres` (structured, parameterised reads from named
+The tool connectors (ADR-0113 SD1, plan C15): a connector of kind `openapi` (an HTTP API
+described by an OpenAPI document, whose writes run only for an approved call) or `postgres` (structured, parameterised reads from named
 tables). Both run in the gateway behind `GATEWAY_TOOL_ROUTE` (C16), never in the sandbox.
 A connector without a kind is an MCP connector (`@indx-workspace/contracts/connectors`).
 
@@ -519,23 +551,29 @@ Problem codes the tool connector routes add to the connector routes' table, with
 travels under (ADR-0113 SD4, C15, C17).
 
 - `connector_spec_invalid`: the document is empty, too large or unusable, or an `allow` rule
-  names no operation or admits nothing (`selectAllowedOperations`).
-- `connector_write_unsupported`: an `allow` rule names a method other than `GET`/`HEAD` (in any
-  case), an `operationId:` rule names such an operation, or a `postgres` body sets `readOnly`
-  to anything but `true` (SD4).
+  names no operation, admits nothing or names an operation whose method is not supported
+  (`selectAllowedOperations`).
 - `connector_tool_name_collision`: two operations of one connector get the same name (C17).
 - `connector_kind_unsupported`: the body names a kind this server does not create.
 
 | Key | Value |
 | --- | --- |
 | `connector_spec_invalid` | `422` |
-| `connector_write_unsupported` | `422` |
 | `connector_tool_name_collision` | `422` |
 | `connector_kind_unsupported` | `400` |
 
 ## TOOL_GATEWAY_PROBLEM_CODES
 
 Problem codes the gateway's tool route answers with at run time (C16).
+
+`approval_required` is the tool error (not an HTTP failure of the route) a write answers with
+when its canonical call is not in the run's approved calls (ADR-0113 SD4, amended by #1304); it
+is the word the engine's denial message starts with. `approval_already_used` is the same refusal
+for a write whose approval was consumed by an earlier call: an approved write runs at most once
+(ADR-0145 D2.1), and the gateway refuses the repeat before it reads the credential.
+
+`tool_control_plane_unconfigured` answers an `AW_CONTROL_CONNECTOR` call on a gateway whose
+deployment set no control-plane origin; the gateway never falls back to another one.
 
 The gateway answers a disabled connector, or one from another workspace, with
 `403 tool_not_in_run` as well, so the route never reveals whether a connector exists. S2-02d may
@@ -545,8 +583,11 @@ refine this.
 | --- | --- |
 | `tool_run_not_active` | `401` |
 | `tool_not_in_run` | `403` |
+| `approval_required` | `403` |
+| `approval_already_used` | `403` |
 | `tool_upstream_failed` | `502` |
 | `tool_upstream_timeout` | `504` |
+| `tool_control_plane_unconfigured` | `503` |
 
 ## TOOL_NAME_MAX_LENGTH
 
@@ -556,10 +597,14 @@ Value: `64`
 
 ## TOOL_OPERATION_METHODS
 
-The only HTTP methods an `openapi` connector exposes in slice 2 (ADR-0113 SD4).
+The HTTP methods an `openapi` connector exposes (ADR-0113 SD4, amended by #1304).
 
 - `'GET'`
 - `'HEAD'`
+- `'POST'`
+- `'PUT'`
+- `'PATCH'`
+- `'DELETE'`
 
 ## TOOL_OPERATION_NAME_MAX_LENGTH
 
@@ -595,6 +640,27 @@ The longest MCP server key `toolServerKey` returns (ADR-0113 SD13).
 
 Value: `16`
 
+## TOOL_WRITE_METHODS
+
+The methods of `TOOL_OPERATION_METHODS` that change state: each is implicitly `requireApproval`.
+
+- `'POST'`
+- `'PUT'`
+- `'PATCH'`
+- `'DELETE'`
+
+## toolApprovalRules
+
+The tool rules that gate an `openapi` connector's writes (ADR-0113 SD4, amended by #1304):
+`mcp__<serverKey>__<operation>` for each operation whose method is in `TOOL_WRITE_METHODS`.
+Every write is implicitly `requireApproval`; this is the one definition of that, and the
+gateway's backstop feeds it to `needsApproval` (ADR-0145 D3), the decision the engine's
+`canUseTool` makes too. Pure.
+
+```ts
+toolApprovalRules(serverKey: string, operations: readonly Pick<ToolOperation, 'name' | 'method'>[]): readonly string[]
+```
+
 ## ToolConnectorKind
 
 One of `TOOL_CONNECTOR_KINDS`.
@@ -607,7 +673,6 @@ One of `TOOL_CONNECTOR_KINDS`.
 One of the keys of `TOOL_CONNECTOR_PROBLEM_CODES`.
 
 - `"connector_spec_invalid"`
-- `"connector_write_unsupported"`
 - `"connector_tool_name_collision"`
 - `"connector_kind_unsupported"`
 
@@ -615,10 +680,13 @@ One of the keys of `TOOL_CONNECTOR_PROBLEM_CODES`.
 
 One of the keys of `TOOL_GATEWAY_PROBLEM_CODES`.
 
+- `"approval_required"`
 - `"tool_run_not_active"`
 - `"tool_not_in_run"`
+- `"approval_already_used"`
 - `"tool_upstream_failed"`
 - `"tool_upstream_timeout"`
+- `"tool_control_plane_unconfigured"`
 
 ## ToolOperation
 
@@ -627,7 +695,7 @@ One of the operations an `openapi` connector exposes.
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `name` | `string` | Yes |  |
-| `method` | `"GET" \| "HEAD"` | Yes |  |
+| `method` | `"GET" \| "HEAD" \| "POST" \| "PUT" \| "PATCH" \| "DELETE"` | Yes |  |
 | `path` | `string` | Yes |  |
 
 ## ToolOperationMethod
@@ -636,6 +704,10 @@ One of `TOOL_OPERATION_METHODS`.
 
 - `"GET"`
 - `"HEAD"`
+- `"POST"`
+- `"PUT"`
+- `"PATCH"`
+- `"DELETE"`
 
 ## ToolOperationNameSchema
 
@@ -645,12 +717,12 @@ An operation name as the gateway lists it (C17): `TOOL_OPERATION_NAME_PATTERN`.
 
 ## ToolOperationSchema
 
-One tool an `openapi` connector exposes (C17): its name, its read method and its path template.
+One tool an `openapi` connector exposes (C17): its name, its method and its path template.
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `name` | `string` | Yes |  |
-| `method` | `"GET" \| "HEAD"` | Yes |  |
+| `method` | `"GET" \| "HEAD" \| "POST" \| "PUT" \| "PATCH" \| "DELETE"` | Yes |  |
 | `path` | `string` | Yes |  |
 
 ## toolRuleConnectorServer

@@ -12,7 +12,7 @@ export default defineAgent({
     id: 'claude-agent-sdk',
     autoApprove: ['Bash', 'mcp__agent-workspace__run_skill_script'],
   },
-  // runCommands runs the cost-model script; nothing is written, and the ERP is read-only.
+  // runCommands runs the cost-model script; the one write is the ERP's createQuote, which waits for approval.
   permissions: { readFiles: true, runCommands: true },
   tools: [erp],
   skills: [skill('cost-model')],

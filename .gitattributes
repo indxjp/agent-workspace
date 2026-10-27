@@ -24,3 +24,13 @@ pnpm-lock.yaml text eol=lf linguist-generated=true
 *.eot binary
 *.zip binary
 *.gz binary
+
+# Generated outputs. Marked so review UIs collapse them and the PR size gate
+# (scripts/ci/check-pr-size.mjs) does not count them.
+llms.txt linguist-generated=true
+docs/sdk/site/openapi.json linguist-generated=true
+docs/sdk/site/reference/** linguist-generated=true
+migrations/meta/** linguist-generated=true
+formal/generated/** linguist-generated=true
+**/__golden__/** linguist-generated=true
+tests/e2e/platforms-journey/golden/** linguist-generated=true

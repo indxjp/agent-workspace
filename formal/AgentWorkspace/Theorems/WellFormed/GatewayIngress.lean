@@ -17,7 +17,7 @@ open AgentWorkspace.Concepts.Usage
 /-- The six routes of spec §9 have six distinct paths. -/
 @[aw_spec (tier := T0) (doc := "docs/spec.md#9-model-gateway")
   (ts := "packages/gateway/src/router.ts#ROUTES")]
-theorem route_paths_are_distinct : (Route.all.map Route.path).Nodup := by decide
+theorem route_paths_are_distinct : (Route.all.map Route.path).Nodup := by decide +kernel
 
 /-- The route table is exactly §9's fenced block, in the order the specification prints it. -/
 @[aw_spec (tier := T0) (doc := "docs/spec.md#9-model-gateway")
@@ -25,7 +25,7 @@ theorem route_paths_are_distinct : (Route.all.map Route.path).Nodup := by decide
 theorem route_table_is_the_spec_contract :
     Route.all.map Route.path =
       ["/v1/messages", "/v1/messages/count_tokens", "/v1/responses", "/v1/chat/completions",
-        "/v1/models", "/health"] := by decide
+        "/v1/models", "/health"] := by decide +kernel
 
 /-- Exactly three routes carry a model turn, and each names a different dialect. -/
 @[aw_spec (tier := T0) (ts := "packages/gateway/src/auth.ts#meteredProtocol")
@@ -33,13 +33,13 @@ theorem route_table_is_the_spec_contract :
 theorem metered_routes_name_distinct_protocols :
     (Route.all.filterMap routeProtocol?).length = 3 ∧
       (Route.all.filterMap routeProtocol?) =
-        [.anthropicMessages, .openaiResponses, .openaiChatCompletions] := by decide
+        [.anthropicMessages, .openaiResponses, .openaiChatCompletions] := by decide +kernel
 
 /-- Every wire protocol is reachable through exactly one route. -/
 @[aw_spec (tier := T0) (ts := "packages/gateway/src/router.ts#RELAYED_PROTOCOLS")]
 theorem every_protocol_has_one_route (protocol : WireProtocol) :
     (Route.all.filter fun route => routeProtocol? route == some protocol).length = 1 := by
-  cases protocol <;> decide
+  cases protocol <;> decide +kernel
 
 /-! ## The closed sets -/
 
@@ -56,7 +56,7 @@ theorem wire_protocol_round_trips (protocol : WireProtocol) :
   (ts := "packages/gateway/src/providers/passthrough.ts#OPENAI_WIRE_PROTOCOLS")]
 theorem exactly_two_protocols_are_relayed :
     (WireEnum.all (α := WireProtocol)).filter WireProtocol.isRelayed =
-      [.openaiResponses, .openaiChatCompletions] := by decide
+      [.openaiResponses, .openaiChatCompletions] := by decide +kernel
 
 /-- Exactly two of the ten tool types are relayed, so eight fail closed. -/
 @[aw_spec (tier := T0)
@@ -64,7 +64,7 @@ theorem exactly_two_protocols_are_relayed :
   (ts := "packages/gateway/src/providers/passthrough.ts#unrelayableToolType")]
 theorem exactly_two_tool_types_are_relayable :
     ToolType.all.filter ToolType.isRelayable = [.function, .custom] ∧
-      (ToolType.all.filter (!ToolType.isRelayable ·)).length = 8 := by decide
+      (ToolType.all.filter (!ToolType.isRelayable ·)).length = 8 := by decide +kernel
 
 /-! ## Totality of the decision -/
 
@@ -95,7 +95,7 @@ either a forward or a refusal, and never both. -/
 theorem decision_is_total_over_protocol_and_family (protocol : WireProtocol)
     (family : ConnectionFamily) :
     (ingressDecision (clean protocol family)).forwardedUpstream = family.speaks protocol := by
-  cases protocol <;> cases family <;> decide
+  cases protocol <;> cases family <;> decide +kernel
 
 /-- The stable codes the ingress decision can refuse with: the seven `authenticateGatewayRequest`
 already publishes, plus the four this unit adds. -/
@@ -115,7 +115,7 @@ private theorem authenticate_deny_code_is_declared {hasBearer : Bool} {v : Verif
   unfold authenticate at h
   repeat' split at h
   all_goals first
-    | (cases h; decide)
+    | (cases h; decide +kernel)
     | cases h
     | simp_all
 
@@ -150,7 +150,7 @@ theorem every_refusal_carries_a_declared_code (r : Request) :
 @[aw_spec (tier := T0) (ts := "packages/gateway/src/providers/passthrough.ts#refusal")]
 theorem declared_refusal_codes_are_non_empty :
     ingressRefusalCodes.all (fun code => !code.isEmpty) = true ∧
-      ingressRefusalCodes.Nodup := by decide
+      ingressRefusalCodes.Nodup := by decide +kernel
 
 /-- A forwarded request is the only shape that carries an upstream request; a refusal carries
 none, so nothing can be read out of a refusal by mistake. -/
@@ -165,7 +165,7 @@ theorem refusal_carries_no_upstream_request (status : Nat) (code : String) :
 theorem empty_frames_measure_zero :
     extractAnthropic [] = Measurement.zero ∧
       extractResponses [] = Measurement.zero ∧
-      extractChat [] = Measurement.zero := by decide
+      extractChat [] = Measurement.zero := by decide +kernel
 
 /-- A measurement's `metered` and `completed` flags are independent, and `settle` reads both — and,
 on an unmetered response, the protocol as well: all twelve combinations of the two flags with the
@@ -177,6 +177,6 @@ theorem settlement_is_total_over_the_two_flags (protocol : WireProtocol)
     settledAccounting (settle protocol ⟨Counters.zero, metered, completed⟩) =
       (if metered then .complete
         else if completed && protocol.isRelayed then .unavailable else .failed) := by
-  cases protocol <;> cases metered <;> cases completed <;> decide
+  cases protocol <;> cases metered <;> cases completed <;> decide +kernel
 
 end AgentWorkspace.Theorems.WellFormed.GatewayIngress

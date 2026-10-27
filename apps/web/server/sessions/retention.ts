@@ -21,7 +21,21 @@ export interface PurgeableSessionStateStore {
   purgeBefore(
     workspaceId: string,
     before: Date,
-  ): Promise<{ readonly entries: number; readonly blobs: number }>;
+  ): Promise<{
+    readonly entries: number;
+    readonly blobs: number;
+    /** The sessions the pass left with no stream at all: their conversation is purged. */
+    readonly sessionIds: readonly string[];
+  }>;
+}
+
+/**
+ * ADR-0146 D6: a visitor's `.attachments/<sessionId>/` lives as long as its session, so the pass
+ * deletes the prefix of each session it purged, objects and catalogue rows together. A file a member
+ * promoted (renamed out) is no longer under the prefix and stays. Answers how many files went.
+ */
+export interface PurgeableSessionAttachments {
+  purgeSessions(workspaceId: string, sessionIds: readonly string[]): Promise<number>;
 }
 
 export type SessionRetentionResult =
@@ -33,6 +47,7 @@ export type SessionRetentionResult =
       readonly transcripts: number;
       readonly stateEntries: number;
       readonly stateBlobs: number;
+      readonly attachments: number;
     };
 
 function positiveInteger(value: string | undefined, fallback: number, name: string): number {
@@ -76,6 +91,7 @@ export async function runSessionRetention(
     workspaceId: string;
     store: PurgeableTranscriptStore;
     stateStore: PurgeableSessionStateStore;
+    attachments?: PurgeableSessionAttachments;
     lease: RetentionLease;
     policy: SessionRetentionPolicy;
     now?: Date;
@@ -92,12 +108,17 @@ export async function runSessionRetention(
     if (input.policy.dryRun) return { kind: 'dry-run', cutoff };
     const transcripts = await input.store.purgeBefore(input.workspaceId, cutoff);
     const state = await input.stateStore.purgeBefore(input.workspaceId, cutoff);
+    const attachments =
+      input.attachments === undefined || state.sessionIds.length === 0
+        ? 0
+        : await input.attachments.purgeSessions(input.workspaceId, state.sessionIds);
     return {
       kind: 'purged',
       cutoff,
       transcripts,
       stateEntries: state.entries,
       stateBlobs: state.blobs,
+      attachments,
     };
   } finally {
     await held.release();
@@ -110,6 +131,7 @@ export async function runSessionRetentionPass(
     listWorkspaceIds(): Promise<readonly string[]>;
     store: PurgeableTranscriptStore;
     stateStore: PurgeableSessionStateStore;
+    attachments?: PurgeableSessionAttachments;
     lease: RetentionLease;
     policy: SessionRetentionPolicy;
     onResult?: (workspaceId: string, result: SessionRetentionResult) => void;
@@ -121,6 +143,7 @@ export async function runSessionRetentionPass(
       workspaceId,
       store: input.store,
       stateStore: input.stateStore,
+      ...(input.attachments === undefined ? {} : { attachments: input.attachments }),
       lease: input.lease,
       policy: input.policy,
     });
@@ -141,6 +164,7 @@ export function startSessionRetentionScheduler(
     listWorkspaceIds(): Promise<readonly string[]>;
     store: PurgeableTranscriptStore;
     stateStore: PurgeableSessionStateStore;
+    attachments?: PurgeableSessionAttachments;
     lease: RetentionLease;
     policy: SessionRetentionPolicy;
     intervalMs: number;

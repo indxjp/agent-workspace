@@ -25,7 +25,7 @@ import {
   CreateRuntimeProfileInput,
   runtimeDriverIds,
   UpdateRuntimeProfileInput,
-} from '@agent-workspace/core';
+} from '@agent-workspace/run-protocol';
 import * as schema from '@agent-workspace/core/db/unscoped';
 import {
   MODEL_CONNECTION_CONFIG_FIELDS,
@@ -308,7 +308,12 @@ describe('configuration tables against the live Drizzle schema', () => {
 
 describe('foreign keys that touch the cluster', () => {
   const vectors = loadVectors(FAMILY, 'foreign-keys.json');
-  const cluster = new Set(['model_connections', 'runtime_profiles', 'secrets']);
+  const cluster = new Set([
+    'model_connections',
+    'runtime_profiles',
+    'secrets',
+    'storage_connections',
+  ]);
 
   it('the model lists exactly the keys that start or end in a cluster table', () => {
     const actual = [...tables.values()]

@@ -111,16 +111,16 @@ private theorem mapRow_get (st : State) (t : TableName) (r : Row) {k : String}
   have hne : ∀ c : String, c ≠ "workspace_id" → c ≠ "id" → k ≠ c := by
     intro c h1 h2 hkc; subst hkc; rcases hk with h | h <;> simp_all
   have hsub : ∀ ty, k ≠ Target.subjectColumn ty := by
-    intro ty; exact hne _ (by cases ty <;> decide) (by cases ty <;> decide)
+    intro ty; exact hne _ (by cases ty <;> decide +kernel) (by cases ty <;> decide +kernel)
   cases t <;> simp only [mapRow]
   all_goals first
     | rfl
-    | rw [setCell_get (hne _ (by decide) (by decide)), setCell_get (hne _ (by decide) (by decide))]
-    | rw [setCell_get (hne _ (by decide) (by decide))]
-    | rw [renameCell_get (hne _ (by decide) (by decide)) (hne _ (by decide) (by decide))]
-    | rw [mapCell_get (hne _ (by decide) (by decide))]
-    | rw [splitSubject_get (hne _ (by decide) (by decide)) hsub,
-        renameCell_get (hne _ (by decide) (by decide)) (hne _ (by decide) (by decide))]
+    | rw [setCell_get (hne _ (by decide +kernel) (by decide +kernel)), setCell_get (hne _ (by decide +kernel) (by decide +kernel))]
+    | rw [setCell_get (hne _ (by decide +kernel) (by decide +kernel))]
+    | rw [renameCell_get (hne _ (by decide +kernel) (by decide +kernel)) (hne _ (by decide +kernel) (by decide +kernel))]
+    | rw [mapCell_get (hne _ (by decide +kernel) (by decide +kernel))]
+    | rw [splitSubject_get (hne _ (by decide +kernel) (by decide +kernel)) hsub,
+        renameCell_get (hne _ (by decide +kernel) (by decide +kernel)) (hne _ (by decide +kernel) (by decide +kernel))]
 
 private theorem column_cases {c : String} {ten : Tenancy} (h : ten.column? = some c) :
     c = "workspace_id" ∨ c = "id" := by
@@ -134,7 +134,7 @@ global identity tables, the same 30 tenant-scoped tables. -/
   (ts := "packages/core/src/db/schema/tenancy.test.ts#TENANT_EXEMPT")]
 theorem tenancy_classes_are_unchanged (t : TableName) :
     (Target.schema t).tenancy = (catalogue t).tenancy := by
-  cases t <;> decide
+  cases t <;> decide +kernel
 
 /-- Every tenancy constraint of today's schema has an image in the target with the same tenancy
 class: no reference to the tenant root and no tenant-paired or sibling-paired reference is lost. -/
@@ -146,7 +146,7 @@ theorem every_tenancy_constraint_is_kept (t : TableName) (fk : ForeignKey)
     fkImage t fk ∈ (Target.schema t).foreignKeys ∧
       classify Target.schema t (fkImage t fk) = classify catalogue t fk := by
   have h : (allTables.all fun t => (catalogue t).foreignKeys.all fun fk =>
-      !isTenancyConstraint catalogue t fk || keptInTarget t fk) = true := by decide
+      !isTenancyConstraint catalogue t fk || keptInTarget t fk) = true := by decide +kernel
   have := List.all_eq_true.mp (List.all_eq_true.mp h t (WireEnum.complete t)) fk hfk
   simp only [hten, Bool.not_true, Bool.false_or, keptInTarget, Bool.and_eq_true, beq_iff_eq,
     List.contains_iff_mem] at this
@@ -159,7 +159,7 @@ its image among the target's keys. -/
 theorem every_key_has_an_image (t : TableName) (fk : ForeignKey)
     (hfk : fk ∈ (catalogue t).foreignKeys) : fkImage t fk ∈ (Target.schema t).foreignKeys := by
   have h : (allTables.all fun t => (catalogue t).foreignKeys.all fun fk =>
-      (Target.schema t).foreignKeys.contains (fkImage t fk)) = true := by decide
+      (Target.schema t).foreignKeys.contains (fkImage t fk)) = true := by decide +kernel
   have := List.all_eq_true.mp (List.all_eq_true.mp h t (WireEnum.complete t)) fk hfk
   simpa using this
 
@@ -170,7 +170,7 @@ constraint: the target only tightens tenancy. -/
 theorem added_keys_are_tenancy_constraints :
     (allTables.all fun t => (Target.schema t).foreignKeys.all fun fk' =>
       (catalogue t).foreignKeys.any (fun fk => fkImage t fk == fk') ||
-        isTenancyConstraint Target.schema t fk') = true := by decide
+        isTenancyConstraint Target.schema t fk') = true := by decide +kernel
 
 /-- The target has no unpaired reference and no undeclared `*_id` column, so today's tenancy test
 rules 2 and 3 hold of it as they do of today's schema. -/
@@ -179,7 +179,7 @@ rules 2 and 3 hold of it as they do of today's schema. -/
 theorem target_keeps_the_tenancy_rules :
     pairingComplete catalogue = true ∧ pairingComplete Target.schema = true ∧
       idColumnsCovered catalogue Er.Core.nonReferenceIdColumns = true ∧
-      idColumnsCovered Target.schema Target.nonReferenceIdColumns = true := by decide
+      idColumnsCovered Target.schema Target.nonReferenceIdColumns = true := by decide +kernel
 
 /-- The refinement map keeps every row in its workspace: the tenant of each row of the target
 state, in order, is the tenant of the row of today's state it comes from. -/
@@ -216,12 +216,12 @@ theorem keys_diverge_exactly_at :
        (.projectMcpServers, "project_mcp_servers_server_workspace_fk"),
        (.projects, "projects_default_agent_workspace_fk"),
        (.sessions, "sessions_project_workspace_fk"),
-       (.shares, "shares_publisher_principal_workspace_fk")] := by decide
+       (.shares, "shares_publisher_principal_workspace_fk")] := by decide +kernel
 
 /-- The target adds exactly nine keys: the inviter's principal (paired and sibling), the model
 connection's credential, the two `SET NULL` siblings and one subject key per subject type. -/
 @[aw_spec (tier := T4) (doc := "docs/formal/concepts.md#current-to-target-mapping")
-  (ts := "apps/web/server/composition/register.ts#subjectOwnership")]
+  (ts := "apps/web/server/composition/wiring/projects.ts#subjectOwnership")]
 theorem keys_added_exactly_at :
     addedKeys =
       [(.invitations, "invitations_inviter_principal_workspace_fk"),
@@ -232,7 +232,7 @@ theorem keys_added_exactly_at :
        (.shares, "shares_subject_agent_workspace_fk"),
        (.shares, "shares_subject_session_workspace_fk"),
        (.shares, "shares_subject_project_workspace_fk"),
-       (.shares, "shares_subject_skill_workspace_fk")] := by decide
+       (.shares, "shares_subject_skill_workspace_fk")] := by decide +kernel
 
 /-- The target adds and drops exactly these columns: `principal_id` for `user_id` on grants,
 `connector_id` for `mcp_server_id` on the two connector links, the inviter's principal, the model
@@ -249,7 +249,7 @@ theorem columns_diverge_exactly_at :
        (.projectMcpServers, ["connector_id"], ["mcp_server_id"]),
        (.shares, ["owner_principal_id", "subject_agent_id", "subject_session_id",
           "subject_project_id", "subject_skill_id"], ["subject_id", "publisher_principal_id"])] := by
-  decide
+  decide +kernel
 
 /-- The target adds and drops exactly these checks: the model pair on agents, the ledger's provider
 set, the transcript key, the SDK session id, three share checks (subject, mode, budget) for the
@@ -266,7 +266,7 @@ theorem checks_diverge_exactly_at :
           "shares_budget_only_runnable"], ["shares_subject_id_not_blank"]),
        (.workspacePrincipals, ["workspace_principals_kind_valid",
           "workspace_principals_source_matches_kind"],
-          ["workspace_principals_kind_valid", "workspace_principals_source_xor"])] := by decide
+          ["workspace_principals_kind_valid", "workspace_principals_source_xor"])] := by decide +kernel
 
 /-- The target renames exactly the three connector tables, so that "connector" is the concept's
 one name. -/
@@ -274,7 +274,7 @@ one name. -/
   (ts := "packages/core/src/db/schema/mcp-servers.ts#mcpServers")]
 theorem table_names_diverge_exactly_at :
     allTables.filter (fun t => Target.tableName t != t.toWire) =
-      [.agentMcpServers, .mcpServers, .projectMcpServers] := by decide
+      [.agentMcpServers, .mcpServers, .projectMcpServers] := by decide +kernel
 
 /-- Today exactly two keys carry an `ON DELETE SET NULL` that cannot execute (it would null the
 `NOT NULL` `workspace_id` too); the target has none. -/
@@ -285,7 +285,7 @@ theorem set_null_diverges_exactly_at :
     unsoundSetNull catalogue =
         [(.projects, "projects_default_agent_workspace_fk"),
          (.sessions, "sessions_project_workspace_fk")] ∧
-      unsoundSetNull Target.schema = [] := by decide
+      unsoundSetNull Target.schema = [] := by decide +kernel
 
 /-- Today exactly one closed set cannot be inlined into DDL by `oneOf` (the principal kind's
 `api_key`); in the target every closed set can. -/
@@ -293,7 +293,7 @@ theorem set_null_diverges_exactly_at :
   (ts := "packages/contracts/src/team.ts#PRINCIPAL_KINDS")]
 theorem value_gate_diverges_exactly_at :
     unrenderable catalogue = [(.workspacePrincipals, "workspace_principals_kind_valid")] ∧
-      unrenderable Target.schema = [] := by decide
+      unrenderable Target.schema = [] := by decide +kernel
 
 /-- Every owned resource names its owner `owner_principal_id` in the target; today exactly one
 table, `shares`, names it otherwise. -/
@@ -302,7 +302,7 @@ table, `shares`, names it otherwise. -/
 theorem owner_columns_diverge_exactly_at :
     allTables.filter (fun t => Current.ownerColumn? t != Target.ownerColumn? t) = [.shares] ∧
       Current.ownerColumn? .shares = some "publisher_principal_id" ∧
-      Target.ownerColumn? .shares = some "owner_principal_id" := by decide
+      Target.ownerColumn? .shares = some "owner_principal_id" := by decide +kernel
 
 /-! ## The states diverge at named cells -/
 
@@ -323,6 +323,20 @@ theorem every_divergence_cell_is_exact :
       !Target.consistent (toTarget st) && Target.violations (toTarget st) == vs) = true := by
   decide +kernel
 
+/-- A named divergence cell holds: read off `every_divergence_cell_is_exact`, so the kernel
+evaluates each cell once. -/
+private theorem divergence_cell {n : String} {st : State} {vs : List String}
+    (h : (n, st, vs) ∈ Divergence.cells) :
+    Current.consistent st = true ∧ Target.violations (toTarget st) = vs := by
+  have := List.all_eq_true.mp every_divergence_cell_is_exact _ h
+  simp only [Bool.and_eq_true, beq_iff_eq] at this
+  exact ⟨this.1.1, this.2⟩
+
+/-- Membership of a literal cell in `Divergence.cells`, found by its name. -/
+local macro "divergence_cell_mem" : tactic =>
+  `(tactic| (unfold Divergence.cells
+             repeat (first | exact List.Mem.head _ | apply List.Mem.tail)))
+
 /-- An API key with no principal is a consistent state today; the target requires one principal
 per membership and per API key (RF-101). -/
 @[aw_spec (tier := T4)
@@ -331,7 +345,8 @@ per membership and per API key (RF-101). -/
 theorem diverges_at_a_source_without_principal :
     Current.consistent Divergence.keyWithoutPrincipal = true ∧
       Target.violations (toTarget Divergence.keyWithoutPrincipal) =
-        ["every_source_has_a_principal"] := by decide +kernel
+        ["every_source_has_a_principal"] :=
+  divergence_cell (by divergence_cell_mem)
 
 /-- A grant held by a member who has no principal is a consistent state today (the grant stores the
 user id); in the target the grant has no principal to name. -/
@@ -341,7 +356,8 @@ user id); in the target the grant has no principal to name. -/
 theorem diverges_at_a_grant_without_principal :
     Current.consistent Divergence.grantedMemberWithoutPrincipal = true ∧
       Target.violations (toTarget Divergence.grantedMemberWithoutPrincipal) =
-        ["agent_grants.principal_id", "every_source_has_a_principal"] := by decide +kernel
+        ["agent_grants.principal_id", "every_source_has_a_principal"] :=
+  divergence_cell (by divergence_cell_mem)
 
 /-- A runtime profile naming a plain secret as its runtime connection is consistent today; the
 target types the reference (RF-204). -/
@@ -350,7 +366,8 @@ target types the reference (RF-204). -/
 theorem diverges_at_an_untyped_runtime_connection :
     Current.consistent Divergence.plainSecretAsRuntimeConnection = true ∧
       Target.violations (toTarget Divergence.plainSecretAsRuntimeConnection) =
-        ["runtime_connections_are_typed"] := by decide +kernel
+        ["runtime_connections_are_typed"] :=
+  divergence_cell (by divergence_cell_mem)
 
 /-- An agent with a model and no model connection is consistent today; the target enforces the
 documented pair. -/
@@ -358,8 +375,8 @@ documented pair. -/
   (ts := "packages/core/src/db/schema/agents.ts#agents")]
 theorem diverges_at_a_model_without_connection :
     Current.consistent Divergence.modelWithoutConnection = true ∧
-      Target.violations (toTarget Divergence.modelWithoutConnection) = ["agents_model_pair"] := by
-  decide +kernel
+      Target.violations (toTarget Divergence.modelWithoutConnection) = ["agents_model_pair"] :=
+  divergence_cell (by divergence_cell_mem)
 
 /-- A session whose SDK session id is not its own id is consistent today although the launch path
 never records one (it refuses any reported id other than the session id); the target makes that
@@ -368,8 +385,8 @@ rule a check. -/
   (ts := "apps/web/server/composition/session-launch.ts#recordReportedSessionIdentity")]
 theorem diverges_at_a_foreign_sdk_session_id :
     Current.consistent Divergence.foreignSdkSessionId = true ∧
-      Target.violations (toTarget Divergence.foreignSdkSessionId) = ["sessions_sdk_id_is_id"] := by
-  decide +kernel
+      Target.violations (toTarget Divergence.foreignSdkSessionId) = ["sessions_sdk_id_is_id"] :=
+  divergence_cell (by divergence_cell_mem)
 
 /-- A transcript stored under a key other than its workspace id is consistent today; the target
 checks that the key is the workspace. -/
@@ -378,27 +395,30 @@ checks that the key is the workspace. -/
 theorem diverges_at_a_transcript_under_another_key :
     Current.consistent Divergence.transcriptUnderAnotherKey = true ∧
       Target.violations (toTarget Divergence.transcriptUnderAnotherKey) =
-        ["session_transcripts_project_key_is_workspace"] := by decide +kernel
+        ["session_transcripts_project_key_is_workspace"] :=
+  divergence_cell (by divergence_cell_mem)
 
 /-- A share whose subject does not exist is consistent today; in the target the subject is a key. -/
 @[aw_spec (tier := T4)
   (doc := "docs/sdk/site/concepts/ownership-and-sharing.mdx#beyond-one-workspace")
-  (ts := "apps/web/server/composition/register.ts#subjectOwnership")]
+  (ts := "apps/web/server/composition/wiring/projects.ts#subjectOwnership")]
 theorem diverges_at_a_dangling_subject :
     Current.consistent Divergence.danglingSubject = true ∧
       Target.violations (toTarget Divergence.danglingSubject) =
-        ["shares_subject_agent_workspace_fk"] := by decide +kernel
+        ["shares_subject_agent_workspace_fk"] :=
+  divergence_cell (by divergence_cell_mem)
 
 /-- A share of one workspace whose subject is another workspace's agent is consistent today; in
 the target the subject key is tenant-paired and refuses it. -/
 @[aw_spec (tier := T4)
   (doc := "docs/sdk/site/concepts/ownership-and-sharing.mdx#beyond-one-workspace")
   (doc := "docs/architecture.md#runtime-and-trust-boundaries")
-  (ts := "apps/web/server/composition/register.ts#subjectOwnership")]
+  (ts := "apps/web/server/composition/wiring/projects.ts#subjectOwnership")]
 theorem diverges_at_a_cross_workspace_subject :
     Current.consistent Divergence.crossWorkspaceSubject = true ∧
       Target.violations (toTarget Divergence.crossWorkspaceSubject) =
-        ["shares_subject_agent_workspace_fk"] := by decide +kernel
+        ["shares_subject_agent_workspace_fk"] :=
+  divergence_cell (by divergence_cell_mem)
 
 /-- A share whose subject id names a row of another type is consistent today; in the target each
 subject type has its own key. -/
@@ -408,7 +428,8 @@ subject type has its own key. -/
 theorem diverges_at_a_wrongly_typed_subject :
     Current.consistent Divergence.wronglyTypedSubject = true ∧
       Target.violations (toTarget Divergence.wronglyTypedSubject) =
-        ["shares_subject_skill_workspace_fk"] := by decide +kernel
+        ["shares_subject_skill_workspace_fk"] :=
+  divergence_cell (by divergence_cell_mem)
 
 /-- An agent share with no mode is consistent today; the target requires one. -/
 @[aw_spec (tier := T4) (doc := "docs/spec.md#2063-publishing-an-agent")
@@ -416,7 +437,8 @@ theorem diverges_at_a_wrongly_typed_subject :
 theorem diverges_at_an_agent_share_without_mode :
     Current.consistent Divergence.agentShareWithoutMode = true ∧
       Target.violations (toTarget Divergence.agentShareWithoutMode) =
-        ["shares_agent_has_mode"] := by decide +kernel
+        ["shares_agent_has_mode"] :=
+  divergence_cell (by divergence_cell_mem)
 
 /-- A budget on a definition share is consistent today; the target allows a budget only on a
 runnable share. -/
@@ -425,7 +447,8 @@ runnable share. -/
 theorem diverges_at_a_budget_on_a_definition_share :
     Current.consistent Divergence.budgetOnDefinitionShare = true ∧
       Target.violations (toTarget Divergence.budgetOnDefinitionShare) =
-        ["shares_budget_only_runnable"] := by decide +kernel
+        ["shares_budget_only_runnable"] :=
+  divergence_cell (by divergence_cell_mem)
 
 /-- A ledger row whose provider is outside `MODEL_PROVIDERS` is consistent today; the target closes
 the set as `runs.provider` already is. -/
@@ -434,7 +457,8 @@ the set as `runs.provider` already is. -/
 theorem diverges_at_an_unknown_ledger_provider :
     Current.consistent Divergence.unknownLedgerProvider = true ∧
       Target.violations (toTarget Divergence.unknownLedgerProvider) =
-        ["run_usage_records_provider_valid"] := by decide +kernel
+        ["run_usage_records_provider_valid"] :=
+  divergence_cell (by divergence_cell_mem)
 
 /-- Deleting an agent that is a project's default is refused today (the composite `SET NULL` nulls
 `projects.workspace_id`), while the target clears the default and stays consistent. -/
@@ -467,7 +491,7 @@ the user, the membership and the principal are unchanged. -/
 theorem current_identity_breaks_on_an_email_change :
     resolveCurrent Current.Witness.state ⟨"ada@example.com", "one", "owner"⟩ = some ("p1", "owner") ∧
       resolveCurrent (changeEmail Current.Witness.state "u1" "ada@new.example.com")
-        ⟨"ada@example.com", "one", "owner"⟩ = none := by decide
+        ⟨"ada@example.com", "one", "owner"⟩ = none := by decide +kernel
 
 open Target.Resolution in
 /-- Wherever today's email lookup finds a user, today's resolution and the target's resolution by
@@ -499,17 +523,17 @@ example : fkImage .shares ((catalogue .shares).foreignKey? "shares_publisher_pri
           |>.getD default)) =
       classify catalogue .shares
         ((catalogue .shares).foreignKey? "shares_publisher_principal_workspace_fk" |>.getD default) :=
-  every_tenancy_constraint_is_kept .shares _ (by decide) (by decide)
+  every_tenancy_constraint_is_kept .shares _ (by decide +kernel) (by decide +kernel)
 
 /-- A reference to a global table (`projects.created_by → users`) keeps its image too. -/
 example : fkImage .projects ((catalogue .projects).foreignKey? "projects_created_by_users_id_fk"
     |>.getD default) ∈ (Target.schema .projects).foreignKeys :=
-  every_key_has_an_image .projects _ (by decide)
+  every_key_has_an_image .projects _ (by decide +kernel)
 
 example : Target.Resolution.resolveCurrent Current.Witness.state ⟨"ada@example.com", "one", "owner"⟩ =
     Target.Resolution.resolveTarget Current.Witness.state ⟨"u1", "one"⟩ :=
   resolution_by_id_refines_resolution_by_email _ _ (Current.Witness.state .users |>.head!) "u1"
-    rfl (by decide) (by decide)
+    rfl (by decide +kernel) (by decide +kernel)
 
 example : (⟨"a@b.c", "one", "owner"⟩ : Target.Resolution.ClaimsCurrent).role = "owner" :=
   role_claim_carries_no_information _ rfl
@@ -544,7 +568,7 @@ theorem ledger_providers_are_the_run_providers :
         (catalogue .runs).oneOfCheck? "runs_provider_valid" ∧
       (catalogue .runs).oneOfCheck? "runs_provider_valid" =
         some ("provider", ["anthropic", "anthropic-compatible", "openai", "azure-openai",
-          "openai-compatible"]) := by decide
+          "openai-compatible"]) := by decide +kernel
 
 /-- Every provider today's `runs.provider` accepts is accepted on a ledger row of the target: the
 target witness with its ledger row's provider set to any of them breaks no constraint. -/

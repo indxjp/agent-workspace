@@ -107,16 +107,6 @@ def preservesForeign (s : State) (a : Attempt) : Prop :=
   (step s a.principal a.request).state.foreignRuns a.principal.workspaceId =
     s.foreignRuns a.principal.workspaceId
 
-/-- A resolved attacker cannot make a run-route transition change another workspace's row,
-even by choosing an identifier that is present in that workspace. -/
-@[aw_spec (tier := T3) (ts := "apps/web/server/runs/api.ts#findRunForPrincipal")
-  (ts := "apps/web/server/runs/api.ts#startRun")
-  (ts := "apps/web/server/runs/api.ts#interruptRun")]
-theorem all_routes_preserve_foreign (s : State) (p : Principal) (r : Request) :
-    (step s p r).state.foreignRuns p.workspaceId = s.foreignRuns p.workspaceId := by
-  exact AgentWorkspace.Theorems.Invariants.BehaviourRuns.every_route_preserves_foreign
-    s p r
-
 /-- A listed foreign row fails the list postcondition, regardless of role and owner id. -/
 @[aw_spec (tier := T3) (ts := "apps/web/server/runs/api.ts#listRuns")
   (ts := "apps/web/server/runs/store.ts#listRuns")]
@@ -126,7 +116,7 @@ theorem foreign_row_fails_list_postcondition (p : Principal) (row : RunRow)
 
 /-- Builder and Viewer list postconditions refuse any row owned by a different member. -/
 @[aw_spec (tier := T3) (ts := "apps/web/server/runs/api.ts#listRuns")
-  (ts := "apps/web/server/runs/api.ts#parseRunListQuery")]
+  (ts := "apps/web/server/runs/list-query.ts#parseRunListQuery")]
 theorem other_member_fails_list_postcondition (p : Principal) (row : RunRow)
     (hrole : p.role = "builder" ∨ p.role = "viewer") (howner : row.ownerId ≠ p.id) :
     listRowAllowed p row = false := by
@@ -173,8 +163,8 @@ authentication and browser-scope gates may produce earlier denials, never a succ
 theorem builder_viewer_revoke_denied (s : State) (p : Principal) (r : Request)
     (hrole : p.role = "builder" ∨ p.role = "viewer") :
     (step s p { r with route := .revoke }).reply.status ≠ 200 := by
-  have hb : AgentWorkspace.Authz.Roles.parseRoleInput "builder" = some .builder := by decide
-  have hv : AgentWorkspace.Authz.Roles.parseRoleInput "viewer" = some .viewer := by decide
+  have hb : AgentWorkspace.Authz.Roles.parseRoleInput "builder" = some .builder := by decide +kernel
+  have hv : AgentWorkspace.Authz.Roles.parseRoleInput "viewer" = some .viewer := by decide +kernel
   rcases hrole with h | h <;> cases hs : p.scope <;>
     cases hc : r.configured <;> cases ha : r.authenticated <;>
     simp_all [step, AgentWorkspace.Authz.Decide.revokeTokensRoleGate,
@@ -199,8 +189,8 @@ theorem viewer_other_agent_start_denied_but_granted_start_admitted (s : State) :
     (step s viewerPrincipal viewerOtherStart).reply.status = 403 ∧
     (step s viewerPrincipal viewerGrantedStart).reply.status = 202 := by
   have hdenied : permission viewerOtherStart viewerPrincipal =
-      some (problem 403 "forbidden") := by decide
-  have hgranted : permission viewerGrantedStart viewerPrincipal = none := by decide
+      some (problem 403 "forbidden") := by decide +kernel
+  have hgranted : permission viewerGrantedStart viewerPrincipal = none := by decide +kernel
   simp only [viewerOtherStart, viewerGrantedStart] at hdenied hgranted ⊢
   simp only [step, hdenied, hgranted]
   simp [viewerPrincipal, scopeMatches, finishReply, problem]
@@ -297,7 +287,7 @@ theorem attacker_boundary_witnesses :
     namesRun .interrupt = true ∧ namesRun .revoke = true ∧
     namesRun .revokeAlias = true ∧ namesRun .start = false ∧
     namesRun .list = false ∧ namedAccessDenied ownState ownRead = false := by
-  decide
+  decide +kernel
 
 /-- Finite first-pass counterexample search over all named route shapes, foreign and absent ids,
 Owner/Builder/Viewer actors, and both browser-scope kinds. The real-handler replay exercises
@@ -305,6 +295,6 @@ the corresponding route calls and same-id absent control. -/
 @[aw_spec (tier := T3) (ts := "apps/web/server/runs/api.ts#findRunForPrincipal")]
 theorem foreign_named_route_search_has_no_success :
     searchAttempts.filter (fun a => !namedAccessDenied searchState a) = [] := by
-  decide
+  decide +kernel
 
 end AgentWorkspace.Theorems.Adversarial.AdversarialRunsAccess

@@ -1,6 +1,5 @@
-import type { RunRequest } from '@agent-workspace/core';
-
 import { runnerBaseEnvironment } from './environment.js';
+import type { ResolvedRunRequest } from './resources.js';
 import { sessionMirrorDeps, startAgentInThisContainer } from './index.js';
 import { startRunnerServer } from './server.js';
 import type { EngineStartOutcome } from './runtime.js';
@@ -11,7 +10,7 @@ export async function startRunner(env: Readonly<Record<string, string | undefine
   const mirrorConfig = readMirrorConfig(env);
   if (mirrorConfig.kind === 'invalid') throw new Error(mirrorConfig.reason);
   const { server, address } = await startRunnerServer(env, {
-    startAgent: (request: RunRequest): Promise<EngineStartOutcome> =>
+    startAgent: (request: ResolvedRunRequest): Promise<EngineStartOutcome> =>
       startAgentInThisContainer(
         request,
         base,

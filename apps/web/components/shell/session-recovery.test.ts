@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { problem } from '../../server/rbac/http';
+import { createClient } from '@indx-workspace/sdk';
+import { fetchDouble, jsonResponse } from '@indx-workspace/sdk/testing';
 
 import {
   recoverWorkspaceSession,
   shouldRecoverFromWorkspaceListProblem,
   shouldRecoverSession,
 } from './session-recovery';
-import { describeWorkspacesFailure } from './workspaces-directory';
+import { loadWorkspaces } from './workspaces-requests-model';
 
 describe('shouldRecoverSession', () => {
   it('recovers when a configured runtime cannot resolve the session’s identity — a vanished membership', () => {
@@ -97,11 +98,16 @@ describe('recoverWorkspaceSession', () => {
   });
 
   it('recovers from a 401 the server renders with problem() — the standard envelope end to end', async () => {
-    const rendered = problem(401, 'unauthorised', 'Sign in again.');
-    const read = await describeWorkspacesFailure(
-      new Response(null, { status: rendered.status }),
-      () => Promise.resolve(rendered.body),
-    );
+    const client = createClient({
+      baseUrl: 'https://aw.example.com',
+      auth: { kind: 'session' },
+      fetch: fetchDouble(() =>
+        jsonResponse(401, { error: { code: 'unauthorised', message: 'Sign in again.' } }),
+      ).fetch,
+    });
+    const result = await loadWorkspaces(client);
+    if (result.ok) throw new Error('expected a refusal');
+    const read = result.problem;
     const observed: string[] = [];
     const recovered = recoverWorkspaceSession(read, {
       clearTenantState: () => observed.push('clear'),

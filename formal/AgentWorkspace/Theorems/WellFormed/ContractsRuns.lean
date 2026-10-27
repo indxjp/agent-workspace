@@ -92,12 +92,20 @@ theorem constants_match_exports :
     modelProviders = ["anthropic", "anthropic-compatible", "openai", "azure-openai",
       "openai-compatible"] ∧
     accountingStates = ["pending", "complete", "partial", "failed", "unavailable"] := by
-  decide
+  decide +kernel
+
+/-- The approval decision vocabulary and the comment bound match the public exports (ADR-0145). -/
+@[aw_spec (tier := T0) (ts := "packages/contracts/src/runs.ts#RunApprovalRequestSchema")
+  (ts := "packages/contracts/src/runs.ts#RUN_APPROVAL_DECISIONS")
+  (ts := "packages/contracts/src/runs.ts#RUN_APPROVAL_COMMENT_MAX_LENGTH")]
+theorem approval_constants_match_exports :
+    runApprovalCommentMaxLength = 1000 ∧ runApprovalDecisions = ["approve", "reject"] := by
+  decide +kernel
 
 /-- An empty list query serializes to no search parameters. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/runs.ts#runListSearchParams")]
 theorem list_query_omits_absent_fields :
-    runListSearchParams {} = [] := by decide
+    runListSearchParams {} = [] := by decide +kernel
 
 /-- Run-list filters serialize in the public interface's stable field order. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/runs.ts#runListSearchParams")]
@@ -105,58 +113,58 @@ theorem list_query_field_order :
     runListSearchParams (RunListQuery.mk (some "running") (some "a") none none none
       none none none (some 20) (some "x")) =
       [("status", "running"), ("agent", "a"), ("limit", "20"),
-       ("cursor", "x")] := by decide
+       ("cursor", "x")] := by decide +kernel
 
 /-- Distinct lower and upper time filters retain their own names and values. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/runs.ts#runListSearchParams")]
 theorem list_query_preserves_time_bounds :
     runListSearchParams (RunListQuery.mk none none none none none
       (some "lower") (some "upper") none none none) =
-      [("from", "lower"), ("to", "upper")] := by decide
+      [("from", "lower"), ("to", "upper")] := by decide +kernel
 
 /-- Whitespace-only prompts are refused by the start-request contract. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/runs.ts#StartRunRequestSchema")]
 theorem start_request_refuses_blank :
-    startRunRequest (.obj [("prompt", .str " \t\n")]) = false := by decide
+    startRunRequest (.obj [("prompt", .str " \t\n")]) = false := by decide +kernel
 
 /-- A model without its connection is refused by the start-request contract. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/runs.ts#StartRunRequestSchema")]
 theorem start_request_refuses_unpaired_model :
-    startRunRequest (.obj [("prompt", .str "go"), ("model", .str "gpt")]) = false := by decide
+    startRunRequest (.obj [("prompt", .str "go"), ("model", .str "gpt")]) = false := by decide +kernel
 
 /-- Explicit null model fields are accepted as no override. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/runs.ts#StartRunRequestSchema")]
 theorem start_request_accepts_null_pair :
     startRunRequest (.obj [("prompt", .str "go"), ("model", .null),
-      ("modelConnectionId", .null)]) = true := by decide
+      ("modelConnectionId", .null)]) = true := by decide +kernel
 
 /-- The start-request contract refuses unrecognized body fields. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/runs.ts#StartRunRequestSchema")]
 theorem start_request_refuses_unknown_key :
-    startRunRequest (.obj [("prompt", .str "go"), ("extra", .bool true)]) = false := by decide
+    startRunRequest (.obj [("prompt", .str "go"), ("extra", .bool true)]) = false := by decide +kernel
 
 /-- A revoke response cannot report a negative token count. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/runs.ts#RevokeRunTokensResponseSchema")]
 theorem revoke_refuses_negative_count :
     revokeRunTokensResponse (.obj [("revoked", .num (-1) 0),
-      ("outcome", .str "revoked")]) = false := by decide
+      ("outcome", .str "revoked")]) = false := by decide +kernel
 
 /-- A revoke response refuses outcomes outside its closed vocabulary. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/runs.ts#RevokeRunTokensResponseSchema")]
 theorem revoke_refuses_other_outcome :
     revokeRunTokensResponse (.obj [("revoked", .num 0 0),
-      ("outcome", .str "lost")]) = false := by decide
+      ("outcome", .str "lost")]) = false := by decide +kernel
 
 /-- The current cost schema accepts non-decimal nonempty amount text. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/runs.ts#RunCostSchema")]
 theorem run_cost_accepts_non_decimal_text :
     runCost (.obj [("amount", .str "not-money"), ("currency", .str "X"),
-      ("priceTableVersion", .null)]) = true := by decide
+      ("priceTableVersion", .null)]) = true := by decide +kernel
 
 /-- An archived session with an SDK id is not derived as resumable. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/sessions.ts#SessionResourceSchema")]
 theorem session_schema_does_not_derive_resumable :
-    Contracts.Sessions.derivedResumable "archived" (some "sdk") = false := by decide
+    Contracts.Sessions.derivedResumable "archived" (some "sdk") = false := by decide +kernel
 
 private def usageFixture : JValue := .obj
   [("inputTokens", .num 1 0), ("outputTokens", .num 2 0),
@@ -166,15 +174,15 @@ private def usageFixture : JValue := .obj
 private def runFixture : JValue := .obj
   [("id", .str "run"), ("workspaceId", .str "ws"), ("agentId", .str "agent"),
    ("projectId", .null), ("initiatingUserId", .null), ("sessionId", .str "session"),
-   ("status", .str "queued"), ("createdAt", .str "2026-01-02T03:04:05Z"),
+   ("agentVersion", .null), ("status", .str "queued"), ("createdAt", .str "2026-01-02T03:04:05Z"),
    ("startedAt", .null), ("endedAt", .null), ("durationMs", .null),
    ("model", .null), ("provider", .null), ("modelConnectionId", .null),
    ("engine", .str "claude-agent-sdk"), ("engineVersion", .null),
    ("usage", usageFixture),
    ("cost", .obj [("amount", .str "0.000000"), ("currency", .str "USD"),
      ("priceTableVersion", .null)]),
-   ("error", .null), ("accountingState", .str "pending"),
-   ("accountingError", .null)]
+   ("error", .null), ("output", .null), ("accountingState", .str "pending"),
+   ("accountingError", .null), ("pendingApproval", .null)]
 
 private def sessionFixture : JValue := .obj
   [("id", .str "session"), ("workspaceId", .str "ws"), ("agentId", .str "agent"),
@@ -195,13 +203,13 @@ theorem cost_requires_nonempty_currency :
     runCost (.obj [("amount", .str "0.000000"), ("currency", .str "USD"),
       ("priceTableVersion", .null)]) = true ∧
     runCost (.obj [("amount", .str "0.000000"), ("currency", .str ""),
-      ("priceTableVersion", .null)]) = false := by decide
+      ("priceTableVersion", .null)]) = false := by decide +kernel
 
 /-- The total token count must be nonnegative even if every other count is valid. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/runs.ts#RunUsageSchema")]
 theorem usage_rejects_negative_total_tokens :
     runUsage usageFixture = true ∧
-    runUsage (replaceField usageFixture "totalTokens" (.num (-1) 0)) = false := by decide
+    runUsage (replaceField usageFixture "totalTokens" (.num (-1) 0)) = false := by decide +kernel
 
 /-- Only active and archived session statuses belong to the public enum. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/sessions.ts#SessionResourceSchema")]
@@ -209,7 +217,7 @@ theorem session_status_enum_excludes_paused :
     Contracts.Sessions.statuses = ["active", "archived"] ∧
     Contracts.Sessions.resource sessionFixture = true ∧
     Contracts.Sessions.resource
-      (replaceField sessionFixture "status" (.str "paused")) = false := by decide
+      (replaceField sessionFixture "status" (.str "paused")) = false := by decide +kernel
 
 /-- Usage requires toolCalls even when every other counter is valid. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/runs.ts#RunUsageSchema")]
@@ -217,26 +225,26 @@ theorem usage_requires_tool_calls :
     runUsage usageFixture = true ∧
     runUsage (.obj [("inputTokens", .num 1 0), ("outputTokens", .num 2 0),
       ("cacheReadInputTokens", .num 3 0), ("cacheCreationInputTokens", .num 4 0),
-      ("totalTokens", .num 10 0)]) = false := by decide
+      ("totalTokens", .num 10 0)]) = false := by decide +kernel
 
 /-- A valid resource status is accepted while an unknown status is refused. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/runs.ts#RunResourceSchema")]
 theorem resource_status_is_enum :
     runResource runFixture = true ∧
-    runResource (replaceField runFixture "status" (.str "paused")) = false := by decide
+    runResource (replaceField runFixture "status" (.str "paused")) = false := by decide +kernel
 
 /-- Run creation timestamps must be ISO instants rather than arbitrary text. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/runs.ts#RunResourceSchema")]
 theorem resource_created_at_is_instant :
     runResource runFixture = true ∧
-    runResource (replaceField runFixture "createdAt" (.str "yesterday")) = false := by decide
+    runResource (replaceField runFixture "createdAt" (.str "yesterday")) = false := by decide +kernel
 
 /-- Session identifiers are canonical UUID text when supplied. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/runs.ts#StartRunRequestSchema")]
 theorem request_session_requires_uuid :
     startRunRequest (.obj [("prompt", .str "go"),
       ("sessionId", .str "123e4567-e89b-42d3-a456-426614174000")]) = true ∧
-    startRunRequest (.obj [("prompt", .str "go"), ("sessionId", .str "bad")]) = false := by decide
+    startRunRequest (.obj [("prompt", .str "go"), ("sessionId", .str "bad")]) = false := by decide +kernel
 
 /-- Every prompt beyond the UTF-16 limit is refused. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/runs.ts#StartRunRequestSchema")]
@@ -255,13 +263,13 @@ theorem request_model_is_nonempty :
       ("model", .str "m")]) = true ∧
     startRunRequest (.obj [("prompt", .str "go"),
       ("modelConnectionId", .str "123e4567-e89b-42d3-a456-426614174000"),
-      ("model", .str "")]) = false := by decide
+      ("model", .str "")]) = false := by decide +kernel
 
 /-- The session resource requires a Boolean resumable field. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/sessions.ts#SessionResourceSchema")]
 theorem session_resumable_is_boolean :
     Contracts.Sessions.resource sessionFixture = true ∧
     Contracts.Sessions.resource
-      (replaceField sessionFixture "resumable" (.str "true")) = false := by decide
+      (replaceField sessionFixture "resumable" (.str "true")) = false := by decide +kernel
 
 end AgentWorkspace.Theorems.WellFormed.ContractsRuns

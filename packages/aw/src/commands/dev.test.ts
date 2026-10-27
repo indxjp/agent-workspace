@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { appendFile, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -1169,8 +1169,15 @@ describe('aw dev (issue #451)', () => {
     it('a runtime that crashes while the question is pending ends aw dev with its log tail', async () => {
       const cwd = await project({
         script: fakeRuntime(
+          // Crash once the question is pending (the prompt below writes `asked`), not after a fixed
+          // sleep: on a loaded runner the sleep ran out before the first sync had asked.
           `${sends(READY, CREDENTIAL)}
-await new Promise((resolve) => setTimeout(resolve, 1500));
+const { existsSync } = await import('node:fs');
+await new Promise((resolve) => {
+  const poll = setInterval(() => {
+    if (existsSync('asked')) resolve(clearInterval(poll));
+  }, 20);
+});
 process.exit(3);`,
         ),
       });
@@ -1190,7 +1197,14 @@ process.exit(3);`,
       const { run } = await dev(cwd, {
         env: { ANTHROPIC_API_KEY: ANTHROPIC_KEY },
         route: agentsRoute,
-        tty: { pasted: '', pending: true, asked },
+        tty: {
+          pasted: '',
+          pending: true,
+          asked,
+          onAsk: () => {
+            writeFileSync(path.join(cwd, 'asked'), '');
+          },
+        },
       });
       expect(asked).toEqual(['  Open the chat in your browser? (Y/n) ']);
       expect(run.code).not.toBe(0);

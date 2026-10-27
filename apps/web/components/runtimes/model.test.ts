@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
+import { createClient } from '@indx-workspace/sdk';
+import { fetchDouble, jsonResponse, type RecordedRequest } from '@indx-workspace/sdk/testing';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -8,6 +10,7 @@ import {
   SWITCH_COMPARISON,
   draftRuntimeNetworkPolicy,
   runtimeConnectionIdFor,
+  saveRuntimeProfile,
   testRuntime,
   testSelectedRuntime,
 } from './model';
@@ -95,29 +98,39 @@ describe('Test Runtime client request', () => {
   });
 });
 
-const json = (status: number, body: unknown) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
+const json = jsonResponse;
+
+function api(route: (request: RecordedRequest) => Response) {
+  const double = fetchDouble(route);
+  const client = createClient({
+    baseUrl: 'https://aw.example.com',
+    auth: { kind: 'session' },
+    fetch: double.fetch,
   });
+  return { client, calls: double.calls };
+}
+
+const stamp = '2026-10-08T00:00:00.000Z';
 
 describe('Test Runtime on a provider sandbox', () => {
   const connections = {
     runtimeConnections: [
-      { id: 'c-docker', name: 'DOCKER__A', driver: 'docker', createdAt: '2026-10-08T00:00:00Z' },
-      { id: 'c-e2b', name: 'EXTERNAL__E2B', driver: 'external', createdAt: '2026-10-08T00:00:00Z' },
+      { id: 'c-docker', name: 'DOCKER__A', driver: 'docker', createdAt: stamp },
+      { id: 'c-e2b', name: 'EXTERNAL__E2B', driver: 'external', createdAt: stamp },
     ],
   };
 
   it("finds the workspace's connection for the selected driver", async () => {
-    const request: typeof fetch = () => Promise.resolve(json(200, connections));
-    await expect(runtimeConnectionIdFor(request, 'external')).resolves.toBe('c-e2b');
-    await expect(runtimeConnectionIdFor(request, 'vercel-sandbox')).resolves.toBeUndefined();
+    const { client, calls } = api(() => json(200, connections));
+    await expect(runtimeConnectionIdFor(client, 'external')).resolves.toBe('c-e2b');
+    await expect(runtimeConnectionIdFor(client, 'vercel-sandbox')).resolves.toBeUndefined();
+    expect(calls[0]?.method).toBe('GET');
+    expect(calls[0]?.url.pathname).toBe('/api/runtime-connections');
   });
 
   it('refuses a connection list that is not the contract', async () => {
-    const request: typeof fetch = () => Promise.resolve(json(200, { runtimeConnections: [{}] }));
-    await expect(runtimeConnectionIdFor(request, 'external')).rejects.toThrow(/invalid list/u);
+    const { client } = api(() => json(200, { runtimeConnections: [{}] }));
+    await expect(runtimeConnectionIdFor(client, 'external')).rejects.toThrow();
   });
 
   it('posts the connection id, and omits it when there is none', async () => {
@@ -136,16 +149,14 @@ describe('Test Runtime on a provider sandbox', () => {
 
   it('still tests a driver that needs no connection when the connection list fails', async () => {
     const bodies: unknown[] = [];
-    const request: typeof fetch = (input, init) => {
-      if (input === '/api/runtime-connections') {
-        return Promise.resolve(
-          json(503, { error: { code: 'runtimes_runtime_not_configured', message: 'x' } }),
-        );
-      }
+    const { client } = api(() =>
+      json(503, { error: { code: 'runtimes_runtime_not_configured', message: 'x' } }),
+    );
+    const request: typeof fetch = (_input, init) => {
       bodies.push(typeof init?.body === 'string' ? JSON.parse(init.body) : undefined);
       return Promise.resolve(json(200, { driverId: 'docker', transcript: [], destroyed: true }));
     };
-    await expect(testSelectedRuntime(request, 'docker')).resolves.toMatchObject({
+    await expect(testSelectedRuntime(client, request, 'docker')).resolves.toMatchObject({
       driverId: 'docker',
     });
     expect(bodies).toEqual([{ driver: 'docker', echo: 'agent-workspace runtime test' }]);
@@ -164,5 +175,71 @@ describe('Test Runtime on a provider sandbox', () => {
     await expect(
       testRuntime(() => Promise.resolve(new Response('nope', { status: 502 })), 'external'),
     ).rejects.toThrow('Test Runtime failed with HTTP 502.');
+  });
+});
+
+describe('saveRuntimeProfile', () => {
+  const draft = {
+    name: 'docker default',
+    driver: 'docker',
+    networkPolicy: 'none',
+    filesystem: 'read-write',
+  } as const;
+  const profile = {
+    id: 'p-1',
+    workspaceId: 'w-1',
+    runtimeConnectionId: null,
+    cpu: null,
+    memoryMb: null,
+    diskMb: null,
+    allowedDomains: null,
+    persistPaths: [],
+    timeoutSeconds: null,
+    idleTimeoutSeconds: null,
+    driverConfig: {},
+    createdAt: stamp,
+    updatedAt: stamp,
+    ...draft,
+  };
+
+  it('creates the first profile for the driver', async () => {
+    const { client, calls } = api((request) =>
+      request.method === 'GET' ? json(200, { runtimeProfiles: [] }) : json(201, profile),
+    );
+    await expect(saveRuntimeProfile(client, draft)).resolves.toMatchObject({ id: 'p-1' });
+    expect(calls.map((c) => `${c.method} ${c.url.pathname}`)).toEqual([
+      'GET /api/runtime-profiles',
+      'POST /api/runtime-profiles',
+    ]);
+    expect(calls[1]?.json).toEqual(draft);
+  });
+
+  it("updates the driver's existing profile in place", async () => {
+    const { client, calls } = api((request) =>
+      request.method === 'GET' ? json(200, { runtimeProfiles: [profile] }) : json(200, profile),
+    );
+    await saveRuntimeProfile(client, draft);
+    expect(calls[1]?.method).toBe('PATCH');
+    expect(calls[1]?.url.pathname).toBe('/api/runtime-profiles/p-1');
+    expect(calls[1]?.json).toEqual(draft);
+  });
+
+  it("rejects with the server's sentence for a refusal", async () => {
+    const { client } = api((request) =>
+      request.method === 'GET'
+        ? json(200, { runtimeProfiles: [] })
+        : json(422, {
+            error: { code: 'network_policy_not_enforceable', message: 'Cannot enforce none.' },
+          }),
+    );
+    await expect(saveRuntimeProfile(client, draft)).rejects.toThrow('Cannot enforce none.');
+  });
+
+  it('refuses a driver the contract does not know before any request', async () => {
+    const { client, calls } = api(() => json(200, { runtimeProfiles: [] }));
+    await expect(saveRuntimeProfile(client, { ...draft, driver: 'nope' })).rejects.toThrow(
+      'Unknown runtime driver nope.',
+    );
+    expect(calls).toEqual([]);
   });
 });

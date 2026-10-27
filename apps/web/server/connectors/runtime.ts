@@ -1,20 +1,18 @@
 /**
  * The single seam between the connector routes and the rest of the application — who the caller
- * is, and where connectors are stored. Copies `apps/web/server/secrets/runtime.ts`'s shape and
- * reasoning exactly; see that file's header for why a `globalThis`-anchored registry and not a
- * module-level `let` (Next.js compiles route handlers and `instrumentation.ts` into separate
- * module graphs).
+ * is, and where connectors are stored.
  *
  * ## The unconfigured case fails, it does not fall through (ADR-0015)
  *
- * Until something calls {@link configureConnectorsRuntime}, {@link currentConnectorsRuntime}
- * returns `null` and every connector route answers `503 connectors_runtime_not_configured`.
+ * The composition root installs it as `ApplicationContext.connectors`. Until it is `serving` — no
+ * context installed, or `unavailable` — every connector route answers
+ * `503 connectors_runtime_not_configured`.
  *
  * ## The production composition root
  *
- * `apps/web/instrumentation.ts` installs the real repository adapter after the encrypted secrets
- * service is available. If that service cannot start, the connector seam remains uninstalled and
- * every route answers 503 by name; connector credentials never fall back to plaintext or memory.
+ * `apps/web/instrumentation.ts` builds the real repository adapter after the encrypted secrets
+ * service is available. If that service cannot start, connectors are `unavailable` and every route
+ * answers 503 by name; connector credentials never fall back to plaintext or memory.
  * Decision 5 of `docs/adr/W2-CP-05-connectors-and-test-connection.md` records this composition.
  */
 import type { ConnectorsStoreProvider } from './store';
@@ -61,23 +59,10 @@ export interface ConnectorsRuntime {
   identifyActor(request: Request): Promise<ConnectorActor | null>;
 }
 
-interface ConnectorsRuntimeRegistry {
-  __agentWorkspaceConnectorsRuntime__?: ConnectorsRuntime;
-}
-
-const registry = globalThis as typeof globalThis & ConnectorsRuntimeRegistry;
-
-/** Install the runtime the connector routes use. Called once, from application wiring. */
-export function configureConnectorsRuntime(runtime: ConnectorsRuntime): void {
-  registry.__agentWorkspaceConnectorsRuntime__ = runtime;
-}
-
-/** Remove the installed runtime. Exists so a test can assert the unconfigured path really fails. */
-export function clearConnectorsRuntime(): void {
-  delete registry.__agentWorkspaceConnectorsRuntime__;
-}
-
-/** The installed runtime, or `null` when nothing has been wired yet. Never throws. */
-export function currentConnectorsRuntime(): ConnectorsRuntime | null {
-  return registry.__agentWorkspaceConnectorsRuntime__ ?? null;
-}
+/**
+ * The connector routes as the application context holds them: `unavailable` when the encrypted
+ * secrets service did not start, which the composition root logs by name.
+ */
+export type Connectors =
+  | { readonly kind: 'serving'; readonly runtime: ConnectorsRuntime }
+  | { readonly kind: 'unavailable' };

@@ -237,7 +237,9 @@ describe('the kit fails an adapter that breaks one of its properties', () => {
     // which grant to remove.
     vague.compile = (request) => {
       const verdict = compile(request);
-      return verdict.ok || request.portable.subagents !== undefined
+      return verdict.ok ||
+        request.portable.subagents !== undefined ||
+        request.outputSchema !== undefined
         ? verdict
         : { ...verdict, reason: 'this engine cannot run the request.' };
     };
@@ -301,7 +303,9 @@ describe('the kit fails an adapter that breaks one of its properties', () => {
     const compile = vague.compile.bind(vague);
     vague.compile = (request) => {
       const verdict = compile(request);
-      return verdict.ok || request.portable.subagents !== undefined
+      return verdict.ok ||
+        request.portable.subagents !== undefined ||
+        request.outputSchema !== undefined
         ? verdict
         : { ...verdict, reason: 'this engine cannot run the request.' };
     };
@@ -335,11 +339,31 @@ describe('the kit fails an adapter that breaks one of its properties', () => {
     const compile = vague.compile.bind(vague);
     vague.compile = (request) => {
       const verdict = compile(request);
-      return verdict.ok ? verdict : { ...verdict, reason: 'this engine cannot run the request.' };
+      return verdict.ok || request.outputSchema !== undefined
+        ? verdict
+        : { ...verdict, reason: 'this engine cannot run the request.' };
     };
     expect(await failedScenarios(subjectFor(vague))).toEqual([
       'subagents-are-honoured-or-refused-by-name',
     ]);
+  });
+
+  it('fails the output-schema scenario, and only it, for a subject that expects the schema compiled where the engine refuses it', async () => {
+    expect(
+      await failedScenarios({ ...subjectFor(), outputSchemaCompiled: () => undefined }),
+    ).toEqual(['an-output-schema-is-honoured-or-refused-by-name']);
+  });
+
+  it('fails the output-schema scenario for an engine that refuses it without naming it', async () => {
+    const vague = { ...createScriptedEngine() };
+    const compile = vague.compile.bind(vague);
+    vague.compile = (request) => {
+      const verdict = compile(request);
+      return verdict.ok ? verdict : { ...verdict, reason: 'this engine cannot run the request.' };
+    };
+    expect(await failedScenarios(subjectFor(vague))).toContain(
+      'an-output-schema-is-honoured-or-refused-by-name',
+    );
   });
 
   it('fails the read-only-grant scenario for an engine that forbids every write', async () => {

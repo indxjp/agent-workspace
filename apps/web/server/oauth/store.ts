@@ -1,18 +1,32 @@
 /**
- * The PostgreSQL-backed {@link OAuthRuntime} (ADR-0134 part 3).
+ * The PostgreSQL-backed {@link OAuthRuntime} (ADR-0134 part 3), and the oauth domain's persistence
+ * port — the one module of `apps/web/server/oauth` that names `@agent-workspace/core/db` (F-08,
+ * W3-5). The endpoints depend on the record and token-row types declared here; the composition
+ * root hands the database root in. Copies the shape of `../sessions/store.ts`.
  */
 import type {
   AgentGrantRepository,
   AgentRepository,
   DatabaseRoot,
   EndpointClientRepository,
+  OAuthClientRecord,
+  OAuthTokenRepository,
   WorkspaceScope,
 } from '@agent-workspace/core/db';
 
 import { ownershipOf } from '../agents/run-ownership';
 import { decide } from '../rbac/decide';
-import { a2aResourcePath, mcpResourcePath } from './resource';
+import { a2aResourcePath, BUILDER_RESOURCE_PATH, mcpResourcePath } from './resource';
 import type { OAuthRuntime } from './runtime';
+
+/** An endpoint client row as the token endpoint authenticates it. */
+export type { OAuthClientRecord };
+
+/** The token-row operations the authorize, token and revoke endpoints perform in one workspace. */
+export type OAuthTokenRows = Pick<
+  OAuthTokenRepository,
+  'issue' | 'consume' | 'revokeFamily' | 'revoke'
+>;
 
 type StoreRoot = Pick<
   DatabaseRoot,
@@ -41,15 +55,37 @@ export function createRepositoryOAuthRuntime(root: StoreRoot): OAuthRuntime {
       const bound = await root.endpointClients.forScope(scope).get(record.id);
       if (bound === null) return null;
       let resourcePath: string | null;
-      if (record.kind === 'mcp-project') {
-        resourcePath = mcpResourcePath(record.name);
-      } else {
-        // The A2A route is addressed by the agent's name, which is not the client's.
-        const agentId = bound.agentIds[0];
-        const agent = agentId === undefined ? null : await root.agents.forScope(scope).get(agentId);
-        resourcePath = agent === null ? null : a2aResourcePath(agent.name);
+      switch (record.kind) {
+        case 'mcp-project':
+          resourcePath = mcpResourcePath(record.name);
+          break;
+        case 'builder':
+          resourcePath = BUILDER_RESOURCE_PATH;
+          break;
+        case 'a2a-agent': {
+          // The A2A route is addressed by the agent's name, which is not the client's.
+          const agentId = bound.agentIds[0];
+          const agent =
+            agentId === undefined ? null : await root.agents.forScope(scope).get(agentId);
+          resourcePath = agent === null ? null : a2aResourcePath(agent.name);
+          break;
+        }
+        default: {
+          const unreachable: never = record.kind;
+          throw new Error(`unhandled endpoint client kind ${String(unreachable)}`);
+        }
       }
-      return { ...record, agentIds: bound.agentIds, resourcePath };
+      // Only the builder consent page renders the label, so other kinds skip the lookup.
+      const creator =
+        record.kind === 'builder'
+          ? await root.directory.principalById(record.workspaceId, bound.createdByPrincipalId)
+          : null;
+      return {
+        ...record,
+        agentIds: bound.agentIds,
+        resourcePath,
+        ...(creator === null ? {} : { creatorLabel: creator.label }),
+      };
     },
     async canRunAll(principal, agentIds) {
       // The same ownership rule as `POST /api/agents/:id/runs`, read from the database root so the

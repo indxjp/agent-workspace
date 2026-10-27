@@ -7,11 +7,12 @@
  * that cannot be imported by a test without dragging the framework's routing conventions in, so
  * the less that lives there the more of this task is actually covered.
  */
+import { applicationContext } from '../application-context';
 import { AGENT_INSTRUCTIONS_MAX_LENGTH } from '../../contracts/agents';
-import { problem, type ApiResult } from './handlers';
+import { problem, type ApiResult } from '../http/result';
 import type { WorkspaceAgentStore } from './store';
-import { currentAgentsRuntime, type AgentsRuntime } from './runtime';
-import { apiResultResponse, readBoundedJson, readRouteParam } from '../http/json-transport';
+import type { AgentsRuntime } from './runtime';
+import { readBoundedJson, readRouteParam } from '../http/json-transport';
 import { authorise, type OwnershipResolver } from '../rbac/http';
 import type { Ownership } from '../rbac/decide';
 import type { Principal } from '../rbac/principal';
@@ -74,11 +75,6 @@ export async function readJsonBody(
   return readBoundedJson(request, { maxBytes: MAX_REQUEST_BODY_BYTES, problem });
 }
 
-/** Turn a handler's answer into a `Response`. A `204` carries no body and no content type. */
-export function toResponse(result: ApiResult): Response {
-  return apiResultResponse(result);
-}
-
 /**
  * Resolve the caller's workspace, hand the matching store to `run`, and return its answer.
  *
@@ -101,7 +97,7 @@ export async function withWorkspaceStore(
   ) => Promise<ApiResult>,
   authenticatedWorkspaceId?: string,
 ): Promise<ApiResult> {
-  const runtime = currentAgentsRuntime();
+  const runtime = applicationContext()?.agents ?? null;
   if (runtime === null) {
     return problem(
       503,

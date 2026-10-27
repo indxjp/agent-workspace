@@ -126,6 +126,7 @@ describe('cloudflare-sandbox driver (ADR-0120)', () => {
       gpu: false,
       managedByProvider: true,
       typicalStartMs: null,
+      fileTransfer: 'push-archive',
     });
     expect(driverFor('http://127.0.0.1:1').capabilities).toEqual(
       cloudflareSandboxRuntimeCapabilities(),

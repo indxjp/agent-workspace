@@ -61,7 +61,7 @@ The body of `GET /api/api-keys`: prefixes and timestamps, never a secret.
 | --- | --- | --- | --- |
 | `id` | `string` | Yes |  |
 | `name` | `string` | Yes |  |
-| `role` | `"owner" \| "admin" \| "builder" \| "viewer"` | Yes |  |
+| `role` | `"builder" \| "owner" \| "admin" \| "viewer"` | Yes |  |
 | `keyPrefix` | `string` | Yes |  |
 | `lastUsedAt` | `null \| string` | Yes |  |
 | `expiresAt` | `null \| string` | Yes |  |
@@ -83,7 +83,7 @@ listable and auditable; `lastUsedAt` is `null` until the key first authenticates
 | --- | --- | --- | --- |
 | `id` | `string` | Yes |  |
 | `name` | `string` | Yes |  |
-| `role` | `"owner" \| "admin" \| "builder" \| "viewer"` | Yes |  |
+| `role` | `"builder" \| "owner" \| "admin" \| "viewer"` | Yes |  |
 | `keyPrefix` | `string` | Yes |  |
 | `lastUsedAt` | `null \| string` | Yes |  |
 | `expiresAt` | `null \| string` | Yes |  |
@@ -116,7 +116,7 @@ The body of `POST /api/api-keys`. `name` is trimmed, non-blank, at most
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `name` | `string` | Yes |  |
-| `role` | `"owner" \| "admin" \| "builder" \| "viewer"` | Yes |  |
+| `role` | `"builder" \| "owner" \| "admin" \| "viewer"` | Yes |  |
 | `expiresAt` | `undefined \| null \| string` | No |  |
 
 ## MintedApiKeyResponse

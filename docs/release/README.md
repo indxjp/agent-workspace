@@ -23,13 +23,39 @@ make a release ready, and the release workflow will not publish while this manif
 8. Create the version tag at that exact commit. The verified release workflow rechecks signatures,
    attestations, package ownership, evidence freshness, approvals, and SHA equality before publish.
 
+The release workflow also runs `scripts/metrics/baseline.mjs` at the tagged commit, prints drift
+against the newest committed `docs/metrics/baseline-*.json`, and attaches the measured
+`metrics-<version>.json` to the GitHub release. Drift never fails the release; to move the
+baseline, run `node scripts/metrics/baseline.mjs` and commit the new file.
+
 Steps 1 and 2 are the image release below: `release.yml` verifies images that
 `.github/workflows/images.yml` has already published, and publishes none itself.
+
+## Where releases run
+
+Every release workflow (`images.yml`, `publish-packages.yml`, `release.yml`) runs in the public
+repository `indxjp/agent-workspace` and nowhere else: each job starts with
+`if: github.repository == 'indxjp/agent-workspace'`, and each runs on `ubuntu-latest`, which is free
+there (ADR-0082 and ADR-0086, Amendments 2026-10-26). The release gate they call is `ci.yml` with
+`full: true`, on the same free runners. A release commit therefore reaches the public `main` first:
+
+1. Merge the `release/<version>` pull request in the development repository.
+2. The OSS export pushes the snapshot of that commit to the public branch `snapshot`; merge its pull
+   request into the public `main`.
+3. Push the tags (`images-v<version>`, then `packages-v<version>`, then `v<version>`) to the
+   public repository, on that snapshot commit. A tag pushed to the development repository starts
+   no release.
+
+Owner, once, in `indxjp/agent-workspace`: create the environments `images-publish`, `npm-publish`
+and `release` as described below, and point every package's npm trusted publisher at
+`indxjp/agent-workspace`, `publish-packages.yml`, `npm-publish` (npmjs.com → the package →
+Settings → Trusted publishing). Until the trusted publishers move, the publish job's OIDC token is
+refused and nothing is published.
 
 ## Platform images
 
 `.github/workflows/images.yml` builds, scans, signs and pushes the platform images to
-`ghcr.io/indxdev/agent-workspace/*` from an `images-v<version>` tag (#370, ADR-0086). The image
+`ghcr.io/indxjp/agent-workspace/*` from an `images-v<version>` tag (#370, ADR-0086). The image
 list is `packages/cli/src/release-images.json`, the images the generator pins, plus one runtime
 image per engine; `node infra/release/images.mjs --references` prints it. Each image is built for
 `linux/amd64` and `linux/arm64` and pushed by digest only. Every platform is scanned with trivy and
@@ -55,8 +81,10 @@ could deploy to it.
    `tests/release/check.test.ts` refuse anything else, ADR-0078 D2): a project's images must serve
    the contracts minor its own CLI and `aw` state. For 0.2.0 that means **`images-v0.2.0` is
    published before `packages-v0.2.0`**.
-2. Tag the commit on `main` and push the tag:
-   `git tag images-v<version> <sha-on-main> && git push origin images-v<version>`. The workflow
+2. Tag the snapshot commit on the public `main` and push the tag to the public repository
+   ([Where releases run](#where-releases-run)):
+   `git tag images-v<version> <sha-on-main> && git push origin images-v<version>`, in a clone of
+   `indxjp/agent-workspace`. The workflow
    refuses a tag off `main`, and a tag whose version differs from the JSON.
 3. The `publish` job uploads the `platform-images-<version>` artifact: `images.json` (each image's
    digest reference), the SBOMs and the provenance of every platform. The digests go into
@@ -83,7 +111,7 @@ and nothing references them. Once the fix is on `main`, the same version can be 
 the git tag, which ADR-0086 D6 allows because every `<name>:<version>` is still absent:
 `git push origin :refs/tags/images-v<version>`, then tag the fixed commit on `main` and push the tag
 as in step 2. Check first that no image tag exists
-(`docker buildx imagetools inspect ghcr.io/indxdev/agent-workspace/web:<version>` must fail with
+(`docker buildx imagetools inspect ghcr.io/indxjp/agent-workspace/web:<version>` must fail with
 "not found" for each name); if one does, the version was published and the fix is a new version.
 
 ### Make the packages public (Owner, once per package)
@@ -176,13 +204,12 @@ never skips it, when that directory is missing.
   publishes. The smoke runs third-party code (`npm rebuild`, the runtime's registry-resolved
   dependencies), so it never runs in the job that can publish, and it runs with an allowlisted
   environment (`PATH`, home, temporary directories, locale, proxy), so no CI credential reaches it.
-- **Provenance.** Off while this repository is internal (Owner decision 2026-09-30, ADR-0082 D5):
-  npm accepts provenance only from a public repository. The workflow's `NPM_PROVENANCE` is the one
-  switch; set it to `'true'` when the repository becomes public, after which npm records each
-  tarball's provenance (repository, workflow, commit). `'true'` on a non-public repository is
+- **Provenance.** On (ADR-0082, Amendment 2026-10-26): the packages publish from the public
+  repository, so npm records each tarball's provenance (repository, workflow, commit). The
+  workflow's `NPM_PROVENANCE` is the one switch; `'true'` on a non-public repository is still
   refused before anything is published.
 - **Credentials.** None are stored. The publish job publishes through npm trusted publishing
-  (GitHub OIDC). Each package's trusted publisher on npmjs.com names this repository,
+  (GitHub OIDC). Each package's trusted publisher on npmjs.com names `indxjp/agent-workspace`,
   `publish-packages.yml` and `npm-publish`.
 - **Re-runs.** A version npm already serves (`npm view` prints exactly that version) is skipped, so
   a re-run after a partial failure publishes only the rest; the run then fails unless npm serves
@@ -197,7 +224,7 @@ never skips it, when that directory is missing.
   (ADR-0109), `@indx-workspace/react` (issue #623), then `@indx-workspace/platforms` (issue #956) —
   the Owner publishes a placeholder first
   version by hand, `0.0.0-bootstrap` as for the first five (ADR-0082 D5), and then configures its
-  trusted publisher (this repository, `publish-packages.yml`, `npm-publish`). For
+  trusted publisher (`indxjp/agent-workspace`, `publish-packages.yml`, `npm-publish`). For
   `@indx-workspace/react` this must happen before `packages-v0.4.0` is tagged: until it does, that
   release and every later one is refused; the same holds for `@indx-workspace/platforms` and the
   first `packages-v*` tag after it joined the list. The placeholder is a `package.json` alone (name, that
@@ -216,10 +243,12 @@ never skips it, when that directory is missing.
 
 ### Cut a package release
 
-1. Bump the eight packages lock-step in one pull request: `version` in each `package.json`,
+1. Bump the eight packages lock-step in one pull request from a `release/<version>` branch (the
+   only branch CI lets edit a `CHANGELOG.md`): `version` in each `package.json`,
    `CONTRACTS_VERSION`, `AW_VERSION`, `CLI_VERSION`, `release-images.json`'s `version` (same
-   major.minor), the schema URL in the CLI's profile fixtures, a heading in each `CHANGELOG.md`,
-   and the regenerated docs (`pnpm docs:generate`). `create`'s generated `package.json` pins
+   major.minor), the schema URL in the CLI's profile fixtures, `pnpm changes:collect` (merges and
+   deletes every `changes/*.md` fragment, [changes/README.md](../../changes/README.md)), then the
+   version heading in place of `## Unreleased` in each `CHANGELOG.md`, and the regenerated docs (`pnpm docs:generate`). `create`'s generated `package.json` pins
    `CLI_VERSION`, so it moves with it. 0.3.0 is the example: `docs/release/notes/0.3.0.md`.
    The release notes' status line reads **published from the `packages-v<version>` tag**, never
    "not published yet": the notes merge before the tag, and nothing edits them after it. Name in
@@ -239,10 +268,11 @@ never skips it, when that directory is missing.
      gh api "/orgs/$org/packages/container/agent-workspace%2F$name" --jq .visibility 2>&1 | tail -1
    done
    ```
-3. Tag `packages-v<version>` on that commit and push it. Never a `v<version>` tag: that is the
+3. Tag `packages-v<version>` on that commit and push it to the public repository. Never a `v<version>` tag: that is the
    platform release, which needs the evidence manifest.
-4. Check the `install-live` run for this version and link it from the release's tracker issue
-   (below). It starts by itself when `publish-packages.yml` finishes. If you cannot, run the
+4. Run `install-live` for this version in the development repository (Actions → Install live →
+   Run workflow) and link it from the release's tracker issue (below). It no longer starts by
+   itself: `publish-packages.yml` runs in the public repository, where the live lanes never run. If you cannot, run the
    post-publish smoke below by hand.
 5. Redeploy the public sites from the tagged commit, so docs.agentworkspace.indx.jp describes the
    release npm now serves: `git checkout packages-v<version> && pnpm install && pnpm sites:deploy`

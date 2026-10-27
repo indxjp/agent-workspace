@@ -323,40 +323,15 @@ export async function applyProjectResources(
   // Notices are printed after the model check (below), so a model secret's notice can give way to
   // the same secret's entry in the problem list.
   for (const refusal of plan.refusals) io.stderr(`warning: ${refusal.path}: ${refusal.message}\n`);
-  // SD16: a secret is recorded only after the loop, and only when every action naming it in this
-  // apply succeeded, so a shared secret's refused or interrupted send is retried on the next start.
-  const sentSecrets = new Set<string>();
-  const failedSecrets = new Set<string>();
-  const created: string[] = [];
-  // Issue #732: the C6 `default` took this start's base URL unless its create or patch failed.
-  let baseUrlTaken = project.models === undefined && secrets.has(DEFAULT_MODEL_SECRET);
-  for (const action of [...plan.creates, ...plan.updates]) {
-    const secret = 'secret' in action ? action.secret : undefined;
-    const what = isModel(action)
-      ? `the "${nameOf(action)}" model connection`
-      : `the "${nameOf(action)}" connector`;
-    try {
-      await send(client, action, values, signal);
-    } catch (error) {
-      if (signal.aborted) throw error;
-      if (secret !== undefined) failedSecrets.add(secret);
-      if (action.kind === 'model' && action.path === 'models.default') baseUrlTaken = false;
-      const created = !('id' in action);
-      if (created && error instanceof ApiProblemError && error.status === CONFLICT_STATUS) continue;
-      if (!isServerRefusal(error)) throw error;
-      io.stderr(`warning: could not set up ${what}: ${error.message}\n`);
-      continue;
-    }
-    if (secret !== undefined) sentSecrets.add(secret);
-    if (action.kind === 'model' && !('id' in action)) {
-      created.push(`model connection: ${nameOf(action)} (${action.input.provider})\n`);
-    }
-    // SD4: every connector the project file declares is MCP; a tool (S2-09c) is `tools.<name>`.
-    if (action.path.startsWith('connectors.')) {
-      io.stdout(appliedLine(action));
-      io.stdout(`${action.path}: MCP tools that write run without confirmation (ADR-0108)\n`);
-    }
-  }
+  const { sentSecrets, failedSecrets, created, baseUrlTaken } = await sendActions(
+    client,
+    [...plan.creates, ...plan.updates],
+    values,
+    io,
+    signal,
+    // Issue #732: the C6 `default` took this start's base URL unless its create or patch failed.
+    project.models === undefined && secrets.has(DEFAULT_MODEL_SECRET),
+  );
   await recordFingerprints(
     fingerprintsFile,
     recorded,
@@ -406,6 +381,59 @@ export async function applyProjectResources(
 `);
   }
   return reported(io, options, { checked: held, problems });
+}
+
+/**
+ * Send every action of the plan, in order. A server refusal is a warning and the next action is
+ * tried; an abort or any other failure is thrown.
+ */
+async function sendActions(
+  client: AgentWorkspaceClient,
+  actions: readonly Action[],
+  values: ReadonlyMap<string, string>,
+  io: CliIo,
+  signal: AbortSignal,
+  defaultTakesBaseUrl: boolean,
+): Promise<{
+  readonly sentSecrets: ReadonlySet<string>;
+  readonly failedSecrets: ReadonlySet<string>;
+  readonly created: readonly string[];
+  readonly baseUrlTaken: boolean;
+}> {
+  // SD16: a secret is recorded only after the loop, and only when every action naming it in this
+  // apply succeeded, so a shared secret's refused or interrupted send is retried on the next start.
+  const sentSecrets = new Set<string>();
+  const failedSecrets = new Set<string>();
+  const created: string[] = [];
+  let baseUrlTaken = defaultTakesBaseUrl;
+  for (const action of actions) {
+    const secret = 'secret' in action ? action.secret : undefined;
+    const what = isModel(action)
+      ? `the "${nameOf(action)}" model connection`
+      : `the "${nameOf(action)}" connector`;
+    try {
+      await send(client, action, values, signal);
+    } catch (error) {
+      if (signal.aborted) throw error;
+      if (secret !== undefined) failedSecrets.add(secret);
+      if (action.kind === 'model' && action.path === 'models.default') baseUrlTaken = false;
+      const created = !('id' in action);
+      if (created && error instanceof ApiProblemError && error.status === CONFLICT_STATUS) continue;
+      if (!isServerRefusal(error)) throw error;
+      io.stderr(`warning: could not set up ${what}: ${error.message}\n`);
+      continue;
+    }
+    if (secret !== undefined) sentSecrets.add(secret);
+    if (action.kind === 'model' && !('id' in action)) {
+      created.push(`model connection: ${nameOf(action)} (${action.input.provider})\n`);
+    }
+    // SD4: every connector the project file declares is MCP; a tool (S2-09c) is `tools.<name>`.
+    if (action.path.startsWith('connectors.')) {
+      io.stdout(appliedLine(action));
+      io.stdout(`${action.path}: MCP tools that write run without confirmation (ADR-0108)\n`);
+    }
+  }
+  return { sentSecrets, failedSecrets, created, baseUrlTaken };
 }
 
 /** Print every problem of `check` unless the caller reports them itself; return `check`. */

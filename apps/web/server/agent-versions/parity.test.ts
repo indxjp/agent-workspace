@@ -21,6 +21,7 @@ import { promoteAgent, rollbackAgent, setAgentPointer } from './pointers';
 import {
   createInMemoryAgentVersionStoreProvider,
   type InMemoryAgentVersionStoreProvider,
+  type SeededReference,
 } from './memory-store';
 import type { WorkspaceAgentVersionStore } from './store';
 
@@ -59,6 +60,7 @@ async function harness(policy: AgentRecord['policy'] = null): Promise<Harness> {
     references: {
       [WORKSPACE]: {
         file: [{ id: 'f1', name: 'docs/a.md' }],
+        skill: [{ id: 's1', name: 'retiring', deleting: true }],
         connector: [
           { id: 'c1', name: 'crm' },
           { id: 'c2', name: 'crm' },
@@ -107,6 +109,14 @@ const REFUSALS: readonly RefusalFixture[] = [
     registered: ['pi'],
     status: 400,
     code: 'unsupported_engine',
+  },
+  {
+    // The decision of the storage design: a skill being deleted is a 409, not an unknown name.
+    name: 'a skill that is being deleted',
+    body: versionRequest({ resources: { skills: ['retiring'] } }),
+    status: 409,
+    code: 'skill_deleting',
+    details: ['retiring'],
   },
   {
     name: 'bypassPermissions',
@@ -333,7 +343,12 @@ describe('create-from-version dryRun parity (C8)', () => {
         agents,
         ...(fixture.registered === undefined ? {} : { registered: fixture.registered }),
       };
-      const owner = { principalId: PRINCIPAL, ownerPrincipalId: PRINCIPAL, userId: null };
+      const owner = {
+        principalId: PRINCIPAL,
+        ownerPrincipalId: PRINCIPAL,
+        userId: null,
+        actorLabel: 'owner key',
+      };
       const raw = typeof fixture.body === 'object' && fixture.body !== null ? fixture.body : {};
       const dryRun = await createAgentFromVersion({ ...raw, dryRun: true }, owner, dependencies);
       const save = await createAgentFromVersion(fixture.body, owner, dependencies);
@@ -384,7 +399,12 @@ describe("the workspace's default runtime profile (S1-22)", () => {
     return { agents: agents.forWorkspace(WORKSPACE), provider, store };
   }
 
-  const owner = { principalId: PRINCIPAL, ownerPrincipalId: PRINCIPAL, userId: null };
+  const owner = {
+    principalId: PRINCIPAL,
+    ownerPrincipalId: PRINCIPAL,
+    userId: null,
+    actorLabel: 'owner key',
+  };
 
   it.each([
     ['with a default', LOCAL_PROFILE, null, LOCAL_PROFILE],
@@ -497,6 +517,47 @@ describe('promote and rollback dryRun parity (C8, #615)', () => {
       ['production', 1, 'promote'],
       ['local', 1, 'set'],
     ]);
+  });
+
+  it('answers 409 skill_deleting when a skill of the target version is marked for deletion since it was saved', async () => {
+    const seeded = { skill: [{ id: 's9', name: 'soon-gone' }] as SeededReference[] };
+    const agents = createInMemoryAgentStoreProvider();
+    const created = await agents.forWorkspace(WORKSPACE).create(
+      {
+        name: 'Rolled',
+        instructions: 'x',
+        modelConnectionId: null,
+        model: null,
+        permissions: FIXTURE_PERMISSIONS,
+      },
+      { principalId: PRINCIPAL, userId: null },
+    );
+    if (created.kind !== 'created') throw new Error('the memory store creates the agent');
+    const provider = createInMemoryAgentVersionStoreProvider({
+      agents,
+      references: { [WORKSPACE]: seeded },
+    });
+    const store = await provider.forWorkspace(WORKSPACE);
+    if (store === null) throw new Error('the memory store answers every workspace');
+    const saved = await createAgentVersion(
+      versionRequest({ resources: { skills: ['soon-gone'] } }),
+      created.agent,
+      PRINCIPAL,
+      { store },
+    );
+    expect(saved.status).toBe(201);
+
+    seeded.skill = [{ id: 's9', name: 'soon-gone', deleting: true }];
+    const moved = await setAgentPointer(
+      { environment: 'local', version: 1 },
+      created.agent,
+      actor,
+      { store },
+    );
+    expect(moved.status).toBe(409);
+    expect(moved.body).toMatchObject({
+      error: { code: 'skill_deleting', details: ['soon-gone'] },
+    });
   });
 
   it('refuses nothing_to_roll_back the same in both modes', async () => {

@@ -5,8 +5,10 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Nightly (02:17 JST): an advisory published after a change merged fails here, not on the next
+  # pull request (ADR-0053, Amendment 2026-10-24).
   schedule:
-    - cron: '17 3 * * 2'
+    - cron: '17 17 * * *'
 
 permissions:
   contents: read
@@ -19,7 +21,7 @@ jobs:
     if: >-
       github.event_name == 'pull_request' &&
       (github.event.repository.visibility == 'public' || vars.ENABLE_GITHUB_ADVANCED_SECURITY == 'true')
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
     permissions:
       contents: read
       pull-requests: read
@@ -29,17 +31,28 @@ jobs:
         with:
           fail-on-severity: high
 
+  # A skipped job reports green, so the opposite condition says out loud that the scans did not run
+  # (audit F-03). Secrets and dependencies are still scanned in ci.yml's fast-checks (gitleaks and
+  # osv-scanner), which need no Advanced Security.
+  ghas-skipped-notice:
+    if: >-
+      github.event.repository.visibility != 'public' &&
+      vars.ENABLE_GITHUB_ADVANCED_SECURITY != 'true'
+    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
+    steps:
+      - run: |
+          echo "::warning title=CodeQL and dependency review did not run::GitHub Advanced Security is not enabled for this private repository (set the ENABLE_GITHUB_ADVANCED_SECURITY variable to true once it is). Only gitleaks, osv-scanner and pnpm audit cover this change."
+
   # GitHub's runner for all three jobs: none of them is on ci-success's path (see ci.yml's header
   # for the runner rule).
   dependency-audit:
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
-          cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm audit --audit-level high
       - name: Produce dependency inventory
@@ -55,16 +68,16 @@ jobs:
     if: >-
       github.event.repository.visibility == 'public' ||
       vars.ENABLE_GITHUB_ADVANCED_SECURITY == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
     permissions:
       contents: read
       security-events: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+      - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           languages: javascript-typescript
           build-mode: none
-      - uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+      - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           category: /language:javascript-typescript

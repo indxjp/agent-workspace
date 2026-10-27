@@ -272,13 +272,13 @@ rather than about a comparison.
 whole content of the acceptance criterion, which is about both. -/
 
 /-- One `runs` row, in the cell this decision writes: the engine that executed the run. -/
-@[aw_spec (ts := "packages/core/src/db/repositories/runs.ts#CreateRunInput")]
+@[aw_spec (ts := "packages/core/src/db/repositories/runs/types.ts#CreateRunInput")]
 structure RunRow where
   engine : String
   deriving DecidableEq, Repr, Inhabited
 
 /-- The state a run-create decision reads and writes. -/
-@[aw_spec (ts := "packages/core/src/db/repositories/runs.ts#SessionRecord")]
+@[aw_spec (ts := "packages/core/src/db/repositories/runs/types.ts#SessionRecord")]
 structure LaunchState where
   /-- `sessions.engine`: `none` until a run pins it. -/
   sessionEngine : Option String

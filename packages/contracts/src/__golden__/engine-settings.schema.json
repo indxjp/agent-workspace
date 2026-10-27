@@ -16,6 +16,12 @@
               "type": "array",
               "items": { "type": "string" }
             },
+            "requireApproval": {
+              "readOnly": true,
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "handoff": { "type": "boolean", "const": true },
             "id": {
               "type": "string",
               "const": "claude-agent-sdk"

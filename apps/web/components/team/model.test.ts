@@ -15,9 +15,6 @@ import {
   describeWithheldControls,
   formatTeamDate,
   isCurrentUser,
-  readMemberList,
-  readMemberProjectCount,
-  readMemberSessionCount,
   removalImpactFromReads,
   roleOptionsFor,
   soleOwnerUserId,
@@ -73,34 +70,6 @@ const ADMIN_CAPABILITY: MembershipCapability = {
   conferrableRoles: ['admin', 'viewer'],
   viewerUserId: 'user-2',
 };
-
-describe('readMemberList', () => {
-  it('accepts the list the route actually answers', () => {
-    expect(readMemberList({ memberships: [OWNER, ADMIN] })).toEqual([OWNER, ADMIN]);
-  });
-
-  it('accepts a workspace with exactly one member', () => {
-    expect(readMemberList({ memberships: [OWNER] })).toEqual([OWNER]);
-  });
-
-  it('answers null rather than an empty table for a body it cannot read', () => {
-    // An empty members table is the claim "this workspace has nobody in it". A malformed response
-    // is no evidence for that claim, so it routes to the screen's failure state instead.
-    for (const malformed of [
-      null,
-      undefined,
-      {},
-      { memberships: null },
-      { memberships: [{ ...OWNER, role: 'superuser' }] },
-      { memberships: [{ ...OWNER, name: '' }] },
-      { memberships: [{ ...OWNER, createdAt: 'yesterday' }] },
-      { memberships: [{ ...OWNER, unexpected: true }] },
-      { memberships: ['not-a-row'] },
-    ]) {
-      expect(readMemberList(malformed)).toBeNull();
-    }
-  });
-});
 
 describe('isCurrentUser', () => {
   it('marks the row whose user id the server said is the viewer', () => {
@@ -195,58 +164,6 @@ describe('describeWithheldControls', () => {
     // A Builder or Viewer never reaches the list at all; explaining a restriction on a control
     // they were never offered would invent a refusal the server never made.
     expect(describeWithheldControls(OWNER, NO_MEMBERSHIP_CAPABILITY, 'user-1')).toBeNull();
-  });
-});
-
-describe('readMemberSessionCount', () => {
-  it('counts only the rows this member owns', () => {
-    const body = {
-      sessions: [{ userId: 'user-2' }, { userId: 'user-1' }, { userId: 'user-2' }],
-    };
-    expect(readMemberSessionCount(body, 'user-2')).toBe(2);
-  });
-
-  it('counts zero for a member who owns none, which is a measured zero', () => {
-    expect(readMemberSessionCount({ sessions: [{ userId: 'user-1' }] }, 'user-2')).toBe(0);
-  });
-
-  it('answers null for the transcript-store response shape, which carries no userId', () => {
-    // `server/sessions/api.ts`'s second branch (no sessions repository configured) answers rows
-    // with no `userId` field at all. Counting those would report a confident 0 for a member who
-    // owns many, and the confirmation would then promise a removal the database refuses.
-    expect(readMemberSessionCount({ sessions: [{ sessionId: 'abc' }] }, 'user-2')).toBeNull();
-  });
-
-  it('does not count a machine-owned session as belonging to a human member', () => {
-    expect(
-      readMemberSessionCount({ sessions: [{ userId: null }, { userId: 'user-2' }] }, 'user-2'),
-    ).toBe(1);
-  });
-
-  it('answers null for a body that is not a session list', () => {
-    for (const malformed of [null, undefined, {}, { sessions: 'none' }, { sessions: [1] }]) {
-      expect(readMemberSessionCount(malformed, 'user-2')).toBeNull();
-    }
-  });
-});
-
-describe('readMemberProjectCount', () => {
-  it('counts the projects this member created', () => {
-    const body = { projects: [{ createdBy: 'user-2' }, { createdBy: 'user-9' }] };
-    expect(readMemberProjectCount(body, 'user-2')).toBe(1);
-  });
-
-  it('answers null when a row does not say who created it', () => {
-    expect(readMemberProjectCount({ projects: [{ name: 'Ops' }] }, 'user-2')).toBeNull();
-  });
-
-  it('does not count a machine-owned project as belonging to a human member', () => {
-    expect(
-      readMemberProjectCount(
-        { projects: [{ createdBy: null }, { createdBy: 'user-2' }] },
-        'user-2',
-      ),
-    ).toBe(1);
   });
 });
 

@@ -9,14 +9,17 @@
  * 1. Parse with `CreateEvaluationRequestSchema` → `400 invalid_body`.
  * 2. `find` the version → `404 agent_version_not_found`.
  * 3. Each case, one after another, on a fresh session pinned to that version (#612), whatever
- *    `local` points at: `startRunOnSession`, wait for the run's
- *    stream to end, check the answer, then ask the judge if the case has one. A refused start of
- *    the first case answers that refusal and stores nothing; a later one fails only its case.
+ *    `local` points at: `startRunOnSession` (`runs/service.ts`), wait for the
+ *    run's stream to end, check the answer, then ask the judge if the case has one. A refused start of
+ *    the first case answers that refusal and stores nothing; a later one fails only its case. A
+ *    case with `expect.awaitsApproval` is scored where its run pauses for approval, and the run is
+ *    then cancelled (ADR-0145): an evaluation never approves.
  * 4. Score, store, `201` with the evaluation.
  *
  * Synchronous, so it is bounded: at most `EVALUATION_CASE_LIMIT` cases and
  * {@link EVALUATION_DEADLINE_MS} for all of them, the running case and its judge included.
  */
+import { log } from '../telemetry/logger';
 import { randomUUID } from 'node:crypto';
 
 import {
@@ -35,7 +38,7 @@ import { AgentFrameSchema, type AgentFrame } from '@indx-workspace/contracts/run
 import { parseRunFailure } from '@indx-workspace/contracts/runs';
 import { z } from 'zod';
 
-import { problem, type ApiResult } from '../agents/handlers';
+import { formatIssues, problem, type ApiResult } from '../http/result';
 import { agentVersionNotFound } from '../agent-versions/problems';
 import type { WorkspaceAgentVersionStore } from '../agent-versions/store';
 import type { ModelResolution } from '../compose/run-request';
@@ -43,11 +46,16 @@ import type { RunModelQuery } from '../compose/run-preflight';
 import { readBoundedJson } from '../http/json-transport';
 import type { ResolvedModelConnection } from '../models/store';
 import { upgradeEventStream } from '../runs/agent-frames';
-import { startRunOnSession } from '../runs/api';
-import type { AgentRef, Principal, RunApiEnvironment } from '../runs/environment';
+import type {
+  AgentRef,
+  RunLimitsOverride,
+  RunPrincipal,
+  RunApiEnvironment,
+} from '../runs/environment';
+import { startRunOnSession } from '../runs/service';
 import { isTerminalRunStatus } from '../runs/store';
 import { judgePrompt, parseJudgeVerdict } from './judge';
-import { checkCase, finalAnswer, score, toolCalls } from './score';
+import { checkCase, finalAnswer, pausedCall, score, toolCalls } from './score';
 
 /**
  * The server's budget for one evaluation request: the ACA session-run cap, under ACA's 240 s
@@ -75,13 +83,19 @@ export interface EvaluateAgentVersionDependencies {
   readonly runs: RunApiEnvironment | null;
   /** {@link EVALUATION_DEADLINE_MS} unless a test shortens it. */
   readonly deadlineMs?: number;
+  /**
+   * Limits every case's run starts under. They can only lower the policy's (`lowerLimits`). Set by
+   * trusted in-process callers only: the route builds these dependencies without it and its body
+   * schema refuses a `limits` key.
+   */
+  readonly limits?: RunLimitsOverride;
 }
 
 /** Score `raw`'s cases against a version of agent `agentId` and store the evaluation. */
 export async function evaluateAgentVersion(
   raw: unknown,
   agentId: string,
-  principal: Principal,
+  principal: RunPrincipal,
   dependencies: EvaluateAgentVersionDependencies,
 ): Promise<ApiResult> {
   const deadline = Date.now() + (dependencies.deadlineMs ?? EVALUATION_DEADLINE_MS);
@@ -91,13 +105,11 @@ export async function evaluateAgentVersion(
       EVALUATION_PROBLEM_CODES.invalid_body,
       'invalid_body',
       'The body is not an evaluation request.',
-      parsed.error.issues.map(
-        (issue) => `${issue.path.map(String).join('.') || '(root)'}: ${issue.message}`,
-      ),
+      formatIssues(parsed.error.issues),
     );
   }
   const { version, cases } = parsed.data;
-  const { store, runs } = dependencies;
+  const { store, runs, limits } = dependencies;
   const record = runs?.recordEvaluation;
   if (runs === null || record === undefined) {
     return problem(
@@ -122,6 +134,7 @@ export async function evaluateAgentVersion(
       agent,
       versionId: found.id,
       deadline,
+      ...(limits === undefined ? {} : { limits }),
     });
     if (outcome.kind === 'refused') {
       if (results.length === 0) return problem(outcome.status, outcome.code, outcome.message);
@@ -152,16 +165,19 @@ export async function evaluateAgentVersion(
 
 export interface CaseContext {
   readonly runs: RunApiEnvironment;
-  readonly principal: Principal;
+  readonly principal: RunPrincipal;
   readonly agent: AgentRef;
   /** The version every case's session pins. */
   readonly versionId: string;
   /** Epoch milliseconds after which nothing more is waited for. */
   readonly deadline: number;
+  /** Lowers every case's run limits; see {@link EvaluateAgentVersionDependencies.limits}. */
+  readonly limits?: RunLimitsOverride;
 }
 
 const DEADLINE_EXCEEDED = 'deadline_exceeded' satisfies EvaluationCaseFailureCode;
 const RUN_STREAM_FAILED = 'run_stream_failed' satisfies EvaluationCaseFailureCode;
+const RUN_NOT_AWAITING_APPROVAL = 'run_not_awaiting_approval' satisfies EvaluationCaseFailureCode;
 const JUDGE_UNAVAILABLE = 'judge_unavailable' satisfies EvaluationCaseFailureCode;
 const JUDGE_UNPARSEABLE = 'judge_unparseable' satisfies EvaluationCaseFailureCode;
 
@@ -186,7 +202,7 @@ function failed(
 }
 
 export async function runCase(evalCase: EvalCase, context: CaseContext): Promise<CaseOutcome> {
-  const { runs, principal, agent, versionId, deadline } = context;
+  const { runs, principal, agent, versionId, deadline, limits } = context;
   if (Date.now() >= deadline) return failed(evalCase, null, [DEADLINE_EXCEEDED]);
   // The start (preflight, `openSession`, the run row) counts against the deadline too.
   const starting = startRunOnSession(runs, principal, agent, {
@@ -194,6 +210,8 @@ export async function runCase(evalCase: EvalCase, context: CaseContext): Promise
     sessionId: null,
     modelOverride: null,
     agentVersionId: versionId,
+    ...(limits === undefined ? {} : { limits }),
+    ...(evalCase.outputSchema === undefined ? {} : { outputSchema: evalCase.outputSchema }),
   });
   const started = await beforeDeadline(starting, deadline);
   if (started === 'deadline') {
@@ -203,7 +221,7 @@ export async function runCase(evalCase: EvalCase, context: CaseContext): Promise
         if (late.kind === 'started') stopAbandonedRun(runs, principal, late.run.id);
       },
       (cause: unknown) => {
-        console.error('[evaluations] a case run started after the deadline failed', cause);
+        log.error('[evaluations] a case run started after the deadline failed', { error: cause });
       },
     );
     return failed(evalCase, null, [DEADLINE_EXCEEDED]);
@@ -219,7 +237,18 @@ export async function runCase(evalCase: EvalCase, context: CaseContext): Promise
   if (frames === 'failed') return failed(evalCase, runId, [RUN_STREAM_FAILED]);
   const run = await runs.store.get(runId);
   const status = run?.status ?? 'missing';
-  if (status !== 'completed') {
+  const awaitsApproval = evalCase.expect.awaitsApproval === true;
+  // ADR-0145: a case that expects the pause passes the status check there, and fails if the run
+  // completed without one. Anything else is judged as it is without the flag.
+  const paused = awaitsApproval && status === 'awaiting_approval';
+  if (awaitsApproval && status === 'completed') {
+    return failed(evalCase, runId, [RUN_NOT_AWAITING_APPROVAL]);
+  }
+  // An evaluation never approves (D2.5). A run left paused (or still running) would continue
+  // under the full policy budget if someone approved it later, because continuations do not
+  // inherit lowered limits: stop it whatever the case expected. A terminal run is left alone.
+  if (status !== 'completed') stopAbandonedRun(runs, principal, runId);
+  if (status !== 'completed' && !paused) {
     // A failed run whose error carries a contract code (`model_credential_rejected`, …) reports
     // that code, so the cause is not lost behind `run_failed` (issue #661).
     const coded = status === 'failed' ? parseRunFailure(run?.error ?? null)?.code : null;
@@ -227,7 +256,10 @@ export async function runCase(evalCase: EvalCase, context: CaseContext): Promise
   }
 
   const answer = finalAnswer(frames);
-  const failures = [...checkCase(evalCase.expect, answer, toolCalls(frames))];
+  const calls = paused
+    ? [...toolCalls(frames), ...pausedCall(run?.pendingApproval)]
+    : toolCalls(frames);
+  const failures = [...checkCase(evalCase.expect, answer, calls, run?.output?.structured ?? null)];
   if (evalCase.expect.judge !== undefined) {
     const prompt = judgePrompt(evalCase.expect.judge, evalCase.input, answer);
     failures.push(...(await judgeFailures(runs, principal, agent, versionId, prompt, deadline)));
@@ -258,7 +290,7 @@ async function framesUntil(
     } catch (cause) {
       // A failed read fails this case only; the store's text stays in the log.
       const when = abandoned ? 'after it was abandoned ' : '';
-      console.error(`[evaluations] reading run ${runId} ${when}failed`, cause);
+      log.error(`[evaluations] reading run ${runId} ${when}failed`, { error: cause });
       return 'failed' as const;
     }
   })();
@@ -291,7 +323,7 @@ async function beforeDeadline<T>(pending: Promise<T>, deadline: number): Promise
  * tokens after its case was failed. Best effort and in the background: the response does not wait
  * for it, and a failure is logged.
  */
-function stopAbandonedRun(runs: RunApiEnvironment, principal: Principal, runId: string): void {
+function stopAbandonedRun(runs: RunApiEnvironment, principal: RunPrincipal, runId: string): void {
   const interrupt = runs.interruptRun;
   if (interrupt === undefined) return;
   const stopping = async () => {
@@ -300,13 +332,13 @@ function stopAbandonedRun(runs: RunApiEnvironment, principal: Principal, runId: 
     await interrupt(principal, run);
   };
   void stopping().catch((cause: unknown) => {
-    console.error(`[evaluations] interrupting abandoned run ${runId} failed`, cause);
+    log.error(`[evaluations] interrupting abandoned run ${runId} failed`, { error: cause });
   });
 }
 
 async function judgeFailures(
   runs: RunApiEnvironment,
-  principal: Principal,
+  principal: RunPrincipal,
   agent: AgentRef,
   versionId: string,
   prompt: string,
@@ -323,7 +355,7 @@ async function judgeFailures(
     // Cut off by the request's deadline, not a provider outage.
     if (signal.aborted) return [DEADLINE_EXCEEDED];
     // The provider's text stays in the log: it can name an endpoint or echo a credential.
-    console.error(`[evaluations] the judge call for agent ${agent.id} failed`, cause);
+    log.error(`[evaluations] the judge call for agent ${agent.id} failed`, { error: cause });
     return [JUDGE_UNAVAILABLE];
   }
   const verdict = parseJudgeVerdict(text);
@@ -353,9 +385,10 @@ export interface ModelJudgeDependencies {
 }
 
 /**
- * The judge as `installRunApi` wires it: one non-streaming message to the model the evaluated
- * version's runs resolve to, through the gateway's provider adapter for that connection. Throws on any
- * failure; {@link judgeFailures} turns that into `judge_unavailable`.
+ * The judge as `wireRunApi` (`composition/wiring/run-api.ts`) wires it into
+ * `ApplicationContext.runs`: one non-streaming message to the model the evaluated version's runs
+ * resolve to, through the gateway's provider adapter for that connection. Throws on any failure;
+ * {@link judgeFailures} turns that into `judge_unavailable`.
  */
 export function createModelJudge(
   dependencies: ModelJudgeDependencies,
@@ -376,7 +409,8 @@ export function createModelJudge(
     if (!resolution.ok) throw new Error(`the judge model did not resolve (${resolution.code})`);
     const resolved = await dependencies.connection(principal.workspaceId, resolution.connectionId);
     if (resolved === null) throw new Error('the judge model connection did not resolve');
-    const adapter = adapters.get(registryProviderId(resolved.connection.provider));
+    const providerId = registryProviderId(resolved.connection.provider);
+    const adapter = adapters.get(providerId);
     if (adapter === undefined) throw new Error(`no adapter for ${resolved.connection.provider}`);
     // ponytail: judge calls skip the gateway process and are not metered in run_usage_records;
     // meter them through a judge token or a judge run when gateway metering of non-run calls exists.
@@ -387,7 +421,7 @@ export function createModelJudge(
         messages: [{ role: 'user', content: prompt }],
       },
       {
-        providerId: adapter.id,
+        providerId,
         credential: resolved.credential,
         requestId: randomUUID(),
         settings: resolved.connection.config,

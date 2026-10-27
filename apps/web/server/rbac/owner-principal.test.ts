@@ -2,11 +2,11 @@ import { describe, expectTypeOf, it } from 'vitest';
 
 import type { RunOwnershipPrincipal } from '../agents/run-ownership';
 import type { ProjectActor } from '../projects/runtime';
-import type { Principal as RunPrincipal } from '../runs/environment';
-import type { SessionPrincipal } from '../sessions/environment';
+import type { RunPrincipal } from '../runs/environment';
+import type { SessionApiPrincipal } from '../sessions/environment';
 import type { ShareActor } from '../shares/core/runtime';
 import type { ShareService } from '../shares/core/service';
-import type { Principal as RbacPrincipal } from './principal';
+import type { Principal } from './principal';
 
 /** The `ownerPrincipalId` member of a projection, exactly as declared (optional or required). */
 type OwnerField<T> = Pick<T, Extract<keyof T, 'ownerPrincipalId'>>;
@@ -23,7 +23,7 @@ type User<T> = Extract<T, { readonly kind: 'user' }>;
 describe('caller projections require ownerPrincipalId', () => {
   it('requires it on every projection the composition roots build', () => {
     expectTypeOf<OwnerField<RunPrincipal>>().toEqualTypeOf<{ readonly ownerPrincipalId: string }>();
-    expectTypeOf<OwnerField<User<SessionPrincipal>>>().toEqualTypeOf<{
+    expectTypeOf<OwnerField<User<SessionApiPrincipal>>>().toEqualTypeOf<{
       readonly ownerPrincipalId: string;
     }>();
     expectTypeOf<OwnerField<Workspace<ProjectActor>>>().toEqualTypeOf<{
@@ -41,7 +41,7 @@ describe('caller projections require ownerPrincipalId', () => {
   });
 
   it('requires actsForPrincipalId when the nominal principal is rebuilt from a directory record', () => {
-    type DirectoryRecord = Parameters<typeof RbacPrincipal.fromDirectoryRecord>[0];
+    type DirectoryRecord = Parameters<typeof Principal.fromDirectoryRecord>[0];
     expectTypeOf<Pick<DirectoryRecord, 'actsForPrincipalId'>>().toEqualTypeOf<{
       readonly actsForPrincipalId: string | null;
     }>();

@@ -1,4 +1,5 @@
 import AgentWorkspace.Theorems.Adversarial.AdversarialRunsStream
+import AgentWorkspace.Theorems.Refinement.SdkRuns
 import Vectors.Common
 
 namespace Vectors.AdversarialRunsStream
@@ -106,7 +107,7 @@ private def indeterminateDone : Vector :=
     input := Json.mkObj [("runStatus", "running"), ("reason", "lost")],
     expected := Json.mkObj [("frames", toJson (["run-failed", "done"] : List String)),
       ("failureStatus", "unknown"), ("waitError", "contract-violation")],
-    witnesses := [witness "indeterminate_done_stops_follow_but_live_wait_fails"] }
+    witnesses := ["AgentWorkspace.Theorems.Refinement.SdkRuns.indeterminate_done_diverges_from_settled_wait"] }
 
 def files : List (String × Json) :=
   [("attacks.json", file "adversarial-runs-stream"

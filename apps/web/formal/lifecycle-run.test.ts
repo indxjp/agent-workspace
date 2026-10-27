@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { asRecord, asString, loadVectors } from '../../../tests/formal/vectors';
-import { InMemoryRunStore, isTerminalRunStatus, type RunStatus } from '../server/runs/store';
+import { InMemoryRunStore } from '../server/runs/memory-store';
+import { isTerminalRunStatus, type RunStatus } from '../server/runs/store';
 
 const vectors = loadVectors('lifecycle-run', 'run-sequences.json');
 function status(value: unknown, context: string): RunStatus {

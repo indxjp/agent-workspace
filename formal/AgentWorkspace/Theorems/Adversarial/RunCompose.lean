@@ -19,7 +19,7 @@ The union moved into the Claude adapter with ENG-04b (#325); the rule did not.
 @[aw_spec (tier := T3)
   (ts := "packages/engine-claude-agent-sdk/src/tools.ts#compileClaudeToolPolicy")]
 theorem policy_keeps_read_denials :
-    "Read" ∈ agentDeny { readFiles := false, writeFiles := true, runCommands := true, unrestrictedNetwork := true } [] := by decide
+    "Read" ∈ agentDeny { readFiles := false, writeFiles := true, runCommands := true, unrestrictedNetwork := true } [] := by decide +kernel
 
 /-- A stored tool denial survives union with checkbox-derived denials. -/
 @[aw_spec (tier := T3)
@@ -27,26 +27,26 @@ theorem policy_keeps_read_denials :
 theorem stored_policy_denial_survives :
     let all : Permissions :=
       { readFiles := true, writeFiles := true, runCommands := true, unrestrictedNetwork := true }
-    agentDeny all ["WebFetch"] = ["WebFetch"] := by decide
+    agentDeny all ["WebFetch"] = ["WebFetch"] := by decide +kernel
 
 /-- A read-only file grant removes write tools on that path and shell execution. -/
 @[aw_spec (tier := T3) (ts := "apps/web/server/compose/run-request.ts#applyFileGrantPolicy")]
 theorem read_only_file_denies_writes_and_shell :
     "Edit(//cwd/readme.txt)" ∈ fileGrantDeny [] "/cwd" [("readme.txt", false)] ∧
     "Bash" ∈ fileGrantDeny [] "/cwd" [("readme.txt", false)] ∧
-    "KillShell" ∈ fileGrantDeny [] "/cwd" [("readme.txt", false)] := by decide
+    "KillShell" ∈ fileGrantDeny [] "/cwd" [("readme.txt", false)] := by decide +kernel
 
 /-- The compiler refuses a provider master key instead of emitting an environment containing it. -/
 @[aw_spec (tier := T3) (ts := "packages/engine-claude-agent-sdk/src/compile.ts#compileRunRequest")]
 theorem master_key_never_compiles :
     compiledEnvironment [("ANTHROPIC_API_KEY", "provider-master-key")]
-      "r" "s" "w" "c" = none := by decide
+      "r" "s" "w" "c" = none := by decide +kernel
 
 /-- An assigned requested skill remains selected while an unassigned request is removed. -/
 @[aw_spec (tier := T3)
   (ts := "apps/web/server/compose/run-request.ts#portableAgentConfigFor")]
 theorem selected_skill_has_positive_witness :
-    selectedSkills ["assigned"] ["assigned", "unassigned"] = ["assigned"] := by decide
+    selectedSkills ["assigned"] ["assigned", "unassigned"] = ["assigned"] := by decide +kernel
 
 /-- A run that wins the session lock first prevents a later project reassignment. -/
 @[aw_spec (tier := T3) (ts := "packages/core/src/db/repositories/projects.ts#moveSession")

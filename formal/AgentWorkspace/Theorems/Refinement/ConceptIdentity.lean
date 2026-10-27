@@ -61,7 +61,7 @@ also accepts an API-key principal with a user id, which the documented rule refu
 theorem me_schema_target_refines_current :
     (∀ m : MeResponse, m.acceptedTarget = true → m.acceptedCurrent = true) ∧
       ∃ m : MeResponse, m.acceptedCurrent = true ∧ m.acceptedTarget = false := by
-  refine ⟨fun m h => ?_, ⟨"p1", .apiKey, .viewer, "w1", some "u1", "CI"⟩, by decide, by decide⟩
+  refine ⟨fun m h => ?_, ⟨"p1", .apiKey, .viewer, "w1", some "u1", "CI"⟩, by decide +kernel, by decide⟩
   simp only [MeResponse.acceptedTarget, Bool.and_eq_true] at h
   exact h.1
 

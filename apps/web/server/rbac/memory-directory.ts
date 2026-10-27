@@ -310,7 +310,8 @@ export function createMemoryDirectory(options: MemoryDirectoryOptions = {}): Mem
         return Promise.resolve({ kind: 'email-taken', email });
       }
       const createdAt = isoOf(now());
-      const user = existing ?? { id: newId(), email, name: input.name, createdAt };
+      // Trimmed as the durable repository trims it, so both answer the same name for one input.
+      const user = existing ?? { id: newId(), email, name: input.name.trim(), createdAt };
       users.set(user.id, user);
       const membershipId = newId();
       const membership: MembershipRow = {

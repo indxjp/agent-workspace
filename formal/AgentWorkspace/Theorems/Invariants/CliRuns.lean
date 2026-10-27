@@ -15,7 +15,7 @@ theorem typed_failure_exit_is_command_independent (first second : Command) (fail
 theorem sdk_failure_maps_to_exit :
     exitCode false (some (fromSdkFailure (.transport false))) = 4 ∧
     exitCode false (some (fromSdkFailure (.apiProblem 409 "conflict"))) = 1 ∧
-    exitCode false (some (fromSdkFailure .contractViolation)) = 3 := by decide
+    exitCode false (some (fromSdkFailure .contractViolation)) = 3 := by decide +kernel
 
 /-- SIGINT wins over every error classification, including a failed courtesy interrupt. -/
 @[aw_spec (tier := T2) (ts := "packages/aw/src/output.ts#reportFailure")]
@@ -30,6 +30,6 @@ theorem courtesy_interrupt_preserves_exit (succeeded : Bool) :
 /-- Conflicting start flags stop command routing before any SDK request. -/
 @[aw_spec (tier := T2) (ts := "packages/aw/src/commands/runs.ts#start")]
 theorem conflicting_start_flags_make_no_sdk_calls :
-    startCalls (startMode true true) = [] := by decide
+    startCalls (startMode true true) = [] := by decide +kernel
 
 end AgentWorkspace.Theorems.Invariants.CliRuns

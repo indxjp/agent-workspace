@@ -136,6 +136,11 @@ is what `get`, `list`, and the `202` of `start` all render. Dates are ISO-8601 s
 <ResponseField name="error" type="string | null">
   The safe public failure text, or `null` while the run is live or ended well.
 </ResponseField>
+<ResponseField name="output" type="{ text: string; structured: unknown } | null">
+  The run's answer once it `completed` (ADR-0143): the final `text`, and the `structured` value
+  when the run was started with an `outputSchema` (`null` otherwise). `null` while the run is live
+  and for a run that failed or was cancelled. Read it typed with [`result`](#result).
+</ResponseField>
 <ResponseField name="accountingState" type="AccountingState">
   How far usage accounting has progressed: one of `ACCOUNTING_STATES` —
   `'pending' | 'complete' | 'partial' | 'failed' | 'unavailable'`. `complete` is the only settled
@@ -162,7 +167,7 @@ const started = await aw.runs.start(agentId, {
 
 ```sh title="aw (illustrative)" claim="illustrative"
 aw runs start <agent> --prompt "Summarise the attached diff" \
-  [--session <id>] [--model <connection-id>:<model>] [--wait | --follow]
+  [--session <id>] [--model <connection-id>:<model>] [--output-schema <path>] [--file-scope <path>]... [--attach <file-id|path>]... [--wait | --follow]
 ```
 
 </CodeGroup>
@@ -188,19 +193,49 @@ aw runs start <agent> --prompt "Summarise the attached diff" \
   names. A session keeps the version it started on, so `version` together with `sessionId` is
   refused (`400 invalid_body`). `aw chat --agent-version <n>` sends it.
 </ParamField>
+<ParamField path="outputSchema" type="ZodType | JSON Schema object">
+  Ask for an answer of this shape (ADR-0143). The SDK sends a Zod schema as JSON Schema 2020-12 and
+  a plain object as is. The root must be `type: "object"`, and the schema is refused
+  `400 invalid_body` when it is over a limit (`root_type`, `size`, `dialect`, `ref`, `depth`); the
+  message names the limit. Only engines that can produce structured output accept it, otherwise
+  the request is refused `422 engine_capability_unsupported` with `details: ["structuredOutput"]`.
+  Neither refusal creates a run. A run whose answer does not satisfy the schema fails with
+  `output_schema_unsatisfied`. Read the answer with [`result`](#result). From the CLI, `--output-schema <path>` reads the
+  schema from a JSON file and checks the same limits before it sends anything.
+</ParamField>
+<ParamField path="fileScope" type="string[]">
+  Narrow the run to part of the agent's file grants (ADR-0147): one to 100 canonical
+  workspace-relative paths, each a file or a folder inside what the agent is granted, with no
+  repeats. Built-in `search_files` and the files the sandbox receives cover only these paths, so one
+  agent can serve many callers without one caller's search reaching another's documents. Omit it to
+  keep all of the agent's grants. A scope is never wider than the grants: a path the agent is not
+  granted, a parent of a granted file, or any path when the agent has no files fails the run with
+  `run_file_scope_not_granted`. That is judged when the run launches, so the start answers `202` and
+  the run fails with the code, read through `runFailure`. The continuation after an approval keeps
+  the scope of the run it continues. From the CLI, repeat `--file-scope <path>`.
+</ParamField>
+<ParamField path="attachments" type="{ fileId: string }[]">
+  Workspace files the run receives read-only (ADR-0146): one to `MAX_RUN_ATTACHMENTS` (`10`) per
+  request, and with a session's earlier uploads at most 20 files, 10 MiB each and 50 MiB in all
+  (`422 run_attachments_too_large`). A file the caller may not read, or that does not exist, is
+  `404 file_not_found`, and no run is created. From the CLI, repeat `--attach <file>`, where
+  `<file>` is a file id or a workspace path.
+</ParamField>
 
-| Status | Code                        | When                                                                                      |
-| ------ | --------------------------- | ----------------------------------------------------------------------------------------- |
-| `503`  | `run_api_not_configured`    | The runs API is not configured on this deployment.                                        |
-| `401`  | `unauthenticated`           | No valid session or API key.                                                              |
-| `403`  | `forbidden`                 | The caller's role does not permit starting this run.                                      |
-| `500`  | `authorisation_undecidable` | The authorisation decision could not be made (a server defect, not a caller error).       |
-| `400`  | `invalid_agent_id`          | The agent id in the path is not a UUID.                                                   |
-| `400`  | `invalid_body`              | The body does not parse into a `StartRunRequest`.                                         |
-| `404`  | `agent_not_found`           | No agent with that id in this workspace.                                                  |
-| `404`  | `agent_version_not_found`   | `version` names no version of this agent in this workspace.                               |
-| `409`  | `session_not_usable`        | The requested `sessionId` cannot run this agent — omit it to start a new session instead. |
-| `409`  | `session_busy`              | The session already has a `queued` or `running` run — wait for it to end or interrupt it. |
+| Status | Code                            | When                                                                                      |
+| ------ | ------------------------------- | ----------------------------------------------------------------------------------------- |
+| `503`  | `run_api_not_configured`        | The runs API is not configured on this deployment.                                        |
+| `401`  | `unauthenticated`               | No valid session or API key.                                                              |
+| `403`  | `forbidden`                     | The caller's role does not permit starting this run.                                      |
+| `500`  | `authorisation_undecidable`     | The authorisation decision could not be made (a server defect, not a caller error).       |
+| `400`  | `invalid_agent_id`              | The agent id in the path is not a UUID.                                                   |
+| `400`  | `invalid_body`                  | The body does not parse into a `StartRunRequest`.                                         |
+| `404`  | `agent_not_found`               | No agent with that id in this workspace.                                                  |
+| `404`  | `file_not_found`                | An attachment names a file the caller may not read, or none.                              |
+| `404`  | `agent_version_not_found`       | `version` names no version of this agent in this workspace.                               |
+| `409`  | `session_not_usable`            | The requested `sessionId` cannot run this agent — omit it to start a new session instead. |
+| `409`  | `session_busy`                  | The session already has a `queued` or `running` run — wait for it to end or interrupt it. |
+| `422`  | `engine_capability_unsupported` | `outputSchema` was sent but the agent's engine cannot produce structured output.          |
 
 ## get
 
@@ -455,6 +490,38 @@ reports a live status (`queued` or `running`), it raises a `ContractViolationErr
 expected to write the terminal status before the stream's `done` frame, so a live status after
 `done` means the platform contradicted its own contract, not a network condition worth retrying.
 
+## result
+
+Wait for the run to end, then read its answer: the text, and the structured value typed by a Zod
+schema when you pass one.
+
+<CodeGroup>
+
+```ts title="sdk (illustrative)" claim="illustrative"
+const Invoice = z.object({ total: z.number(), currency: z.string() });
+const { run } = await aw.runs.start(agentId, {
+  prompt: 'Read the invoice.',
+  outputSchema: Invoice,
+});
+const { text, output } = await aw.runs.result(run.id, { schema: Invoice });
+// output: { total: number; currency: string } | null
+```
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw runs start <agent> --prompt "Read the invoice." --output-schema invoice.schema.json --wait --json
+aw runs get <id> --json   # .output.structured is the value; .output.text the final text
+```
+
+</CodeGroup>
+
+**SDK:** [`runs.result`](/reference/sdk/runs#result) · **Guide:**
+[Get typed data back from a run](/guides/structured-output)
+
+`result` drains [`waitForOutcome`](#waitforoutcome) and reads `run.output`. A run that did not
+`completed` has no answer, so `text` and `output` are `null` and the reason is in `run.error`. With
+`schema`, a structured value that does not parse raises a `ContractViolationError`: the run asked
+for this shape and the platform handed back another.
+
 ## The neutral view
 
 `runtime` frames carry the Claude Agent SDK's own messages, classified by the runner. Reading them
@@ -606,6 +673,36 @@ aw runs rate <run-id> --down --comment "Must not promise a refund"   # or --up
 The widget's feedback buttons call the same route (`parts: { feedback: true }` on a surface).
 `aw feedback` lists the ratings that were given.
 
+## Files a run writes
+
+An agent with `writeFiles` on that ends `completed` leaves what it wrote to its `outputs/`
+directory with the run: the files appear in the workspace file browser under
+`runs/<run-id>/outputs/`. A run that did not complete, or an agent without `writeFiles`, has none,
+and the call answers an empty list. The archive the runtime hands back is capped at 128 MiB by
+default; a larger one leaves no outputs.
+
+`runs.outputs` lists them, folders walked, and each entry carries its `name` under `outputs/` and
+the `path` that [`files.download`](/resources/files) takes. You never spell the storage prefix.
+
+<CodeGroup>
+
+```ts title="sdk (illustrative)" claim="illustrative"
+for (const file of await aw.runs.outputs(runId)) {
+  const { bytes } = await aw.files.download(file.path);
+  console.log(file.name, bytes.byteLength);
+}
+```
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw runs outputs <run-id>                      # list
+aw runs outputs <run-id> --download ./out     # save them, nested folders included
+```
+
+</CodeGroup>
+
+**Route:** `GET /api/files?path=runs/:id/outputs` (no route of its own) ·
+**SDK:** [`runs.outputs`](/reference/sdk/runs#outputs)
+
 ## See also
 
 <CardGroup cols={2}>
@@ -620,6 +717,9 @@ The widget's feedback buttons call the same route (`parts: { feedback: true }` o
   </Card>
   <Card title="Streaming" href="/guides/streaming">
     The general SSE and reconnect model this resource follows.
+  </Card>
+  <Card title="Get typed data back from a run" href="/guides/structured-output">
+    Ask for a value of your own shape and read it typed, from code or the CLI.
   </Card>
 </CardGroup>
 

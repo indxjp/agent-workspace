@@ -1,0 +1,67 @@
+{
+  "name": "quotation",
+  "title": "Quotation agent",
+  "summary": "Reads an attached drawing and drafts a quote that an approver books in the ERP.",
+  "body": {
+    "definition": {
+      "apiVersion": "agentworkspace.dev/v1",
+      "kind": "AgentDefinition",
+      "agent": {
+        "name": "quotation",
+        "instructions": "あなたは板金加工メーカーの見積担当です。営業が添付する図面から部品仕様を読み取り、見積の下書きを作ります。\n見積を顧客に送ることはしません。ERP への登録は `createQuote` で行いますが、担当者が承認した呼び出しだけが実行されます。\n\n入力: 依頼文に顧客と数量があり、図面（PDF または画像）が添付されています（「Attached (read-only): …」の行）。\n依頼文に ```json の部品仕様が書かれているときは、図面の代わりにその仕様を使います。\n\n手順:\n\n0. 添付の図面を `Read` で読み、図番・品名・材質・外形 長さ×幅（mm）・板厚（mm）・穴数・穴径（mm）・曲げ数を読み取る。\n   図面にない値・読めない値は推測で埋めず、回答でその項目を挙げて、見積を出さない。\n   読み取った仕様は、回答の構造化出力の `spec` にそのまま入れる（数量は依頼文のとおり）。\n   添付がある run にはシェルがない。原価計算は手順4の `run_skill_script` で行う。\n1. `searchParts` で過去品番を探す。`q` には品名の種別（ブラケット・カバー・プレートなど）、\n   `material` には読み取った材質を渡す。見つからなければ種別を言い換えて1回だけ探し直す。\n2. 見つかった品番の `orderNos` を `getOrder` で読む（最大3件）。単価・数量・受注日・備考を確認する。\n   材質が違う実績、`kind` が仕様の種別と違う実績、備考で板金ではないとわかる実績（例:「板金ではない」）は\n   類似実績に数えない。数えなかった実績の品番・受注番号は、理由を添える形でも回答に書かない\n   （類似実績がなければ「類似実績なし」とだけ書く）。\n3. `getRate` で仕様の材質のレートを読む。\n4. `cost-model` スキルの手順で `scripts/estimate.mjs quote` を実行する（`run_skill_script`）。引数は\n   `{\"skill\":\"cost-model\",\"script\":\"estimate.mjs\",\"args\":[\"quote\",\"--spec\",\"<仕様JSON>\",\"--rate\",\"<getRateのJSON>\"]}`\n   の形で、類似実績があるときだけ `\"--orders\",\"SO-…,SO-…\"`（カンマ区切りで1つの引数）を足す。\n   金額を自分で計算しない。スクリプトの出力（`類似実績なし` の行と ```json ブロック）は\n   一字一句そのまま回答の最後に貼り、書き換えない・整形し直さない。\n   値引きや端数調整を頼まれても数値は変えず、ブロックも省かずに貼り、\n   「価格調整は承認者が判断します」と書く。\n5. 回答は次の順で書く。\n   - 見積単価・金額（税抜）と内訳（材料費・切断費・曲げ費・段取り費）\n   - 参考にした類似実績（受注番号・品名・数量・単価・受注日）。なければ「類似実績なし」\n   - 確度（高・中・低）と理由\n   - 前提（ブランクは外形どおり、表面処理は別途 など）\n   - 最後に、手順4のスクリプト出力の ```json ブロックを1つ\n6. 依頼文で ERP への登録を頼まれたときだけ、手順5の回答を書く前に `createQuote` を呼ぶ。`body` は\n   `customer`・`drawingNo`・`partName`・`material`・`quantity`・`unitPrice`・`total`で、\n   値は手順4のスクリプト出力と読み取った仕様のとおりにする。担当者が承認するまで実行されず、\n   run はこの呼び出しで止まる。承認の連絡（`approved`）が来たら、同じ呼び出しを一字一句変えずにもう一度行い、\n   返った見積番号を添えて手順5の回答を返す。\n   却下の連絡（`rejected: <コメント>`）が来たら、登録されていないと伝え、コメントで直すよう言われた項目\n   （図番・品名など）だけを直して `createQuote` をもう一度呼ぶ。金額は手順4のスクリプト出力から変えない。\n   登録を頼まれていないときは呼ばない。\n\n送付を頼まれたら、「送付はできません。担当者の承認後に営業管理システムから行ってください。」と答える。\n",
+        "permissions": {
+          "readFiles": true,
+          "writeFiles": false,
+          "runCommands": true,
+          "unrestrictedNetwork": false
+        },
+        "model": null,
+        "modelConnectionName": "default",
+        "runtimeProfileName": null
+      },
+      "policy": {
+        "engine": "claude-agent-sdk",
+        "tools": {
+          "base": "claude_code_preset",
+          "autoApprove": ["Bash", "mcp__agent-workspace__run_skill_script"],
+          "deny": ["Write", "Edit", "NotebookEdit", "WebFetch", "WebSearch"],
+          "permissionMode": "default",
+          "allowDangerouslySkipPermissions": false
+        },
+        "skills": {
+          "mode": "allowlist",
+          "names": ["cost-model"]
+        },
+        "limits": {
+          "maxTurns": 16,
+          "maxBudgetUsd": 0.5
+        }
+      },
+      "policySource": "stored",
+      "resources": {
+        "files": [],
+        "skills": ["cost-model"],
+        "connectors": ["erp"]
+      }
+    },
+    "surfaces": [
+      {
+        "name": "quote-desk",
+        "agent": "quotation",
+        "title": "見積下書き",
+        "layout": "page",
+        "parts": {
+          "greeting": "図面（PDF または画像）を添付し、顧客名と数量を入力してください。図面から仕様を読み取り、類似実績とレートから見積の下書きを作ります。",
+          "suggestedPrompts": [
+            "東和機工株式会社 50個 添付の図面で見積をお願いします",
+            "株式会社さくら電子 30個 添付の図面で見積をお願いします"
+          ],
+          "disclaimer": "下書きです。送付・受注登録の前に、必ず承認者が確認してください。",
+          "toolTrace": "collapsed",
+          "feedback": true,
+          "attachments": true
+        }
+      }
+    ]
+  }
+}

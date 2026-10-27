@@ -32,6 +32,7 @@ import {
   check,
   foreignKey,
   index,
+  jsonb,
   pgTable,
   text,
   unique,
@@ -65,6 +66,19 @@ export const skills = pgTable(
      */
     createdBy: uuid('created_by'),
     ownerPrincipalId: uuid('owner_principal_id').notNull(),
+    /**
+     * The platform record about the skill (name, enabled flag, timestamps). A row of an earlier
+     * release has it only as a `skill-meta/<name>.json` object until it is read and copied here.
+     */
+    meta: jsonb('meta'),
+    /**
+     * Set once a delete has passed its in-use check and is removing the skill's bytes: the owner and
+     * the published revision numbers, so a retry by the owner clears every `.skills/<name>@<n>/`
+     * folder. The row stays until the delete finishes; null for a live skill.
+     */
+    pendingDelete: jsonb('pending_delete'),
+    /** The digest of the built-in release installed into the row; null for a skill the user made. */
+    builtinDigest: text('builtin_digest'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

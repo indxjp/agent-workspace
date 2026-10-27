@@ -4,6 +4,7 @@
  */
 import { buildA2aAgentCard } from '@indx-workspace/contracts/a2a';
 
+import { applicationContext } from '../application-context';
 import { resolveAgentRunOwnership } from '../agents/run-ownership';
 import { readPublicUrl } from '../endpoints/public-url';
 import { endpointCredentialKey, readCappedBody } from '../endpoints/request';
@@ -12,7 +13,7 @@ import { decide } from '../rbac/decide';
 import { parseRole } from '../rbac/roles';
 import { getRunApi } from '../runs/environment';
 import { apiError } from '../runs/http';
-import { getA2a, type A2aEnvironment, type A2aIdentity, type PublishedAgent } from './env';
+import type { A2aEnvironment, A2aIdentity, PublishedAgent } from './env';
 import { admitA2aCall, admitA2aCardFetch } from './limits';
 import { A2A_BLOCKING_WAIT_MS, handleV03, rateLimited, type A2aCall } from './v0_3/rpc';
 
@@ -160,13 +161,18 @@ function requestedVersion(request: Request): string {
   return new URL(request.url).searchParams.get('A2A-Version')?.trim() ?? '';
 }
 
+function servingA2a(): A2aEnvironment | null {
+  const a2a = applicationContext()?.a2a;
+  return a2a?.kind === 'serving' ? a2a.environment : null;
+}
+
 const notConfigured = (): Response =>
   apiError(503, 'a2a_not_configured', 'the A2A endpoint is not configured.');
 
 /** POST /api/a2a/agents/:agentName */
 export async function serveA2aRpc(request: Request, agentName: string): Promise<Response> {
   if (carriesNoCredential(request)) return unauthenticated(agentName);
-  const a2a = getA2a();
+  const a2a = servingA2a();
   if (a2a === null) return notConfigured();
 
   const authorised = await authorise(request, a2a, agentName, (req) => {
@@ -227,7 +233,7 @@ function cardResponse(agent: PublishedAgent): Response {
  */
 export async function serveA2aCard(request: Request, agentName: string): Promise<Response> {
   if (carriesNoCredential(request)) return servePublicCard(request, agentName);
-  const a2a = getA2a();
+  const a2a = servingA2a();
   if (a2a === null) return notConfigured();
   const authorised = await authorise(request, a2a, agentName);
   if (!authorised.ok) return authorised.response;
@@ -237,7 +243,7 @@ export async function serveA2aCard(request: Request, agentName: string): Promise
 async function servePublicCard(request: Request, agentName: string): Promise<Response> {
   const origin = refuseOrigin(request);
   if (origin !== null) return origin;
-  const a2a = getA2a();
+  const a2a = servingA2a();
   if (a2a === null) return notConfigured();
   const admission = admitA2aCardFetch(request.headers, a2a.now());
   if (!admission.admitted) return rateLimited(admission.retryAfterSeconds);

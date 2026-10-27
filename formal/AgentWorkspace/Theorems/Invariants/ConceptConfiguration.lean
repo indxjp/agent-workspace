@@ -31,7 +31,7 @@ open AgentWorkspace.Theorems.Invariants.ErCore (no_cross_tenant_reference)
 
 /-! ## Helpers -/
 
-private theorem pairing : pairingComplete catalogue = true := by decide
+private theorem pairing : pairingComplete catalogue = true := by decide +kernel
 
 private theorem table_consistent {st : State} (hc : consistent catalogue st = true)
     (t : TableName) : tableConsistent catalogue st t = true :=
@@ -177,8 +177,8 @@ elab "aw_config_fk_theorems" : command => do
           {r r' : AgentWorkspace.Er.Core.Row}
           (href : References catalogue st $tI (fkOf $tI $nS) r r') :
           tenantOf catalogue $tI r = tenantOf catalogue $gI r' := by
-        have h := no_cross_tenant_reference catalogue pairing st hc (by decide) href
-        rwa [show (fkOf $tI $nS).refTable = $gI from by decide] at h))
+        have h := no_cross_tenant_reference catalogue pairing st hc (by decide +kernel) href
+        rwa [show (fkOf $tI $nS).refTable = $gI from by decide +kernel] at h))
 
 end Generator
 
@@ -207,7 +207,7 @@ theorem model_connection_has_exactly_one_workspace (st : State)
     (hc : consistent catalogue st = true) {r : Row} (hr : r ∈ st .modelConnections) :
     ∃ w ∈ st .workspaces, w.get "id" = r.get "workspace_id" ∧
       ∀ w' ∈ st .workspaces, w'.get "id" = r.get "workspace_id" → w' = w :=
-  one_workspace hc "model_connections_workspace_id_workspaces_id_fk" (by decide) (by decide) hr
+  one_workspace hc "model_connections_workspace_id_workspaces_id_fk" (by decide +kernel) (by decide +kernel) hr
 
 /-- In every consistent state, a runtime profile belongs to exactly one workspace. -/
 @[aw_spec (tier := T2) (doc := "docs/sdk/04-api-specification.md#11-vocabulary")
@@ -216,7 +216,7 @@ theorem runtime_profile_has_exactly_one_workspace (st : State)
     (hc : consistent catalogue st = true) {r : Row} (hr : r ∈ st .runtimeProfiles) :
     ∃ w ∈ st .workspaces, w.get "id" = r.get "workspace_id" ∧
       ∀ w' ∈ st .workspaces, w'.get "id" = r.get "workspace_id" → w' = w :=
-  one_workspace hc "runtime_profiles_workspace_id_workspaces_id_fk" (by decide) (by decide) hr
+  one_workspace hc "runtime_profiles_workspace_id_workspaces_id_fk" (by decide +kernel) (by decide +kernel) hr
 
 /-- In every consistent state, a secret belongs to exactly one workspace. -/
 @[aw_spec (tier := T2) (doc := "docs/sdk/04-api-specification.md#11-vocabulary")
@@ -225,7 +225,7 @@ theorem secret_has_exactly_one_workspace (st : State) (hc : consistent catalogue
     {r : Row} (hr : r ∈ st .secrets) :
     ∃ w ∈ st .workspaces, w.get "id" = r.get "workspace_id" ∧
       ∀ w' ∈ st .workspaces, w'.get "id" = r.get "workspace_id" → w' = w :=
-  one_workspace hc "secrets_workspace_id_workspaces_id_fk" (by decide) (by decide) hr
+  one_workspace hc "secrets_workspace_id_workspaces_id_fk" (by decide +kernel) (by decide +kernel) hr
 
 /-- In every consistent state, a runtime profile that names a runtime connection names exactly
 one `secrets` row, and that secret belongs to the profile's workspace. -/
@@ -237,20 +237,20 @@ theorem profile_connection_is_one_secret_of_its_workspace (st : State)
     ∃ s ∈ st .secrets, s.get "id" = some v ∧ s.get "workspace_id" = r.get "workspace_id" ∧
       ∀ s' ∈ st .secrets, s'.get "id" = some v → s' = s := by
   have hfk : fkOf .runtimeProfiles "runtime_profiles_runtime_connection_id_secrets_id_fk" ∈
-      (catalogue .runtimeProfiles).foreignKeys := by decide
+      (catalogue .runtimeProfiles).foreignKeys := by decide +kernel
   obtain ⟨s, hs, hsv, huniq⟩ :=
-    reaches_one hc hfk (c := "runtime_connection_id") (k := "id") (by decide) (by decide)
-      (by decide) hr hv
+    reaches_one hc hfk (c := "runtime_connection_id") (k := "id") (by decide +kernel) (by decide +kernel)
+      (by decide +kernel) hr hv
   refine ⟨s, hs, hsv, ?_, huniq⟩
   have href : References catalogue st .runtimeProfiles
       (fkOf .runtimeProfiles "runtime_profiles_runtime_connection_id_secrets_id_fk") r s :=
     ⟨hfk, hr, hs, by simp [Row.present, show (fkOf .runtimeProfiles
         "runtime_profiles_runtime_connection_id_secrets_id_fk").columns =
-        ["runtime_connection_id"] from by decide, hv],
+        ["runtime_connection_id"] from by decide +kernel, hv],
       by simp [Row.project, show (fkOf .runtimeProfiles
         "runtime_profiles_runtime_connection_id_secrets_id_fk").columns =
-        ["runtime_connection_id"] from by decide, show (fkOf .runtimeProfiles
-        "runtime_profiles_runtime_connection_id_secrets_id_fk").refColumns = ["id"] from by decide,
+        ["runtime_connection_id"] from by decide +kernel, show (fkOf .runtimeProfiles
+        "runtime_profiles_runtime_connection_id_secrets_id_fk").refColumns = ["id"] from by decide +kernel,
         hv, hsv]⟩
   have := runtime_profiles_runtime_connection_id_secrets_id_fk_preserves_tenant st hc href
   simpa [tenantOf, TableSpec.tenantColumn?, catalogue, Tenancy.column?] using this.symm
@@ -262,25 +262,25 @@ theorem profile_connection_is_one_secret_of_its_workspace (st : State)
 theorem model_connection_id_identifies_one_row (st : State) (hc : consistent catalogue st = true)
     {r1 r2 : Row} (h1 : r1 ∈ st .modelConnections) (h2 : r2 ∈ st .modelConnections)
     (hs : (r1.get "id").isSome = true) (hv : r1.get "id" = r2.get "id") : r1 = r2 :=
-  primary_key hc (by decide) h1 h2 hs hv
+  primary_key hc (by decide +kernel) h1 h2 hs hv
 
 /-- In every consistent state, a runtime-profile id identifies at most one row. -/
 @[aw_spec (tier := T2) (ts := "packages/core/src/db/schema/columns.ts#primaryKeyId")]
 theorem runtime_profile_id_identifies_one_row (st : State) (hc : consistent catalogue st = true)
     {r1 r2 : Row} (h1 : r1 ∈ st .runtimeProfiles) (h2 : r2 ∈ st .runtimeProfiles)
     (hs : (r1.get "id").isSome = true) (hv : r1.get "id" = r2.get "id") : r1 = r2 :=
-  primary_key hc (by decide) h1 h2 hs hv
+  primary_key hc (by decide +kernel) h1 h2 hs hv
 
 /-- In every consistent state, a secret id identifies at most one row. -/
 @[aw_spec (tier := T2) (ts := "packages/core/src/db/schema/columns.ts#primaryKeyId")]
 theorem secret_id_identifies_one_row (st : State) (hc : consistent catalogue st = true)
     {r1 r2 : Row} (h1 : r1 ∈ st .secrets) (h2 : r2 ∈ st .secrets)
     (hs : (r1.get "id").isSome = true) (hv : r1.get "id" = r2.get "id") : r1 = r2 :=
-  primary_key hc (by decide) h1 h2 hs hv
+  primary_key hc (by decide +kernel) h1 h2 hs hv
 
 private theorem name_unique {st : State} (hc : consistent catalogue st = true) {t : TableName}
     (n : String)
-    (hu : (⟨n, ["workspace_id", "name"], .index, []⟩ : UniqueKey) ∈ (catalogue t).uniques)
+    (hu : (⟨n, ["workspace_id", "name"], .index, [], []⟩ : UniqueKey) ∈ (catalogue t).uniques)
     (hw : (catalogue t).isNotNull "workspace_id" = true)
     (hn : (catalogue t).isNotNull "name" = true) {r1 r2 : Row} (h1 : r1 ∈ st t)
     (h2 : r2 ∈ st t) (hws : r1.get "workspace_id" = r2.get "workspace_id")
@@ -298,7 +298,7 @@ theorem model_connection_name_is_unique_in_its_workspace (st : State)
     (hc : consistent catalogue st = true) {r1 r2 : Row} (h1 : r1 ∈ st .modelConnections)
     (h2 : r2 ∈ st .modelConnections) (hws : r1.get "workspace_id" = r2.get "workspace_id")
     (hname : r1.get "name" = r2.get "name") : r1 = r2 :=
-  name_unique hc "model_connections_workspace_name_key" (by decide) (by decide) (by decide) h1 h2
+  name_unique hc "model_connections_workspace_name_key" (by decide +kernel) (by decide +kernel) (by decide +kernel) h1 h2
     hws hname
 
 /-- In every consistent state, two runtime profiles of one workspace with the same name are the
@@ -310,7 +310,7 @@ theorem runtime_profile_name_is_unique_in_its_workspace (st : State)
     (hc : consistent catalogue st = true) {r1 r2 : Row} (h1 : r1 ∈ st .runtimeProfiles)
     (h2 : r2 ∈ st .runtimeProfiles) (hws : r1.get "workspace_id" = r2.get "workspace_id")
     (hname : r1.get "name" = r2.get "name") : r1 = r2 :=
-  name_unique hc "runtime_profiles_workspace_name_key" (by decide) (by decide) (by decide) h1 h2
+  name_unique hc "runtime_profiles_workspace_name_key" (by decide +kernel) (by decide +kernel) (by decide +kernel) h1 h2
     hws hname
 
 /-- In every consistent state, two secrets of one workspace with the same name are the same row,
@@ -321,7 +321,7 @@ theorem secret_name_is_unique_in_its_workspace (st : State) (hc : consistent cat
     {r1 r2 : Row} (h1 : r1 ∈ st .secrets) (h2 : r2 ∈ st .secrets)
     (hws : r1.get "workspace_id" = r2.get "workspace_id") (hname : r1.get "name" = r2.get "name") :
     r1 = r2 :=
-  name_unique hc "secrets_workspace_name_key" (by decide) (by decide) (by decide) h1 h2 hws hname
+  name_unique hc "secrets_workspace_name_key" (by decide +kernel) (by decide +kernel) (by decide +kernel) h1 h2 hws hname
 
 /-! ## Closed sets -/
 
@@ -331,7 +331,7 @@ theorem secret_name_is_unique_in_its_workspace (st : State) (hc : consistent cat
 theorem stored_provider_is_a_provider (st : State) (hc : consistent catalogue st = true)
     {r : Row} (hr : r ∈ st .modelConnections) :
     ∃ p : ModelConnection.Provider, r.get "provider" = some p.toWire :=
-  enum_cell (n := "model_connections_provider_valid") hc (by decide) (by decide) hr
+  enum_cell (n := "model_connections_provider_valid") hc (by decide +kernel) (by decide +kernel) hr
 
 /-- In every consistent state, a stored runtime profile's driver is one of the drivers. -/
 @[aw_spec (tier := T2)
@@ -339,7 +339,7 @@ theorem stored_provider_is_a_provider (st : State) (hc : consistent catalogue st
 theorem stored_driver_is_a_driver (st : State) (hc : consistent catalogue st = true)
     {r : Row} (hr : r ∈ st .runtimeProfiles) :
     ∃ d : RuntimeProfile.Driver, r.get "driver" = some d.toWire :=
-  enum_cell (n := "runtime_profiles_driver_valid") hc (by decide) (by decide) hr
+  enum_cell (n := "runtime_profiles_driver_valid") hc (by decide +kernel) (by decide +kernel) hr
 
 /-- In every consistent state, a stored runtime profile's network policy is one of the policies. -/
 @[aw_spec (tier := T2) (doc := "docs/sdk/site/concepts/data-plane.mdx#what-never-changes")
@@ -347,7 +347,7 @@ theorem stored_driver_is_a_driver (st : State) (hc : consistent catalogue st = t
 theorem stored_network_policy_is_a_policy (st : State) (hc : consistent catalogue st = true)
     {r : Row} (hr : r ∈ st .runtimeProfiles) :
     ∃ p : RuntimeProfile.NetworkPolicy, r.get "network_policy" = some p.toWire :=
-  enum_cell (n := "runtime_profiles_network_policy_valid") hc (by decide) (by decide) hr
+  enum_cell (n := "runtime_profiles_network_policy_valid") hc (by decide +kernel) (by decide +kernel) hr
 
 /-- In every consistent state, a stored runtime profile's filesystem mode is one of the modes. -/
 @[aw_spec (tier := T2)
@@ -355,7 +355,7 @@ theorem stored_network_policy_is_a_policy (st : State) (hc : consistent catalogu
 theorem stored_filesystem_is_a_mode (st : State) (hc : consistent catalogue st = true)
     {r : Row} (hr : r ∈ st .runtimeProfiles) :
     ∃ f : RuntimeProfile.Filesystem, r.get "filesystem" = some f.toWire :=
-  enum_cell (n := "runtime_profiles_filesystem_valid") hc (by decide) (by decide) hr
+  enum_cell (n := "runtime_profiles_filesystem_valid") hc (by decide +kernel) (by decide +kernel) hr
 
 /-- In every consistent state, a stored secret's algorithm is `aes-256-gcm`. -/
 @[aw_spec (tier := T2) (ts := "packages/core/src/db/schema/secrets.ts#secretAlgorithms")]
@@ -363,7 +363,7 @@ theorem stored_algorithm_is_aes_gcm (st : State) (hc : consistent catalogue st =
     {r : Row} (hr : r ∈ st .secrets) : r.get "algorithm" = some "aes-256-gcm" := by
   obtain ⟨a, ha⟩ := enum_cell (α := Secret.Algorithm) (n := "secrets_algorithm_valid")
     (c := "algorithm") hc
-    (by decide) (by decide) hr
+    (by decide +kernel) (by decide +kernel) hr
   cases a
   exact ha
 
@@ -382,11 +382,11 @@ theorem stored_secret_is_well_formed (st : State) (hc : consistentConfig st = tr
       cellOk r "wrapped_data_key_tag" (octetLength · == 16) = true ∧
       cellOk r "ciphertext_tag" (octetLength · == 16) = true ∧
       cellOk r "ciphertext" (0 < octetLength ·) = true := by
-  have h1 := refined hc (t := .secrets) (n := "secrets_name_shape") (by decide) hr
-  have h2 := refined hc (t := .secrets) (n := "secrets_wrapped_data_key_size") (by decide) hr
-  have h3 := refined hc (t := .secrets) (n := "secrets_nonce_sizes") (by decide) hr
-  have h4 := refined hc (t := .secrets) (n := "secrets_tag_sizes") (by decide) hr
-  have h5 := refined hc (t := .secrets) (n := "secrets_ciphertext_not_empty") (by decide) hr
+  have h1 := refined hc (t := .secrets) (n := "secrets_name_shape") (by decide +kernel) hr
+  have h2 := refined hc (t := .secrets) (n := "secrets_wrapped_data_key_size") (by decide +kernel) hr
+  have h3 := refined hc (t := .secrets) (n := "secrets_nonce_sizes") (by decide +kernel) hr
+  have h4 := refined hc (t := .secrets) (n := "secrets_tag_sizes") (by decide +kernel) hr
+  have h5 := refined hc (t := .secrets) (n := "secrets_ciphertext_not_empty") (by decide +kernel) hr
   unfold configCheckHolds at h1 h2 h3 h4 h5
   simp only [String.reduceBEq, Bool.false_eq_true, ↓reduceIte,
     Secret.wrappedDataKeyBytes,
@@ -409,10 +409,10 @@ theorem default_model_is_set_with_its_connection (st : State) (hc : consistentCo
       (p.get "default_model").isNone) := by
   constructor
   · intro w hw
-    have := refined hc (t := .workspaces) (n := "workspaces_default_model_pair") (by decide) hw
+    have := refined hc (t := .workspaces) (n := "workspaces_default_model_pair") (by decide +kernel) hw
     simpa [configCheckHolds, pairHolds] using this
   · intro p hp
-    have := refined hc (t := .projects) (n := "projects_default_model_pair") (by decide) hp
+    have := refined hc (t := .projects) (n := "projects_default_model_pair") (by decide +kernel) hp
     simpa [configCheckHolds, pairHolds] using this
 
 /-! ## Witnesses -/
@@ -434,7 +434,8 @@ private def pairs : List (Row × Row) :=
   [(c1, ws), (Witness.profile, ws), (Witness.profile, s1), (Witness.profile, s1),
    (s1, ws), (Witness.agent, c1), (Witness.agent, c1), (Witness.agent, Witness.profile),
    (Witness.agent, Witness.profile), (Witness.project, c1), (Witness.project, c1),
-   (Witness.run, c1), (Witness.run, c1), (ws, c1), (ws, c1), (Witness.connector, s2)]
+   (Witness.run, c1), (Witness.run, c1), (ws, c1), (ws, c1), (Witness.connector, s2),
+   (Witness.storageConnection, ws)]
 
 /-- Every key of the cluster is populated in the witness: each listed pair is a reference. -/
 private theorem witness_populates_every_key :
@@ -528,7 +529,7 @@ example : ∃ s ∈ Witness.state .secrets, s.get "id" = some "s1" ∧
     s.get "workspace_id" = Witness.profile.get "workspace_id" ∧
     ∀ s' ∈ Witness.state .secrets, s'.get "id" = some "s1" → s' = s :=
   profile_connection_is_one_secret_of_its_workspace Witness.state witness_catalogue
-    (by decide +kernel) (by decide)
+    (by decide +kernel) (by decide +kernel)
 
 example : ∃ w ∈ Witness.state .workspaces, w.get "id" = (Witness.connection "c2" "w2").get "workspace_id" ∧
     ∀ w' ∈ Witness.state .workspaces,
@@ -548,7 +549,7 @@ example : ∃ w ∈ Witness.state .workspaces,
 /-- The same name in two workspaces is two rows: uniqueness is per workspace. -/
 example : Witness.secret "s2" "w1" "GITHUB_TOKEN" ≠ Witness.secret "s3" "w2" "GITHUB_TOKEN" ∧
     (Witness.secret "s2" "w1" "GITHUB_TOKEN").get "name" =
-      (Witness.secret "s3" "w2" "GITHUB_TOKEN").get "name" := by decide
+      (Witness.secret "s3" "w2" "GITHUB_TOKEN").get "name" := by decide +kernel
 
 example : Witness.profile = Witness.profile :=
   runtime_profile_name_is_unique_in_its_workspace Witness.state witness_catalogue
@@ -564,16 +565,16 @@ example : Witness.secret "s2" "w1" "GITHUB_TOKEN" = Witness.secret "s2" "w1" "GI
 
 example : Witness.profile = Witness.profile :=
   runtime_profile_id_identifies_one_row Witness.state witness_catalogue (by decide +kernel)
-    (by decide +kernel) (by decide) rfl
+    (by decide +kernel) (by decide +kernel) rfl
 
 example : Witness.connection "c1" "w1" = Witness.connection "c1" "w1" :=
   model_connection_id_identifies_one_row Witness.state witness_catalogue (by decide +kernel)
-    (by decide +kernel) (by decide) rfl
+    (by decide +kernel) (by decide +kernel) rfl
 
 example : Witness.secret "s1" "w1" "RUNTIME_CONNECTION__DOCKER__PRIMARY" =
     Witness.secret "s1" "w1" "RUNTIME_CONNECTION__DOCKER__PRIMARY" :=
   secret_id_identifies_one_row Witness.state witness_catalogue (by decide +kernel)
-    (by decide +kernel) (by decide) rfl
+    (by decide +kernel) (by decide +kernel) rfl
 
 example : ∃ p : ModelConnection.Provider, (Witness.connection "c1" "w1").get "provider" = some p.toWire :=
   stored_provider_is_a_provider Witness.state witness_catalogue (by decide +kernel)

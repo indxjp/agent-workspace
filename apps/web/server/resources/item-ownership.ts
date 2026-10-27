@@ -8,7 +8,8 @@
  * calling {@link resolverForRow} with its own row-loader and its own 404 {@link ApiResult}; neither
  * argument is guessed by this module, so a route's existing "row not found" wording is unchanged.
  */
-import { problem, type OwnershipOutcome, type OwnershipResolver } from '../rbac/http';
+import { problemWithDetail as problem } from '../http/result';
+import type { OwnershipOutcome, OwnershipResolver } from '../rbac/http';
 
 /** The ownership facts accepted during the principal migration window. */
 export interface OwnedRow {
@@ -31,10 +32,13 @@ export interface ApiResultLike {
  * task holds is workspace-bound by construction — see `agents/store.ts`'s own header) — this
  * function does not re-scope it, only decides what the row's presence or absence means for
  * authorisation. `notFound` is the route's own 404 builder, called only when `load` answers `null`.
+ * `refuse`, when given, answers a refusal for a row the caller may not touch whatever their role
+ * (a built-in agent's writes, #1848); it runs before the role decision, once the row is known.
  */
 export function resolverForRow<Row extends OwnedRow>(
   load: () => Promise<Row | null>,
   notFound: () => ApiResultLike,
+  refuse?: (row: Row) => ApiResultLike | null,
 ): OwnershipResolver {
   return async (principal): Promise<OwnershipOutcome> => {
     const row = await load();
@@ -47,6 +51,8 @@ export function resolverForRow<Row extends OwnedRow>(
     if (row.workspaceId !== principal.workspaceId) {
       return { kind: 'refuse', result: notFound() };
     }
+    const refusal = refuse?.(row) ?? null;
+    if (refusal !== null) return { kind: 'refuse', result: refusal };
     if (row.ownerPrincipalId !== undefined && row.ownerPrincipalId !== null) {
       return {
         kind: 'ownership',

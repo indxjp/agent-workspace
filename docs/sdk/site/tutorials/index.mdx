@@ -7,20 +7,102 @@ description: "Ten agents Japanese enterprises ask for, each built end to end wit
 - **Read this when:** you have a business task in mind and want to see a complete agent built
   for it, or to know whether the SDK can do it today.
 - **You will learn:** which tutorial fits your use case, what each one teaches, where to start,
-  and how the tutorials use the six chapters of the path.
+  and how the tutorials are tested.
 - **Used in:** after [Chapter 1: Run your first agent](/path/first-agent); each tutorial puts
   chapters [2](/path/build), [3](/path/test) and [4](/path/embed) together.
 
 </Info>
 
-Ten tutorials, one per agent that Japanese enterprises actually ask for, from manual search to
-ringi review to Excel consolidation. Each one is a project you can follow end to end, and each
-one is also a **benchmark**: the table below says, capability by capability, where the SDK
-stands today, and every verdict in it is backed by an offline test.
+Ten tutorials, one per agent that Japanese enterprises actually ask for, each a project you build
+end to end and each an honest benchmark of what the SDK does today.
+
+<Card title="Start with Tutorial 0: Build an agent on your own stack" icon="layer-group" href="/tutorials/your-stack" horizontal>
+  One command creates an agent; then you change its engine, model, tools, frontend and servers one layer at a time. About 20 minutes · Starter.
+</Card>
+
+## Pick a tutorial
+
+Every tutorial assumes [chapter 1](/path/first-agent): Node 24, a model key and a project
+answering under `aw dev`. If you are not sure where to begin, take
+[manual search](/tutorials/manual-search): read-only, one MCP server, one skill, no stored policy
+and no human step in the middle. Use cases 9 and 10 reuse its pieces.
+
+<CardGroup cols={2}>
+  <Card title="1. Manual search" icon="book" href="/tutorials/manual-search" img="/images/tutorials/manual-search/01-result.png">
+    Search huge manuals with self-written queries; answer with checked citations.
+
+    About 30 minutes to read · Starter
+  </Card>
+  <Card title="2. CAD drawing" icon="compass-drafting" href="/tutorials/cad-drafting" img="/images/tutorials/cad-drafting/01-result.png">
+    Find similar past drawings and draft a DXF for the designer to check.
+
+    About 45 minutes to read · Advanced
+  </Card>
+  <Card title="3. Quotation" icon="calculator" href="/tutorials/quotation" img="/images/tutorials/quotation/01-result.png">
+    Estimate a part's cost from its drawing, with a breakdown and past prices.
+
+    About 40 minutes to read · Intermediate
+  </Card>
+  <Card title="4. Ringi review" icon="stamp" href="/tutorials/ringi-review" img="/images/tutorials/ringi-review/01-result.png">
+    Check approval requests against the authority rules and past decisions.
+
+    About 45 minutes to read · Advanced
+  </Card>
+  <Card title="5. Customer inquiry" icon="headset" href="/tutorials/customer-inquiry" img="/images/tutorials/customer-inquiry/01-result.png">
+    Answer customers from their whole history, in a widget on your site.
+
+    About 45 minutes to read · Advanced
+  </Card>
+  <Card title="6. Excel consolidation" icon="table" href="/tutorials/excel-consolidation" img="/images/tutorials/excel-consolidation/01-result.png">
+    Merge scattered workbooks into one traceable table and explain it.
+
+    About 45 minutes to read · Advanced
+  </Card>
+  <Card title="7. Contract review" icon="file-contract" href="/tutorials/contract-review" img="/images/tutorials/contract-review/02-agent.png">
+    Review a draft clause by clause against the legal playbook.
+
+    About 40 minutes to read · Intermediate
+  </Card>
+  <Card title="8. Meeting minutes" icon="clipboard-list" href="/tutorials/meeting-minutes" img="/images/tutorials/meeting-minutes/01-result.png">
+    Turn a transcript into formal minutes and confirmed action items.
+
+    About 45 minutes to read · Advanced
+  </Card>
+  <Card title="9. Maintenance troubleshooting" icon="wrench" href="/tutorials/maintenance-troubleshooting" img="/images/tutorials/maintenance-troubleshooting/01-result.png">
+    Walk a technician through a fault one cited step at a time.
+
+    About 45 minutes to read · Advanced
+  </Card>
+  <Card title="10. Quality defects" icon="magnifying-glass-chart" href="/tutorials/quality-defect" img="/images/tutorials/quality-defect/01-result.png">
+    Find similar past defects and draft the 8D and 5-whys analysis.
+
+    About 40 minutes to read · Intermediate
+  </Card>
+</CardGroup>
+
+## Find your use case
 
 If you have a use case of your own, find the closest row and read its tutorial: its "Where the
 SDK stands" section is the honest answer to "can I build this today, and what will I have to
 write myself?"
+
+| If you need an agent that… | Tutorial | What it teaches | Difficulty |
+| --- | --- | --- | --- |
+| runs on the engine, model, frontend and servers you already chose | [0. Your stack](/tutorials/your-stack) | the generator's flags, engines, models, `openapiTool`, `postgresTool`, MCP, skills, widget and React, deploy | Starter |
+| answers from manuals or rule books, with citations | [1. Manual search](/tutorials/manual-search) | a skill, an MCP search server, a file grant, a side-panel surface, evals, a backend citation check | Starter |
+| reuses past drawings to draft a new one | [2. CAD drawing](/tutorials/cad-drafting) | a skill script with `runCommands` and `writeFiles`, read-write files, a person's choice between two runs, a stored policy | Advanced |
+| prices work from an ERP and a cost model | [3. Quotation](/tutorials/quotation) | `openapiTool` with a `secret` and one approved write, a skill script, a policy ceiling | Intermediate |
+| checks approval requests against the rules | [4. Ringi review](/tutorials/ringi-review) | read-only MCP tools, an approved `openapiTool` comment, a fixed output format as a skill, a backend that starts one typed run per revision, a side panel | Advanced |
+| answers customers on your website | [5. Customer inquiry](/tutorials/customer-inquiry) | an MCP server with signed-token scope and masking, a dock widget, sessions, handoff to an operator, ratings into evals | Advanced |
+| consolidates scattered spreadsheets | [6. Excel consolidation](/tutorials/excel-consolidation) | MCP file search, two skill scripts, a person's approval of the plan, a number guard | Advanced |
+| reviews documents against a checklist | [7. Contract review](/tutorials/contract-review) | file grants, two skill scripts that read Word, no MCP server, judged evals, a must-flag check | Intermediate |
+| turns meetings into tasks in a tracker | [8. Meeting minutes](/tutorials/meeting-minutes) | a skill script, an `openapiTool` write that runs only for an approved call, a person's approval between two runs | Advanced |
+| guides someone step by step and logs the result | [9. Maintenance troubleshooting](/tutorials/maintenance-troubleshooting) | `search_files` narrowed per technician and an approved `openapiTool` write, one run per reply, a check on every turn, escalation, ratings into evals | Advanced |
+| analyses incidents from past cases, kept confidential | [10. Quality defects](/tutorials/quality-defect) | an approval-gated `openapiTool` over the QMS with caller identity, a skill with a checker script, an offline policy ceiling, a revision after review | Intermediate |
+
+**Starter:** read-only, no human step. **Intermediate:** a script or a backend check you own.
+**Advanced:** a person's step between runs, a write to another system, or webhook and session code
+in your backend.
 
 ## What a tutorial is here
 
@@ -30,55 +112,17 @@ needs together in one project, the agent definition, its skills, its MCP servers
 file grants and policy, a surface, an eval file and the backend code around the run. Every
 tutorial page has the same shape:
 
-- **At the top:** what you will build, what you will learn, and how long it takes.
-- **How the agent works:** one diagram from the request to the person who decides.
-- **What you build:** the pieces, the files and the SDK feature behind each.
-- **Numbered steps**, then **Run it**: offline in the test suite with no API key, then on your
-  own workspace.
+- **At the top:** what you will build, what you will learn, and how long it takes to read and to
+  do.
+- **The result:** a screenshot of the finished agent answering a real question.
+- **How it works:** one diagram from the request to the person who decides, and the files you
+  will write.
+- **Before you start:** what you need, and where the code comes from.
+- **Build it:** numbered parts, one per file, each ending with a **Check** you can verify.
+- **Run it:** offline in the test suite with no API key, then on your own workspace.
 - **Where the SDK stands:** the benchmark verdict for that use case, and what is still your code.
 
-## Which one to start with
-
-<Steps>
-  <Step title="Run your first agent">
-    Every tutorial assumes [chapter 1](/path/first-agent): Node 24, a model key and a project
-    answering under `aw dev`.
-  </Step>
-  <Step title="Build on your own stack">
-    [Build an agent on your own stack](/tutorials/your-stack) creates one agent and changes its
-    engine, model, tools, frontend and infrastructure one at a time.
-  </Step>
-  <Step title="Read the manual search tutorial">
-    [Manual search](/tutorials/manual-search) is the simplest gallery tutorial: read-only, one MCP
-    server, one skill, no stored policy and no human step in the middle. Use cases 9 and 10 reuse
-    its pieces.
-  </Step>
-  <Step title="Read the one closest to your use case">
-    Find it in the table below.
-  </Step>
-</Steps>
-
-## Find your use case
-
-| If you need an agent that… | Tutorial | What it teaches | Difficulty |
-| --- | --- | --- | --- |
-| runs on the engine, model, frontend and servers you already chose | [Your stack](/tutorials/your-stack) | the generator's flags, engines, models, `openapiTool`, `postgresTool`, MCP, skills, widget and React, deploy | Starter |
-| answers from manuals or rule books, with citations | [1. Manual search](/tutorials/manual-search) | a skill, an MCP search server, a file grant, a side-panel surface, evals, a backend citation check | Starter |
-| reuses past drawings to draft a new one | [2. CAD drawing](/tutorials/cad-drafting) | a skill script with `runCommands` and `writeFiles`, read-write files, a person's choice between two runs, a stored policy | Advanced |
-| prices work from an ERP and a cost model | [3. Quotation](/tutorials/quotation) | `openapiTool` (GET only) with a `secret`, a skill script, a policy ceiling, approval in your own system | Intermediate |
-| checks approval requests against the rules | [4. Ringi review](/tutorials/ringi-review) | read-only MCP tools, a fixed output format as a skill, a webhook that starts one run per revision, a side panel | Advanced |
-| answers customers on your website | [5. Customer inquiry](/tutorials/customer-inquiry) | an MCP server with signed-token scope and masking, a dock widget, sessions, handoff to an operator, ratings into evals | Advanced |
-| consolidates scattered spreadsheets | [6. Excel consolidation](/tutorials/excel-consolidation) | MCP file search, two skill scripts, a person's confirmation between two turns, a number guard | Advanced |
-| reviews documents against a checklist | [7. Contract review](/tutorials/contract-review) | file grants, two skill scripts that read Word, no MCP server, judged evals, a must-flag check | Intermediate |
-| turns meetings into tasks in a tracker | [8. Meeting minutes](/tutorials/meeting-minutes) | a skill script, an MCP write tool behind approval tokens, a person's approval between two runs | Advanced |
-| guides someone step by step and logs the result | [9. Maintenance troubleshooting](/tutorials/maintenance-troubleshooting) | two MCP servers (one writes), one run per reply, a check on every turn, escalation, ratings into evals | Advanced |
-| analyses incidents from past cases, kept confidential | [10. Quality defects](/tutorials/quality-defect) | an MCP server that computes statistics, a skill with a checker script, an offline policy ceiling, a revision after review | Intermediate |
-
-**Starter:** read-only, no human step. **Intermediate:** a script or a backend check you own.
-**Advanced:** a person's step between runs, a write to another system, or webhook and session code
-in your backend.
-
-## How the tutorials use the path
+### How the tutorials use the path
 
 | Chapter | What the tutorials take from it |
 | --- | --- |
@@ -86,32 +130,43 @@ in your backend.
 | [2. Build your agent](/path/build) | Every tutorial: `defineAgent`, skills, MCP servers or `openapiTool`, file grants, permissions and the project's policy ceiling. |
 | [3. Test and improve it](/path/test) | Every tutorial has an eval file run with `aw eval`, and most set a promotion bar; 5 and 9 turn rated runs into eval cases. |
 | [4. Put it in your product](/path/embed) | Every tutorial defines a surface and calls the agent from a backend with `runs.start` and `runs.follow`. |
-| [5. Ship it to your servers](/path/ship) | Not covered by the gallery, which runs on `aw dev` or your workspace; [your stack](/tutorials/your-stack#7-deploy-it-on-your-infrastructure) shows `aw deploy`. |
-| [6. Run it for your team](/path/operate) | Not covered. Per-person scope, which most verdicts mark as missing, is tracked as [RF-102](/concepts/roadmap). |
+| [5. Ship it to your servers](/path/ship) | Not covered by the gallery, which runs on `aw dev` or your workspace; [Tutorial 0](/tutorials/your-stack) shows `aw deploy` in its last part. |
+| [6. Run it for your team](/path/operate) | Not covered. Per-person scope, which most verdicts mark as missing, is not on the roadmap yet: no connector learns who is asking today. |
 
 For the six recurring shapes an agent takes (an in-product copilot, a team workspace, backend
 automation and so on), see [Use cases](/concepts/use-cases).
 
-## The benchmark
+## How the tutorials are tested
 
-✅ the SDK does it · 🟡 it works with code you write (an MCP server, a skill script, a second
-run) · ❌ not provided yet · — not needed. Score: ✅ = 1, 🟡 = 0.5, ❌ = 0, averaged over the
-capabilities the use case needs.
+Each tutorial is also a **benchmark**: the table below says, capability by capability, where the
+SDK stands today, and every verdict in it is backed by an offline test.
+
+Every cell is scored by one rule:
+
+- ✅ the platform does it: the use case writes no code of its own for this capability.
+- 🟡 the use case does it with code it ships (an MCP server, a skill script, a backend step, a
+  second run) and its offline suite exercises that code; or the platform does most of it and the
+  use case covers the missing part itself.
+- ❌ the use case does not do it: the step is left to a person, to a system the gallery does not
+  build, or is impossible today.
+- — not needed.
+
+Score: ✅ = 1, 🟡 = 0.5, ❌ = 0, averaged over the capabilities the use case needs.
 
 {/* benchmark:start */}
 
 | # | Use case | Agent | Search | Parse | Struct | Approve | Write | Trigger | Scope | UI | Eval | Audit | Score |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | [Manual search agent](/tutorials/manual-search) | ✅ | 🟡 | 🟡 | ❌ | — | — | — | 🟡 | ✅ | ✅ | ✅ | 69 |
-| 2 | [CAD drawing agent](/tutorials/cad-drafting) | ✅ | 🟡 | 🟡 | ❌ | ❌ | ❌ | — | 🟡 | 🟡 | 🟡 | ✅ | 45 |
-| 3 | [Quotation agent](/tutorials/quotation) | ✅ | ✅ | 🟡 | ❌ | ❌ | ❌ | — | 🟡 | 🟡 | ✅ | ✅ | 55 |
-| 4 | [Ringi review agent](/tutorials/ringi-review) | ✅ | 🟡 | ❌ | ❌ | — | 🟡 | ❌ | ❌ | ✅ | ✅ | ✅ | 50 |
-| 5 | [Customer inquiry agent](/tutorials/customer-inquiry) | ✅ | 🟡 | — | ❌ | ❌ | — | ❌ | 🟡 | ✅ | ✅ | ✅ | 56 |
-| 6 | [Excel consolidation & analysis agent](/tutorials/excel-consolidation) | ✅ | 🟡 | 🟡 | ❌ | 🟡 | ❌ | ❌ | 🟡 | 🟡 | ✅ | ✅ | 50 |
-| 7 | [Contract review agent](/tutorials/contract-review) | ✅ | 🟡 | 🟡 | ❌ | 🟡 | ❌ | — | 🟡 | 🟡 | ✅ | 🟡 | 50 |
-| 8 | [Meeting minutes & action-item agent](/tutorials/meeting-minutes) | 🟡 | — | ❌ | ❌ | 🟡 | 🟡 | ❌ | 🟡 | 🟡 | ✅ | ✅ | 45 |
-| 9 | [Skill-transfer & maintenance troubleshooting agent](/tutorials/maintenance-troubleshooting) | ✅ | 🟡 | ❌ | ❌ | 🟡 | 🟡 | — | 🟡 | ❌ | ✅ | ✅ | 50 |
-| 10 | [Quality defect and past-trouble analysis agent](/tutorials/quality-defect) | ✅ | 🟡 | 🟡 | ❌ | 🟡 | — | — | 🟡 | 🟡 | ✅ | ✅ | 61 |
+| 1 | [Manual search agent](/tutorials/manual-search) | ✅ | ✅ | ✅ | ✅ | — | — | — | ✅ | ✅ | ✅ | ✅ | 100 |
+| 2 | [CAD drawing agent](/tutorials/cad-drafting) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ | ✅ | ✅ | ✅ | 100 |
+| 3 | [Quotation agent](/tutorials/quotation) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ | ✅ | ✅ | ✅ | 100 |
+| 4 | [Ringi review agent](/tutorials/ringi-review) | ✅ | ✅ | ✅ | ✅ | — | ✅ | — | ✅ | ✅ | ✅ | ✅ | 100 |
+| 5 | [Customer inquiry agent](/tutorials/customer-inquiry) | ✅ | ✅ | — | ✅ | ✅ | — | ✅ | ✅ | ✅ | ✅ | ✅ | 100 |
+| 6 | [Excel consolidation & analysis agent](/tutorials/excel-consolidation) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 100 |
+| 7 | [Contract review agent](/tutorials/contract-review) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ | ✅ | ✅ | ✅ | 100 |
+| 8 | [Meeting minutes & action-item agent](/tutorials/meeting-minutes) | ✅ | — | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 100 |
+| 9 | [Skill-transfer & maintenance troubleshooting agent](/tutorials/maintenance-troubleshooting) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ | ✅ | ✅ | ✅ | 100 |
+| 10 | [Quality defect and past-trouble analysis agent](/tutorials/quality-defect) | ✅ | ✅ | ✅ | ✅ | ✅ | — | — | ✅ | ✅ | ✅ | ✅ | 100 |
 
 {/* benchmark:end */}
 
@@ -130,13 +185,14 @@ capabilities the use case needs.
 | Audit | Are runs, costs and changes recorded? |
 
 <Note>
-  An agent can use a tool written with `defineTool()`, and `aw dev`
-  runs it, but only on your machine: a version that uses one cannot be promoted yet. So every
-  search or write tool in this gallery is still an MCP server you run, which is what a deployment
-  needs, and that is how the verdicts below are scored.
+  An agent can use a tool written with `defineTool()`: `aw dev` runs it on your machine, and a
+  version that uses one can be promoted on a deployment whose operator turned the tool sandbox on
+  (see [Tools from code](/guides/tools-from-code)). The sandbox is off by default, so every search
+  or write tool in this gallery is still an MCP server you run, and that is how the verdicts below
+  are scored.
 </Note>
 
-## How each verdict is proved
+### How each verdict is proved
 
 Every use case has an offline test suite that runs with no API key. A verdict
 cites one of four kinds of evidence:
@@ -148,37 +204,6 @@ cites one of four kinds of evidence:
 | `source` | Nothing; the cell cites a file in the platform. | What the code says, for facts no offline test can reach. |
 | `live` | `aw eval` on a real workspace and model. | Run by you, not by CI. |
 
-## The ten use cases
-
-<CardGroup cols={2}>
-  <Card title="1. Manual search" icon="book" href="/tutorials/manual-search">
-    Search huge manuals with self-written queries; answer with checked citations.
-  </Card>
-  <Card title="2. CAD drawing" icon="compass-drafting" href="/tutorials/cad-drafting">
-    Find similar past drawings and draft a DXF for the designer to check.
-  </Card>
-  <Card title="3. Quotation" icon="calculator" href="/tutorials/quotation">
-    Estimate a part's cost from its drawing, with a breakdown and past prices.
-  </Card>
-  <Card title="4. Ringi review" icon="stamp" href="/tutorials/ringi-review">
-    Check approval requests against the authority rules and past decisions.
-  </Card>
-  <Card title="5. Customer inquiry" icon="headset" href="/tutorials/customer-inquiry">
-    Answer customers from their whole history, in a widget on your site.
-  </Card>
-  <Card title="6. Excel consolidation" icon="table" href="/tutorials/excel-consolidation">
-    Merge scattered workbooks into one traceable table and explain it.
-  </Card>
-  <Card title="7. Contract review" icon="file-contract" href="/tutorials/contract-review">
-    Review a draft clause by clause against the legal playbook.
-  </Card>
-  <Card title="8. Meeting minutes" icon="clipboard-list" href="/tutorials/meeting-minutes">
-    Turn a transcript into formal minutes and confirmed action items.
-  </Card>
-  <Card title="9. Maintenance troubleshooting" icon="wrench" href="/tutorials/maintenance-troubleshooting">
-    Walk a technician through a fault one cited step at a time.
-  </Card>
-  <Card title="10. Quality defects" icon="magnifying-glass-chart" href="/tutorials/quality-defect">
-    Find similar past defects and draft the 8D and 5-whys analysis.
-  </Card>
-</CardGroup>
+<Card title="Next: Tutorial 0, build an agent on your own stack" icon="arrow-right" href="/tutorials/your-stack">
+  Create one agent with one command, then change each layer of its stack.
+</Card>

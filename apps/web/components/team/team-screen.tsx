@@ -39,58 +39,28 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { NO_INVITATION_CAPABILITY, type InvitationCapability } from '../../contracts/invitations';
 import { NO_MEMBERSHIP_CAPABILITY } from '../../contracts/team';
-import { describeTransportRejection } from '../agents/model';
+import { browserClient } from '../../lib/browser-client';
 import { InvitationsSection } from './invitations-section';
 import { MembersTable, type MembersTableState } from './members-table';
 import {
   describeMembershipFailure,
-  describeRequestFailure,
-  readMemberList,
-  readMemberProjectCount,
-  readMemberSessionCount,
-  removalImpactFromReads,
   type MemberDialogState,
   type MembershipCapability,
   type MembershipResource,
   type MembershipRoleName,
-  type RemovalImpactCounts,
 } from './model';
 import { RemoveMemberDialog } from './remove-dialog';
-
-const JSON_READ = { cache: 'no-store', headers: { accept: 'application/json' } } as const;
+import {
+  changeMemberRole,
+  countRemovalImpact,
+  loadMembers,
+  removeMember,
+} from './team-requests-model';
 
 /** The removal confirmation, and the member it is about. `null` while it is closed. */
 interface OpenDialog {
   readonly member: MembershipResource;
   readonly state: MemberDialogState;
-}
-
-function membershipUrl(id: string): string {
-  return `/api/memberships/${encodeURIComponent(id)}`;
-}
-
-/**
- * What removing this member affects, counted from the two list endpoints the caller already reads.
- *
- * Both are complete for Owner and Admin — the only roles that reach this screen — and `null` when
- * either read fails or cannot answer the question at all (`readMemberSessionCount` says when).
- * Projects are asked for with `?archived=all` so a retired project the member created is still
- * counted; it is still theirs, and the confirmation is about what stays behind.
- */
-async function countRemovalImpact(userId: string): Promise<RemovalImpactCounts | null> {
-  const [sessions, projects] = await Promise.all([
-    fetch('/api/sessions', JSON_READ)
-      .then(async (response) =>
-        response.ok ? readMemberSessionCount(await response.json(), userId) : null,
-      )
-      .catch(() => null),
-    fetch('/api/projects?archived=all', JSON_READ)
-      .then(async (response) =>
-        response.ok ? readMemberProjectCount(await response.json(), userId) : null,
-      )
-      .catch(() => null),
-  ]);
-  return removalImpactFromReads(sessions, projects);
 }
 
 export function TeamScreen({
@@ -125,37 +95,17 @@ export function TeamScreen({
       setTable({ kind: 'refused' });
       return;
     }
-    let response: Response;
-    try {
-      response = await fetch('/api/memberships', JSON_READ);
-    } catch (error) {
-      setTable({
-        kind: 'failed',
-        message: describeMembershipFailure(describeTransportRejection(error), {
-          status: null,
-          impact: null,
-        }),
-      });
-      return;
-    }
-    if (!response.ok) {
-      const problem = await describeRequestFailure(response, () => response.json());
-      setTable({
-        kind: 'failed',
-        message: describeMembershipFailure(problem, { status: response.status, impact: null }),
-      });
-      return;
-    }
-    const members = readMemberList(await response.json().catch(() => null));
+    const result = await loadMembers(browserClient());
     setTable(
-      members === null
-        ? {
+      result.ok
+        ? { kind: 'ready', members: result.value }
+        : {
             kind: 'failed',
-            message:
-              'The member list came back in a shape this screen cannot read, so nothing is shown ' +
-              'rather than a partial list. Reload to try again.',
-          }
-        : { kind: 'ready', members },
+            message: describeMembershipFailure(result.problem, {
+              status: result.status,
+              impact: null,
+            }),
+          },
     );
   }, [capability.canListMembers]);
 
@@ -166,27 +116,12 @@ export function TeamScreen({
   async function changeRole(member: MembershipResource, role: MembershipRoleName) {
     setBusyMembershipId(member.id);
     setRoleProblem(null);
-    let response: Response;
-    try {
-      response = await fetch(membershipUrl(member.id), {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json', accept: 'application/json' },
-        body: JSON.stringify({ role }),
-      });
-    } catch (error) {
-      setBusyMembershipId(null);
-      setRoleProblem(
-        describeMembershipFailure(describeTransportRejection(error), {
-          status: null,
-          impact: null,
-        }),
-      );
-      return;
-    }
+    const result = await changeMemberRole(browserClient(), member.id, role);
     setBusyMembershipId(null);
-    if (!response.ok) {
-      const problem = await describeRequestFailure(response, () => response.json());
-      setRoleProblem(describeMembershipFailure(problem, { status: response.status, impact: null }));
+    if (!result.ok) {
+      setRoleProblem(
+        describeMembershipFailure(result.problem, { status: result.status, impact: null }),
+      );
       return;
     }
     // Reload rather than patch the row locally: the response is one membership and the last-Owner
@@ -199,7 +134,7 @@ export function TeamScreen({
     returnFocusRef.current =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setDialog({ member, state: { kind: 'counting' } });
-    void countRemovalImpact(member.userId).then((impact) => {
+    void countRemovalImpact(browserClient(), member.userId).then((impact) => {
       // Only replace a state this same open produced; a cancel or a confirm in between owns it now.
       setDialog((current) =>
         current?.member.id === member.id && current.state.kind === 'counting'
@@ -219,32 +154,13 @@ export function TeamScreen({
     // owns a session is refused by `sessions_member_workspace_fk` as an unenveloped 500.
     const impact = open.state.kind === 'counted' ? open.state.impact : null;
     setDialog({ member: open.member, state: { kind: 'submitting' } });
-    let response: Response;
-    try {
-      response = await fetch(membershipUrl(open.member.id), {
-        method: 'DELETE',
-        headers: { accept: 'application/json' },
-      });
-    } catch (error) {
+    const result = await removeMember(browserClient(), open.member.id);
+    if (!result.ok) {
       setDialog({
         member: open.member,
         state: {
           kind: 'failed',
-          message: describeMembershipFailure(describeTransportRejection(error), {
-            status: null,
-            impact,
-          }),
-        },
-      });
-      return;
-    }
-    if (!response.ok) {
-      const problem = await describeRequestFailure(response, () => response.json());
-      setDialog({
-        member: open.member,
-        state: {
-          kind: 'failed',
-          message: describeMembershipFailure(problem, { status: response.status, impact }),
+          message: describeMembershipFailure(result.problem, { status: result.status, impact }),
         },
       });
       return;

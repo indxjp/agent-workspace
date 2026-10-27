@@ -7,7 +7,76 @@ what the policy covers are on the developer site's
 [Public surface and stability](../../docs/sdk/site/concepts/public-surface.mdx#versions-and-deprecation)
 page. Released in lock-step with `@indx-workspace/contracts`, with the same version.
 
-## Unreleased
+## 0.6.11 — unreleased
+
+### Changed
+
+- `diffBodies` (`@indx-workspace/sdk/portable`) also diffs the `policy` tool rules, `subagents`, `knowledge` and `description`, and `uncoveredKeys(before, after)` names the top-level fields it does not cover.
+
+### Deprecated
+
+- A `skills.import` file given as `contentBase64` is deprecated; pass its bytes as `body`. The
+  first such file a process sends logs one warning, and the form is removed in the next major
+  release. `skills.import` already sends `multipart/form-data` either way.
+
+## 0.6.10 — unreleased
+
+### Added
+
+- `triggers` (ADR-0144): `list`, `get`, `create`, `update`, `remove` and `rotateSecret` over
+  `/api/triggers`; `create` and `rotateSecret` return the URL secret once.
+- `runs.start` takes `attachments` (ADR-0146): workspace files the run receives read-only.
+- `RunEventFrame` gains the `run-warning` kind, a platform notice such as
+  `attachments_removed_shell`. It carries a resume `id` and is not an agent event (`toAgentEvent`
+  returns `null`). Before this, a `run.warning` frame was read as an agent frame and refused.
+- `runs.outputs(runId)` lists the files a completed run wrote to its `outputs/` directory (an agent
+  with `writeFiles`), each with its `name` and the `path` `files.download` takes. It is the files
+  list over the run's prefix; no new route.
+- `engine.requireApproval` on the `claude-agent-sdk` engine settings: tool names (`Write`,
+  `mcp__gh__*`) whose every call waits for approval. `defineAgent()` refuses a rule for a tool the
+  permissions turn off, a tool also in `autoApprove`, and a rule with a `(specifier)`;
+  `toAgentVersionBody()` refuses a non-empty list until the Claude adapter honours it.
+- `runs.start` takes `outputSchema`: a Zod schema, sent as JSON Schema 2020-12, or a JSON Schema
+  object as is (ADR-0143). `runs.result(runId, { schema })` waits for the run, then returns its
+  `text` and its structured `output`, parsed and typed by `schema`; an answer that does not match
+  is a `ContractViolationError`. A run that failed or was cancelled resolves with a `null` text and
+  `null` output. `RunResource.output` carries the answer; `fixtures.run()` defaults it to `null`.
+- `defineAgent({ engine: { id: 'claude-agent-sdk', handoff: true } })` offers the agent a `handoff_to_person` tool; the run then ends `completed` after one `agent.handoff` event carrying the reason. The agent's policy is stored, as with `requireApproval`.
+- `toAgentEvent` parses the `agent.handoff` frame.
+- `runs.start({ subject })` names the person a run acts for, and the platform signs it into the identity headers of every tool call that opts in.
+- `verifyIdentity` is exported to check that signed assertion in your own tool server.
+- `openapiTool` accepts `identity` so an OpenAPI tool can opt in to the caller assertion.
+- `skill(name, { revision })` pins a skill revision in `defineAgent`; the pin lands in the saved version's `resources.skillRevisions`, and an unpinned skill adds no key.
+- Runs carry `agentVersion`, so a run id leads to the agent version, and through `agents.versions.list` to the skill revisions it pinned.
+- `runs.start({ fileScope })` narrows a run to part of the agent's file grants, so built-in `search_files` and the sandbox cover only those paths. A path outside the grants fails the run with `run_file_scope_not_granted`.
+- `agentFromVersionBody()` and `toolModulesOf()` in `@indx-workspace/sdk/define`: the inverse of `toAgentVersionBody()` for an Agent Workspace project. File grants, tools from the project's modules, `mcp()` connectors and code tools come back, and anything that cannot is reported as a drop, never silently. Code tools are named by `codeToolNames` or by the body's `toolBundles`; a pinned bundle that differs from the module's `defineTool()` value is dropped.
+- `files.completeUpload(path)` finishes a signed-link upload and returns the ready file.
+- `files.upload` now uses a signed link (mint, `PUT` to the object store, complete) for a body larger than `MAX_UPLOAD_BYTES`, or with `{ direct: true }`. A store that cannot sign (`501 direct_transfer_unsupported`) falls back to the relay unless `direct` is set. A `Blob` is streamed to the store, not buffered. Until the server accepts a signed-link size above `MAX_UPLOAD_BYTES` (#1640), such an upload fails at the mint with `400` instead of `413`.
+- `runs.start(agentId, { idempotencyKey })` sends the key as the `Idempotency-Key` header: a start
+  retried with the same key and input answers with the run the first one queued instead of starting
+  another (ADR-0151). The same key with a different input is `409 run_idempotency_conflict`; a blank
+  key or one over 255 characters is `400 invalid_idempotency_key`.
+- `client.storage.connections` connects a bucket or folder and browses it: `list`, `get` (by id or name), `create`, `update`, `remove`, `rotateCredential`, `test`, and `browse`, an async iterator over the entries of a folder. No method returns a credential. The server percent-decodes the browse `prefix` once before checking it, so a folder whose name holds a space or a non-ASCII character can be opened.
+- `shares.publish` sends a session share's `transcript: { runIds }`, and only the run ids, so text a caller holds never reaches the body.
+- `triggers.create` and `triggers.update` take an `outputSchema`, a Zod type or a JSON Schema object,
+  so the runs a trigger starts return typed output that `runs.result` reads.
+- `triggers.create` and `triggers.update` take a `subject`, so a scheduled or webhook run reaches a
+  subject-scoped connector as that caller.
+- `runs.start` takes an `idempotencyKey`, sent as the `Idempotency-Key` header, so a retried start
+  answers the run already started.
+
+### Changed
+
+- New projects pin the engines this release was built with: `@anthropic-ai/claude-agent-sdk`
+  0.3.310, `@earendil-works/pi-*` 1.4.0 and `@mastra/core` 1.79.0 (`@mastra/mcp` 2.5.0,
+  `@mastra/memory` 1.39.0).
+- `openapiTool()` in `@indx-workspace/sdk/define` accepts write rules (`POST`, `PUT`, `PATCH`,
+  `DELETE`, or an `operationId:<id>` naming a write). Compose adds every write operation to the
+  agent's `requireApproval` as `mcp__<server>__<operation>` for a `claude-agent-sdk` agent, and the
+  gateway runs it only for an approved call. A stored policy whose `permissionMode` is not
+  `default` and that uses such a connector fails to compile, since `requireApproval` needs the
+  `default` mode.
+- `runs.outputs` no longer filters the server's temporary archive: the server saves run outputs as artifacts and never lists its staging files.
 
 ### Fixed
 

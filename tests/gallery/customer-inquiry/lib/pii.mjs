@@ -1,5 +1,5 @@
-// Personal-data masking for everything the CRM server returns, and the check the chat backend runs
-// on every answer before it leaves.
+// Personal-data patterns. The CRM API masks everything it returns (the fake CRM does, with
+// `maskDeep`), and the chat backend runs `findPii` over every answer before it leaves.
 //
 // Agent Workspace does not redact tool results or answers, so this is the use case's own code.
 // Two layers: the values the CRM holds for the customer (their phone, e-mail, address) are masked

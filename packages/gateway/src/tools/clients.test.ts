@@ -10,7 +10,6 @@ import type { AddressInfo } from 'node:net';
 import { OpenApiToolConfigSchema } from '@indx-workspace/contracts/tool-connectors';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createGatewayApplication } from '../index.js';
@@ -112,10 +111,7 @@ describe('the MCP SDK client against the tool endpoint', () => {
       new URL(`/v1/tools/${CONNECTOR}/mcp`, gatewayUrl),
       { requestInit: { headers: { authorization: `Bearer ${token}` } } },
     );
-    // The SDK's own client transport is its `Transport`; the two declarations differ only under this
-    // repository's `exactOptionalPropertyTypes` (`get sessionId(): string | undefined` against
-    // `sessionId?: string`), which is a property of the `.d.ts`, not of the object.
-    await client.connect(transport as Transport);
+    await client.connect(transport);
     const listed = await client.listTools();
     expect(listed.tools.map((tool) => tool.name)).toEqual(['listPets']);
     const called = await client.callTool({ name: 'listPets', arguments: {} });

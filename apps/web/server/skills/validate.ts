@@ -5,7 +5,8 @@
 import { SKILL_FILE_PATH_MAX_BYTES, SKILL_MD_FILENAME } from '@indx-workspace/contracts/skills';
 
 import { createCaseFoldGuard, isAdmissibleRelativePath, isValidSkillName } from './keys';
-import { problem, type ApiResult } from './result';
+import type { ApiResult } from '../http/result';
+import { problem } from './result';
 
 // ── Input shapes, validated field by field (ADR-0015: positive assertion, explicit rejecting else) ─
 

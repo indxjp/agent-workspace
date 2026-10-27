@@ -25,7 +25,7 @@ theorem blank_connector_name_passes_the_parser_but_not_the_check :
     ∃ p, Connector.parseBody (some blankNameBody) = .ok p ∧
       (p.toConnector ⟨"c1"⟩ ⟨"w1"⟩ ⟨"s1"⟩ none ⟨"p1"⟩).nameNotBlank = false ∧
       (p.toConnector ⟨"c1"⟩ ⟨"w1"⟩ ⟨"s1"⟩ none ⟨"p1"⟩).valid = false :=
-  ⟨_, rfl, by decide, by decide⟩
+  ⟨_, rfl, by decide +kernel, by decide⟩
 
 private def openapiRow (sec : Option SecretId) : Connector.ToolConnector :=
   ⟨⟨"c3"⟩, ⟨"w1"⟩, "petstore", .openapi, "{\"auth\": {\"type\": \"bearer\"}}", sec, true, none,
@@ -39,7 +39,7 @@ without one; the server's admission and `ConnectorResourceSchema` enforce the pa
   (doc := "docs/adr/0113-tools-defined-in-code-are-catalog-connectors-that-run-in-the-gateway.md#sd1--tools-are-catalog-connectors-of-kind-openapi-or-postgres")]
 theorem openapi_credential_pairing_is_not_a_database_check :
     (openapiRow (some ⟨"s1"⟩)).valid = true ∧ (openapiRow none).valid = true := by
-  decide
+  decide +kernel
 
 /-- Finding: a repeated file id in an assignment body is reported as an unknown file, although it
 names a file of the catalog; the same repetition of a skill or connector id is merged silently. -/
@@ -59,7 +59,7 @@ example : Grant.replace (some ⟨true, true, false, false⟩) ⟨["f1"], ["k1"],
     ⟨[⟨"f1", .read⟩, ⟨"f1", .read⟩], [], []⟩ = .unknownFile "f1" ∧
     Grant.replace (some ⟨true, true, false, false⟩) ⟨["f1"], ["k1"], []⟩ ⟨[], ["k1", "k1"], []⟩ =
       .updated ⟨[], ["k1"], []⟩ :=
-  repeated_ids_are_treated_differently_by_kind _ _ "f1" "k1" .read (by decide)
+  repeated_ids_are_treated_differently_by_kind _ _ "f1" "k1" .read (by decide +kernel)
 
 /-- Finding: 04 §2 says every row that can be own or other carries `ownerPrincipalId`, and the
 tables do, but only the agent and connector bodies carry it on the wire; the file and skill
@@ -72,7 +72,7 @@ theorem file_and_skill_bodies_carry_no_owner :
       "ownerPrincipalId" ∈ Agent.wireFields ∧ "ownerPrincipalId" ∈ Connector.wireFields ∧
       "ownerPrincipalId" ∉ File.wireFields ∧ "ownerPrincipalId" ∉ Skill.wireFields ∧
       "createdBy" ∉ File.wireFields ∧ "createdBy" ∉ Skill.wireFields := by
-  decide
+  decide +kernel
 
 private def member (i u : String) (revoked : Bool) : Grant.PrincipalView :=
   ⟨⟨i⟩, some ⟨u⟩, revoked⟩
@@ -90,7 +90,7 @@ theorem revoked_principal_keeps_a_hidden_grant :
     let users : List UserId := [⟨"u2"⟩]
     Grant.grantsRead [member "p2" "u2" true] users = [] ∧ Grant.hasGrant users ⟨"u2"⟩ = true ∧
       Grant.grantsRead [member "p2" "u2" false] users = [⟨"p2"⟩] := by
-  decide
+  decide +kernel
 
 /-- Finding: the ownership page draws the grant edge to "a person or API key", but a grant can
 only name a membership principal: an API-key principal is always `principal-not-found`. -/
@@ -110,7 +110,7 @@ theorem an_api_key_principal_cannot_be_granted (ps : List Grant.PrincipalView) (
   simp [Grant.grantsReplace, hnone]
 
 example : Grant.grantsReplace true [⟨⟨"k1"⟩, none, false⟩] [⟨"k1"⟩] = .principalNotFound ⟨"k1"⟩ :=
-  an_api_key_principal_cannot_be_granted _ _ (by decide)
+  an_api_key_principal_cannot_be_granted _ _ (by decide +kernel)
 
 /-- Two slug grammars coexist: a skill name may start with a digit and repeat a hyphen, which the
 `oneOf` value gate for closed sets refuses, while a closed-set value such as `read-write`
@@ -121,7 +121,7 @@ theorem skill_names_and_closed_set_values_are_different_slugs :
     Skill.nameShape "1password" = true ∧ isSafeValue "1password" = false ∧
       Skill.nameShape "a--b" = true ∧ isSafeValue "a--b" = false ∧
       Skill.nameShape "read-write" = true ∧ isSafeValue "read-write" = true := by
-  decide
+  decide +kernel
 
 /-- The word "grant" names two tables: the data-plane page's "read-only grant" is an `agent_files`
 assignment (it has an `access`), while an agent grant (`agent_grants`) has none. The two are
@@ -135,7 +135,7 @@ theorem grant_names_two_different_relations :
       (fk .agentGrants "agent_grants_member_workspace_fk").refTable = .memberships ∧
       (catalogue .agentFiles).hasColumn "access" = true ∧
       (catalogue .agentGrants).hasColumn "access" = false := by
-  decide
+  decide +kernel
 
 private def divergedKey : File.File :=
   ⟨⟨"f1"⟩, ⟨"w1"⟩, "docs/a.md", .file, some "objects/7f3a", 3, none, none, ⟨"p1"⟩⟩
@@ -150,7 +150,7 @@ theorem rename_rewrites_a_diverged_key_blindly :
     File.renameByPrefix "docs" "archive" [divergedKey] =
       [{ divergedKey with path := "archive/a.md", storageKey := some "archivects/7f3a" }] ∧
       divergedKey.valid = true := by
-  decide
+  decide +kernel
 
 private def uploadedA : File.File :=
   ⟨⟨"f1"⟩, ⟨"w1"⟩, "docs/a.md", .file, some "docs/a.md", 3, none, some ⟨"u1"⟩, ⟨"p1"⟩⟩
@@ -173,6 +173,6 @@ theorem uploading_over_an_existing_path_does_not_make_the_caller_owner :
       (Skill.putSkill ⟨"w1"⟩ ⟨"k9"⟩ ⟨"notes", "# v2", true, some ⟨"u2"⟩, ⟨"p2"⟩⟩
           [⟨⟨"k1"⟩, ⟨"w1"⟩, "notes", "# v1", true, some ⟨"u1"⟩, ⟨"p1"⟩⟩]).all
         (·.owner != ⟨"p2"⟩) = true := by
-  decide
+  decide +kernel
 
 end AgentWorkspace.Theorems.Meta.ConceptCatalog

@@ -9,11 +9,8 @@ import {
   createRuntimeConnection,
   listRuntimeConnections,
 } from '../../../server/runtimes/connections';
-import {
-  readJsonBody,
-  toResponse,
-  withWorkspaceConnectionStore,
-} from '../../../server/runtimes/http';
+import { readJsonBody, withWorkspaceConnectionStore } from '../../../server/runtimes/http';
+import { apiResultResponse } from '../../../server/http/json-transport';
 import { requireResourceAccess } from '../../../server/resources/authorise';
 
 export const dynamic = 'force-dynamic';
@@ -32,7 +29,7 @@ export async function GET(request: Request): Promise<Response> {
     (store) => listRuntimeConnections(store),
     access.principal.workspaceId,
   );
-  return toResponse(result);
+  return apiResultResponse(result);
 }
 
 /** `POST /api/runtime-connections` — create one connection in the caller's workspace (§14.9). */
@@ -48,5 +45,5 @@ export async function POST(request: Request): Promise<Response> {
     },
     access.principal.workspaceId,
   );
-  return toResponse(result);
+  return apiResultResponse(result);
 }

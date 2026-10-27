@@ -11,7 +11,7 @@ import {
   installWidgetSurfaceRuntime,
   WIDGET_WORKSPACE_SLUG,
 } from '../../../../../server/surfaces/loader/test-runtime';
-import { clearSurfaceSessionsRuntime } from '../../../../../server/surfaces/public/runtime';
+import { clearApplicationContext } from '../../../../../server/application-context';
 
 const request = vi.hoisted(() => ({ headers: new Headers() }));
 
@@ -42,7 +42,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
-  clearSurfaceSessionsRuntime();
+  clearApplicationContext();
   vi.unstubAllEnvs();
 });
 

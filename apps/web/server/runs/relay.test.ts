@@ -1,3 +1,4 @@
+import { log as webLogger } from '../telemetry/logger';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -8,7 +9,7 @@ import {
   SseMessageAssembler,
   type SseMessage,
 } from './relay';
-import { InMemoryRunStore } from './store';
+import { InMemoryRunStore } from './memory-store';
 
 const RUN = '11111111-1111-4111-8111-111111111111';
 const NUL = String.fromCharCode(0);
@@ -208,7 +209,7 @@ describe('relayRunnerStream', () => {
       },
     );
 
-    expect(outcome).toEqual({ kind: 'completed', events: 1 });
+    expect(outcome).toEqual({ kind: 'completed', events: 1, output: null });
     expect(seen).toEqual(['sdk-session']);
   });
 
@@ -225,13 +226,55 @@ describe('relayRunnerStream', () => {
       ]),
       store,
     );
-    expect(outcome).toEqual({ kind: 'completed', events: 2 });
+    expect(outcome).toEqual({ kind: 'completed', events: 2, output: null });
     const handle = await store.openStream(RUN, null);
     if (handle === null) throw new Error('no handle');
     await store.finish(RUN, 'completed', null);
     const seen: string[] = [];
     for await (const event of handle.events) seen.push(event.type);
     expect(seen).toEqual(['system', 'assistant']);
+  });
+
+  describe('the run output (ADR-0143)', () => {
+    const message = (text: string): string =>
+      `event: agent.message\ndata: ${JSON.stringify({ role: 'assistant', blocks: [{ type: 'text', text }] })}\n\n`;
+    const result = (output: unknown): string =>
+      `event: agent.result\ndata: ${JSON.stringify({ stopReason: 'end_turn', output })}\n\n`;
+    const relay = async (frames: readonly string[]): Promise<unknown> => {
+      const store = new InMemoryRunStore();
+      await newRun(store);
+      return relayRunnerStream(
+        RUN,
+        sseResponse([...frames, 'event: run-done\ndata: {}\n\n']),
+        store,
+      );
+    };
+
+    it('returns the output the engine put on its agent.result frame', async () => {
+      const output = { text: '{"a":1}', structured: { a: 1 } };
+      expect(await relay([message('thinking'), result(output)])).toEqual({
+        kind: 'completed',
+        events: 2,
+        output,
+      });
+    });
+
+    it('falls back to the last assistant message text, with no structured value', async () => {
+      expect(await relay([message('first'), message('final answer')])).toEqual({
+        kind: 'completed',
+        events: 2,
+        output: { text: 'final answer', structured: null },
+      });
+    });
+
+    it('ignores user messages and an agent.result with no usable output', async () => {
+      const user = `event: agent.message\ndata: ${JSON.stringify({ role: 'user', blocks: [{ type: 'text', text: 'hi' }] })}\n\n`;
+      expect(await relay([user, result('not an output')])).toEqual({
+        kind: 'completed',
+        events: 2,
+        output: null,
+      });
+    });
   });
 
   it('fails when the connection closes cleanly without an explicit terminal frame', async () => {
@@ -252,7 +295,7 @@ describe('relayRunnerStream', () => {
   });
 
   it('fails the run rather than skipping a frame whose data is not JSON', async () => {
-    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     const store = new InMemoryRunStore();
     await newRun(store);
     const outcome = await relayRunnerStream(
@@ -277,7 +320,7 @@ describe('relayRunnerStream', () => {
   });
 
   it('fails the run when the runtime tries to forge a reserved control frame', async () => {
-    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     const store = new InMemoryRunStore();
     await newRun(store);
     const outcome = await relayRunnerStream(RUN, sseResponse(['event: done\ndata: {}\n\n']), store);
@@ -332,7 +375,7 @@ describe('relayRunnerStream', () => {
       ]),
       store,
     );
-    expect(outcome).toEqual({ kind: 'completed', events: 1 });
+    expect(outcome).toEqual({ kind: 'completed', events: 1, output: null });
     const handle = await store.openStream(RUN, null);
     if (handle === null) throw new Error('no handle');
     await store.finish(RUN, 'completed', null);
@@ -357,6 +400,40 @@ describe('relayRunnerStream', () => {
       reason: 'Not logged in · Please run /login',
       events: 0,
     });
+  });
+
+  it('reports a run-error that stopped for approval as awaiting_approval, with the call (ADR-0145)', async () => {
+    const store = new InMemoryRunStore();
+    await newRun(store);
+    const data = {
+      code: 'awaiting_approval',
+      outcome: 'awaiting_approval',
+      message: 'stopped for approval',
+      approvalRequest: { toolName: 'send_email', toolUseId: 'toolu_1', canonicalCall: '{}' },
+    };
+    const outcome = await relayRunnerStream(
+      RUN,
+      sseResponse([`event: run-error\ndata: ${JSON.stringify(data)}\n\n`]),
+      store,
+    );
+    expect(outcome).toEqual({
+      kind: 'awaiting_approval',
+      call: { toolName: 'send_email', canonicalCall: '{}' },
+      toolCallId: 'toolu_1',
+      events: 0,
+    });
+  });
+
+  it('fails a run that claims to await approval without a usable request', async () => {
+    const store = new InMemoryRunStore();
+    await newRun(store);
+    const data = { code: 'awaiting_approval', approvalRequest: { toolName: 'send_email' } };
+    const outcome = await relayRunnerStream(
+      RUN,
+      sseResponse([`event: run-error\ndata: ${JSON.stringify(data)}\n\n`]),
+      store,
+    );
+    expect(outcome.kind).toBe('failed');
   });
 
   it('falls back to a named reason when `run-error` carries no message', async () => {
@@ -400,7 +477,7 @@ describe('relayRunnerStream', () => {
   });
 
   it("still refuses a forged `done` or `run-failed` — the runner's own names moved, the reservation did not", async () => {
-    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     const store = new InMemoryRunStore();
     await newRun(store);
     for (const forged of ['done', 'run-failed']) {
@@ -418,7 +495,7 @@ describe('relayRunnerStream', () => {
   });
 
   it('reports how many events survived when the stream breaks mid-run', async () => {
-    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     const store = new InMemoryRunStore();
     await newRun(store);
     const encoder = new TextEncoder();
@@ -444,8 +521,8 @@ describe('relayRunnerStream', () => {
     });
     if (outcome.kind !== 'failed') return;
     expect(outcome.reason).not.toContain('SECRET_SENTINEL');
-    const loggedFailure = log.mock.calls[0]?.[1] as unknown;
-    expect((loggedFailure as Error | undefined)?.cause).toEqual(
+    const loggedFailure = log.mock.calls[0]?.[1] as { error: Error } | undefined;
+    expect(loggedFailure?.error.cause).toEqual(
       new Error('connection reset by peer SECRET_SENTINEL'),
     );
     log.mockRestore();

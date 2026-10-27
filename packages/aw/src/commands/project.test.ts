@@ -884,17 +884,37 @@ describe('loadProject', () => {
 
   it('kills a file that never finishes loading', async () => {
     const root = await project({
-      'agents/assistant.ts': `setInterval(() => undefined, 1000);\nawait new Promise(() => undefined);\n${agentFile()}`,
+      'agents/assistant.ts': `setInterval(() => undefined, 1000);\nconsole.log('evaluating assistant');\nawait new Promise(() => undefined);\n${agentFile()}`,
     });
-    const load = await loadProject({
-      root,
-      io,
-      signal: new AbortController().signal,
-      timeoutMs: 1500,
-    });
-    expect(load.problems).toMatchObject([
-      { file: 'agents/assistant.ts', status: null, code: 'loader_timeout' },
-    ]);
+    // The loader's timer counts from the fork, so a wall-clock budget raced the child's start on a
+    // loaded runner: it fired before the file was announced, naming '.'. Only the parent's
+    // setTimeout is faked, and the timeout fires once the file has printed; the loader announces
+    // each file, awaiting the send, before it evaluates it.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      let printed: () => void = () => undefined;
+      const evaluating = new Promise<void>((resolve) => {
+        printed = resolve;
+      });
+      const load = loadProject({
+        root,
+        io: {
+          ...io,
+          stderr: (text) => {
+            if (text.includes('evaluating assistant')) printed();
+          },
+        },
+        signal: new AbortController().signal,
+        timeoutMs: 1500,
+      });
+      await evaluating;
+      vi.advanceTimersByTime(1500);
+      expect((await load).problems).toMatchObject([
+        { file: 'agents/assistant.ts', status: null, code: 'loader_timeout' },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('names a file whose top-level await never settles, or that exits the loader', async () => {
@@ -1439,6 +1459,19 @@ describe('aw check with skills/ folders (issue #694)', () => {
     const root = await project({ 'agents/assistant.ts': SKILL_AGENT('triage') });
     const run = await aw(root, ['check'], withSkills('triage'));
     expect(run.code).toBe(EXIT_CODE.ok);
+  });
+
+  it("accepts builtinSkill('office-reader') in a fresh project, with no folder and no workspace skill", async () => {
+    const root = await project({
+      'agents/assistant.ts': agentFile(", skills: [builtinSkill('office-reader')]").replace(
+        'mcp }',
+        'mcp, builtinSkill }',
+      ),
+    });
+    const run = await aw(root, ['check'], server(emptyServer()));
+    expect(run.code).toBe(EXIT_CODE.ok);
+    expect(run.stdout).not.toContain('skill_not_found');
+    expect(requests(run)).not.toContain('GET /api/skills');
   });
 
   it('refuses a missing skill by name, with the nearest name, and does not dry-run the agent', async () => {

@@ -5,15 +5,47 @@ description: "The @indx-workspace/contracts/observability exports, sorted alphab
 
 <Note>This page is generated from `packages/contracts/src/observability.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
 
+## AgentCreatedAuditDetails
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `agentId` | `string` | Yes |  |
+| `version` | `number` | Yes |  |
+| `via` | `"ui" \| "aw-push" \| "api" \| "builder"` | Yes |  |
+| `builderRunId` | `undefined \| string` | No |  |
+| `createdByAgentId` | `undefined \| string` | No |  |
+
+## AgentCreatedAuditDetailsSchema
+
+What an `agent-created` row names (issue #1847), stored in `audit_events.details`, which no other
+action may carry. `createdByAgentId` is for issue #1851 and is unused here.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `agentId` | `string` | Yes |  |
+| `version` | `number` | Yes |  |
+| `via` | `"ui" \| "aw-push" \| "api" \| "builder"` | Yes |  |
+| `builderRunId` | `undefined \| string` | No |  |
+| `createdByAgentId` | `undefined \| string` | No |  |
+
 ## AUDIT_ACTIONS
 
 The control-plane actions the audit trail records, as the `audit_events.action` column
-restates them. An action name is a name, not a reference: values for objects a deployment does
-not hold are still valid, and a row's subject may no longer exist when the row is read.
+restates them (its CHECK is derived from this list). An action name is a name, not a
+reference: values for objects a deployment does not hold are still valid, and a row's subject
+may no longer exist when the row is read.
+
+Spec §36's list of "important control-plane actions" comes first, verbatim and in §36's order,
+each phrase as a slug. Five of them name objects no table in the first wave held (runtime
+profiles, projects and shares); they are here because §36 lists them. The `invitation-*`,
+`project-archived` and `project-restored` values postdate §36: nothing is deleted by an archive
+or a restore, so neither folds into `project-deleted`. The column is a `CHECK`, not a native
+`pgEnum`, so adding a value is a one-line `ALTER` rather than a migration with lock implications.
 
 - `'user-created'`
 - `'user-deleted'`
 - `'agent-changed'`
+- `'agent-created'`
 - `'provider-credential-changed'`
 - `'api-key-created'`
 - `'api-key-revoked'`
@@ -39,6 +71,18 @@ not hold are still valid, and a row's subject may no longer exist when the row i
 - `'oauth-client-secret-rotated'`
 - `'oauth-grant-issued'`
 - `'oauth-grant-revoked'`
+- `'file-uploaded'`
+- `'file-downloaded'`
+- `'file-link-created'`
+- `'file-moved'`
+- `'file-deleted'`
+- `'storage-connection-created'`
+- `'storage-connection-updated'`
+- `'storage-connection-deleted'`
+- `'storage-connection-credential-changed'`
+- `'storage-connection-tested'`
+- `'storage-connection-written'`
+- `'storage-grant-changed'`
 
 ## AUDIT_LIST_DEFAULT_LIMIT
 
@@ -56,6 +100,7 @@ Value: `500`
 - `"user-created"`
 - `"user-deleted"`
 - `"agent-changed"`
+- `"agent-created"`
 - `"provider-credential-changed"`
 - `"api-key-created"`
 - `"api-key-revoked"`
@@ -81,6 +126,18 @@ Value: `500`
 - `"oauth-client-secret-rotated"`
 - `"oauth-grant-issued"`
 - `"oauth-grant-revoked"`
+- `"file-uploaded"`
+- `"file-downloaded"`
+- `"file-link-created"`
+- `"file-moved"`
+- `"file-deleted"`
+- `"storage-connection-created"`
+- `"storage-connection-updated"`
+- `"storage-connection-deleted"`
+- `"storage-connection-credential-changed"`
+- `"storage-connection-tested"`
+- `"storage-connection-written"`
+- `"storage-grant-changed"`
 
 ## AuditEvent
 
@@ -91,10 +148,11 @@ Value: `500`
 | `actorUserId` | `null \| string` | Yes |  |
 | `actorPrincipalId` | `null \| string` | Yes |  |
 | `actorLabel` | `string` | Yes |  |
-| `action` | `"user-created" \| "user-deleted" \| "agent-changed" \| "provider-credential-changed" \| "api-key-created" \| "api-key-revoked" \| "connector-changed" \| "permission-changed" \| "runtime-profile-changed" \| "project-created" \| "project-deleted" \| "project-archived" \| "project-restored" \| "session-published" \| "public-link-revoked" \| "runnable-link-stopped" \| "public-sharing-policy-changed" \| "invitation-created" \| "invitation-resent" \| "invitation-revoked" \| "invitation-accepted" \| "endpoint-client-created" \| "endpoint-client-changed" \| "endpoint-client-revoked" \| "endpoint-tool-called" \| "oauth-client-secret-rotated" \| "oauth-grant-issued" \| "oauth-grant-revoked"` | Yes |  |
+| `action` | `"user-created" \| "user-deleted" \| "agent-changed" \| "agent-created" \| "provider-credential-changed" \| "api-key-created" \| "api-key-revoked" \| "connector-changed" \| "permission-changed" \| "runtime-profile-changed" \| "project-created" \| "project-deleted" \| "project-archived" \| "project-restored" \| "session-published" \| "public-link-revoked" \| "runnable-link-stopped" \| "public-sharing-policy-changed" \| "invitation-created" \| "invitation-resent" \| "invitation-revoked" \| "invitation-accepted" \| "endpoint-client-created" \| "endpoint-client-changed" \| "endpoint-client-revoked" \| "endpoint-tool-called" \| "oauth-client-secret-rotated" \| "oauth-grant-issued" \| "oauth-grant-revoked" \| "file-uploaded" \| "file-downloaded" \| "file-link-created" \| "file-moved" \| "file-deleted" \| "storage-connection-created" \| "storage-connection-updated" \| "storage-connection-deleted" \| "storage-connection-credential-changed" \| "storage-connection-tested" \| "storage-connection-written" \| "storage-grant-changed"` | Yes |  |
 | `subjectId` | `null \| string` | Yes |  |
 | `subjectLabel` | `string` | Yes |  |
 | `createdAt` | `string` | Yes |  |
+| `builderRunId` | `undefined \| string` | No |  |
 
 ## AuditEventListResponse
 
@@ -124,6 +182,9 @@ or the subject is renamed or deleted. `actorPrincipalId` is `null` only for a no
 service or system actor; `actorUserId` is the legacy human attribution and goes `null` when the
 user is deleted. `subjectId` is `null` for an action with no one subject.
 
+`builderRunId` names the Builder run that created the agent. It is present only on an
+`agent-created` row whose stored details carry it, never on any other action.
+
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `id` | `string` | Yes |  |
@@ -131,10 +192,11 @@ user is deleted. `subjectId` is `null` for an action with no one subject.
 | `actorUserId` | `null \| string` | Yes |  |
 | `actorPrincipalId` | `null \| string` | Yes |  |
 | `actorLabel` | `string` | Yes |  |
-| `action` | `"user-created" \| "user-deleted" \| "agent-changed" \| "provider-credential-changed" \| "api-key-created" \| "api-key-revoked" \| "connector-changed" \| "permission-changed" \| "runtime-profile-changed" \| "project-created" \| "project-deleted" \| "project-archived" \| "project-restored" \| "session-published" \| "public-link-revoked" \| "runnable-link-stopped" \| "public-sharing-policy-changed" \| "invitation-created" \| "invitation-resent" \| "invitation-revoked" \| "invitation-accepted" \| "endpoint-client-created" \| "endpoint-client-changed" \| "endpoint-client-revoked" \| "endpoint-tool-called" \| "oauth-client-secret-rotated" \| "oauth-grant-issued" \| "oauth-grant-revoked"` | Yes |  |
+| `action` | `"user-created" \| "user-deleted" \| "agent-changed" \| "agent-created" \| "provider-credential-changed" \| "api-key-created" \| "api-key-revoked" \| "connector-changed" \| "permission-changed" \| "runtime-profile-changed" \| "project-created" \| "project-deleted" \| "project-archived" \| "project-restored" \| "session-published" \| "public-link-revoked" \| "runnable-link-stopped" \| "public-sharing-policy-changed" \| "invitation-created" \| "invitation-resent" \| "invitation-revoked" \| "invitation-accepted" \| "endpoint-client-created" \| "endpoint-client-changed" \| "endpoint-client-revoked" \| "endpoint-tool-called" \| "oauth-client-secret-rotated" \| "oauth-grant-issued" \| "oauth-grant-revoked" \| "file-uploaded" \| "file-downloaded" \| "file-link-created" \| "file-moved" \| "file-deleted" \| "storage-connection-created" \| "storage-connection-updated" \| "storage-connection-deleted" \| "storage-connection-credential-changed" \| "storage-connection-tested" \| "storage-connection-written" \| "storage-grant-changed"` | Yes |  |
 | `subjectId` | `null \| string` | Yes |  |
 | `subjectLabel` | `string` | Yes |  |
 | `createdAt` | `string` | Yes |  |
+| `builderRunId` | `undefined \| string` | No |  |
 
 ## AuditListQuery
 
@@ -145,6 +207,7 @@ page, and is refused as `400 invalid_cursor` by any other list or workspace.
 | --- | --- | --- | --- |
 | `limit` | `undefined \| number` | No |  |
 | `cursor` | `undefined \| string` | No |  |
+| `action` | `undefined \| "user-created" \| "user-deleted" \| "agent-changed" \| "agent-created" \| "provider-credential-changed" \| "api-key-created" \| "api-key-revoked" \| "connector-changed" \| "permission-changed" \| "runtime-profile-changed" \| "project-created" \| "project-deleted" \| "project-archived" \| "project-restored" \| "session-published" \| "public-link-revoked" \| "runnable-link-stopped" \| "public-sharing-policy-changed" \| "invitation-created" \| "invitation-resent" \| "invitation-revoked" \| "invitation-accepted" \| "endpoint-client-created" \| "endpoint-client-changed" \| "endpoint-client-revoked" \| "endpoint-tool-called" \| "oauth-client-secret-rotated" \| "oauth-grant-issued" \| "oauth-grant-revoked" \| "file-uploaded" \| "file-downloaded" \| "file-link-created" \| "file-moved" \| "file-deleted" \| "storage-connection-created" \| "storage-connection-updated" \| "storage-connection-deleted" \| "storage-connection-credential-changed" \| "storage-connection-tested" \| "storage-connection-written" \| "storage-grant-changed"` | No | Only rows of this one action (single value; a value outside `AUDIT_ACTIONS` is refused as `400 invalid_action`). Paging keeps the same order and cursor with the filter on. |
 
 ## RunTelemetry
 
@@ -153,7 +216,7 @@ page, and is refused as `400 invalid_cursor` by any other list or workspace.
 | `runId` | `string` | Yes |  |
 | `workspaceId` | `string` | Yes |  |
 | `agentId` | `string` | Yes |  |
-| `status` | `"completed" \| "failed" \| "running" \| "queued" \| "cancelled"` | Yes |  |
+| `status` | `"completed" \| "failed" \| "queued" \| "running" \| "awaiting_approval" \| "cancelled"` | Yes |  |
 | `durationMs` | `null \| number` | Yes |  |
 | `costUsd` | `null \| number` | Yes |  |
 
@@ -187,6 +250,6 @@ workspace's share of them. It is not complete across instances and does not surv
 | `runId` | `string` | Yes |  |
 | `workspaceId` | `string` | Yes |  |
 | `agentId` | `string` | Yes |  |
-| `status` | `"completed" \| "failed" \| "running" \| "queued" \| "cancelled"` | Yes |  |
+| `status` | `"completed" \| "failed" \| "queued" \| "running" \| "awaiting_approval" \| "cancelled"` | Yes |  |
 | `durationMs` | `null \| number` | Yes |  |
 | `costUsd` | `null \| number` | Yes |  |

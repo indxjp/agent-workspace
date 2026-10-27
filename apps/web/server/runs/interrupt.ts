@@ -19,6 +19,7 @@
  * boundary and always happens; this signal is the courtesy that stops the runtime sooner when it
  * can be reached at all. See `docs/adr/SDK-03-RUN-235-an-interrupt-is-a-control-plane-transition.md`.
  */
+import { defineSlot } from '../runtime-slot';
 import { publicRunFailure } from './failures';
 
 /** What a launcher knows about the runtime holding one run, while it holds it. */
@@ -27,14 +28,11 @@ export interface LiveRunHandle {
   readonly base: string;
   /** Private runner-manager authentication, the same headers the launcher's own requests carry. */
   readonly headers: Readonly<Record<string, string>>;
+  /** Stops what the launcher still does for the run on this process (its storage write-back). */
+  readonly onInterrupt?: () => void;
 }
 
-interface LiveRunRegistry {
-  /** Namespaced so it cannot collide with anything else on the global object. */
-  __agentWorkspaceLiveRuns__?: Map<string, LiveRunHandle>;
-}
-
-const registry = globalThis as typeof globalThis & LiveRunRegistry;
+const registry = defineSlot<Map<string, LiveRunHandle>>('__agentWorkspaceLiveRuns__');
 
 /**
  * How long the courtesy signal may hold the caller's request open.
@@ -48,8 +46,7 @@ const registry = globalThis as typeof globalThis & LiveRunRegistry;
 const INTERRUPT_SIGNAL_TIMEOUT_MS = 5_000;
 
 function liveRuns(): Map<string, LiveRunHandle> {
-  registry.__agentWorkspaceLiveRuns__ ??= new Map();
-  return registry.__agentWorkspaceLiveRuns__;
+  return registry.getOrCreate(() => new Map());
 }
 
 /** Record that this process is holding `runId`'s runtime connection. Called once `base` is known. */
@@ -112,5 +109,6 @@ export async function signalRuntimeInterrupt(
 export function signalLiveRun(runId: string, doFetch: typeof globalThis.fetch): Promise<void> {
   const handle = liveRuns().get(runId);
   if (handle === undefined) return Promise.resolve();
+  handle.onInterrupt?.();
   return signalRuntimeInterrupt(handle.base, runId, handle.headers, doFetch);
 }

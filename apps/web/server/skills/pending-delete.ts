@@ -1,70 +1,92 @@
 /**
- * The pending-delete marker of `DELETE /api/skills/:name`, and the catalog sync that respects it
+ * The pending delete of `DELETE /api/skills/:name`, and the catalog sync that respects it
  * (issue #240 review, ADR-0077 D3).
  *
  * `GET /api/skills` and `GET /api/skills/:name` upsert a catalog row for every skill whose
- * `skill-meta/<name>.json` they find. A delete removes the catalog row before the bytes, so without
- * a marker that sync would re-create the row between the two steps — owned by whoever listed, or as
- * a row with no bytes once the delete finishes. The marker (`skill-deletes/<name>.json`) is written
- * before the row goes and removed last. While it exists the sync never inserts a row, and it
- * records the owner, so the owning Builder can finish an interrupted delete.
+ * `skill-meta/<name>.json` they find. A delete marks the skill's row (`skills.pending_delete`: the
+ * owner and the revision numbers) before it removes any bytes, and removes the row last. While the
+ * mark exists the sync never answers with the skill, so nothing brings it back between the two
+ * steps, and the mark records the owner, so the owning Builder can finish an interrupted delete.
  */
-import type { CatalogSkill, ResourceCatalogRepository } from '@agent-workspace/core/db';
+import {
+  parsePendingSkillDelete,
+  type CatalogSkill,
+  type PendingSkillDelete,
+  type ResourceCatalogRepository,
+} from '@agent-workspace/core/db';
 
 import { SKILL_DELETE_PREFIX, skillDeleteMarkerKey, skillMetaKey } from './keys';
-import type { ObjectStore } from './object-store-bridge';
+import type { SkillObjects } from '../storage/store';
 
-/** What a pending delete recorded: the owner of the row it removed, when it had one. */
-export interface PendingSkillDelete {
-  readonly ownerPrincipalId: string | null;
-}
-
-/** The marker for `name`, or `null` when no delete of it is pending. */
-export async function readPendingSkillDelete(
-  store: ObjectStore,
+/**
+ * The marker object an earlier release wrote for a pending delete, or `null` when there is none.
+ * Nothing writes it any more.
+ */
+// storage-bridge(#1699): read `skill-deletes/<name>.json` until the marker objects are removed (#1676)
+export async function readLegacyPendingSkillDelete(
+  store: SkillObjects,
   name: string,
 ): Promise<PendingSkillDelete | null> {
   const object = await store.get(skillDeleteMarkerKey(name));
   if (object === null) return null;
   try {
-    const parsed: unknown = JSON.parse(Buffer.from(object.body).toString('utf8'));
-    if (typeof parsed === 'object' && parsed !== null && 'ownerPrincipalId' in parsed) {
-      const owner = parsed.ownerPrincipalId;
-      if (typeof owner === 'string') return { ownerPrincipalId: owner };
-    }
+    return parsePendingSkillDelete(JSON.parse(Buffer.from(object.body).toString('utf8')));
   } catch {
     // An unreadable marker still marks the delete as pending; it just proves no owner.
+    return parsePendingSkillDelete(null);
   }
-  return { ownerPrincipalId: null };
 }
 
-/** Record that a delete of `name` is under way, and whose skill it was. */
-export async function writePendingSkillDelete(
-  store: ObjectStore,
+/** Remove the legacy marker of `name`: the delete finished, or was refused before it changed anything. */
+// storage-bridge(#1699): the marker of a skill whose delete ended must not hide a later skill of that name
+export async function clearLegacyPendingSkillDelete(
+  store: SkillObjects,
   name: string,
-  pending: PendingSkillDelete,
 ): Promise<void> {
-  await store.put(skillDeleteMarkerKey(name), {
-    body: Buffer.from(JSON.stringify(pending), 'utf8'),
-    contentType: 'application/json',
-  });
-}
-
-/** Remove the marker: the delete finished, or was refused before it changed anything. */
-export async function clearPendingSkillDelete(store: ObjectStore, name: string): Promise<void> {
   await store.delete(skillDeleteMarkerKey(name));
 }
 
+/**
+ * The pending delete of `name`: the row's column, else the legacy marker object. A legacy marker
+ * found beside a row that has no column value is copied to the column, and the marker object stays.
+ * The copy follows the rule of a fresh delete: a skill an agent has assigned is not marked, so its
+ * legacy marker does not count (`null`), and the skill stays listed and usable.
+ */
+export async function pendingSkillDelete(
+  store: SkillObjects,
+  catalog: ResourceCatalogRepository,
+  name: string,
+): Promise<PendingSkillDelete | null> {
+  const row = (await catalog.listSkills()).find((skill) => skill.name === name);
+  const marked = row?.pendingDelete ?? null;
+  if (marked !== null) return marked;
+  const legacy = await readLegacyPendingSkillDelete(store, name);
+  if (legacy === null || row === undefined) return legacy;
+  return (await catalog.backfillSkillPendingDelete(name, legacy)) ? legacy : null;
+}
+
 /** The names of every skill with a delete pending in this workspace. */
-export async function pendingSkillDeleteNames(store: ObjectStore): Promise<ReadonlySet<string>> {
+async function pendingSkillDeleteNames(
+  store: SkillObjects,
+  catalog: ResourceCatalogRepository,
+  existing: readonly CatalogSkill[],
+): Promise<ReadonlySet<string>> {
+  const names = new Set(
+    existing.filter((row) => row.pendingDelete !== null).map((row) => row.name),
+  );
+  // storage-bridge(#1699): names pending only as legacy marker objects
   const prefix = `${SKILL_DELETE_PREFIX}/`;
   const suffix = '.json';
-  const names = new Set<string>();
   for (const entry of await store.list(SKILL_DELETE_PREFIX)) {
     if (entry.kind !== 'file' || !entry.key.startsWith(prefix) || !entry.key.endsWith(suffix)) {
       continue;
     }
-    names.add(entry.key.slice(prefix.length, entry.key.length - suffix.length));
+    const name = entry.key.slice(prefix.length, entry.key.length - suffix.length);
+    // A marker beside a row is only a pending delete if the skill is not in use (and then the
+    // column is filled); a marker with no row hides the name.
+    if (existing.some((row) => row.name === name)) {
+      if ((await pendingSkillDelete(store, catalog, name)) !== null) names.add(name);
+    } else names.add(name);
   }
   return names;
 }
@@ -72,32 +94,43 @@ export async function pendingSkillDeleteNames(store: ObjectStore): Promise<Reado
 /** What a read route would write to the catalog for one listed skill. */
 export type SkillCatalogSyncInput = Parameters<ResourceCatalogRepository['putSkill']>[0];
 
+/** What {@link syncSkillCatalogRow} needs to know, read once per request. */
+export interface SkillSyncContext {
+  readonly existing: readonly CatalogSkill[];
+  readonly pendingDeletes: ReadonlySet<string>;
+}
+
+export async function skillSyncContext(
+  store: SkillObjects,
+  catalog: ResourceCatalogRepository,
+): Promise<SkillSyncContext> {
+  const existing = await catalog.listSkills();
+  return { existing, pendingDeletes: await pendingSkillDeleteNames(store, catalog, existing) };
+}
+
 /**
  * Upsert the catalog row a read route found bytes for, unless a delete is pending, and return its
- * id — or `null` when the skill is being deleted and has no row left to answer with.
+ * id — or `null` when the skill is being deleted and so has nothing to answer with.
  *
- * - A pending delete never gets a row inserted: an existing row still answers with its id (the
- *   delete may yet be refused as in use), and a missing one leaves the skill out.
+ * - A pending delete never gets a row inserted, and one that has passed its in-use check (it holds
+ *   a mark) is left out, so a half-deleted skill is neither listed nor handed to its reader.
  * - A row this call inserted is checked once more. If the skill's platform record is gone or a
  *   delete started meanwhile, the sync raced a delete, so the row it inserted is removed again.
  *   Together with the delete's own final sweep, no sync leaves a row behind a delete.
  */
 export async function syncSkillCatalogRow(
-  store: ObjectStore,
+  store: SkillObjects,
   catalog: ResourceCatalogRepository,
   input: SkillCatalogSyncInput,
-  context: {
-    readonly existing: readonly CatalogSkill[];
-    readonly pendingDeletes: ReadonlySet<string>;
-  },
+  context: SkillSyncContext,
 ): Promise<string | null> {
+  if (context.pendingDeletes.has(input.name)) return null;
   const existing = context.existing.find((row) => row.name === input.name);
-  if (context.pendingDeletes.has(input.name)) return existing?.id ?? null;
   const row = await catalog.putSkill(input);
   if (existing?.id === row.id) return row.id;
   const raced =
     (await store.get(skillMetaKey(input.name))) === null ||
-    (await readPendingSkillDelete(store, input.name)) !== null;
+    (await pendingSkillDelete(store, catalog, input.name)) !== null;
   if (!raced) return row.id;
   await catalog.deleteSkill(input.name);
   return null;

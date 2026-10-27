@@ -4,6 +4,12 @@
  * Anthropic-compatible body for fields it does not interpret.
  */
 
+import type {
+  ModelConnectionConfig,
+  ModelConnectionConfigField,
+} from '@indx-workspace/contracts/models';
+import type { RegisteredProviderId } from './providers/registry.js';
+
 export type ModelInfo = {
   id: string;
   type: 'model';
@@ -31,10 +37,10 @@ type AnthropicCountTokensResponse = {
  * the gateway authentication layer; provider modules never discover them from process.env.
  */
 export type RequestContext = {
-  providerId: string;
+  providerId: RegisteredProviderId;
   credential: string;
   requestId: string;
-  settings: Readonly<Record<string, unknown>>;
+  settings: ModelConnectionConfig;
   /**
    * Headers received from the gateway client for this operation.
    *
@@ -136,5 +142,22 @@ export class ModelDiscoveryHttpError extends Error {
     super(`${provider} model discovery returned HTTP ${String(status)}.`);
     this.name = 'ModelDiscoveryHttpError';
     this.status = status;
+  }
+}
+
+/**
+ * A stored model connection lacks a config field its provider requires (for example an Azure row
+ * saved before `apiVersion` became mandatory). The router answers it with a typed 409. The message
+ * names only the provider id and the field name, never a value.
+ */
+export class ModelConnectionIncompleteError extends Error {
+  public readonly field: ModelConnectionConfigField;
+
+  public constructor(provider: string, field: ModelConnectionConfigField) {
+    super(
+      `The ${provider} model connection is missing config.${field}; set it on the model connection and retry.`,
+    );
+    this.name = 'ModelConnectionIncompleteError';
+    this.field = field;
   }
 }

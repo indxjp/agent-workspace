@@ -18,6 +18,8 @@
  */
 import { createHash } from 'node:crypto';
 
+import { formatStorageUrl } from '@indx-workspace/contracts/storage-url';
+
 import { COMPOSE_PROJECT_NAME_PATTERN, RESERVED_COMPOSE_PROJECT_NAME } from '../compose-project.ts';
 import { CLAUDE_AGENT_SDK_RUNTIME_IMAGE_KEY, type DeploymentImages } from '../deployment.ts';
 import type { DeploymentCloud, DeploymentProfile } from '../profile.ts';
@@ -98,11 +100,16 @@ const UNCONFIGURED_PRICING =
  * the way the PostgreSQL user is.
  */
 const COMPOSE_OBJECT_STORE_ENDPOINT = 'http://seaweedfs:8333';
+/** The loopback host port `templates/compose.yaml` publishes that gateway on (`SEAWEEDFS_PORT`). */
+const COMPOSE_OBJECT_STORE_HOST_PORT = 8333;
+/** Where the host's browser reaches that gateway: the published port above. */
+const COMPOSE_OBJECT_STORE_PUBLIC_ENDPOINT = `http://localhost:${String(COMPOSE_OBJECT_STORE_HOST_PORT)}`;
 const COMPOSE_OBJECT_STORE_ACCESS_KEY_ID = 'agent_workspace';
 
 interface ObjectStorePlacement {
   readonly backend: string;
   readonly endpoint: string;
+  readonly publicEndpoint: string;
   readonly bucket: string;
   readonly accessKeyId: string;
   readonly secretAccessKey: string;
@@ -118,7 +125,13 @@ function objectStorePlacement(
   profile: DeploymentProfile,
   objectStoreSecretKey: string,
 ): ObjectStorePlacement {
-  const empty = { endpoint: '', bucket: '', accessKeyId: '', secretAccessKey: '' };
+  const empty = {
+    endpoint: '',
+    publicEndpoint: '',
+    bucket: '',
+    accessKeyId: '',
+    secretAccessKey: '',
+  };
   if (profile.storage.objects === 'local-filesystem') {
     return { ...empty, backend: '', forcePathStyle: 'true' };
   }
@@ -141,6 +154,7 @@ function objectStorePlacement(
       // creation. Explicit `s3` declares an operator-provisioned bucket.
       backend: '',
       endpoint: COMPOSE_OBJECT_STORE_ENDPOINT,
+      publicEndpoint: COMPOSE_OBJECT_STORE_PUBLIC_ENDPOINT,
       bucket,
       accessKeyId: COMPOSE_OBJECT_STORE_ACCESS_KEY_ID,
       secretAccessKey: objectStoreSecretKey,
@@ -199,21 +213,73 @@ function objectCredentialLines(profile: DeploymentProfile): readonly string[] {
   ];
 }
 
-function objectEndpointLines(profile: DeploymentProfile, endpoint: string): readonly string[] {
+/** Where the Compose and `local-filesystem` profiles keep files, skills and session transcripts. */
+const LOCAL_STORAGE_ROOT = '/var/lib/agent-workspace';
+
+/**
+ * The `AW_STORAGE_URL` a profile renders (the storage design, §04), or `''` when a Terraform module
+ * supplies it. The bundled SeaweedFS gets the bucket, endpoint and path style the old names gave
+ * it, so a project's existing objects stay where they are.
+ */
+function storageUrl(profile: DeploymentProfile): string {
+  const objects = profile.storage.objects;
+  if (objects === 'local-filesystem') {
+    return formatStorageUrl({ kind: 'file', root: LOCAL_STORAGE_ROOT });
+  }
+  // The Blob account is a Terraform output, so the Container Apps module supplies the store.
+  if (objects.startsWith('azblob://')) return '';
+  const bucket = objects.slice(objects.indexOf('://') + '://'.length);
+  if (objects.startsWith('gcs://')) return formatStorageUrl({ kind: 'gcs', bucket, prefix: '' });
+  if (profile.cloud === 'local') {
+    return formatStorageUrl({
+      kind: 's3',
+      bucket,
+      prefix: '',
+      endpoint: COMPOSE_OBJECT_STORE_ENDPOINT,
+      publicEndpoint: COMPOSE_OBJECT_STORE_PUBLIC_ENDPOINT,
+      forcePathStyle: true,
+    });
+  }
+  // `deploy` adds the account's R2 endpoint, which only it knows.
+  return formatStorageUrl({
+    kind: 's3',
+    bucket,
+    prefix: '',
+    ...(profile.cloud === 'cloudflare' ? { region: 'auto' } : {}),
+    forcePathStyle: false,
+  });
+}
+
+const SIGNED_UPLOAD_LINES = [
+  '# Largest signed upload in bytes. Blank keeps the server default, 5 GiB.',
+  'AW_STORAGE_SIGNED_UPLOAD_MAX_BYTES=',
+];
+
+function storageUrlLines(
+  profile: DeploymentProfile,
+  url: string,
+  objects: ObjectStorePlacement,
+): readonly string[] {
   return [
+    '# Where files, skills and session transcripts live, in one URL. No key or password belongs in',
+    '# it: the credential lines below, or the workload identity, supply those.',
     ...(profile.storage.objects.startsWith('azblob://')
       ? [
-          '# Terraform supplies the Blob account service URL here, for example:',
-          '# https://<account>.blob.core.windows.net',
+          '# Leave blank: the Container Apps Terraform module supplies the Blob store',
+          '# (azblob://<account>/<container>); the storage account is one of its outputs.',
         ]
       : []),
-    ...(profile.cloud === 'cloudflare'
+    `AW_STORAGE_URL=${url}`,
+    ...(objects.endpoint === COMPOSE_OBJECT_STORE_ENDPOINT
       ? [
-          '# Leave blank: the control plane deploy (a later release) sets it to',
-          '# https://<CLOUDFLARE_ACCOUNT_ID>.r2.cloudflarestorage.com. Set it here to override.',
+          '# The bundled SeaweedFS starts empty: the server creates the bucket on first boot.',
+          'AW_STORAGE_CREATE_BUCKET=true',
         ]
       : []),
-    `OBJECT_STORAGE_ENDPOINT=${endpoint}`,
+    ...SIGNED_UPLOAD_LINES,
+    ...objectCredentialLines(profile),
+    `OBJECT_STORAGE_ACCESS_KEY_ID=${objects.accessKeyId}`,
+    `OBJECT_STORAGE_SECRET_ACCESS_KEY=${objects.secretAccessKey}`,
   ];
 }
 
@@ -391,6 +457,7 @@ function identityLines(profile: DeploymentProfile): readonly string[] {
 export function renderEnv(input: EnvRenderInput): string {
   const { profile, secrets, images } = input;
   const objects = objectStorePlacement(profile, secrets.objectStoreSecretKey);
+  const url = storageUrl(profile);
   const addresses = serviceAddresses(profile);
 
   return [
@@ -422,18 +489,12 @@ export function renderEnv(input: EnvRenderInput): string {
     // applies profiles, so the service's `${…:?}` demands must hold even when it never starts.
     `SEAWEEDFS_ACCESS_KEY_ID=${composeOnly(profile, COMPOSE_OBJECT_STORE_ACCESS_KEY_ID)}`,
     `SEAWEEDFS_SECRET_ACCESS_KEY=${composeOnly(profile, secrets.objectStoreSecretKey)}`,
+    '# The loopback host port SeaweedFS is published on. Change it to run beside another project',
+    '# that uses 8333, and change the publicEndpoint port in AW_STORAGE_URL with it.',
+    `SEAWEEDFS_PORT=${composeOnly(profile, String(COMPOSE_OBJECT_STORE_HOST_PORT))}`,
     `COMPOSE_PROFILES=${objects.endpoint === COMPOSE_OBJECT_STORE_ENDPOINT ? 'object-storage' : ''}`,
-    `OBJECT_STORAGE_BACKEND=${objects.backend}`,
-    ...objectEndpointLines(profile, objects.endpoint),
-    `OBJECT_STORAGE_BUCKET=${objects.bucket}`,
-    ...objectCredentialLines(profile),
-    `OBJECT_STORAGE_ACCESS_KEY_ID=${objects.accessKeyId}`,
-    `OBJECT_STORAGE_SECRET_ACCESS_KEY=${objects.secretAccessKey}`,
-    `OBJECT_STORAGE_FORCE_PATH_STYLE=${objects.forcePathStyle}`,
+    ...storageUrlLines(profile, url, objects),
     `AWS_REGION=${profile.cloud === 'cloudflare' ? 'auto' : 'us-east-1'}`,
-    `AW_FILE_STORAGE_ROOT=${profile.storage.objects.startsWith('azblob://') ? '' : '/var/lib/agent-workspace/files'}`,
-    `AW_SKILL_STORAGE_ROOT=${profile.storage.objects.startsWith('azblob://') ? '' : '/var/lib/agent-workspace/skills'}`,
-    'AW_SESSION_TRANSCRIPT_ROOT=/var/lib/agent-workspace/sessions',
     `# Runtime: ${profile.runtime.default}`,
     `RUNTIME_DRIVER=${profile.runtime.default}`,
     ...(profile.runtime.default === 'external'

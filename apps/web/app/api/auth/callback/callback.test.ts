@@ -19,9 +19,10 @@ import {
 } from '../../../../server/auth';
 import { conferredBy } from '../../../../server/rbac/conferral';
 import { createMemoryDirectory } from '../../../../server/rbac/memory-directory';
-import { clearRbacRuntime, configureRbacRuntime } from '../../../../server/rbac/runtime';
 
 import { handleCallback, type CallbackDeps } from './route';
+import { clearApplicationContext } from '../../../../server/application-context';
+import { installTestDomains } from '../../../../server/application-context-fixtures';
 
 const SECRET = 'a'.repeat(32);
 const HOST = 'app.example.test';
@@ -101,7 +102,7 @@ describe('POST /api/auth/callback', () => {
     ]) {
       delete process.env[name];
     }
-    clearRbacRuntime();
+    clearApplicationContext();
   });
 
   it('refuses a cross-origin callback before ever calling finishOidcLogin', async () => {
@@ -160,9 +161,11 @@ describe('POST /api/auth/callback', () => {
 
   it('mints only a pre-membership invitation identity for a new OIDC identity', async () => {
     const directory = createMemoryDirectory();
-    configureRbacRuntime({
-      directory,
-      identify: () => Promise.resolve(null),
+    installTestDomains({
+      rbac: {
+        directory,
+        identify: () => Promise.resolve(null),
+      },
     });
     const response = await handleCallback(
       request({ cookies: { [oidcTransactionCookieName()]: 'txn' } }),
@@ -199,7 +202,7 @@ describe('POST /api/auth/callback', () => {
     const membership = (await former.listMemberships())[0];
     if (membership === undefined) throw new Error('membership setup failed');
     expect((await former.deleteMembership(membership.id)).kind).toBe('deleted');
-    configureRbacRuntime({ directory, identify: () => Promise.resolve(null) });
+    installTestDomains({ rbac: { directory, identify: () => Promise.resolve(null) } });
 
     const response = await handleCallback(
       request({ cookies: { [oidcTransactionCookieName()]: 'txn' } }),
@@ -217,7 +220,7 @@ describe('POST /api/auth/callback', () => {
       workspaces: [{ id: 'ws-a', slug: 'acme', name: 'Acme' }],
       users: [{ email: 'solo@example.test', name: 'Solo', workspaceId: 'ws-a', role: 'admin' }],
     });
-    configureRbacRuntime({ directory, identify: () => Promise.resolve(null) });
+    installTestDomains({ rbac: { directory, identify: () => Promise.resolve(null) } });
     const response = await handleCallback(
       request({ cookies: { [oidcTransactionCookieName()]: 'txn' } }),
       fakeDeps({ subject: 'sub-solo', email: 'solo@example.test', name: null }),
@@ -245,7 +248,7 @@ describe('POST /api/auth/callback', () => {
     const alice = await directory.findUserByEmail('alice@example.test');
     if (alice === null) throw new Error('seed did not create alice');
     await directory.linkIdentity(ISSUER, 'sub-alice', alice.id);
-    configureRbacRuntime({ directory, identify: () => Promise.resolve(null) });
+    installTestDomains({ rbac: { directory, identify: () => Promise.resolve(null) } });
 
     // Alice changed her provider email to the Owner's address.
     const response = await handleCallback(
@@ -275,7 +278,7 @@ describe('POST /api/auth/callback', () => {
       workspaces: [{ id: 'ws-a', slug: 'acme', name: 'Acme' }],
       users: [{ email: 'solo@example.test', name: 'Solo', workspaceId: 'ws-a', role: 'admin' }],
     });
-    configureRbacRuntime({ directory, identify: () => Promise.resolve(null) });
+    installTestDomains({ rbac: { directory, identify: () => Promise.resolve(null) } });
     const response = await handleCallback(
       request({ cookies: { [oidcTransactionCookieName()]: 'txn' } }),
       fakeDeps({ subject: 'sub-solo', email: 'solo@example.test', name: null, next }),
@@ -296,7 +299,7 @@ describe('POST /api/auth/callback', () => {
       email: 'multi@example.test',
       role: conferredBy('owner', 'viewer', 'test'),
     });
-    configureRbacRuntime({ directory, identify: () => Promise.resolve(null) });
+    installTestDomains({ rbac: { directory, identify: () => Promise.resolve(null) } });
 
     const response = await handleCallback(
       request({ cookies: { [oidcTransactionCookieName()]: 'txn' } }),
@@ -329,7 +332,7 @@ describe('POST /api/auth/callback', () => {
       email: 'multi@example.test',
       role: conferredBy('owner', 'viewer', 'test'),
     });
-    configureRbacRuntime({ directory, identify: () => Promise.resolve(null) });
+    installTestDomains({ rbac: { directory, identify: () => Promise.resolve(null) } });
 
     const response = await handleCallback(
       request({ cookies: { [oidcTransactionCookieName()]: 'txn' } }),
@@ -400,11 +403,11 @@ describe('POST /api/auth/callback', () => {
     expect(rejected.status).toBe(401);
     expect(await rejected.json()).toMatchObject({ error: 'oidc_callback_rejected' });
 
-    // No `configureRbacRuntime` anywhere in this test, so the identity resolves and then finds no
-    // runtime — the last refusal before the first redirecting arm. The typed code is asserted on
+    // No `installTestDomains({ rbac })` anywhere in this test, so the identity resolves and then
+    // finds no runtime — the last refusal before the first redirecting arm. The typed code is asserted on
     // every arm above and here because the statuses collide (503 twice, 400 twice): status alone
     // cannot tell this arm from `oidc_not_configured`, so a later edit that hoisted
-    // `configureRbacRuntime` into a shared `beforeEach` would silently make six refusals five.
+    // `installTestDomains({ rbac })` into a shared `beforeEach` would silently make six refusals five.
     const noRuntime = await handleCallback(request(withTransaction), fakeDeps(identity));
     expect(noRuntime.status).toBe(503);
     expect(await noRuntime.json()).toMatchObject({ error: 'rbac_runtime_not_configured' });
@@ -422,9 +425,11 @@ describe('POST /api/auth/callback', () => {
   });
 
   it('clears the OIDC transaction cookie on every path, including a refusal', async () => {
-    configureRbacRuntime({
-      directory: createMemoryDirectory(),
-      identify: () => Promise.resolve(null),
+    installTestDomains({
+      rbac: {
+        directory: createMemoryDirectory(),
+        identify: () => Promise.resolve(null),
+      },
     });
     const response = await handleCallback(
       request({ cookies: { [oidcTransactionCookieName()]: 'txn' } }),

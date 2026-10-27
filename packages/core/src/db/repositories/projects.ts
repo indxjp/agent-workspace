@@ -9,6 +9,7 @@ import {
   type NewProject,
   type Project,
 } from '../schema/index.js';
+import { refuseReservedFileBindings } from './project-files.js';
 import { refuseToolConnectorBindings } from './project-mcp-servers.js';
 import { requireWorkspaceScope, type WorkspaceScope } from './scope.js';
 
@@ -164,6 +165,7 @@ export function createDatabaseProjectRepositoryProvider(db: Database): ProjectRe
             )[0];
             if (created === undefined) throw new Error('project insert returned no row');
             await refuseToolConnectorBindings(tx, workspaceId, mcpServerIds);
+            await refuseReservedFileBindings(tx, workspaceId, fileIds);
             if (fileIds.length > 0)
               await tx
                 .insert(projectFiles)
@@ -212,6 +214,7 @@ export function createDatabaseProjectRepositoryProvider(db: Database): ProjectRe
                   )[0];
             if (updated === undefined) throw new Error('project update returned no row');
             if (fileIds !== undefined) {
+              await refuseReservedFileBindings(tx, workspaceId, fileIds);
               await tx
                 .delete(projectFiles)
                 .where(

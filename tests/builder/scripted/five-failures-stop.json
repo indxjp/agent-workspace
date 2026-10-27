@@ -1,0 +1,11 @@
+{
+  "turns": [
+    { "toolUses": [{ "name": "mcp__aw-control__draft_check", "input": { "body": "@draft:erp" } }] },
+    { "toolUses": [{ "name": "mcp__aw-control__draft_check", "input": { "body": "@draft:erp" } }] },
+    { "toolUses": [{ "name": "mcp__aw-control__draft_check", "input": { "body": "@draft:erp" } }] },
+    { "toolUses": [{ "name": "mcp__aw-control__draft_check", "input": { "body": "@draft:erp" } }] },
+    { "toolUses": [{ "name": "mcp__aw-control__draft_check", "input": { "body": "@draft:erp" } }] },
+    { "toolUses": [{ "name": "mcp__aw-control__draft_check", "input": { "body": "@draft:erp" } }] },
+    { "text": "The check keeps failing with agent_definition_references_missing. Stopping." }
+  ]
+}

@@ -30,34 +30,7 @@ import {
   type SecretResource,
 } from './contract';
 import type { SecretReferrers, WorkspaceSecretsStore } from './store';
-
-/** A status and a body, before either becomes an HTTP response. `body: null` means "no content". */
-export interface ApiResult {
-  readonly status: number;
-  readonly body: unknown;
-}
-
-/** The error envelope every failing route returns. */
-export interface ApiProblem {
-  readonly error: {
-    readonly code: string;
-    readonly message: string;
-    readonly details?: readonly string[];
-  };
-}
-
-export function problem(
-  status: number,
-  code: string,
-  message: string,
-  details?: readonly string[],
-): ApiResult {
-  const error =
-    details === undefined || details.length === 0
-      ? { code, message }
-      : { code, message, details: [...details] };
-  return { status, body: { error } satisfies ApiProblem };
-}
+import { problem, type ApiResult } from '../http/result';
 
 /** Validate a path id before it reaches the store. `secrets.id` is a `uuid` column. */
 export function requireSecretId(
@@ -152,6 +125,13 @@ export async function replaceSecret(
       return { status: 200, body: toSecretResource(outcome.secret) };
     case 'not-found':
       return secretNotFound();
+    case 'in-use':
+      return problem(
+        409,
+        'secret_in_use',
+        'This secret is the credential of a storage connection. Rotate it with PUT /api/storage-connections/:id/credential.',
+        secretReferrerDetails(outcome.referrers),
+      );
     default: {
       const unreachable: never = outcome;
       return problem(
@@ -202,6 +182,7 @@ function secretReferrerDetails(referrers: SecretReferrers): readonly string[] {
   const all: InUseReferrer[] = [
     ...referrers.connectorIds.map((id) => ({ kind: 'connector' as const, id })),
     ...referrers.modelConnectionIds.map((id) => ({ kind: 'model-connection' as const, id })),
+    ...referrers.storageConnectionIds.map((id) => ({ kind: 'storage-connection' as const, id })),
   ];
   return all.map(formatInUseReferrer);
 }

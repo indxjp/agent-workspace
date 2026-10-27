@@ -7,3 +7,13 @@ export interface RunTelemetryAttributes {
   readonly durationMs: number | null;
   readonly costUsd: number | null;
 }
+
+export {
+  createJsonLogger,
+  type JsonLoggerOptions,
+  type LogFields,
+  type Logger,
+  type LogLevel,
+} from './logger.js';
+export { redacted } from './redact.js';
+export { parseTraceparent, traceHeaders, type TraceContext } from './traceparent.js';

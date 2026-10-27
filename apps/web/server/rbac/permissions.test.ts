@@ -24,6 +24,7 @@ import {
   parseResource,
   policyBecause,
   RESOURCES,
+  type Grant,
   type Resource,
 } from './permissions';
 import { ROLES } from './roles';
@@ -447,11 +448,61 @@ describe('the grants are the ones §21’s sentences require', () => {
     }
   });
 
+  it('corrects the four cells where a lower role out-ranked a higher one (ADR-0152)', () => {
+    // Builder runs its own agents and the ones an `agent_grants` row names (`permitted` is "own or
+    // granted"), so it is no longer denied what a Viewer with the same row is allowed.
+    expect(grantsFor('builder', 'agents')).toEqual({
+      read: 'any',
+      write: 'own',
+      run: 'permitted',
+    });
+    // Admin runs every connector, as Builder runs its own.
+    expect(grantsFor('admin', 'connectors')).toEqual({ read: 'any', write: 'any', run: 'any' });
+    // Admin reads and writes every project, as Builder does its own.
+    expect(grantsFor('admin', 'projects')).toEqual({ read: 'any', write: 'any', run: 'none' });
+  });
+
   it('gives no role but Owner anything over secrets — §21 names none', () => {
     for (const role of ROLES) {
       const expected = role === 'owner' ? 'any' : 'none';
       expect(grantsFor(role, 'secrets').read, role).toBe(expected);
       expect(grantsFor(role, 'secrets').write, role).toBe(expected);
     }
+  });
+});
+
+/** Does grant `higher` admit every ownership answer grant `lower` admits? (`decide.ts#applyGrant`) */
+function covers(higher: Grant, lower: Grant): boolean {
+  // `permitted` admits `own` as well as `permitted` (ADR-0152), so it covers `own`.
+  return (
+    higher === 'any' ||
+    higher === lower ||
+    lower === 'none' ||
+    (higher === 'permitted' && lower === 'own')
+  );
+}
+
+describe('roles are monotonic (ADR-0152)', () => {
+  it('gives every role at least the access of every role below it, on every cell', () => {
+    const inverted = ROLES.flatMap((higher, index) =>
+      ROLES.slice(index + 1).flatMap((lower) =>
+        RESOURCES.flatMap((resource) =>
+          (['read', 'write', 'run'] as const)
+            .filter(
+              (operation) =>
+                !covers(
+                  grantsFor(higher, resource)[operation],
+                  grantsFor(lower, resource)[operation],
+                ),
+            )
+            .map(
+              (operation) =>
+                `${resource}.${operation}: ${higher}=${grantsFor(higher, resource)[operation]} < ` +
+                `${lower}=${grantsFor(lower, resource)[operation]}`,
+            ),
+        ),
+      ),
+    );
+    expect(inverted).toEqual([]);
   });
 });

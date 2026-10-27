@@ -12,6 +12,8 @@
  * decides the tag on positive assertions only, ending in an explicit `unknown-failure` else
  * (ADR-0015) — there is no path here on which an unrecognised failure reads as success.
  */
+import type { REMOTE_CONNECTOR_TRANSPORTS } from '@indx-workspace/contracts/connectors';
+
 import {
   classify,
   MESSAGES,
@@ -44,7 +46,7 @@ export type TestConnectionConfig =
       readonly credentialConfigured: boolean;
     }
   | {
-      readonly transport: 'http' | 'sse';
+      readonly transport: (typeof REMOTE_CONNECTOR_TRANSPORTS)[number];
       readonly url: string;
       readonly headers: Readonly<Record<string, string>>;
       readonly credentialConfigured: boolean;

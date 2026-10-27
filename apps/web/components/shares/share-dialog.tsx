@@ -1,55 +1,25 @@
 'use client';
+import type { ShareExpiry, ShareVisibility } from '@indx-workspace/contracts/shares';
 import { useEffect, useRef, useState } from 'react';
 
-export type ShareSubject = {
-  readonly type: 'agent' | 'session' | 'project' | 'skill';
-  readonly id: string;
-  readonly label: string;
-};
+import { browserClient } from '../../lib/browser-client';
+import { publishShare, sharePublishCommand, type ShareSubject } from './share-dialog-model';
 
-export type SharePublishPayload = {
-  readonly subjectType: ShareSubject['type'];
-  readonly subjectId: string;
-  readonly subjectLabel: string;
-  readonly visibility: 'private' | 'workspace' | 'public';
-  readonly mode?: 'definition';
-  readonly expiry: '24 h' | '7 days' | '30 days' | 'never';
-  readonly passphrase?: string;
-  readonly transcript?: readonly unknown[];
-};
-
-/** Build the strict API payload, including the visible transcript for session snapshots. */
-export function sharePublishPayload(
-  subject: ShareSubject,
-  visibility: SharePublishPayload['visibility'],
-  expiry: SharePublishPayload['expiry'],
-  passphrase: string,
-  transcript?: readonly unknown[],
-): SharePublishPayload {
-  return {
-    subjectType: subject.type,
-    subjectId: subject.id,
-    subjectLabel: subject.label,
-    visibility,
-    ...(subject.type === 'agent' ? { mode: 'definition' as const } : {}),
-    expiry,
-    ...(passphrase ? { passphrase } : {}),
-    ...(subject.type === 'session' && transcript !== undefined ? { transcript } : {}),
-  };
-}
+export type { ShareSubject } from './share-dialog-model';
 
 export function ShareDialog({
   subject,
   triggerLabel = 'Share',
-  transcript,
+  runIds,
 }: Readonly<{
   subject: ShareSubject;
   triggerLabel?: string;
-  transcript?: readonly unknown[];
+  /** For a session share: the runs on screen, whose stored text the share publishes. */
+  runIds?: readonly string[];
 }>) {
   const [open, setOpen] = useState(false);
-  const [visibility, setVisibility] = useState<'private' | 'workspace' | 'public'>('workspace');
-  const [expiry, setExpiry] = useState<'24 h' | '7 days' | '30 days' | 'never'>('never');
+  const [visibility, setVisibility] = useState<ShareVisibility>('workspace');
+  const [expiry, setExpiry] = useState<ShareExpiry>('never');
   const [passphrase, setPassphrase] = useState('');
   const [result, setResult] = useState<string | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -70,39 +40,28 @@ export function ShareDialog({
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [open]);
   async function publish() {
-    try {
-      const response = await fetch('/api/shares', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(
-          sharePublishPayload(subject, visibility, expiry, passphrase, transcript),
-        ),
-      });
-      const body = (await response.json().catch(() => ({}))) as {
-        url?: unknown;
-        error?: { message?: unknown };
-      };
-      if (!response.ok || typeof body.url !== 'string') {
-        setResult(
-          typeof body.error?.message === 'string'
-            ? body.error.message
-            : `Share failed (${response.status})`,
-        );
-        return;
-      }
-      const url = body.url;
-      // The clipboard is absent on an insecure origin (the call throws) and may refuse; either way
-      // the link still shows for a manual copy.
-      const copied = await Promise.resolve()
-        .then(() => navigator.clipboard.writeText(url))
-        .then(
-          () => true,
-          () => false,
-        );
-      setResult(copied ? `Link copied: ${url}` : url);
-    } catch {
-      setResult('Share could not be created.');
+    const outcome = await publishShare(
+      browserClient(),
+      sharePublishCommand(subject, visibility, expiry, passphrase, runIds),
+    );
+    if ('problem' in outcome) {
+      setResult(outcome.problem);
+      return;
     }
+    const url = outcome.url;
+    if (url === null) {
+      setResult(visibility === 'private' ? 'Shared with you only.' : 'Shared with the workspace.');
+      return;
+    }
+    // The clipboard is absent on an insecure origin (the call throws) and may refuse; either way
+    // the link still shows for a manual copy.
+    const copied = await Promise.resolve()
+      .then(() => navigator.clipboard.writeText(url))
+      .then(
+        () => true,
+        () => false,
+      );
+    setResult(copied ? `Link copied: ${url}` : url);
   }
   return (
     <>

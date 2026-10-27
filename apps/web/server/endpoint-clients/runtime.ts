@@ -6,6 +6,9 @@
  *
  * Every method takes the caller's workspace id and answers only for that workspace, so a row in
  * another workspace is indistinguishable from one that does not exist.
+ *
+ * The composition root builds it once and installs it as `ApplicationContext.endpointClients`; with
+ * no context installed every route answers `503 endpoint_clients_runtime_not_configured`.
  */
 import type { ApiKeyResource } from '@indx-workspace/contracts/api-keys';
 import type { EndpointClientResource } from '@indx-workspace/contracts/endpoint-clients';
@@ -103,21 +106,4 @@ export interface EndpointClientsRuntime {
     principal: Pick<Principal, 'workspaceId' | 'principalId' | 'userId' | 'label'>,
     event: EndpointClientAuditEvent,
   ): Promise<void>;
-}
-
-interface Registry {
-  __agentWorkspaceEndpointClientsRuntime__?: EndpointClientsRuntime;
-}
-const registry = globalThis as typeof globalThis & Registry;
-
-export function configureEndpointClientsRuntime(runtime: EndpointClientsRuntime): void {
-  registry.__agentWorkspaceEndpointClientsRuntime__ = runtime;
-}
-
-export function clearEndpointClientsRuntime(): void {
-  delete registry.__agentWorkspaceEndpointClientsRuntime__;
-}
-
-export function currentEndpointClientsRuntime(): EndpointClientsRuntime | null {
-  return registry.__agentWorkspaceEndpointClientsRuntime__ ?? null;
 }

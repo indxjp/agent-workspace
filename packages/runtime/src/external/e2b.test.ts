@@ -391,6 +391,7 @@ describe('external driver with the e2b provider (ADR-0120)', () => {
       gpu: false,
       managedByProvider: true,
       typicalStartMs: null,
+      fileTransfer: 'push-archive',
     });
   });
 

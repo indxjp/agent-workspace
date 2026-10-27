@@ -190,11 +190,139 @@ describe('normaliseOpenApi', () => {
     expect(result.openapi.operations.map((o) => o.path)).toEqual(['/pets/{petId}']);
   });
 
-  it('refuses POST /pets and operationId:addPet as writes', () => {
-    for (const rule of ['POST /pets', 'operationId:addPet']) {
-      const result = normaliseOpenApi(input(fixture('petstore-3.0.yaml'), { allow: [rule] }));
-      expect(refusal(result).code).toBe('connector_write_unsupported');
-    }
+  describe('write operations (#1304)', () => {
+    const jsonBody = {
+      required: true,
+      content: {
+        'application/json': { schema: { type: 'object', properties: { n: { type: 'string' } } } },
+      },
+    };
+    const writes = (
+      operation: Record<string, unknown>,
+      extra: Record<string, unknown> = {},
+    ): string => doc({ '/quotes': { post: { ...okResponse, ...operation }, ...extra } });
+
+    it('admits POST /pets and operationId:addPet, storing the JSON body as an argument', () => {
+      for (const rule of ['POST /pets', 'operationId:addPet']) {
+        const result = normaliseOpenApi(input(fixture('petstore-3.0.yaml'), { allow: [rule] }));
+        if (!result.ok) throw new Error(result.details.join('; '));
+        expect(result.openapi.operations.map((o) => o.method)).toEqual(['POST']);
+      }
+    });
+
+    it('appends the JSON requestBody schema as the body parameter, after the parameters', () => {
+      const result = normaliseOpenApi(
+        input(
+          writes({
+            operationId: 'createQuote',
+            parameters: [{ name: 'dryRun', in: 'query', schema: { type: 'boolean' } }],
+            requestBody: jsonBody,
+          }),
+          { allow: ['POST /quotes'] },
+        ),
+      );
+      if (!result.ok) throw new Error(result.details.join('; '));
+      expect(result.parameters['createQuote']).toEqual([
+        { name: 'dryRun', in: 'query', required: false, schema: { type: 'boolean' } },
+        {
+          name: 'body',
+          in: 'body',
+          required: true,
+          schema: jsonBody.content['application/json'].schema,
+        },
+      ]);
+    });
+
+    it('marks an optional body not required', () => {
+      const result = normaliseOpenApi(
+        input(
+          writes({
+            operationId: 'createQuote',
+            requestBody: { content: { 'application/json': {} } },
+          }),
+          { allow: ['POST /quotes'] },
+        ),
+      );
+      if (!result.ok) throw new Error(result.details.join('; '));
+      expect(result.parameters['createQuote']).toEqual([
+        { name: 'body', in: 'body', required: false, schema: {} },
+      ]);
+    });
+
+    it('gives a DELETE without a requestBody no body parameter', () => {
+      const result = normaliseOpenApi(
+        input(
+          doc({
+            '/quotes/{id}': {
+              delete: {
+                ...okResponse,
+                operationId: 'deleteQuote',
+                parameters: [{ name: 'id', in: 'path', required: true }],
+              },
+            },
+          }),
+          { allow: ['DELETE /quotes/*'] },
+        ),
+      );
+      if (!result.ok) throw new Error(result.details.join('; '));
+      expect(result.parameters['deleteQuote']).toEqual([
+        { name: 'id', in: 'path', required: true },
+      ]);
+    });
+
+    it('refuses a write whose request body is not application/json', () => {
+      const result = normaliseOpenApi(
+        input(
+          writes({ requestBody: { content: { 'text/plain': { schema: { type: 'string' } } } } }),
+          {
+            allow: ['POST /quotes'],
+          },
+        ),
+      );
+      expect(refusal(result)).toEqual({
+        code: 'connector_spec_invalid',
+        details: ['POST /quotes: only application/json request bodies are supported'],
+      });
+    });
+
+    it('refuses a write that has a parameter named body next to a request body', () => {
+      const result = normaliseOpenApi(
+        input(writes({ requestBody: jsonBody, parameters: [{ name: 'body', in: 'query' }] }), {
+          allow: ['POST /quotes'],
+        }),
+      );
+      expect(refusal(result).code).toBe('connector_spec_invalid');
+      expect(refusal(result).details[0]).toMatch(/^POST \/quotes: a parameter named "body"/u);
+    });
+
+    it('ignores a requestBody on a read, and an unadmitted write of any kind', () => {
+      const result = normaliseOpenApi(
+        input(
+          doc({
+            '/quotes': {
+              get: {
+                ...okResponse,
+                operationId: 'listQuotes',
+                requestBody: { content: { 'text/plain': {} } },
+              },
+              post: { ...okResponse, requestBody: { content: { 'text/plain': {} } } },
+            },
+          }),
+          { allow: ['GET /quotes'] },
+        ),
+      );
+      if (!result.ok) throw new Error(result.details.join('; '));
+      expect(result.parameters['listQuotes']).toEqual([]);
+    });
+
+    it('refuses an operationId naming an unsupported method as connector_spec_invalid', () => {
+      const result = normaliseOpenApi(
+        input(doc({ '/quotes': { options: { ...okResponse, operationId: 'quoteOptions' } } }), {
+          allow: ['operationId:quoteOptions'],
+        }),
+      );
+      expect(refusal(result).code).toBe('connector_spec_invalid');
+    });
   });
 
   describe('the SD15 base URL', () => {

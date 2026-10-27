@@ -21,6 +21,7 @@ import {
   foreignKey,
   index,
   integer,
+  jsonb,
   numeric,
   pgTable,
   text,
@@ -29,6 +30,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+import { RUN_STATUSES } from '@indx-workspace/contracts/runs';
 
 import { engineIds } from './agents.js';
 import { createdAt, primaryKeyId, updatedAt } from './columns.js';
@@ -41,12 +43,23 @@ import { workspaces } from './workspaces.js';
  * The run lifecycle. `cancelled` is distinct from `failed` because §14.3's runtime contract
  * has an interrupt: a user pressing stop is not an error, and a UI that paints it red is
  * lying.
+ *
+ * `awaiting_approval` is a run that has stopped for a human decision (ADR-0145 D1): its runtime is
+ * over, its tokens are revoked, and `pending_approval` names the call it waits on. It is stopped,
+ * not terminal: it still moves on, to `completed` (approved and continued elsewhere) or `cancelled`
+ * (denied, interrupted or expired). The list is the contract's `RUN_STATUSES` itself.
  */
-export const runStatuses = ['queued', 'running', 'completed', 'failed', 'cancelled'] as const;
+export const runStatuses = RUN_STATUSES;
 export type RunStatus = (typeof runStatuses)[number];
 
-/** The statuses at which a run is over and `ended_at` must be set. */
+/** The statuses at which a run is over for good. */
 export const terminalRunStatuses = ['completed', 'failed', 'cancelled'] as const;
+
+/**
+ * The statuses at which the run's runtime is over and `ended_at` must be set: the terminal ones and
+ * `awaiting_approval`. A stopped run does not make its session busy.
+ */
+export const stoppedRunStatuses = [...terminalRunStatuses, 'awaiting_approval'] as const;
 
 /**
  * Whether usage settlement is trustworthy — issue #134, and **deliberately separate** from
@@ -145,12 +158,87 @@ export const runs = pgTable(
       .notNull()
       .default(sql`'{}'::uuid[]`),
     /**
+     * The workspace file paths this run was granted (ADR-0147): files and folder roots, exactly what
+     * the run request carried after the policy ceiling, snapshotted by
+     * `RunRepository.snapshotFileGrants` while the run is `queued`. Run-scoped file search answers
+     * only from these. Empty (the default) means no grant, and a search then finds nothing.
+     *
+     * Paths, not file ids, and no foreign key: PostgreSQL cannot put one on an array element, and a
+     * path names the same object the run was given. Every search is also confined to the run's own
+     * workspace by the tenant-scoped repository, so a path cannot reach another tenant's text.
+     */
+    fileGrants: text('file_grants')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    /**
      * The origin of the session's tool sandbox that serves this run's code tools (ADR-0118 TS3),
      * written by the server once while the run is `queued`. The gateway forwards the run's tool
      * calls to it; the run request never carries it, so no caller chooses where the gateway
      * dials. NULL for a run with no code tool and for every run recorded before migration 0045.
      */
     toolSandboxOrigin: text('tool_sandbox_origin'),
+    /**
+     * The call an `awaiting_approval` run waits on (ADR-0145 D2.1): `{ toolName, canonicalCall }`,
+     * where `canonicalCall` is the canonical JSON text of the call. NULL in every other status
+     * (`runs_awaiting_approval_has_pending`), and kept as history once the run moves on. Persisted
+     * JSON is `unknown`: the repository validates it on write and on read.
+     */
+    pendingApproval: jsonb('pending_approval'),
+    /**
+     * When an `awaiting_approval` run stops waiting (ADR-0145 D2.4): 24 hours after it paused,
+     * written by the same update that pauses it. A decision that arrives after it cancels the run
+     * instead (`approval_expired`). Set in every `awaiting_approval` row
+     * (`runs_awaiting_approval_has_deadline`) and kept as history once the run moves on; NULL for a
+     * run that never paused.
+     */
+    approvalDeadlineAt: timestamp('approval_deadline_at', { withTimezone: true, mode: 'date' }),
+    /**
+     * The calls a continuation run may make without asking again (ADR-0145 D2.1): an array of
+     * `{ toolName, canonicalCall }`, each good for one use. `[]` (the default) for every run that
+     * is not a continuation. Validated on write and on read, like {@link pendingApproval}.
+     */
+    approvedToolCalls: jsonb('approved_tool_calls')
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    /**
+     * The paused run this run continues (ADR-0145 D2.3, ADR-0151): written once, by the decision
+     * that completes that run and inserts this one. NULL for a run that is not a continuation. A
+     * paused run has at most one continuation (`runs_continues_run_id_unique`). The reference is
+     * tenant-paired, declared below as `runs_continues_run_workspace_fk`.
+     */
+    continuesRunId: uuid('continues_run_id'),
+    /**
+     * When this continuation's approved calls were used up (ADR-0151, RF-303): stamped by the same
+     * update that moves the run out of `queued`, which happens once and before the runner is sent
+     * anything, so the approval is consumed durably before any approved call can execute. NULL for
+     * a run with no approved calls and for one not yet started. Nothing clears it, and
+     * `runs_consumed_approvals_never_queued` refuses to put such a run back in the queue: a retry
+     * would run an approved call a second time, so a continuation the runner accepted is never
+     * retried.
+     */
+    approvalsConsumedAt: timestamp('approvals_consumed_at', { withTimezone: true, mode: 'date' }),
+    /**
+     * The approved calls that have run (ADR-0145 D2.1, #1541): an array of `{ toolName,
+     * canonicalCall }`, each added once, by `consumeApprovedCall` only, in the one update that also
+     * checks the call is in {@link approvedToolCalls} and not yet here. So it is a subset of
+     * `approved_tool_calls` by construction (no CHECK: it would need jsonb containment in the
+     * formal model) and a call is good for one use however many callers race for it. `[]` (the
+     * default) until the gateway runs an approved write. Validated on read, like
+     * {@link approvedToolCalls}.
+     */
+    consumedToolCalls: jsonb('consumed_tool_calls')
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    /**
+     * The start request's `Idempotency-Key`, prefixed with the acting principal's id
+     * (`<principalId>:<key>`), so a key is scoped to one workspace and one principal (ADR-0151,
+     * #250). NULL for a run started without one. A paused run keeps it: a replay returns the
+     * original run whatever its status, and the key is never freed.
+     */
+    idempotencyKey: text('idempotency_key'),
+    /** The SHA-256 of the start request a key was first used with; set exactly when the key is. */
+    idempotencyRequestHash: text('idempotency_request_hash'),
     startedAt: timestamp('started_at', { withTimezone: true, mode: 'date' }),
     endedAt: timestamp('ended_at', { withTimezone: true, mode: 'date' }),
     inputTokens: integer('input_tokens').notNull().default(0),
@@ -175,6 +263,25 @@ export const runs = pgTable(
      * case. NULL for a run recorded before migration 0042. End-user text: it goes with its run.
      */
     prompt: text('prompt'),
+    /**
+     * The JSON Schema object the run was asked to answer with (ADR-0143), written once when the
+     * run is created. NULL for a run that asked for none and for every run recorded before
+     * migration 0054. Opaque here: the public boundary checks its dialect and size.
+     */
+    outputSchema: jsonb('output_schema').$type<Record<string, unknown>>(),
+    /**
+     * The caller identity the run was started to act for (ADR-0142 D2), written once when the run
+     * is created so an approval continuation can carry it on (ADR-0157). NULL for a run that
+     * asserted none and for every run recorded before migration 0067. A person identifier: the same
+     * string a trigger stores, never rendered on the run resource.
+     */
+    subject: text('subject'),
+    /**
+     * The run's final answer, `{ text, structured }` (ADR-0143), written in the same transaction
+     * that moves the run to `completed` and at no other time. NULL until then, for a failed or
+     * cancelled run, and for every run recorded before migration 0054.
+     */
+    output: jsonb('output').$type<{ text: string; structured: unknown }>(),
     /** See {@link AccountingState}. Existing rows are backfilled to `unavailable`, not `complete`
      * — they were never settled by this mechanism, and saying otherwise is the false zero issue
      * #134 removes. */
@@ -193,6 +300,15 @@ export const runs = pgTable(
     index('runs_session_created_idx').on(table.sessionId, table.createdAt),
     index('runs_model_connection_idx').on(table.modelConnectionId),
     uniqueIndex('runs_id_workspace_unique').on(table.id, table.workspaceId),
+    // ADR-0151: one run per start key. The key already carries the principal.
+    uniqueIndex('runs_workspace_idempotency_key_unique')
+      .on(table.workspaceId, table.idempotencyKey)
+      .where(sql`${table.idempotencyKey} is not null`),
+    // ADR-0151: one continuation per paused run. The decision path already serialises two
+    // decisions under the paused run's lock; this makes a second continuation impossible anyway.
+    uniqueIndex('runs_continues_run_id_unique')
+      .on(table.continuesRunId)
+      .where(sql`${table.continuesRunId} is not null`),
     // §25, and the reason `session_id` above carries no reference of its own. The file header
     // refuses to store `agent_id` because "a second copy could disagree with sessions.agent_id
     // and nothing in the schema would stop it". `workspace_id` IS a second copy, of
@@ -214,17 +330,45 @@ export const runs = pgTable(
       foreignColumns: [modelConnections.id, modelConnections.workspaceId],
       name: 'runs_model_connection_workspace_fk',
     }),
-    oneOf('runs_status_valid', table.status, runStatuses),
+    // A continuation continues a run of its own workspace. No `.onDelete()` action, like
+    // `workspace_principals_acts_for_workspace_fk`: both runs belong to one session, so the
+    // session's cascade removes them together, and nothing deletes a single run.
+    foreignKey({
+      columns: [table.continuesRunId, table.workspaceId],
+      foreignColumns: [table.id, table.workspaceId],
+      name: 'runs_continues_run_workspace_fk',
+    }),
+    oneOf('runs_status_valid', table.status, runStatuses, { snake: true }),
     oneOf('runs_provider_valid', table.provider, modelProviders),
     oneOf('runs_engine_valid', table.engine, engineIds),
     oneOf('runs_accounting_state_valid', table.accountingState, accountingStates),
-    // A finished run has an end time and an unfinished one does not. Without this, a
+    // A stopped run has an end time and a running one does not. Without this, a
     // `completed` run with a NULL `ended_at` renders a duration of "NaN s" in the UI — the
     // exact class of failure ADR-0015 is about, moved one layer earlier so it cannot
     // reach the renderer.
     check(
       'runs_ended_at_iff_terminal',
-      sql`(${table.status} in ${sql.raw(renderValueList(terminalRunStatuses))}) = (${table.endedAt} is not null)`,
+      sql`(${table.status} in ${sql.raw(renderValueList(stoppedRunStatuses, { snake: true }))}) = (${table.endedAt} is not null)`,
+    ),
+    check(
+      'runs_awaiting_approval_has_pending',
+      sql`${table.status} <> 'awaiting_approval' or ${table.pendingApproval} is not null`,
+    ),
+    check(
+      'runs_awaiting_approval_has_deadline',
+      sql`${table.status} <> 'awaiting_approval' or ${table.approvalDeadlineAt} is not null`,
+    ),
+    check(
+      'runs_consumed_approvals_never_queued',
+      sql`${table.approvalsConsumedAt} is null or ${table.status} <> 'queued'`,
+    ),
+    check(
+      'runs_idempotency_key_has_hash',
+      sql`(${table.idempotencyKey} is null) = (${table.idempotencyRequestHash} is null)`,
+    ),
+    check(
+      'runs_output_only_when_completed',
+      sql`${table.output} is null or ${table.status} = 'completed'`,
     ),
     check(
       'runs_ended_after_started',

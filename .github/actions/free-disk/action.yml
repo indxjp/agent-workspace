@@ -17,7 +17,9 @@ runs:
   using: composite
   steps:
     - name: Delete the preinstalled SDKs this repository does not use
-      if: inputs.wait != 'true'
+      # MS-A2 has the room, and its Docker images belong to other jobs too. Blacksmith also reports
+      # runner.environment 'self-hosted', so the runner name tells the two apart.
+      if: inputs.wait != 'true' && !startsWith(runner.name, 'ito-MS-A2')
       shell: bash
       run: |
         set -euo pipefail
@@ -31,7 +33,7 @@ runs:
         ' > "$RUNNER_TEMP/free-disk.log" 2>&1 &
 
     - name: Wait for the disk to be freed
-      if: inputs.wait == 'true'
+      if: inputs.wait == 'true' && !startsWith(runner.name, 'ito-MS-A2')
       shell: bash
       run: |
         set -euo pipefail

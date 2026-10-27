@@ -16,7 +16,7 @@ vi.mock('next/navigation', () => ({
 }));
 
 const { ProjectsScreen } = await import('./projects-screen');
-const { describeEmptyProjectList, parseProjectFilter, projectsListQuery } = await import('./model');
+const { describeEmptyProjectList, parseProjectFilter } = await import('./model');
 
 function render(query: string): string {
   searchParams = new URLSearchParams(query);
@@ -49,15 +49,6 @@ describe('ProjectsScreen', () => {
 
   it('falls back to the active view for a filter the URL spells wrong', () => {
     expect(render('archived=nonsense')).toContain('<option value="active" selected="">');
-  });
-
-  it('asks the list route for the slice the URL names', () => {
-    // The screen fetches in an effect this renderer never runs, so the URL itself is pinned here —
-    // `projects-screen.tsx` builds it from exactly these two functions.
-    expect(projectsListQuery(parseProjectFilter('archived'))).toBe(
-      '/api/projects?archived=archived',
-    );
-    expect(projectsListQuery(parseProjectFilter(null))).toBe('/api/projects?archived=active');
   });
 
   it('has empty-state copy that fits the filter the view is showing', () => {

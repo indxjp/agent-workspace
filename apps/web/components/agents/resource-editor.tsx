@@ -12,20 +12,25 @@
  * module's own header for why no route hands back a name directly. `useAgentProjects` is the
  * read-only project-association half (`docs/adr/W9-PROJ-125-project-resources-narrow-never-widen.md`).
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type { AgentPermissions, AgentResourceAssignments } from '../../contracts/agents';
-import { ProjectListResponseSchema, type ProjectResource } from '../../contracts/projects';
+import type { ProjectResource } from '../../contracts/projects';
+import { browserClient } from '../../lib/browser-client';
+import { loadAgentProjects, loadResourceCatalogs } from './agent-requests-model';
 import {
-  fetchFileCatalog,
   projectProvidedGroups,
-  readNamedCatalog,
   resolveFileGrants,
   resolveNamedAssignments,
   type FileCatalog,
   type NamedCatalog,
 } from './model';
-import { FilePicker, toFileRows, type FilePickerSelection } from '../resources/resource-screens';
+import { FilePicker, type FilePickerSelection } from '../resources/resource-screens';
+import {
+  ConnectedStorage,
+  StorageGrantList,
+  useStorageConnections,
+} from '../storage/connected-storage';
 
 const CARD = 'rounded-(--radius) border border-border bg-surface p-4';
 const CONTROL =
@@ -61,37 +66,19 @@ export function useResourceCatalogs(): CatalogsState {
   const [state, setState] = useState<CatalogsState>({ kind: 'loading' });
   useEffect(() => {
     let active = true;
-    void (async () => {
-      try {
-        const files = await fetchFileCatalog(async (path) => {
-          const response = await fetch(`/api/files?path=${encodeURIComponent(path)}`, {
-            headers: { accept: 'application/json' },
-          });
-          if (!response.ok) return [];
-          return toFileRows((await response.json()) as Record<string, unknown>);
-        });
-        const [skillsResponse, connectorsResponse] = await Promise.all([
-          fetch('/api/skills', { headers: { accept: 'application/json' } }),
-          fetch('/api/connectors', { headers: { accept: 'application/json' } }),
-        ]);
-        const skills = readNamedCatalog(
-          skillsResponse.ok ? await skillsResponse.json() : { skills: [] },
-          'skills',
-        );
-        const connectors = readNamedCatalog(
-          connectorsResponse.ok ? await connectorsResponse.json() : { connectors: [] },
-          'connectors',
-        );
-        if (active) setState({ kind: 'ready', files, skills, connectors });
-      } catch (error) {
+    void loadResourceCatalogs(browserClient()).then(
+      (catalogs) => {
+        if (active) setState({ kind: 'ready', ...catalogs });
+      },
+      (error: unknown) => {
         if (active) {
           setState({
             kind: 'failed',
             reason: `Resource names could not be loaded: ${error instanceof Error ? error.message : String(error)}`,
           });
         }
-      }
-    })();
+      },
+    );
     return () => {
       active = false;
     };
@@ -110,26 +97,19 @@ export function useAgentProjects(): ProjectsState {
   const [state, setState] = useState<ProjectsState>({ kind: 'loading' });
   useEffect(() => {
     let active = true;
-    void fetch('/api/projects', { headers: { accept: 'application/json' } })
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new Error(`GET /api/projects returned ${String(response.status)}.`);
-        }
-        const parsed = ProjectListResponseSchema.safeParse(await response.json());
-        if (!parsed.success) throw new Error('The projects response did not match its schema.');
-        return parsed.data.projects;
-      })
-      .then((projects) => {
+    void loadAgentProjects(browserClient()).then(
+      (projects) => {
         if (active) setState({ kind: 'ready', projects });
-      })
-      .catch((error: unknown) => {
+      },
+      (error: unknown) => {
         if (active) {
           setState({
             kind: 'failed',
             reason: `Project associations could not be loaded: ${error instanceof Error ? error.message : String(error)}`,
           });
         }
-      });
+      },
+    );
     return () => {
       active = false;
     };
@@ -158,14 +138,28 @@ export function FileAssignments({
   catalog,
   writeFilesAllowed,
   onChange,
+  storage,
 }: Readonly<{
   files: AgentResourceAssignments['files'];
   catalog: FileCatalog | null;
   writeFilesAllowed: boolean;
   onChange: (next: AgentResourceAssignments['files']) => void;
+  /** Connected storage: the agent, its saved grants and the callback for a newly saved grant. */
+  storage?: {
+    agentId: string;
+    grants: AgentResourceAssignments['storageGrants'];
+    onGranted: (next: AgentResourceAssignments) => void;
+  };
 }>) {
   const [browsing, setBrowsing] = useState(false);
+  const [source, setSource] = useState<'workspace' | 'storage'>('workspace');
   const [pending, setPending] = useState<readonly FilePickerSelection[]>([]);
+  const grantsRef = useRef<HTMLUListElement>(null);
+  const addRef = useRef<HTMLButtonElement>(null);
+  const grants = storage?.grants ?? [];
+  const connections = useStorageConnections(
+    storage !== undefined && ((browsing && source === 'storage') || grants.length > 0),
+  );
   const rows = resolveFileGrants(files, catalog);
 
   const setAccess = (fileId: string, access: 'read' | 'read-write') => {
@@ -223,9 +217,22 @@ export function FileAssignments({
           ))}
         </ul>
       )}
+      {storage === undefined ? null : (
+        <StorageGrantList
+          agentId={storage.agentId}
+          grants={grants}
+          connections={connections}
+          listRef={grantsRef}
+          onChanged={(next) => {
+            storage.onGranted(next);
+            addRef.current?.focus();
+          }}
+        />
+      )}
       <div className="mt-3">
         <button
           type="button"
+          ref={addRef}
           className={BTN_SM}
           onClick={() => {
             setBrowsing((current) => !current);
@@ -236,15 +243,47 @@ export function FileAssignments({
         </button>
         {browsing ? (
           <div className="mt-3 rounded border border-border p-3">
-            <FilePicker onChange={setPending} />
-            <button
-              type="button"
-              className={`${BTN_SM} mt-2`}
-              disabled={pending.length === 0}
-              onClick={addPending}
-            >
-              Add {pending.length} selected
-            </button>
+            {storage === undefined ? null : (
+              <div className="mb-3 flex gap-2">
+                <button
+                  type="button"
+                  className={BTN_SM}
+                  aria-pressed={source === 'workspace'}
+                  onClick={() => setSource('workspace')}
+                >
+                  Workspace files
+                </button>
+                <button
+                  type="button"
+                  className={BTN_SM}
+                  aria-pressed={source === 'storage'}
+                  onClick={() => setSource('storage')}
+                >
+                  Connected storage
+                </button>
+              </div>
+            )}
+            {storage !== undefined && source === 'storage' ? (
+              <ConnectedStorage
+                agentId={storage.agentId}
+                connections={connections}
+                writeFilesAllowed={writeFilesAllowed}
+                grantsRef={grantsRef}
+                onGranted={storage.onGranted}
+              />
+            ) : (
+              <>
+                <FilePicker onChange={setPending} />
+                <button
+                  type="button"
+                  className={`${BTN_SM} mt-2`}
+                  disabled={pending.length === 0}
+                  onClick={addPending}
+                >
+                  Add {pending.length} selected
+                </button>
+              </>
+            )}
           </div>
         ) : null}
       </div>
@@ -429,6 +468,11 @@ export function AgentResourcesEditor({
         catalog={files}
         writeFilesAllowed={permissions.writeFiles}
         onChange={(next) => onChange({ ...assignments, files: next })}
+        storage={{
+          agentId,
+          grants: assignments.storageGrants,
+          onGranted: (next) => onChange({ ...assignments, storageGrants: next.storageGrants }),
+        }}
       />
       <NamedAssignments
         heading="Skills"

@@ -26,19 +26,28 @@
  * core, only a `local` move writes them (issue #612): a `production` move moves its pointer alone,
  * so it cannot meet `name-conflict`.
  *
- * An applied `applyAndPoint` also records the move's `agent-changed` audit row (issue #478), with
- * the workspace, action and subject fixed from the call as core fixes them; a test reads the rows
- * with `audits`. A refusal records none. Every pointer write also appends to the pointer history
+ * An applied `applyAndPoint` also records the move's `agent-changed` audit row (issue #478), and a
+ * create given `agentCreatedAudit` its `agent-created` row (built and parsed before the create writes
+ * anything), with the workspace, action and subject fixed from the call as core fixes them; a test
+ * reads the rows with `audits`. A refusal records none. Every pointer write also appends to the pointer history
  * (issue #615), which `listMoves` answers newest first in insertion order. The audit table's own constraints (the actor-principal
  * foreign key, the not-blank labels) are not mirrored: only PostgreSQL can prove that a refused
  * audit row rolls the move back, and `pointers.postgres.test.ts` does.
  */
+import {
+  AgentCreatedAuditDetailsSchema,
+  type AgentCreatedAuditDetails,
+} from '@indx-workspace/contracts/observability';
+
 import {
   appliedRuntimeProfileId,
   bodyDeclaresSubagents,
   bodyHasDescription,
   bodySubagentNames,
   narrowFileGrants,
+  narrowStorageGrants,
+  storageGrantChange,
+  type StorageGrantRef,
   resolveFromRows,
   type AgentDefinitionReferenceKind,
   type AgentPointerAudit,
@@ -48,6 +57,7 @@ import {
   type AgentVersionListing,
   type AgentVersionPointerRecord,
   type AgentSubagentCandidate,
+  type AgentVersionStoreProvider,
   type AgentVersionRecord,
   type ApplyAndPointOutcome,
   type CreateAgentVersionInput,
@@ -58,17 +68,18 @@ import {
   type PointedSurface,
   type ReferenceNames,
   type ResolveDefinitionOutcome,
-} from '@agent-workspace/core/db';
+  type WorkspaceAgentVersionStore,
+} from './store';
 
 import {
   toStoredPolicy,
   type AgentStoreProvider,
+  type WorkspaceAgentStore,
   type CreateAgentOutcome,
   type UpdateAgentOutcome,
 } from '../agents/store';
 import type { AgentResourceStoreProvider } from '../agents/resource-store';
 import type { LatestEvaluation } from './release';
-import type { AgentVersionStoreProvider, WorkspaceAgentVersionStore } from './store';
 
 /** A row a definition name may match: its id and the name (a file's path) it is known by. */
 export interface SeededReference {
@@ -78,6 +89,8 @@ export interface SeededReference {
   readonly stdio?: boolean;
   /** A tool connector (`openapi`/`postgres`), not an MCP one. */
   readonly tool?: boolean;
+  /** A skill whose delete is under way: it does not resolve and answers `skill_deleting`. */
+  readonly deleting?: boolean;
 }
 
 /** The rows each reference kind may match, for one workspace. */
@@ -113,8 +126,10 @@ export type SeededPointer = AgentVersionPointerRecord & { readonly workspaceId: 
 /** An `agent-changed` audit row as the memory store records it — the `audit_events` mirror. */
 export type RecordedPointerAudit = AgentPointerAudit & {
   readonly workspaceId: string;
-  readonly action: 'agent-changed';
+  readonly action: 'agent-changed' | 'storage-grant-changed' | 'agent-created';
   readonly subjectId: string;
+  /** Set on an `agent-created` row only. */
+  readonly details?: AgentCreatedAuditDetails;
 };
 
 /** The provider plus what a test reads back: how many versions and pointers exist. */
@@ -139,17 +154,29 @@ export interface InMemoryAgentVersionStoreProvider extends AgentVersionStoreProv
 /** What a materialisation writes beside the agent row: core's three assignment tables. */
 export interface MaterialisedAssignments {
   readonly skillIds: readonly string[];
+  readonly skillRevisions?: Readonly<Record<string, number>> | undefined;
   readonly connectorIds: readonly string[];
   /** After the #133 ceiling: `read-write` only when the agent may write files. */
   readonly files: readonly FileGrant[];
+  /** After the same ceiling, with the connection ids the deploy resolved. */
+  readonly storageGrants: readonly StorageGrantRef[];
 }
 
-/** Core's `writeAssignments`: one row per id, file grants under the #133 ceiling. */
+/** A folder listed twice keeps one grant, as the table's unique key does. */
+function distinctFolders(grants: readonly StorageGrantRef[]): readonly StorageGrantRef[] {
+  return [
+    ...new Map(grants.map((grant) => [`${grant.connectionId}\n${grant.prefix}`, grant])).values(),
+  ];
+}
+
+/** Core's `writeAssignments`: one row per id, file and storage grants under the #133 ceiling. */
 function toAssignments(agent: MaterialisedAgent): MaterialisedAssignments {
   return {
     skillIds: [...new Set(agent.references.skillIds)],
+    skillRevisions: agent.references.skillRevisions,
     connectorIds: [...new Set(agent.references.connectorIds)],
     files: narrowFileGrants(agent.references.files, agent.permissions),
+    storageGrants: narrowStorageGrants(agent.references.storageGrants ?? [], agent.permissions),
   };
 }
 
@@ -172,6 +199,16 @@ function surfacesOf(body: unknown): readonly StoredSurface[] {
 }
 
 /** An agent-store refusal on a materialising write, as the core outcome it stands in for. */
+/** The seeded rows, with the skills being deleted moved out of `skill` (they do not resolve). */
+function deletingSkillsApart(seeded: SeededReferences) {
+  const skills = seeded.skill ?? [];
+  return {
+    ...seeded,
+    skill: skills.filter((row) => row.deleting !== true),
+    deletingSkill: skills.filter((row) => row.deleting === true),
+  };
+}
+
 function agentWriteRefusal(
   outcome: Exclude<
     UpdateAgentOutcome | CreateAgentOutcome,
@@ -212,6 +249,32 @@ function rowOf(agent: MaterialisedAgent): {
   };
 }
 
+/**
+ * The `agent-created` row of a create, parsed before the create writes anything; the new agent's id
+ * does not exist yet, so the caller replaces the `PENDING` ids once it does. Null without the input.
+ */
+const PENDING = 'pending';
+function createdAuditRow(
+  workspaceId: string,
+  input: Parameters<WorkspaceAgentVersionStore['createAgentWithFirstVersion']>[0],
+): (RecordedPointerAudit & { readonly details: AgentCreatedAuditDetails }) | null {
+  if (input.agentCreatedAudit === undefined) return null;
+  const { details, ...actor } = input.agentCreatedAudit;
+  return {
+    ...actor,
+    workspaceId,
+    action: 'agent-created',
+    subjectId: PENDING,
+    subjectLabel: input.agent.name,
+    details: AgentCreatedAuditDetailsSchema.parse({
+      ...details,
+      agentId: PENDING,
+      version: 1,
+      via: input.version.via,
+    }),
+  };
+}
+
 /** Create the in-memory provider. Versions, pointers and assignments live in this closure. */
 export function createInMemoryAgentVersionStoreProvider(
   options: InMemoryAgentVersionStoreOptions,
@@ -225,6 +288,8 @@ export function createInMemoryAgentVersionStoreProvider(
     readonly agentId: string;
   })[] = [];
   const assignments = new Map<string, MaterialisedAssignments>();
+  /** Each version's own storage grants, by version id (`agent_version_storage_grants`). */
+  const versionGrants = new Map<string, readonly StorageGrantRef[]>();
   /** The newest evaluation of each version id; a version id is unique across workspaces. */
   const evaluations = new Map<string, LatestEvaluation>();
   // ponytail: an edit is detected as a moved `updatedAt`, because the in-memory agent store has no
@@ -232,6 +297,13 @@ export function createInMemoryAgentVersionStoreProvider(
   // against PostgreSQL.
   const writtenFrom = new Map<string, { versionId: string; agentUpdatedAt: number }>();
   const now = options.now ?? ((): Date => new Date());
+  const countCreatedSince = async (
+    workspaceAgents: Pick<WorkspaceAgentStore, 'list'>,
+    since: Date,
+  ): Promise<number> =>
+    (await workspaceAgents.list()).filter(
+      (agent) => agent.builtin === undefined && agent.createdAt >= since,
+    ).length;
   const newId = options.newId ?? ((): string => crypto.randomUUID());
   const principalIsUnknown = (principalId: string): boolean =>
     options.knownPrincipalIds !== undefined && !options.knownPrincipalIds.has(principalId);
@@ -272,6 +344,23 @@ export function createInMemoryAgentVersionStoreProvider(
     const agents = options.agents.forWorkspace(workspaceId);
     const agentExists = async (agentId: string): Promise<boolean> =>
       (await agents.get(agentId)) !== null;
+    /** Core's `storage-grant-changed` audit: one row when the grants differ, none otherwise. */
+    const recordGrantChange = (
+      agentId: string,
+      before: readonly StorageGrantRef[],
+      after: readonly StorageGrantRef[],
+      audit: AgentPointerAudit | undefined,
+    ): void => {
+      const change = storageGrantChange(before, after);
+      if (audit === undefined || change === null) return;
+      audits.push({
+        ...audit,
+        subjectLabel: `${audit.subjectLabel}: ${change}`,
+        workspaceId,
+        action: 'storage-grant-changed',
+        subjectId: agentId,
+      });
+    };
     const versionsOf = (agentId: string): AgentVersionRecord[] =>
       versions.filter((row) => row.workspaceId === workspaceId && row.agentId === agentId);
     const versionById = (versionId: string): AgentVersionRecord | undefined =>
@@ -344,11 +433,13 @@ export function createInMemoryAgentVersionStoreProvider(
       async create(agentId, input: CreateAgentVersionInput): Promise<CreateAgentVersionOutcome> {
         if (!(await agentExists(agentId))) return { kind: 'not-found' };
         if (principalIsUnknown(input.createdByPrincipalId)) return { kind: 'unknown-principal' };
+        const number = Math.max(0, ...versionsOf(agentId).map((row) => row.number)) + 1;
+        if (input.number !== undefined && input.number !== number) return { kind: 'number-taken' };
         const version: AgentVersionRecord = {
           id: newId(),
           workspaceId,
           agentId,
-          number: Math.max(0, ...versionsOf(agentId).map((row) => row.number)) + 1,
+          number,
           summary: input.summary,
           via: input.via,
           body: input.body,
@@ -356,6 +447,7 @@ export function createInMemoryAgentVersionStoreProvider(
           createdAt: now(),
         };
         versions.push(version);
+        versionGrants.set(version.id, distinctFolders(input.storageGrants ?? []));
         return { kind: 'created', version };
       },
 
@@ -387,7 +479,7 @@ export function createInMemoryAgentVersionStoreProvider(
         return Promise.resolve(
           resolveFromRows(
             references,
-            options.references?.[workspaceId] ?? {},
+            deletingSkillsApart(options.references?.[workspaceId] ?? {}),
             options.defaultRuntimeProfiles?.[workspaceId] ?? null,
           ),
         );
@@ -417,7 +509,7 @@ export function createInMemoryAgentVersionStoreProvider(
           const wanted = new Set(ids[kind] ?? []);
           return new Map(
             (seeded[kind] ?? [])
-              .filter((row) => wanted.has(row.id))
+              .filter((row) => wanted.has(row.id) && row.deleting !== true)
               .map((row) => [row.id, row.name]),
           );
         };
@@ -451,9 +543,36 @@ export function createInMemoryAgentVersionStoreProvider(
         );
       },
 
+      storageGrantsOf(versionId): Promise<readonly StorageGrantRef[]> {
+        const own = versions.some((row) => row.id === versionId && row.workspaceId === workspaceId);
+        return Promise.resolve(own ? (versionGrants.get(versionId) ?? []) : []);
+      },
+
+      async isConnectionGranted(connectionId): Promise<boolean> {
+        for (const [agentId, row] of assignments) {
+          if (
+            row.storageGrants.some((grant) => grant.connectionId === connectionId) &&
+            (await agentExists(agentId))
+          ) {
+            return true;
+          }
+        }
+        return false;
+      },
+
       async applyAndPoint(agentId, input): Promise<ApplyAndPointOutcome> {
         const current = await agents.get(agentId);
         if (current === null) return { kind: 'not-found' };
+        if (input.expectedVersion !== undefined) {
+          const pointed =
+            pointers.find(
+              (row) =>
+                row.workspaceId === workspaceId &&
+                row.agentId === agentId &&
+                row.environment === input.environment,
+            )?.number ?? null;
+          if (pointed !== input.expectedVersion) return { kind: 'pointer-moved', current: pointed };
+        }
         const version = versionsOf(agentId).find((row) => row.number === input.number);
         if (version === undefined) return { kind: 'version-not-found' };
         const rewritesRow = input.environment === 'local';
@@ -501,10 +620,17 @@ export function createInMemoryAgentVersionStoreProvider(
           throw new Error(`the in-memory agent ${agentId} vanished during a materialisation`);
         }
         const written = toAssignments(input.agent);
+        recordGrantChange(
+          agentId,
+          assignments.get(agentId)?.storageGrants ?? [],
+          written.storageGrants,
+          input.audit,
+        );
         assignments.set(agentId, written);
         await options.resources?.forWorkspace(workspaceId).replace(agentId, {
           files: written.files,
           skillIds: written.skillIds,
+          skillRevisions: written.skillRevisions,
           connectorIds: written.connectorIds,
         });
         const pointer = movePointer(pointed, input.reason, input.audit.actorPrincipalId);
@@ -520,6 +646,8 @@ export function createInMemoryAgentVersionStoreProvider(
         };
       },
 
+      agentsCreatedSince: (since) => countCreatedSince(agents, since),
+
       async createAgentWithFirstVersion(input): Promise<CreateAgentWithFirstVersionOutcome> {
         const { agent: materialised, version: versionInput, environment } = input;
         if (
@@ -528,6 +656,12 @@ export function createInMemoryAgentVersionStoreProvider(
         ) {
           return { kind: 'unknown-principal' };
         }
+        if (
+          input.quota !== undefined &&
+          (await countCreatedSince(agents, input.quota.since)) >= input.quota.limit
+        ) {
+          return { kind: 'quota-exceeded' };
+        }
         const nesting = await subagentNesting(null, materialised.name, versionInput.body);
         if (nesting !== null) return nesting;
         if (await nameTaken(materialised.name, null)) {
@@ -535,6 +669,10 @@ export function createInMemoryAgentVersionStoreProvider(
         }
         const taken = takenSurfaceName(null, versionInput.body, environment);
         if (taken !== null) return { kind: 'surface-name-taken', name: taken };
+
+        // Built and parsed before any write, so a refused row leaves nothing behind; the new agent's
+        // id is filled in below, once the agent exists.
+        const createdAudit = createdAuditRow(workspaceId, input);
 
         const created = await agents.create(rowOf(materialised), {
           principalId: materialised.ownerPrincipalId,
@@ -552,7 +690,9 @@ export function createInMemoryAgentVersionStoreProvider(
         if (withPolicy.kind !== 'updated') {
           throw new Error(`the in-memory agent ${agentId} vanished during its own create`);
         }
-        assignments.set(agentId, toAssignments(materialised));
+        const first = toAssignments(materialised);
+        assignments.set(agentId, first);
+        recordGrantChange(agentId, [], first.storageGrants, input.audit);
         const version: AgentVersionRecord = {
           id: newId(),
           workspaceId,
@@ -565,6 +705,7 @@ export function createInMemoryAgentVersionStoreProvider(
           createdAt: now(),
         };
         versions.push(version);
+        versionGrants.set(version.id, first.storageGrants);
         writtenFrom.set(agentId, {
           versionId: version.id,
           agentUpdatedAt: withPolicy.agent.updatedAt.getTime(),
@@ -581,6 +722,14 @@ export function createInMemoryAgentVersionStoreProvider(
           'set',
           versionInput.createdByPrincipalId,
         );
+        if (createdAudit !== null) {
+          audits.push({
+            ...createdAudit,
+            subjectId: agentId,
+            // Parsed again with the real id; it cannot fail, as the same details passed above.
+            details: AgentCreatedAuditDetailsSchema.parse({ ...createdAudit.details, agentId }),
+          });
+        }
         return {
           kind: 'created',
           agent: { ...withPolicy.agent, policy: materialised.policy },

@@ -13,7 +13,11 @@ const SPEC = {
       get: { operationId: 'getOrder' },
       delete: { operationId: 'deleteOrder' },
     },
-    '/orders': { get: { operationId: 'listOrders' }, post: { operationId: 'createOrder' } },
+    '/orders': {
+      get: { operationId: 'listOrders' },
+      post: { operationId: 'createOrder' },
+      options: { operationId: 'optionsOrder' },
+    },
     '/admin': { get: { operationId: 'getAdmin' } },
   },
   components: { schemas: { Order: { type: 'object' } } },
@@ -52,6 +56,12 @@ describe('narrowOpenApiSpec', () => {
     });
   });
 
+  it('admits a write operation named by an operationId rule (#1304)', () => {
+    expect(pathsOf(narrowOpenApiSpec(JSON_PROJECT, tool(['operationId:createOrder'])))).toEqual({
+      '/orders': { post: { operationId: 'createOrder' } },
+    });
+  });
+
   it('drops a path-level $ref, whose operations the rules never saw', () => {
     const project = projectWith(
       JSON.stringify({
@@ -86,7 +96,7 @@ describe('narrowOpenApiSpec', () => {
       { specRef: 'https://example.com/other.json', allow: ['GET /a'] },
     ],
     ['rules that admit nothing', tool(['GET /nothing'])],
-    ['a write rule', tool(['GET /orders/*', 'operationId:createOrder'])],
+    ['an unsupported method', tool(['GET /orders/*', 'operationId:optionsOrder'])],
   ])('fails for %s', (_name, input) => {
     expect(narrowOpenApiSpec(JSON_PROJECT, input).ok).toBe(false);
   });

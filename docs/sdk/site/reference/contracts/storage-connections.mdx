@@ -1,0 +1,233 @@
+---
+title: "storage-connections"
+description: "The @indx-workspace/contracts/storage-connections exports, sorted alphabetically."
+---
+
+<Note>This page is generated from `packages/contracts/src/storage-connections.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## CreateStorageConnectionInput
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `url` | `string` | Yes |  |
+| `allowedPrefixes` | `string[]` | Yes |  |
+| `writeAllowed` | `undefined \| false \| true` | No |  |
+| `credential` | `undefined \| { provider: "s3"; accessKeyId: string; secretAccessKey: string; sessionToken?: string \| undefined; } \| { provider: "gcs"; serviceAccountJson: string; } \| { provider: "gcs"; accessToken: string; } \| { provider: "azblob"; accountKey: string; } \| { provider: "azblob"; sasToken: string; } \| { provider: "file"; }` | No |  |
+
+## CreateStorageConnectionInputSchema
+
+The body of `POST /api/storage-connections`. The provider is the URL's scheme; `file` is
+allowed only for a folder under `STORAGE_CONNECTION_FILE_ROOTS_ENV`. `url` is parsed by
+`parseStorageUrl`, so userinfo and any unknown query parameter are refused as
+`storage_connection_url_has_secret`, and a `credential` for another provider as
+`storage_connection_url_invalid`. Access is read-only unless `writeAllowed` is `true`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `url` | `string` | Yes |  |
+| `allowedPrefixes` | `string[]` | Yes |  |
+| `writeAllowed` | `false \| true` | Yes |  |
+| `credential` | `undefined \| { provider: "s3"; accessKeyId: string; secretAccessKey: string; sessionToken?: string \| undefined; } \| { provider: "gcs"; serviceAccountJson: string; } \| { provider: "gcs"; accessToken: string; } \| { provider: "azblob"; accountKey: string; } \| { provider: "azblob"; sasToken: string; } \| { provider: "file"; }` | No |  |
+
+## MAX_STORAGE_CONNECTION_PREFIXES
+
+The most folders one connection may allow.
+
+Value: `50`
+
+## parseStorageGrantPath
+
+Reads `storage://<connection>/<prefix>`. `null` for any other path (a plain path is a workspace
+file), for a connection name that is not valid or is shaped like a connection id, and for a
+prefix that is not a canonical folder path (empty, absolute, or holding a `.` or `..` segment).
+
+```ts
+parseStorageGrantPath(path: string): { connection: string; prefix: string } | null
+```
+
+## STORAGE_CONNECTION_FILE_ROOTS_ENV
+
+The operator's list of local folders a `file` connection may name. A `file` connection is
+accepted only for a folder under one of these roots; the server enforces it (Q-21), a contract
+cannot because the roots are deployment configuration.
+
+Value: `'AW_STORAGE_CONNECTION_FILE_ROOTS'`
+
+## STORAGE_CONNECTION_PROBLEM_CODES
+
+The stable code a refusal carries. Expected failures of the connection routes, with their HTTP
+status.
+
+| Key | Value |
+| --- | --- |
+| `storage_connection_not_found` | `404` |
+| `storage_connection_name_taken` | `409` |
+| `storage_connection_credential_required` | `409` |
+| `storage_connection_in_use` | `409` |
+| `storage_connection_url_invalid` | `422` |
+| `storage_connection_url_has_secret` | `422` |
+| `storage_connection_endpoint_forbidden` | `422` |
+| `storage_connection_prefix_not_allowed` | `403` |
+| `storage_connection_write_not_allowed` | `403` |
+| `storage_connection_unreachable` | `502` |
+
+## STORAGE_CONNECTION_PROVIDERS
+
+- `'s3'`
+- `'gcs'`
+- `'azblob'`
+- `'file'`
+
+## STORAGE_GRANT_SCHEME
+
+The scheme of a grant that names a folder of a storage connection instead of a workspace file.
+
+Value: `'storage://'`
+
+## StorageConnectionBrowseResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `entries` | `readonly Readonly<{ path: string; kind: "file" \| "folder"; size?: number \| undefined; }>[]` | Yes |  |
+| `next` | `undefined \| string` | No |  |
+
+## StorageConnectionBrowseResponseSchema
+
+One page of a connection's folder listing, inside its allowed prefixes.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `entries` | `readonly Readonly<{ path: string; kind: "file" \| "folder"; size?: number \| undefined; }>[]` | Yes |  |
+| `next` | `undefined \| string` | No |  |
+
+## StorageConnectionCredential
+
+- `{ provider: "s3"; accessKeyId: string; secretAccessKey: string; sessionToken?: string | undefined; }`
+- `{ provider: "gcs"; serviceAccountJson: string; }`
+- `{ provider: "gcs"; accessToken: string; }`
+- `{ provider: "azblob"; accountKey: string; }`
+- `{ provider: "azblob"; sasToken: string; }`
+- `{ provider: "file"; }`
+
+## StorageConnectionCredentialSchema
+
+The write-only credential of a connection, shaped by the provider it is for. It is stored by
+connection id, never as a `secret:<name>` string, and never returned. A `file` connection has
+nothing to authenticate with. A GCS connection holds a service-account key or a short-lived
+OAuth `accessToken` (it expires, so the connection then needs rotating); a key whose JSON names
+a `type` other than `service_account` is refused as `storage_connection_url_invalid`.
+
+- `{ provider: "s3"; accessKeyId: string; secretAccessKey: string; sessionToken?: string | undefined; }`
+- `{ provider: "gcs"; serviceAccountJson: string; }`
+- `{ provider: "gcs"; accessToken: string; }`
+- `{ provider: "azblob"; accountKey: string; }`
+- `{ provider: "azblob"; sasToken: string; }`
+- `{ provider: "file"; }`
+
+## StorageConnectionListResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `connections` | `readonly StorageConnectionResource[]` | Yes |  |
+
+## StorageConnectionListResponseSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `connections` | `readonly StorageConnectionResource[]` | Yes |  |
+
+## StorageConnectionNameSchema
+
+`string`
+
+## StorageConnectionProblemCode
+
+- `"storage_connection_prefix_not_allowed"`
+- `"storage_connection_write_not_allowed"`
+- `"storage_connection_not_found"`
+- `"storage_connection_name_taken"`
+- `"storage_connection_credential_required"`
+- `"storage_connection_in_use"`
+- `"storage_connection_url_invalid"`
+- `"storage_connection_url_has_secret"`
+- `"storage_connection_endpoint_forbidden"`
+- `"storage_connection_unreachable"`
+
+## StorageConnectionProvider
+
+- `"file"`
+- `"s3"`
+- `"gcs"`
+- `"azblob"`
+
+## StorageConnectionResource
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `name` | `string` | Yes |  |
+| `provider` | `"file" \| "s3" \| "gcs" \| "azblob"` | Yes |  |
+| `url` | `string` | Yes |  |
+| `allowedPrefixes` | `string[]` | Yes |  |
+| `writeAllowed` | `false \| true` | Yes |  |
+| `hasCredential` | `false \| true` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+| `updatedAt` | `string` | Yes |  |
+
+## StorageConnectionResourceSchema
+
+One storage connection as every response renders it. The credential is write-only and has no
+field here: `hasCredential` says whether one is stored. `url` is the `AW_STORAGE_URL` grammar and
+never carries a secret.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `name` | `string` | Yes |  |
+| `provider` | `"file" \| "s3" \| "gcs" \| "azblob"` | Yes |  |
+| `url` | `string` | Yes |  |
+| `allowedPrefixes` | `string[]` | Yes |  |
+| `writeAllowed` | `false \| true` | Yes |  |
+| `hasCredential` | `false \| true` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+| `updatedAt` | `string` | Yes |  |
+
+## StorageConnectionTestOutcome
+
+- `Readonly<{ ok: true; }>`
+- `Readonly<{ ok: false; code: "forbidden" | "unreachable" | "not_found"; }>`
+
+## StorageConnectionTestOutcomeSchema
+
+The body of `POST /api/storage-connections/:id/test`; `code` says why it failed.
+
+- `Readonly<{ ok: true; }>`
+- `Readonly<{ ok: false; code: "forbidden" | "unreachable" | "not_found"; }>`
+
+## UpdateStorageConnectionPatch
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `undefined \| string` | No |  |
+| `url` | `undefined \| string` | No |  |
+| `allowedPrefixes` | `undefined \| string[]` | No |  |
+| `writeAllowed` | `undefined \| false \| true` | No |  |
+| `credential` | `undefined \| { provider: "s3"; accessKeyId: string; secretAccessKey: string; sessionToken?: string \| undefined; } \| { provider: "gcs"; serviceAccountJson: string; } \| { provider: "gcs"; accessToken: string; } \| { provider: "azblob"; accountKey: string; } \| { provider: "azblob"; sasToken: string; } \| { provider: "file"; }` | No |  |
+
+## UpdateStorageConnectionPatchSchema
+
+The body of `PATCH /api/storage-connections/:id`. A new `url` is checked like a created one; the
+server also keeps its provider, because the stored credential is shaped for it. A `url` that
+moves a connection holding a credential to another endpoint, account, bucket or container needs
+a new `credential` in the same patch (`storage_connection_credential_required`), which replaces
+the stored one; a change of the URL's prefix keeps it.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `undefined \| string` | No |  |
+| `url` | `undefined \| string` | No |  |
+| `allowedPrefixes` | `undefined \| string[]` | No |  |
+| `writeAllowed` | `undefined \| false \| true` | No |  |
+| `credential` | `undefined \| { provider: "s3"; accessKeyId: string; secretAccessKey: string; sessionToken?: string \| undefined; } \| { provider: "gcs"; serviceAccountJson: string; } \| { provider: "gcs"; accessToken: string; } \| { provider: "azblob"; accountKey: string; } \| { provider: "azblob"; sasToken: string; } \| { provider: "file"; }` | No |  |

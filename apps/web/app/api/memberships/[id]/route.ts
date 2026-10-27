@@ -15,7 +15,8 @@
  */
 import { refusingLocalRuntimeKey } from '../../../../server/cli-auth/local-runtime-key-guard';
 import { changeMembershipRole, deleteMembership } from '../../../../server/rbac/handlers';
-import { authorise, readIdParam, readJsonBody, toResponse } from '../../../../server/rbac/http';
+import { readJsonBody } from '../../../../server/http/result';
+import { authorise, readIdParam, toResponse } from '../../../../server/rbac/http';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';

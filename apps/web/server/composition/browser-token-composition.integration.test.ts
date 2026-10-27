@@ -32,7 +32,7 @@ import crypto from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { BROWSER_TOKEN_PATTERN } from '@indx-workspace/contracts/tokens';
-import type { AgentPermissions } from '@agent-workspace/core';
+import type { AgentPermissions } from '@agent-workspace/run-protocol';
 import { openDatabaseRoot, type DatabaseRoot } from '@agent-workspace/core/db';
 import {
   apiKeys,
@@ -112,6 +112,7 @@ describe.skipIf(!hasDatabase)(
     const builderSessionId = crypto.randomUUID();
     const builderRunId = crypto.randomUUID();
     const builderTerminalRunId = crypto.randomUUID();
+    const builderPausedRunId = crypto.randomUUID();
     const builderArchivedSessionId = crypto.randomUUID();
     let builderApiKey: string;
     let builderPrincipalId: string;
@@ -205,6 +206,18 @@ describe.skipIf(!hasDatabase)(
           sessionId: builderSessionId,
           status: 'completed',
           endedAt: new Date(),
+        },
+        // Paused for a decision (ADR-0145): stopped, so it carries `ended_at`, the pending call and
+        // the deadline for a decision (24 hours after the pause, as the repository stamps it).
+        {
+          id: builderPausedRunId,
+          workspaceId: workspace.id,
+          sessionId: builderSessionId,
+          status: 'awaiting_approval',
+          startedAt: new Date(),
+          endedAt: new Date(),
+          pendingApproval: { toolName: 'send_email', canonicalCall: '{}' },
+          approvalDeadlineAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
         },
       ]);
 
@@ -397,12 +410,17 @@ describe.skipIf(!hasDatabase)(
       await expect(problemCode(response)).resolves.toBe('invalid_field');
     }, 180_000);
 
-    it('refuses minting for an already-terminal run or an archived session', async () => {
+    it('refuses minting for an already-terminal run, a paused run or an archived session', async () => {
       // The verifier rejects both on the token's very first use, and the plaintext is shown once —
       // so a 201 here would hand out a credential that can never work and never be minted again.
       const terminalRun = await mintFor({ kind: 'run', id: builderTerminalRunId });
       expect(terminalRun.status).toBe(404);
       await expect(problemCode(terminalRun)).resolves.toBe('run_not_found');
+
+      // ADR-0145 D1: no token stays valid while a person decides, so none is minted for a paused run.
+      const pausedRun = await mintFor({ kind: 'run', id: builderPausedRunId });
+      expect(pausedRun.status).toBe(404);
+      await expect(problemCode(pausedRun)).resolves.toBe('run_not_found');
 
       const archivedSession = await mintFor({ kind: 'session', id: builderArchivedSessionId });
       expect(archivedSession.status).toBe(404);

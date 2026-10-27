@@ -35,6 +35,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { UnknownWorkspaceError } from '@agent-workspace/core/db';
+import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type { AgentPermissions, AgentPolicy, CreateAgentInput } from '../../contracts/agents';
@@ -42,7 +44,6 @@ import type { AgentRecord } from './contract';
 import { createInMemoryAgentStoreProvider } from './memory-store';
 import {
   createRepositoryAgentStoreProvider,
-  UnknownWorkspaceError,
   type AgentStoreProvider,
   type CreateAgentOutcome,
 } from './store';
@@ -175,6 +176,53 @@ export function describeAgentStoreConformance(
         expect(outcome.kind === 'created' && outcome.agent.permissions.unrestrictedNetwork).toBe(
           false,
         );
+      });
+    });
+
+    describe('create with assignments (W2-3)', () => {
+      const none = { files: [], skillIds: [], connectorIds: [] };
+
+      it('creates the agent and its assignments in one write', async () => {
+        const fixture = await plain();
+        const store = fixture.provider.forWorkspace(fixture.workspaceA);
+        const outcome = await store.createWithAssignments(input(), fixture.ownerA, none);
+        expect(outcome).toMatchObject({ kind: 'created', assignments: none });
+        if (outcome.kind !== 'created') return;
+        expect((await store.list()).map((agent) => agent.id)).toEqual([outcome.agent.id]);
+      });
+
+      it('leaves no agent row when an assignment names a skill the workspace does not have', async () => {
+        const fixture = await plain();
+        const store = fixture.provider.forWorkspace(fixture.workspaceA);
+        const outcome = await store.createWithAssignments(input(), fixture.ownerA, {
+          ...none,
+          skillIds: [ABSENT],
+        });
+        expect(outcome).toEqual({ kind: 'unknown-skill', id: ABSENT });
+        expect(await store.list()).toEqual([]);
+      });
+
+      it('leaves no agent row when an assignment names a file the workspace does not have', async () => {
+        const fixture = await plain();
+        const store = fixture.provider.forWorkspace(fixture.workspaceA);
+        const outcome = await store.createWithAssignments(input(), fixture.ownerA, {
+          ...none,
+          files: [{ fileId: ABSENT, access: 'read' }],
+        });
+        expect(outcome).toEqual({ kind: 'unknown-file', id: ABSENT });
+        expect(await store.list()).toEqual([]);
+      });
+
+      it('answers the create refusal before any assignment', async () => {
+        const fixture = await plain();
+        const store = fixture.provider.forWorkspace(fixture.workspaceA);
+        await store.create(input(), fixture.ownerA);
+        const outcome = await store.createWithAssignments(input(), fixture.ownerA, {
+          ...none,
+          connectorIds: [ABSENT],
+        });
+        expect(outcome.kind).toBe('name-conflict');
+        expect(await store.list()).toHaveLength(1);
       });
     });
 
@@ -443,6 +491,8 @@ describeAgentStoreConformance('the in-memory agent store', ({ withModelConnectio
     // the check would not be the same thing as the PostgreSQL run, which cannot skip it.
     provider: createInMemoryAgentStoreProvider({
       knownModelConnectionIds: new Set(modelConnection === null ? [] : [modelConnection]),
+      // The fixtures seed no files, skills or connectors, as the PostgreSQL run seeds none.
+      knownAssignableIds: new Set(),
     }),
     workspaceA: crypto.randomUUID(),
     workspaceB: crypto.randomUUID(),
@@ -508,11 +558,10 @@ type CoreDb = typeof import('@agent-workspace/core/db/unscoped');
 
 describe.skipIf(!hasDatabase)('the PostgreSQL agent store', () => {
   /**
-   * Core is loaded through a dynamic import inside `beforeAll`, not statically at the top of the
-   * file, for one reason: this module is also imported by the in-memory run above, and that run
-   * must not need `packages/core/dist` to exist. CI builds core before it tests — `Build
-   * packages/core` precedes `Test` in `.github/workflows/ci.yml` — and the check below names the
-   * command rather than letting the import fail with a resolver message nobody can act on.
+   * The escape subpath is loaded through a dynamic import inside `beforeAll`, not statically at the
+   * top of the file, so that the `dist` check below can name the build command rather than letting
+   * the import fail with a resolver message nobody can act on. CI builds core before it tests —
+   * `Build packages/core` precedes `Test` in `.github/workflows/ci.yml`.
    */
   let core: CoreDb;
   let isolated: Awaited<ReturnType<CoreDb['createIsolatedTestDatabase']>>;
@@ -626,6 +675,129 @@ describe.skipIf(!hasDatabase)('the PostgreSQL agent store', () => {
     await expect(store.get(ABSENT)).rejects.toThrow(/no workspace has id/u);
   });
 
+  describe('lineage and archive columns (issue #1851)', () => {
+    /** A workspace with one owner principal, and the repository scoped to it. */
+    async function fixture() {
+      const workspaceId = crypto.randomUUID();
+      const userId = crypto.randomUUID();
+      const membershipId = crypto.randomUUID();
+      const principalId = crypto.randomUUID();
+      await isolated.db
+        .insert(core.workspaces)
+        .values({ id: workspaceId, slug: workspaceId, name: 'Lineage' });
+      await isolated.db
+        .insert(core.users)
+        .values({ id: userId, email: `${userId}@example.test`, name: 'Owner' });
+      await isolated.db.transaction(async (tx) => {
+        await tx
+          .insert(core.memberships)
+          .values({ id: membershipId, workspaceId, userId, role: 'owner' });
+        await tx
+          .insert(core.workspacePrincipals)
+          .values({ id: principalId, workspaceId, kind: 'membership', membershipId });
+      });
+      const scope = await core
+        .createDatabaseWorkspaceScopeResolver(isolated.db)
+        .forWorkspaceId(workspaceId);
+      if (scope === null) throw new Error('the workspace just inserted has no scope');
+      const repository = core.createDatabaseAgentRepositoryProvider(isolated.db).forScope(scope);
+      const row = (name: string) => ({
+        name,
+        instructions: '',
+        modelConnectionId: null,
+        model: null,
+        permissions: PERMISSIONS,
+        ownerPrincipalId: principalId,
+      });
+      const make = async (
+        name: string,
+        createdByAgent?: { agentId: string; version: number; runId: string },
+      ) => {
+        const outcome = await repository.create({
+          ...row(name),
+          ...(createdByAgent === undefined ? {} : { createdByAgent }),
+        });
+        if (outcome.kind !== 'created')
+          throw new Error(`could not create ${name}: ${outcome.kind}`);
+        return outcome.agent;
+      };
+      return { workspaceId, principalId, repository, make };
+    }
+
+    it('writes an agent with lineage and reads it back; a person-made agent has none', async () => {
+      const { repository, make } = await fixture();
+      const builder = await make('builder-like');
+      const made = await make('made', { agentId: builder.id, version: 4, runId: 'run_abc' });
+      const person = await repository.get(builder.id);
+      expect(person?.createdByAgent).toBeUndefined();
+      expect(person?.archivedAt).toBeUndefined();
+      expect((await repository.get(made.id))?.createdByAgent).toEqual({
+        agentId: builder.id,
+        version: 4,
+        runId: 'run_abc',
+      });
+    });
+
+    it('refuses a partial lineage with the CHECK', async () => {
+      const { workspaceId, principalId, make } = await fixture();
+      const creator = await make('creator');
+      const refusal = async (lineage: {
+        createdByAgentId?: string;
+        createdByAgentVersion?: number;
+        createdByRunId?: string;
+      }): Promise<unknown> => {
+        try {
+          await isolated.db.insert(core.agents).values({
+            workspaceId,
+            name: `partial-${crypto.randomUUID()}`,
+            instructions: '',
+            permissions: PERMISSIONS,
+            ownerPrincipalId: principalId,
+            ...lineage,
+          });
+        } catch (error) {
+          return error;
+        }
+        return null;
+      };
+      // drizzle wraps the driver error; the constraint name is on its cause.
+      const lineageCheck = { cause: { constraint: 'agents_created_by_agent_lineage_check' } };
+      expect(await refusal({ createdByAgentVersion: 1 })).toMatchObject(lineageCheck);
+      expect(await refusal({ createdByRunId: 'run_abc' })).toMatchObject(lineageCheck);
+      expect(await refusal({ createdByAgentId: creator.id })).toMatchObject(lineageCheck);
+    });
+
+    it('keeps the version and run when the creating agent is deleted', async () => {
+      const { repository, make } = await fixture();
+      const creator = await make('creator');
+      const made = await make('made', { agentId: creator.id, version: 1, runId: 'run_abc' });
+      expect(await repository.delete(creator.id)).toEqual({ kind: 'deleted' });
+      expect((await repository.get(made.id))?.createdByAgent).toEqual({
+        agentId: null,
+        version: 1,
+        runId: 'run_abc',
+      });
+    });
+
+    it('refuses a creator from another workspace', async () => {
+      const home = await fixture();
+      const foreign = await fixture();
+      const creator = await foreign.make('creator');
+      await expect(
+        home.make('made', { agentId: creator.id, version: 1, runId: 'run_abc' }),
+      ).rejects.toMatchObject({ cause: { constraint: 'agents_created_by_agent_workspace_fk' } });
+    });
+
+    it('reads archived_at back as archivedAt without hiding the agent from the list', async () => {
+      const { repository, make } = await fixture();
+      const agent = await make('to-archive');
+      const archivedAt = new Date('2026-02-03T04:05:06.007Z');
+      await isolated.db.update(core.agents).set({ archivedAt }).where(eq(core.agents.id, agent.id));
+      expect((await repository.get(agent.id))?.archivedAt).toEqual(archivedAt);
+      expect((await repository.list()).map((a) => a.id)).toContain(agent.id);
+    });
+  });
+
   /**
    * The acceptance criterion of this whole task, as a gate rather than as a transcript.
    *
@@ -644,9 +816,9 @@ describe.skipIf(!hasDatabase)('the PostgreSQL agent store', () => {
    * is stubbed, and nothing here touches the declared escape subpath. The writer is told only a
    * workspace id and a name; the reader is told only the workspace id.
    *
-   * `./store.ts` is loaded by the children **as TypeScript**, which Node 24 strips natively. It can
-   * be, because every one of that module's imports is `import type` and is erased — the same
-   * property that keeps `pg` off the edge runtime, here doing a second job.
+   * `./store.ts` is loaded by the children **as TypeScript**, which Node 24 strips natively. Its
+   * one value import, `@agent-workspace/core/db`, resolves to the same built `dist` the child
+   * imports directly.
    */
   it('keeps an agent across a real process restart: two processes, one database', async () => {
     // The child lives in the OS temporary directory, not in the repository. Two reasons, and the

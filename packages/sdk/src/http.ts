@@ -8,6 +8,7 @@ import {
   CONTRACTS_VERSION_HEADER,
   type ApiProblem,
 } from '@indx-workspace/contracts';
+import type { PresignedUrl } from '@indx-workspace/contracts/files';
 
 import {
   ApiProblemError,
@@ -81,10 +82,11 @@ export interface SendSpec {
   readonly body?: unknown;
   /**
    * Sent as-is, with no encoding and no `content-type` of the client's own; a caller that has one
-   * sets it in `headers`. An upload of bytes is the one case (`POST /api/files`). Takes precedence
-   * over `body`, header and all.
+   * sets it in `headers`. An upload of bytes (`POST /api/files`) is one case; a `FormData` is the
+   * other (`POST /api/skills`), whose `multipart/form-data` header, boundary included, `fetch`
+   * writes itself. Takes precedence over `body`, header and all.
    */
-  readonly rawBody?: Blob;
+  readonly rawBody?: Blob | FormData;
   /** The statuses that mean success; anything else is read as a problem. */
   readonly expect: readonly number[];
   readonly signal?: AbortSignal | undefined;
@@ -398,6 +400,54 @@ export class HttpClient {
     }
     if (!spec.expect.includes(response.status)) throw await problemFromResponse(response);
     return response;
+  }
+
+  /**
+   * Send `body` to a presigned object-store URL, with exactly the headers it was signed for and
+   * none of this client's own: the store gets no bearer, no contracts header and no cookies. The
+   * body is handed to `fetch` as given (a `Blob` is streamed, not read), through the configured
+   * `fetch`, under the same headers deadline as {@link send}. A refusal is an
+   * {@link ApiProblemError} carrying the store's status.
+   */
+  public async putSigned(spec: {
+    readonly operation: string;
+    readonly target: Pick<PresignedUrl, 'url' | 'method' | 'headers'>;
+    readonly body: Blob | Uint8Array<ArrayBuffer>;
+    readonly signal?: AbortSignal | undefined;
+  }): Promise<void> {
+    const deadline =
+      this.#options.timeoutMs === undefined ? undefined : headersDeadline(this.#options.timeoutMs);
+    const signal = combinedSignal(spec.signal, deadline?.signal);
+    let response: Response;
+    try {
+      response = await this.#fetch(spec.target.url, {
+        method: spec.target.method,
+        headers: new Headers(spec.target.headers),
+        body: spec.body,
+        credentials: 'omit',
+        ...(signal === undefined ? {} : { signal }),
+      });
+    } catch (cause) {
+      throw new TransportError({
+        operation: spec.operation,
+        aborted: spec.signal?.aborted === true || (signal?.aborted ?? false),
+        cause,
+      });
+    } finally {
+      deadline?.disarm();
+    }
+    await response.body?.cancel().catch(() => undefined);
+    if (!response.ok) {
+      // The store answers in its own format (S3 and Azure send XML), never the platform envelope.
+      throw new ApiProblemError({
+        status: response.status,
+        problem: {
+          code: 'unrecognised_error_body',
+          message: `the object store refused the ${spec.target.method} (HTTP ${String(response.status)})`,
+        },
+        retryAfterSeconds: retryAfterSeconds(response),
+      });
+    }
   }
 
   /** {@link send}, then parse the JSON body through `schema`. A `204` yields `null`. */

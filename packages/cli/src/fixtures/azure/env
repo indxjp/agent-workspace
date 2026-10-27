@@ -16,21 +16,22 @@ DATABASE_URL=
 # Object store: azblob://acme-ai-files
 SEAWEEDFS_ACCESS_KEY_ID=
 SEAWEEDFS_SECRET_ACCESS_KEY=
+# The loopback host port SeaweedFS is published on. Change it to run beside another project
+# that uses 8333, and change the publicEndpoint port in AW_STORAGE_URL with it.
+SEAWEEDFS_PORT=
 COMPOSE_PROFILES=
-OBJECT_STORAGE_BACKEND=azure-blob
-# Terraform supplies the Blob account service URL here, for example:
-# https://<account>.blob.core.windows.net
-OBJECT_STORAGE_ENDPOINT=
-OBJECT_STORAGE_BUCKET=acme-ai-files
+# Where files, skills and session transcripts live, in one URL. No key or password belongs in
+# it: the credential lines below, or the workload identity, supply those.
+# Leave blank: the Container Apps Terraform module supplies the Blob store
+# (azblob://<account>/<container>); the storage account is one of its outputs.
+AW_STORAGE_URL=
+# Largest signed upload in bytes. Blank keeps the server default, 5 GiB.
+AW_STORAGE_SIGNED_UPLOAD_MAX_BYTES=
 # Azure Blob authenticates with the web Container App managed identity. No account key,
 # connection string or SAS token belongs in this file.
 OBJECT_STORAGE_ACCESS_KEY_ID=
 OBJECT_STORAGE_SECRET_ACCESS_KEY=
-OBJECT_STORAGE_FORCE_PATH_STYLE=false
 AWS_REGION=us-east-1
-AW_FILE_STORAGE_ROOT=
-AW_SKILL_STORAGE_ROOT=
-AW_SESSION_TRANSCRIPT_ROOT=/var/lib/agent-workspace/sessions
 # Runtime: aca-sessions
 RUNTIME_DRIVER=aca-sessions
 # The three addresses below are the Services infra/helm/agent-workspace publishes; a

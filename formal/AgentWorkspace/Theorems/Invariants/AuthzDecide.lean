@@ -45,7 +45,7 @@ theorem scope_only_narrows (q : Query) (s : Scope) :
       cases parsePath q.path with
       | ok res sub id =>
         dsimp only
-        cases parseOperation q.method sub with
+        cases parseOperationFor q.method res sub with
         | refused m => left; rfl
         | ok op => exact classified_scope_narrows role q res sub id op s
       | _ => left; rfl
@@ -63,7 +63,7 @@ theorem scoped_allow_implies_unscoped_allow (q : Query) (s : Scope) (f : Option 
 
 example : decideOrdinary ⟨"owner", "GET", "/api/runs/r", .own, none⟩ = .allow (some ⟨.runs, .read, .any⟩) :=
   scoped_allow_implies_unscoped_allow ⟨"owner", "GET", "/api/runs/r", .own, none⟩ (.run ⟨"r"⟩) _
-    (by decide)
+    (by decide +kernel)
 
 /-- An undetermined owner (`unknown`) is decided exactly as another member's row (`other`): the
 handler that has not read the row gains nothing by saying so. -/
@@ -72,7 +72,7 @@ handler that has not read the row gains nothing by saying so. -/
   (ts := "apps/web/server/rbac/decide.ts#applyGrant")]
 theorem unknown_owner_is_decided_as_other (q : Query) :
     decideOrdinary { q with ownership := .unknown } = decideOrdinary { q with ownership := .other } := by
-  have hg : ∀ g, applyGrant g .unknown = applyGrant g .other := by decide
+  have hg : ∀ g, applyGrant g .unknown = applyGrant g .other := by decide +kernel
   unfold decideOrdinary decideClassified
   dsimp only
   cases parseRoleInput q.role with
@@ -85,7 +85,7 @@ theorem unknown_owner_is_decided_as_other (q : Query) :
       cases parsePath q.path with
       | ok res sub id =>
         dsimp only
-        cases parseOperation q.method sub with
+        cases parseOperationFor q.method res sub with
         | refused m => rfl
         | ok op => simp only [hg]
       | _ => rfl
@@ -93,7 +93,7 @@ theorem unknown_owner_is_decided_as_other (q : Query) :
 
 /-- Every `allow` that consulted §21's table is backed by it: the role parses, the path parses to
 the allowed resource, the grant is that role's cell, it is not `none`, an `own` grant saw an `own`
-or `not-applicable` fact, and a `permitted` grant saw a `permitted` fact. -/
+or `not-applicable` fact, and a `permitted` grant saw an `own` or `permitted` fact (ADR-0152). -/
 @[aw_spec (tier := T2) (doc := "docs/sdk/04-api-specification.md#33-roles")
   (doc := "docs/adr/W9-AUTH-117-viewer-permitted-agent-grants.md#decision")
   (ts := "apps/web/server/rbac/decide.ts#decide")]
@@ -104,7 +104,7 @@ theorem every_allow_is_backed_by_the_table (q : Query) (f : RouteFacts)
       f.operation = RouteOperation.ofOperation op ∧
       f.grant = grantFor role f.resource op ∧ f.grant ≠ .none ∧
       (f.grant = .own → q.ownership = .own ∨ q.ownership = .notApplicable) ∧
-      (f.grant = .permitted → q.ownership = .permitted) := by
+      (f.grant = .permitted → q.ownership = .own ∨ q.ownership = .permitted) := by
   unfold decideOrdinary at h
   cases hr : parseRoleInput q.role with
   | none => simp [hr] at h
@@ -118,7 +118,7 @@ theorem every_allow_is_backed_by_the_table (q : Query) (f : RouteFacts)
       cases hp : parsePath q.path with
       | ok res sub id =>
         simp only [hp] at h
-        cases ho : parseOperation q.method sub with
+        cases ho : parseOperationFor q.method res sub with
         | refused m => simp [ho] at h
         | ok op =>
           simp only [ho, decideClassified] at h
@@ -139,8 +139,8 @@ example : ∃ role sub id op, parseRoleInput "builder" = some role ∧
     RouteOperation.write = RouteOperation.ofOperation op ∧
     Grant.own = grantFor role .agents op ∧ Grant.own ≠ .none ∧
     (Grant.own = .own → Ownership.own = .own ∨ Ownership.own = .notApplicable) ∧
-    (Grant.own = .permitted → Ownership.own = .permitted) :=
+    (Grant.own = .permitted → Ownership.own = .own ∨ Ownership.own = .permitted) :=
   every_allow_is_backed_by_the_table ⟨"builder", "PATCH", "/api/agents/a", .own, none⟩
-    ⟨.agents, .write, .own⟩ (by decide)
+    ⟨.agents, .write, .own⟩ (by decide +kernel)
 
 end AgentWorkspace.Theorems.Invariants.AuthzDecide

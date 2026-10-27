@@ -6,7 +6,7 @@
  * the platform routes of #968; every call goes through the SDK client, never `fetch`, and the
  * server decides who may export.
  */
-import { createClient, type AgentWorkspaceClient } from '@indx-workspace/sdk';
+import type { AgentWorkspaceClient } from '@indx-workspace/sdk';
 import type { AgentVersionListResponse } from '@indx-workspace/contracts/agent-versions';
 import type {
   FieldVerdict,
@@ -16,6 +16,8 @@ import type {
 } from '@indx-workspace/contracts/platforms';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
+
+import { browserClient } from '../../lib/browser-client';
 
 import {
   agentCardUrl,
@@ -40,9 +42,6 @@ const SUPPORT_TONE = {
   unsupported: 'bg-warn-soft text-warn',
   dropped: 'bg-warn-soft text-warn',
 } as const;
-
-const sessionClient = (): AgentWorkspaceClient =>
-  createClient({ baseUrl: window.location.origin, auth: { kind: 'session' } });
 
 /** The agent page's tab bar; `aria-current` and the weight mark the tab being shown. */
 export function AgentTabs({
@@ -372,7 +371,7 @@ export function AgentPlatformsScreen({
 
   useEffect(() => {
     const controller = new AbortController();
-    const client = sessionClient();
+    const client = browserClient();
     Promise.all([
       client.platforms.list({ signal: controller.signal }),
       client.agents.versions.list(agentId, { signal: controller.signal }),
@@ -407,7 +406,7 @@ export function AgentPlatformsScreen({
     setDownloading(false);
     setDownloadFailure(null);
     try {
-      const response = await sessionClient().platforms.export(agentId, version, { platform });
+      const response = await browserClient().platforms.export(agentId, version, { platform });
       if (generation.current === mine) setCheck({ kind: 'exported', platform, response });
     } catch (error) {
       if (generation.current === mine) setCheck(checkFailure(platform, error));
@@ -421,7 +420,7 @@ export function AgentPlatformsScreen({
     setDownloading(true);
     setDownloadFailure(null);
     try {
-      await saveArchive(sessionClient(), agentId, version, platform);
+      await saveArchive(browserClient(), agentId, version, platform);
     } catch (error) {
       if (generation.current !== mine) return;
       const failed = checkFailure(platform, error);

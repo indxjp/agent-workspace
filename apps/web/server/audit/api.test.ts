@@ -11,7 +11,8 @@ import { installRbacHarness, TEST_WORKSPACE_ID, type RbacHarness } from '../rbac
 import { GET } from '../../app/api/audit-events/route';
 import { encodeListCursor } from '../pagination/list-cursor';
 import { keysetPageOf } from '../pagination/testing';
-import { clearAuditRuntime, configureAuditRuntime } from './runtime';
+import { clearApplicationContext } from '../application-context';
+import { installTestDomains } from '../application-context-fixtures';
 
 const OTHER_WORKSPACE_ID = 'other-workspace-under-test';
 const CALLER = { email: 'caller@audit.example.test' };
@@ -28,6 +29,7 @@ function row(id: string, workspaceId: string, createdAt = '2026-09-21T10:00:00.0
     action: 'agent-changed',
     subjectId: null,
     subjectLabel: 'An agent',
+    details: null,
     createdAt: new Date(createdAt),
   };
 }
@@ -55,7 +57,7 @@ let harness: RbacHarness | null = null;
 afterEach(() => {
   harness?.teardown();
   harness = null;
-  clearAuditRuntime();
+  clearApplicationContext();
 });
 
 function install(
@@ -66,10 +68,12 @@ function install(
   } = {},
 ): {
   readonly limits: number[];
+  readonly actions: (string | null)[];
   readonly repositoryCalls: string[];
   readonly call: (search?: string) => Promise<{ status: number; body: unknown }>;
 } {
   const limits: number[] = [];
+  const actions: (string | null)[] = [];
   const repositoryCalls: string[] = [];
   const knownWorkspaces = [
     ...(options.scopeKnowsCallerWorkspace === false
@@ -83,26 +87,32 @@ function install(
       : [{ email: CALLER.email, name: 'Caller', workspaceId: TEST_WORKSPACE_ID, role }],
   );
   const installed = harness;
-  configureAuditRuntime({
-    scopes: createInMemoryWorkspaceScopeResolver(knownWorkspaces),
-    repositories: {
-      forScope: (scope) => {
-        repositoryCalls.push(scope.workspaceId);
-        return {
-          write: () => Promise.resolve(),
-          count: () => Promise.resolve(0),
-          list: (input = {}) => {
-            const limit = input.limit ?? 100;
-            limits.push(limit);
-            const rows = (options.rows ?? ROWS)[scope.workspaceId] ?? [];
-            return Promise.resolve(keysetPageOf(rows, { limit, cursor: input.cursor ?? null }));
-          },
-        };
+  installTestDomains({
+    audit: {
+      scopes: createInMemoryWorkspaceScopeResolver(knownWorkspaces),
+      repositories: {
+        forScope: (scope) => {
+          repositoryCalls.push(scope.workspaceId);
+          return {
+            write: () => Promise.resolve(),
+            count: () => Promise.resolve(0),
+            list: (input = {}) => {
+              const limit = input.limit ?? 100;
+              limits.push(limit);
+              actions.push(input.action ?? null);
+              const rows = ((options.rows ?? ROWS)[scope.workspaceId] ?? []).filter(
+                (candidate) => input.action === undefined || candidate.action === input.action,
+              );
+              return Promise.resolve(keysetPageOf(rows, { limit, cursor: input.cursor ?? null }));
+            },
+          };
+        },
       },
     },
   });
   return {
     limits,
+    actions,
     repositoryCalls,
     call: async (search = '') => {
       const response = await installed.call(GET, {
@@ -126,6 +136,94 @@ describe('GET /api/audit-events', () => {
     });
     expect(JSON.stringify(response.body)).not.toContain(OTHER_WORKSPACE_ID);
     expect(limits).toEqual([100]);
+  });
+
+  describe('builderRunId', () => {
+    const id = '33333333-3333-4333-8333-333333333333';
+    const builderRow: AuditRow = {
+      ...row(id, TEST_WORKSPACE_ID),
+      action: 'agent-created',
+      details: {
+        agentId: id,
+        version: 1,
+        via: 'builder',
+        builderRunId: 'run-1',
+        createdByAgentId: 'agent-x',
+      },
+    };
+
+    it('names the Builder run on an agent-created row a Builder save wrote, and renders no details', async () => {
+      const { call } = install('owner', { rows: { [TEST_WORKSPACE_ID]: [builderRow] } });
+      const response = await call();
+      const [event] = AuditEventListResponseSchema.parse(response.body).events;
+      expect(event?.builderRunId).toBe('run-1');
+      expect(event).not.toHaveProperty('createdByAgentId');
+      expect(JSON.stringify(response.body)).not.toContain('details');
+      expect(JSON.stringify(response.body)).not.toContain('createdByAgentId');
+    });
+
+    it('leaves it off an agent-created row with no run, and off every row of another action', async () => {
+      const { call } = install('owner', {
+        rows: {
+          [TEST_WORKSPACE_ID]: [
+            {
+              ...builderRow,
+              id: '44444444-4444-4444-8444-444444444444',
+              details: { agentId: id, version: 1, via: 'api' },
+            },
+            { ...builderRow, id: '55555555-5555-4555-8555-555555555555', action: 'agent-changed' },
+            row('66666666-6666-4666-8666-666666666666', TEST_WORKSPACE_ID),
+            { ...builderRow, id: '77777777-7777-4777-8777-777777777777', details: null },
+          ],
+        },
+      });
+      const response = await call();
+      expect(AuditEventListResponseSchema.parse(response.body).events).toHaveLength(4);
+      expect(JSON.stringify(response.body)).not.toContain('builderRunId');
+    });
+
+    it('leaves it off an agent-created row whose stored details are not the strict shape', async () => {
+      const { call } = install('owner', {
+        rows: {
+          [TEST_WORKSPACE_ID]: [
+            {
+              ...builderRow,
+              details: {
+                agentId: id,
+                version: 1,
+                via: 'builder',
+                builderRunId: 'run-1',
+                createdByAgentId: '',
+              },
+            },
+          ],
+        },
+      });
+      const response = await call();
+      expect(response.status).toBe(200);
+      expect(JSON.stringify(response.body)).not.toContain('builderRunId');
+    });
+  });
+
+  it('returns builderRunId on an agent-created row written by a Builder save, and never on other rows', async () => {
+    const id = '33333333-3333-4333-8333-333333333333';
+    const otherId = '44444444-4444-4444-8444-444444444444';
+    const { call } = install('owner', {
+      rows: {
+        [TEST_WORKSPACE_ID]: [
+          {
+            ...row(id, TEST_WORKSPACE_ID),
+            action: 'agent-created',
+            details: { agentId: id, version: 1, via: 'builder', builderRunId: 'run-1' },
+          },
+          row(otherId, TEST_WORKSPACE_ID),
+        ],
+      },
+    });
+    const response = await call();
+    const { events } = AuditEventListResponseSchema.parse(response.body);
+    expect(events.find((event) => event.id === id)?.builderRunId).toBe('run-1');
+    expect(events.find((event) => event.id === otherId)).not.toHaveProperty('builderRunId');
   });
 
   it.each(['admin', 'builder', 'viewer'] as const)(
@@ -157,12 +255,14 @@ describe('GET /api/audit-events', () => {
     expect(ApiProblemSchema.parse(response.body).error.code).toBe('unauthenticated');
   });
 
-  it('answers 503 audit_runtime_not_configured in the standard envelope when no repository is wired', async () => {
+  it('answers 503 rbac_runtime_not_configured in the standard envelope when no context is installed', async () => {
+    // The audit domain and the RBAC gate live in one application context, so with none installed
+    // the gate answers first.
     const { call } = install('owner');
-    clearAuditRuntime();
+    clearApplicationContext();
     const response = await call();
     expect(response.status).toBe(503);
-    expect(ApiProblemSchema.parse(response.body).error.code).toBe('audit_runtime_not_configured');
+    expect(ApiProblemSchema.parse(response.body).error.code).toBe('rbac_runtime_not_configured');
   });
 
   it.each(['0', '501', '1.5', 'ten', ''])(
@@ -203,6 +303,42 @@ describe('GET /api/audit-events', () => {
       'aaaaaaaa-0000-4000-8000-000000000002',
       'aaaaaaaa-0000-4000-8000-000000000001',
     ]);
+  });
+
+  describe('?action= filter', () => {
+    const MIXED: readonly AuditRow[] = PAGED_ROWS.map((paged, index) => ({
+      ...paged,
+      action: index % 2 === 0 ? 'file-deleted' : 'agent-changed',
+    }));
+
+    it('lists only the rows of the named action, paged with the same cursor', async () => {
+      const { call, actions } = install('owner', { rows: { [TEST_WORKSPACE_ID]: MIXED } });
+      const seen: string[] = [];
+      let search = '?action=file-deleted&limit=1';
+      for (let pages = 0; pages <= MIXED.length; pages += 1) {
+        const page = AuditEventListResponseSchema.parse((await call(search)).body);
+        seen.push(...page.events.map((event) => event.id));
+        if (page.nextCursor === null) break;
+        search = `?action=file-deleted&limit=1&cursor=${encodeURIComponent(page.nextCursor)}`;
+      }
+      expect(seen).toEqual([
+        'aaaaaaaa-0000-4000-8000-000000000005',
+        'aaaaaaaa-0000-4000-8000-000000000003',
+        'aaaaaaaa-0000-4000-8000-000000000001',
+      ]);
+      expect(new Set(actions)).toEqual(new Set(['file-deleted']));
+    });
+
+    it.each(['no-such-action', '', 'File-Deleted'])(
+      'answers 400 invalid_action in the standard envelope for action=%j',
+      async (action) => {
+        const { call, limits } = install('owner');
+        const response = await call(`?action=${action}`);
+        expect(response.status).toBe(400);
+        expect(ApiProblemSchema.parse(response.body).error.code).toBe('invalid_action');
+        expect(limits).toEqual([]);
+      },
+    );
   });
 
   it('answers nextCursor null when one page holds every row', async () => {

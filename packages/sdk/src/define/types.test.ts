@@ -76,7 +76,7 @@ describe('define types', () => {
     expectTypeOf<keyof DefineLimits>().toEqualTypeOf<'maxTurns' | 'maxBudgetUsd'>();
     expectTypeOf<keyof Exclude<ModelReference, string>>().toEqualTypeOf<'connection' | 'id'>();
     expectTypeOf<keyof Extract<EngineSettings, { id: 'claude-agent-sdk' }>>().toEqualTypeOf<
-      'id' | 'autoApprove'
+      'id' | 'autoApprove' | 'requireApproval' | 'handoff'
     >();
     expectTypeOf<keyof Extract<EngineSettings, { id: 'openai-agents' }>>().toEqualTypeOf<
       'id' | 'reasoningEffort' | 'parallelToolCalls'
@@ -98,7 +98,7 @@ describe('define types', () => {
     expectTypeOf<Parameters<typeof openapiTool>[0]>().toEqualTypeOf<OpenApiToolInput>();
     expectTypeOf<Parameters<typeof postgresTool>[0]>().toEqualTypeOf<PostgresToolInput>();
     expectTypeOf<keyof OpenApiToolInput>().toEqualTypeOf<
-      'name' | 'spec' | 'allow' | 'auth' | 'baseUrl'
+      'name' | 'spec' | 'allow' | 'auth' | 'identity' | 'baseUrl'
     >();
     expectTypeOf<keyof PostgresToolInput>().toEqualTypeOf<
       'name' | 'url' | 'readOnly' | 'tables' | 'maxRows'

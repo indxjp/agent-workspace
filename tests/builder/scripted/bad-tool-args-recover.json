@@ -1,0 +1,14 @@
+{
+  "turns": [
+    {
+      "toolUses": [
+        {
+          "name": "mcp__aw-control__draft_check",
+          "input": { "body": "@draft:crm", "workspaceId": "other" }
+        }
+      ]
+    },
+    { "toolUses": [{ "name": "mcp__aw-control__draft_check", "input": { "body": "@draft:crm" } }] },
+    { "text": "The draft passes the check." }
+  ]
+}

@@ -169,6 +169,10 @@ export class AgentDefinitions {
         return name === undefined ? [] : [name];
       });
     const skillNames = namesOf('skill', assignments.skillIds, skills);
+    const skillPins = Object.entries(assignments.skillRevisions ?? {}).flatMap(([id, revision]) => {
+      const name = skills.find((row) => row.id === id)?.name;
+      return name === undefined ? [] : [[name, revision] as const];
+    });
     const connectorNames = namesOf('connector', assignments.connectorIds, connectors);
     const fileGrants = assignments.files.flatMap((grant) => {
       const path = files.get(grant.fileId);
@@ -208,7 +212,12 @@ export class AgentDefinitions {
           : policy.policy,
       // A server older than #239 does not say; 'stored' keeps the policy exactly as read.
       policySource: policy.source ?? 'stored',
-      resources: { files: fileGrants, skills: skillNames, connectors: connectorNames },
+      resources: {
+        files: fileGrants,
+        skills: skillNames,
+        ...(skillPins.length === 0 ? {} : { skillRevisions: Object.fromEntries(skillPins) }),
+        connectors: connectorNames,
+      },
     });
   }
 
@@ -318,6 +327,14 @@ export class AgentDefinitions {
           }
         : definition.policy;
 
+    // A skipped skill is not assigned, so its pin goes with it.
+    const skillRevisions = Object.fromEntries(
+      Object.entries(resources.skillRevisions ?? {}).flatMap(([name, revision]) => {
+        const id = skillIds.get(name);
+        return id === undefined ? [] : [[id, revision] as const];
+      }),
+    );
+
     const created = await this.#agents.create(
       {
         name: agent.name,
@@ -328,7 +345,12 @@ export class AgentDefinitions {
         runtimeProfileId,
       },
       {
-        assignments: { files: fileGrants, skillIds: [...skillIds.values()], connectorIds },
+        assignments: {
+          files: fileGrants,
+          skillIds: [...skillIds.values()],
+          ...(Object.keys(skillRevisions).length === 0 ? {} : { skillRevisions }),
+          connectorIds,
+        },
         ...request,
       },
     );

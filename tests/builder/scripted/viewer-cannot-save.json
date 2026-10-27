@@ -1,0 +1,6 @@
+{
+  "turns": [
+    { "toolUses": [{ "name": "mcp__aw-control__draft_save", "input": { "body": "@draft:crm" } }] },
+    { "text": "Saving needs the Builder role. Ask an admin, or use the aw command." }
+  ]
+}

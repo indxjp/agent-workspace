@@ -1,0 +1,11 @@
+{
+  // The type-checking view: the whole of `src`, tests included, emitting nothing. The skill
+  // scripts under `office-reader/` are plain JavaScript (they run with Node alone in a run's
+  // sandbox) and are typed by their `.d.mts` files.
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "noEmit": true
+  },
+  "include": ["src"]
+}

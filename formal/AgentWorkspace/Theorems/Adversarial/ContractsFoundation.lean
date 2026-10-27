@@ -36,14 +36,14 @@ theorem accepted_id_has_no_path_character (j : JValue) (s : String) (hj : j = .s
     (h : isUuid j = true) : ∀ c ∈ s.toList, c ∉ pathSignificant := by
   subst hj
   intro c hc hbad
-  have hsafe : ∀ d ∈ pathSignificant, Uuid.isHexDigit d = false ∧ d ≠ '-' := by decide
+  have hsafe : ∀ d ∈ pathSignificant, Uuid.isHexDigit d = false ∧ d ≠ '-' := by decide +kernel
   obtain ⟨hx, hd⟩ := hsafe c hbad
   rcases canonical_chars s h c hc with h' | h'
   · rw [hx] at h'; cases h'
   · exact hd h'
 
 example : ∀ c ∈ "123e4567-e89b-12d3-a456-426614174000".toList, c ∉ pathSignificant :=
-  accepted_id_has_no_path_character _ _ rfl (by decide)
+  accepted_id_has_no_path_character _ _ rfl (by decide +kernel)
 
 /-- Every body `readProblem` accepts, over all JSON an attacker can send, yields a code of at
 least one UTF-16 unit. -/
@@ -77,7 +77,7 @@ theorem accepted_problem_has_a_code (j : JValue) (b : ApiProblemBody)
 
 example : 1 ≤ utf16Length "forbidden" :=
   accepted_problem_has_a_code (apiProblemCodec.encode ⟨⟨"forbidden", "No.", none, none⟩⟩)
-    ⟨"forbidden", "No.", none, none⟩ (by decide)
+    ⟨"forbidden", "No.", none, none⟩ (by decide +kernel)
 
 /-- An accepted standard envelope, whatever the attacker sent, has `error` as its only top-level
 key and only `code`, `message`, `details` and the deprecated `detail` inside it: no extra field
@@ -101,6 +101,6 @@ theorem accepted_standard_envelope_has_no_extra_key (j : JValue) (p : ApiProblem
 example : ∃ fs fs', apiProblemCodec.encode ⟨⟨"x", "y", none, none⟩⟩ = .obj fs ∧
     (∀ k ∈ keys fs, k = "error") ∧ lookup "error" fs = some (.obj fs') ∧
     ∀ k ∈ keys fs', k ∈ ["code", "message", "details", "detail"] :=
-  accepted_standard_envelope_has_no_extra_key _ ⟨⟨"x", "y", none, none⟩⟩ (by decide)
+  accepted_standard_envelope_has_no_extra_key _ ⟨⟨"x", "y", none, none⟩⟩ (by decide +kernel)
 
 end AgentWorkspace.Theorems.Adversarial.ContractsFoundation

@@ -13,7 +13,7 @@
  * A model connection and a runtime profile travel by name in the definition and by id here: the
  * resolution is the only place a name becomes an id.
  */
-import type { MaterialisedAgent, ResolvedReferences } from '@agent-workspace/core/db';
+import type { MaterialisedAgent, ResolvedReferences } from './store';
 import type { AgentVersionBody } from '@indx-workspace/contracts/agent-versions';
 import type { AgentDefinition } from '@indx-workspace/contracts/agents';
 

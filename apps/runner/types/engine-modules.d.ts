@@ -6,23 +6,23 @@
  * this application the other adapters' packages are not in the build context and their specifiers
  * resolve to nothing. These declarations are what the emit build (`tsconfig.build.json`, and only
  * it) type-checks those specifiers against: each module is the one export the registry reads,
- * typed `unknown`, because `readEngineExport` checks it at run time and answers
+ * the adapter's factory, typed `unknown`, because `readEngineExport` checks it at run time and answers
  * `engine_not_installed` for a module that is missing or malformed. The type-checking view
  * (`tsconfig.json`) does not include this file, so the workspace type-check still resolves the
  * real packages.
  */
 declare module '@agent-workspace/engine-claude-agent-sdk' {
-  export const CLAUDE_AGENT_SDK_ENGINE_ADAPTER: unknown;
+  export const createClaudeAgentSdkEngine: unknown;
 }
 
 declare module '@agent-workspace/engine-openai-agents' {
-  export const OPENAI_AGENTS_ENGINE_ADAPTER: unknown;
+  export const createOpenAiAgentsEngine: unknown;
 }
 
 declare module '@agent-workspace/engine-pi' {
-  export const PI_ENGINE_ADAPTER: unknown;
+  export const createPiEngine: unknown;
 }
 
 declare module '@agent-workspace/engine-mastra' {
-  export const MASTRA_ENGINE_ADAPTER: unknown;
+  export const createMastraEngine: unknown;
 }

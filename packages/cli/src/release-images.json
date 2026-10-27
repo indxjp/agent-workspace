@@ -1,6 +1,6 @@
 {
-  "registry": "ghcr.io/indxdev",
-  "version": "0.6.9",
+  "registry": "ghcr.io/indxjp",
+  "version": "0.6.11",
   "images": {
     "web": "web",
     "gateway": "gateway",

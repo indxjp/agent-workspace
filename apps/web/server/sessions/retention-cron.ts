@@ -13,31 +13,20 @@
  * The route exists only where `CRON_SECRET` is set. Without it the answer is a 404, so a deployment
  * on any other target exposes nothing; with it, only the exact bearer runs the pass.
  */
+import { log } from '../telemetry/logger';
 import { createHash, timingSafeEqual } from 'node:crypto';
 
 import type { SessionRetentionResult } from './retention';
+import { problemBody } from '../http/result';
 
 export type RetentionCronPass = () => Promise<readonly SessionRetentionResult[]>;
 
-interface RetentionCronRegistry {
-  __agentWorkspaceRetentionCronPass__?: RetentionCronPass;
-}
-
-const registry = globalThis as typeof globalThis & RetentionCronRegistry;
-
-/** Register the pass the cron route runs. Called by the composition root when `CRON_SECRET` is set. */
-export function installRetentionCronPass(pass: RetentionCronPass): void {
-  registry.__agentWorkspaceRetentionCronPass__ = pass;
-}
-
-/** Remove it. For tests. */
-export function resetRetentionCronPass(): void {
-  delete registry.__agentWorkspaceRetentionCronPass__;
-}
-
-export function getRetentionCronPass(): RetentionCronPass | null {
-  return registry.__agentWorkspaceRetentionCronPass__ ?? null;
-}
+/**
+ * The retention driver this process runs: `cron` carries the pass `GET /api/cron/retention` runs,
+ * `interval` means an in-process timer runs it and the route has nothing to serve.
+ */
+export type RetentionDriver =
+  { readonly kind: 'cron'; readonly pass: RetentionCronPass } | { readonly kind: 'interval' };
 
 /**
  * Pick the one retention driver this process runs: the cron route when `CRON_SECRET` is set (the
@@ -48,23 +37,19 @@ export function wireSessionRetention(
     env: Readonly<Record<string, string | undefined>>;
     runPass: RetentionCronPass;
     startScheduler: () => void;
-    installPass?: (pass: RetentionCronPass) => void;
   }>,
-): 'cron' | 'interval' {
-  if ((deps.env['CRON_SECRET'] ?? '') !== '') {
-    (deps.installPass ?? installRetentionCronPass)(deps.runPass);
-    return 'cron';
-  }
+): RetentionDriver {
+  if ((deps.env['CRON_SECRET'] ?? '') !== '') return { kind: 'cron', pass: deps.runPass };
   deps.startScheduler();
-  return 'interval';
+  return { kind: 'interval' };
 }
 
-function problem(status: number, code: string, message: string): Response {
-  return Response.json({ error: { code, message } }, { status });
+export function problem(status: number, code: string, message: string): Response {
+  return Response.json(problemBody(code, message), { status });
 }
 
 /** Compare digests, so the comparison takes the same time whatever the length of the guess. */
-function bearerMatches(header: string | null, secret: string): boolean {
+export function bearerMatches(header: string | null, secret: string): boolean {
   const supplied = header?.startsWith('Bearer ') === true ? header.slice('Bearer '.length) : '';
   const digest = (value: string) => createHash('sha256').update(value).digest();
   return timingSafeEqual(digest(supplied), digest(secret));
@@ -96,9 +81,7 @@ export async function handleRetentionCron(
     results = await deps.pass();
   } catch (error) {
     // SQL and storage text stay in the server log; the caller gets the standard envelope.
-    console.error(
-      `[retention-cron] pass failed: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    log.error('[retention-cron] pass failed', { error });
     return problem(500, 'internal_error', 'The request could not be completed.');
   }
   const counts = { workspaces: results.length, purged: 0, dryRun: 0, leaseHeld: 0 };

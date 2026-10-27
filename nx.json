@@ -2,7 +2,7 @@
   "$schema": "./node_modules/nx/schemas/nx-schema.json",
   "//": "Nx owns the TASK graph of this pnpm workspace (build / typecheck / lint / test per project) so CI can run only what a change affects (`nx affected`) and replay what it has already computed (the task cache). pnpm still owns installs and the workspace protocol. Every target is a plain `command` declared in the owning package.json `nx` block — there is no Nx plugin, no executor and no project.json to learn. See docs/adr/0053-ci-runs-on-nx-and-blacksmith-never-on-a-self-hosted-runner.md and, for the cross-run cache, docs/adr/0110-nx-cloud-is-replaced-by-a-self-hosted-oidc-gated-remote-cache.md.",
   "defaultBase": "main",
-  "//namedInputs": "lintConfig: The flat ESLint config and the root tsconfig it resolves type information through are read by every project's lint and typecheck, so they are inputs to all of them without being inside any one project. vitestConfig: The root Vitest config supplies every project's alias map and collection rules. TEST_DATABASE_URL and the S3 variables are part of the hash on purpose: the database-backed suites SKIP when they are absent (and the CI gate 'No test in the run was skipped' fails), so a result computed without services must never be replayed for a run that has them.",
+  "//namedInputs": "lintConfig: The flat ESLint config and the root tsconfig it resolves type information through are read by every project's lint and typecheck, so they are inputs to all of them without being inside any one project. vitestConfig: The root Vitest config supplies every project's alias map and collection rules. TEST_DATABASE_URL, the S3 variables and the Azurite/GCS emulator variables (TEST_AZURITE_URL, TEST_GCS_ENDPOINT) are part of the hash on purpose (whether each is set, not its value: on the self-hosted MS-A2 runners every job gets its own service ports): the database-backed suites SKIP when they are absent (and the CI gate 'No test in the run was skipped' fails) and the emulator suites are not defined at all, so a result computed without services must never be replayed for a run that has them.",
   "namedInputs": {
     "default": ["{projectRoot}/**/*", "sharedGlobals"],
     "sharedGlobals": [
@@ -17,16 +17,14 @@
     ],
     "lintConfig": [
       "{workspaceRoot}/eslint.config.mjs",
+      "{workspaceRoot}/eslint-suppressions.json",
       "{workspaceRoot}/tsconfig.root.json",
       "{workspaceRoot}/tsconfig.architecture.json"
     ],
     "vitestConfig": [
       "{workspaceRoot}/vitest.config.ts",
       {
-        "env": "TEST_DATABASE_URL"
-      },
-      {
-        "env": "TEST_S3_ENDPOINT"
+        "runtime": "node -p \"['TEST_DATABASE_URL','TEST_S3_ENDPOINT','TEST_AZURITE_URL','TEST_GCS_ENDPOINT'].map((name) => name + '=' + Boolean(process.env[name])).join(' ')\""
       }
     ]
   },

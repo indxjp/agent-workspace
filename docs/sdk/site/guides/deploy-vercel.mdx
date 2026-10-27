@@ -65,10 +65,13 @@ Open `acme-ai-deploy/.env` and set:
 | Variable | What it is |
 | --- | --- |
 | `DATABASE_URL` | An external PostgreSQL URL. Vercel runs no database; Neon works. |
-| `OBJECT_STORAGE_BUCKET`, `OBJECT_STORAGE_ACCESS_KEY_ID`, `OBJECT_STORAGE_SECRET_ACCESS_KEY` | The bucket and its key pair. Without a key pair the control plane installs no skills, files or session-state API. |
-| `OBJECT_STORAGE_ENDPOINT`, `AWS_REGION` | For R2: `https://<account>.r2.cloudflarestorage.com` and `auto`. Create the bucket first; the Vercel deploy does not. |
+| `AW_STORAGE_URL` | Where files, skills and session transcripts live, as `s3://<bucket>`. For R2: `s3://<bucket>?endpoint=https://<account>.r2.cloudflarestorage.com&region=auto`. Create the bucket first; the Vercel deploy does not. Put no key in it. |
+| `OBJECT_STORAGE_ACCESS_KEY_ID`, `OBJECT_STORAGE_SECRET_ACCESS_KEY`, `AWS_REGION` | The key pair (and `auto` for R2). Without a key pair the control plane installs no skills, files or session-state API. |
+| `AW_STORAGE_SIGNED_UPLOAD_MAX_BYTES` | Optional. The largest signed upload in bytes; blank keeps the server default, 5 GiB. |
 | `EXTERNAL_PROVIDER`, `E2B_API_KEY` | `e2b` and your E2B key. |
 | `E2B_RUNTIME_TEMPLATE`, `E2B_TOOL_HOST_TEMPLATE` | Templates pinned as `<template>:<build_id>`; see [E2B runtime template](/guides/deploy#e2b-runtime-template). The tool host turns on code tools. |
+
+A project created before `AW_STORAGE_URL` has `OBJECT_STORAGE_BUCKET` and `OBJECT_STORAGE_ENDPOINT` in `.env` and in the Vercel project. They are ignored, with one `storage_setting_ignored` warning that names them and never their values: deploy refuses an apply while `AW_STORAGE_URL` is blank, and never pushes an old storage variable. Set the URL in their place (`agent-workspace doctor` prints the line). Deploy does not delete the stale variables already set on the Vercel project: remove them there once the URL is pushed.
 
 ## Deploy
 

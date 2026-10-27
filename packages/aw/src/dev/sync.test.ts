@@ -11,7 +11,7 @@ import {
 } from '@indx-workspace/contracts/agent-versions';
 import type { AgentResource } from '@indx-workspace/contracts/agents';
 import type { ConnectorResource } from '@indx-workspace/contracts/connectors';
-import type { SkillFile } from '@indx-workspace/contracts/skills';
+import { SKILL_IMPORT_MULTIPART, type SkillFile } from '@indx-workspace/contracts/skills';
 import { createClient, type AgentWorkspaceClient } from '@indx-workspace/sdk';
 import { fixtures } from '@indx-workspace/sdk/testing';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -250,6 +250,18 @@ function toolResource(id: string, body: Record<string, unknown>): ConnectorResou
   });
 }
 
+/** A multipart skill import read the way `POST /api/skills` reads it: the name, then one part per file. */
+async function multipartImport(form: FormData): Promise<{ name: string; files: SkillFile[] }> {
+  const name = form.get(SKILL_IMPORT_MULTIPART.nameField);
+  const files: SkillFile[] = [];
+  for (const part of form.getAll(SKILL_IMPORT_MULTIPART.fileField)) {
+    if (typeof part === 'string') continue;
+    const bytes = Buffer.from(await part.arrayBuffer());
+    files.push({ path: part.name, contentBase64: bytes.toString('base64') });
+  }
+  return { name: typeof name === 'string' ? name : '', files };
+}
+
 /** The skills routes `aw dev` uses for `skills/`: list, import, export and patch. */
 function skillsServer(state: ServerState, request: Recorded): Response {
   const detail = (name: string) => ({ ...FIXTURES.skill, name });
@@ -412,7 +424,12 @@ async function start(
     const recorded: Recorded = {
       method: init?.method ?? 'GET',
       path: new URL(href).pathname,
-      json: typeof body === 'string' ? (JSON.parse(body) as unknown) : undefined,
+      json:
+        typeof body === 'string'
+          ? (JSON.parse(body) as unknown)
+          : body instanceof FormData
+            ? await multipartImport(body)
+            : undefined,
     };
     calls.push(recorded);
     const outage = holder.harness?.outage ?? null;

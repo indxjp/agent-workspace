@@ -16,10 +16,10 @@ import {
   connectorsRuntimeNotConfigured,
   readConnectorIdParam,
   readConnectorBody,
-  toResponse,
   withWorkspaceStore,
 } from '../../../../server/connectors/http';
-import { currentConnectorsRuntime } from '../../../../server/connectors/runtime';
+import { apiResultResponse } from '../../../../server/http/json-transport';
+import { applicationContext } from '../../../../server/application-context';
 import { requireResourceAccess } from '../../../../server/resources/authorise';
 import type { OwnershipResolver } from '../../../../server/rbac/http';
 
@@ -31,10 +31,11 @@ type ConnectorRouteContext = { params: Promise<{ id: string }> };
 function ownershipOf(id: unknown): OwnershipResolver {
   return async (principal) => {
     const parsed = requireConnectorId(id);
-    const installed = currentConnectorsRuntime();
-    if (installed === null) {
+    const connectors = applicationContext()?.connectors;
+    if (connectors?.kind !== 'serving') {
       return { kind: 'refuse', result: connectorsRuntimeNotConfigured() };
     }
+    const installed = connectors.runtime;
     if (!parsed.ok) {
       return { kind: 'refuse', result: connectorNotFound() };
     }
@@ -56,7 +57,7 @@ export async function GET(request: Request, context: ConnectorRouteContext): Pro
     (store) => getConnector(store, id),
     access.principal.workspaceId,
   );
-  return toResponse(result);
+  return apiResultResponse(result);
 }
 
 export async function PATCH(request: Request, context: ConnectorRouteContext): Promise<Response> {
@@ -78,7 +79,7 @@ export async function PATCH(request: Request, context: ConnectorRouteContext): P
     },
     access.principal.workspaceId,
   );
-  return toResponse(result);
+  return apiResultResponse(result);
 }
 
 export async function DELETE(request: Request, context: ConnectorRouteContext): Promise<Response> {
@@ -97,5 +98,5 @@ export async function DELETE(request: Request, context: ConnectorRouteContext): 
     },
     access.principal.workspaceId,
   );
-  return toResponse(result);
+  return apiResultResponse(result);
 }

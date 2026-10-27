@@ -53,14 +53,14 @@ describe('gateway run authentication', () => {
     });
     let resolvedTokenHash = '';
     const resolver: GatewayRunResolver = {
-      resolve: (claims, tokenHash) => {
+      resolve: (_claims, tokenHash) => {
         resolvedTokenHash = tokenHash;
         return Promise.resolve({
           state: 'active',
           providerId: 'anthropic',
           connectionProvider: 'anthropic',
           credential: 'provider-master-key',
-          settings: { connectionId: claims.modelConnectionId },
+          settings: {},
         });
       },
     };
@@ -341,6 +341,44 @@ describe('gateway run authentication', () => {
     );
     return { gateway, token };
   }
+
+  it('hands a settlement failure the request it belongs to, for its trace id (F-04)', async () => {
+    const tokens = createRunTokenCodec({ secret: SECRET, now: () => 1000 });
+    const token = await tokens.issue(SUBJECT);
+    const failures: { error: unknown; traceparent: string | null }[] = [];
+    const gateway = createAuthenticatedGateway(
+      routerReturning(
+        Response.json({
+          id: 'msg_fail',
+          model: 'claude-fixture',
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+      ),
+      tokens,
+      {
+        resolve: () =>
+          Promise.resolve({
+            state: 'active',
+            providerId: 'anthropic',
+            connectionProvider: 'anthropic',
+            credential: 'k',
+          }),
+      },
+      { record: () => Promise.reject(new Error('ledger down')), fail: () => Promise.resolve() },
+      (error, request) => {
+        failures.push({ error, traceparent: request.headers.get('traceparent') });
+      },
+    );
+    const traceparent = '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01';
+    await gateway.fetch(
+      new Request('http://gateway/v1/messages', {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, traceparent },
+        body: JSON.stringify({ model: 'claude-fixture', messages: [] }),
+      }),
+    );
+    expect(failures).toEqual([{ error: new Error('ledger down'), traceparent }]);
+  });
 
   it('holds a streamed response open until settlement completes, without delaying its bytes', async () => {
     const encoder = new TextEncoder();

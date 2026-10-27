@@ -2,7 +2,7 @@
  * Response and request helpers shared by the OAuth endpoints. Responses are `no-store` (RFC 6749
  * §5.1) and errors are the RFC 6749 §5.2 shape; nothing here ever carries a secret.
  */
-import { MAX_REQUEST_BODY_BYTES } from '../rbac/http';
+import { MAX_REQUEST_BODY_BYTES } from '../http/result';
 
 export type OAuthErrorCode =
   | 'invalid_request'

@@ -40,7 +40,7 @@ const agent = {
   updatedAt: '2026-09-21T10:00:00.000Z',
 };
 
-const assignments = { files: [], skillIds: [], connectorIds: [] };
+const assignments = { files: [], skillIds: [], connectorIds: [], storageGrants: [] };
 const principalIds = ['99999999-9999-4999-8999-999999999999'];
 
 const policy: AgentPolicy = {
@@ -74,6 +74,27 @@ describe('AgentsClient.list/get', () => {
     const { agents, calls } = client(() => json(200, { agents: [agent] }));
     expect(await agents.list()).toEqual([agent]);
     expect(calls[0]?.url.pathname).toBe('/api/agents');
+  });
+
+  it('reads lineage and archivedAt on get and list, and none on a person-made agent (#1851)', async () => {
+    const made = {
+      ...agent,
+      createdByAgent: { agentId: AGENT, version: 2, runId: 'run_abc' },
+      archivedAt: '2026-09-22T10:00:00.000Z',
+    };
+    const { agents } = client((request) =>
+      request.url.pathname === '/api/agents'
+        ? json(200, { agents: [made, agent] })
+        : json(200, made),
+    );
+    const [first, second] = await agents.list();
+    expect(first?.createdByAgent).toEqual({ agentId: AGENT, version: 2, runId: 'run_abc' });
+    expect(first?.archivedAt).toBe('2026-09-22T10:00:00.000Z');
+    expect(second).not.toHaveProperty('createdByAgent');
+    expect(second).not.toHaveProperty('archivedAt');
+    expect((await agents.get(AGENT)).createdByAgent?.version).toBe(2);
+    expectTypeOf(first?.createdByAgent?.agentId).toEqualTypeOf<string | null | undefined>();
+    expectTypeOf(first?.archivedAt).toEqualTypeOf<string | undefined>();
   });
 
   it('surfaces a missing agent by code', async () => {
@@ -125,7 +146,7 @@ describe('AgentsClient.create', () => {
 describe('AgentsClient.create from a version (S1-09, issue #447)', () => {
   const version = fixtures.agentVersion();
   const fromVersion = {
-    version: { summary: version.summary, via: version.via, body: version.body },
+    version: { summary: version.summary, via: 'api', body: version.body },
   } satisfies CreateAgentFromVersionRequestInput;
 
   it('posts {version} as given and reads the 201 agent and version', async () => {

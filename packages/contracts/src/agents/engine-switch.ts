@@ -119,7 +119,13 @@ function withWithheld(
 }
 
 function claudeToWithholding(previous: ClaudeArm, next: WithholdingArm): EngineSwitchTranslation {
-  const refused = previous.tools.deny.filter(claudeDenialIsUntranslatable);
+  // No other arm can make a call wait for approval or hand off to a person; dropping either would
+  // silently change what the agent does.
+  const refused = [
+    ...previous.tools.deny.filter(claudeDenialIsUntranslatable),
+    ...(previous.requireApproval ?? []).map((rule) => `requireApproval: ${rule}`),
+    ...(previous.handoff === true ? ['handoff'] : []),
+  ];
   const pairs: (readonly [string, readonly string[]])[] = [];
   const withheld = new Set<AgentPermissionKey>(next.withheldPermissions ?? []);
   for (const key of governedKeys(next.engine)) {

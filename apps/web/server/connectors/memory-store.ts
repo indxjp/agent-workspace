@@ -18,6 +18,7 @@
 import {
   credentialFieldFor,
   credentialHeaderValue,
+  identityOf,
   toToolConnectorResource,
   type AnyConnectorResource,
   type ConnectorResource,
@@ -43,8 +44,9 @@ import {
 /** A tool connector row; `credential` is the raw value, kept only in this process's memory. */
 interface StoredToolConnector extends Omit<
   ToolConnectorRow,
-  'credentialSecretId' | 'name' | 'enabled' | 'toolConfig' | 'updatedAt'
+  'credentialSecretId' | 'identitySecretName' | 'name' | 'enabled' | 'toolConfig' | 'updatedAt'
 > {
+  identitySecretName: string | null;
   name: string;
   enabled: boolean;
   toolConfig: Readonly<Record<string, unknown>>;
@@ -71,6 +73,7 @@ interface StoredConnector {
   authType: McpAuthType;
   /** The raw credential, kept ONLY in this process's memory — see this file's header. */
   credential: string | null;
+  identitySecretName: string | null;
   enabled: boolean;
   readonly createdBy: string | null;
   readonly ownerPrincipalId: string;
@@ -94,6 +97,7 @@ function toResource(row: StoredConnector): ConnectorResource {
     ownerPrincipalId: row.ownerPrincipalId,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+    ...identityOf(row.identitySecretName),
   };
 }
 
@@ -121,6 +125,8 @@ function toProbeConfig(row: StoredConnector): ResolvedConnectorProbeConfig {
 export interface InMemoryConnectorsStoreOptions {
   readonly now?: (() => Date) | undefined;
   readonly newId?: (() => string) | undefined;
+  /** Identity secret NAME to value; a name absent here is an unresolvable secret. */
+  readonly identityKeys?: Readonly<Record<string, string>> | undefined;
 }
 
 export function createInMemoryConnectorsStoreProvider(
@@ -181,6 +187,7 @@ export function createInMemoryConnectorsStoreProvider(
             toolConfig: write.toolConfig,
             openapiDocument: write.openapiDocument,
             credential: write.credential,
+            identitySecretName: write.identity?.secret ?? null,
             enabled: true,
             createdBy: owner.userId,
             ownerPrincipalId: owner.principalId,
@@ -209,6 +216,7 @@ export function createInMemoryConnectorsStoreProvider(
             row.toolConfig = change.toolConfig;
             row.openapiDocument = change.openapiDocument;
             row.credential = change.credential;
+            row.identitySecretName = change.identity?.secret ?? null;
           }
           row.updatedAt = now();
           return Promise.resolve({ kind: 'updated', connector: toolResource(row) });
@@ -233,6 +241,7 @@ export function createInMemoryConnectorsStoreProvider(
             url: input.url,
             authType: input.authType,
             credential: input.credential,
+            identitySecretName: input.identity?.secret ?? null,
             enabled: true,
             createdBy: owner.userId,
             ownerPrincipalId: owner.principalId,
@@ -252,6 +261,7 @@ export function createInMemoryConnectorsStoreProvider(
               url: row.url,
               authType: row.authType,
               credentialSecretId: row.credential !== null ? `mem-secret-${row.id}` : null,
+              identitySecretName: row.identitySecretName,
               enabled: row.enabled,
               createdBy: row.createdBy,
               ownerPrincipalId: row.ownerPrincipalId,
@@ -294,10 +304,20 @@ export function createInMemoryConnectorsStoreProvider(
           if (patch.args !== undefined) row.args = patch.args === null ? null : [...patch.args];
           if (patch.url !== undefined) row.url = patch.url;
           if (patch.authType !== undefined) row.authType = patch.authType;
+          if (patch.identity !== undefined) {
+            row.identitySecretName = patch.identity === null ? null : patch.identity.secret;
+          }
           if (row.authType === 'none') row.credential = null;
           else if (patch.credential !== undefined) row.credential = patch.credential;
           row.updatedAt = now();
           return Promise.resolve({ kind: 'updated', connector: toResource(row) });
+        },
+
+        resolveIdentityKey(id: string): Promise<string | null | undefined> {
+          const name = (bucket(workspaceId).get(id) ?? toolBucket(workspaceId).get(id))
+            ?.identitySecretName;
+          if (name === null || name === undefined) return Promise.resolve(undefined);
+          return Promise.resolve(options.identityKeys?.[name] ?? null);
         },
 
         resolveForProbe(id: string): Promise<ResolvedConnectorProbeConfig | null> {

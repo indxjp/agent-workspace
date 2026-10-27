@@ -23,21 +23,23 @@ def witnesses : List Frame :=
    .usage ⟨10, 20, some 5, none, some 8⟩,
    .result .endTurn (some 2) (some ⟨4, 3⟩),
    .native "system/status" (.obj [("type", .str "system")]),
-   .malformed "an SDK event must be an object; got the string \"nope\""]
+   .malformed "an SDK event must be an object; got the string \"nope\"",
+   .approvalRequested "tool_2" "Bash" "Bash(rm -rf build)",
+   .handoff (some "The visitor asked for a person.")]
 
 /-- The model's frame names are the contract's, in the contract's order, and the witnesses cover
 every one of them. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/run-events.ts#AGENT_FRAME_NAMES")
-  (ts := "packages/core/src/types.ts#agentFrameNames")]
+  (ts := "packages/run-protocol/src/types.ts#agentFrameNames")]
 theorem frames_cover_the_vocabulary :
-    witnesses.map Frame.name = agentFrameNames := by decide
+    witnesses.map Frame.name = agentFrameNames := by decide +kernel
 
 /-- The two closed sets a frame is written in are the contract's, in the contract's order. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/run-events.ts#AGENT_TOOL_KINDS")
   (ts := "packages/contracts/src/run-events.ts#AGENT_STOP_REASONS")]
 theorem tool_kinds_and_stop_reasons_are_the_contract :
     ToolKind.all.map ToolKind.toWire = agentToolKinds ∧
-    StopReason.all.map StopReason.toWire = agentStopReasons := by decide
+    StopReason.all.map StopReason.toWire = agentStopReasons := by decide +kernel
 
 /-- Every frame name is a legal SSE `event:` name, and none of them is `error`.
 
@@ -48,7 +50,7 @@ client's watchdog swallows it. -/
   (ts := "packages/contracts/src/run-events.ts#EVENT_NAME_PATTERN")]
 theorem frame_names_are_legal_sse_names :
     agentFrameNames.all eventNamePattern = true ∧
-    agentFrameNames.contains "error" = false := by decide
+    agentFrameNames.contains "error" = false := by decide +kernel
 
 /-- The neutral vocabulary and the pre-ENG-03 relayed vocabulary are disjoint.
 
@@ -58,7 +60,7 @@ upgraded — a positive membership test rather than a guess about the payload's 
   (ts := "packages/contracts/src/run-events.ts#RELAYED_EVENT_NAMES")]
 theorem neutral_and_legacy_vocabularies_are_disjoint :
     agentFrameNames.all (fun name => !relayedEventNames.contains name) = true ∧
-    relayedEventNames.all (fun name => !agentFrameNames.contains name) = true := by decide
+    relayedEventNames.all (fun name => !agentFrameNames.contains name) = true := by decide +kernel
 
 /-- The frame codec round-trips: a frame encoded with its engine and its engine-native payload
 decodes back to exactly that engine, that payload and that frame. -/
@@ -67,7 +69,16 @@ decodes back to exactly that engine, that payload and that frame. -/
 theorem frame_codec_round_trips :
     witnesses.all (fun frame =>
       decode (encode "claude-agent-sdk" (.obj [("type", .str "assistant")]) frame) ==
-        some ("claude-agent-sdk", .obj [("type", .str "assistant")], frame)) = true := by decide
+        some ("claude-agent-sdk", .obj [("type", .str "assistant")], frame)) = true := by decide +kernel
+
+/-- A visitor's `agent.handoff` — served without the operator's `reason` (ADR-0145 D4) — is still a
+frame the parser reads, and reads as a handoff with no reason. -/
+@[aw_spec (tier := T0) (ts := "packages/contracts/src/run-events.ts#AgentHandoffFrameSchema")
+  (ts := "apps/web/server/runs/agent-frames.ts#forVisitor")]
+theorem visitor_handoff_round_trips :
+    decode (encode "claude-agent-sdk" .null (.handoff none)) =
+      some ("claude-agent-sdk", .null, .handoff none) ∧
+    (Frame.handoff none).body = [] := by decide +kernel
 
 /-- The parser is exactly as strict as the contract on the closed fields: a `role`, a delta `block`, a
 tool `status` outside their enums, a negative or non-numeric `engineCostUsd`, and an empty string
@@ -93,9 +104,11 @@ theorem decode_refuses_what_the_contract_refuses :
       none ∧
     decode (.obj (head "agent.native" ++ [("type", .str ""), ("payload", .null)])) = none ∧
     decode (.obj (head "agent.malformed" ++ [("reason", .str "")])) = none ∧
+    decode (.obj (head "agent.handoff" ++ [("reason", .str "")])) = none ∧
+    decode (.obj (head "agent.malformed")) = none ∧
     decode (.obj (head "agent.tool.call" ++
       [("toolCallId", .str ""), ("name", .str "Read"), ("kind", .str "read"),
-       ("input", .null)])) = none := by decide
+       ("input", .null)])) = none := by decide +kernel
 
 /-- The SDK's classification answers a frame for a runtime frame and nothing for the platform's own,
 and it refuses a runtime frame whose `event:` name disagrees with its payload's `frame` field. -/
@@ -106,19 +119,19 @@ theorem platform_frames_carry_no_agent_event :
     toAgentEvent (.runtime "agent.malformed"
       (encode "claude-agent-sdk" .null (.malformed "x"))) = some (.malformed "x") ∧
     toAgentEvent (.runtime "agent.result"
-      (encode "claude-agent-sdk" .null (.malformed "x"))) = none := by decide
+      (encode "claude-agent-sdk" .null (.malformed "x"))) = none := by decide +kernel
 
 /-- `raw` over the cap becomes the marker, and the marker satisfies the published schema: a payload
 too large is **truncated, never rejected**, because the neutral fields beside it are what a consumer
 renders. -/
-@[aw_spec (tier := T0) (ts := "packages/core/src/schemas.ts#capAgentFrameRaw")
+@[aw_spec (tier := T0) (ts := "packages/run-protocol/src/schemas.ts#capAgentFrameRaw")
   (ts := "packages/contracts/src/run-events.ts#AgentFrameRawTruncationSchema")]
 theorem oversized_raw_is_truncated_not_rejected :
     capRaw (some 8) (.str "small") = .str "small" ∧
     capRaw (some (rawMaxBytes + 1)) (.str "huge") = truncationMarker (some (rawMaxBytes + 1)) ∧
     capRaw none (.str "cyclic") = truncationMarker none ∧
     agentFrameRawTruncation (truncationMarker (some (rawMaxBytes + 1))) = true ∧
-    agentFrameRawTruncation (truncationMarker none) = true := by decide
+    agentFrameRawTruncation (truncationMarker none) = true := by decide +kernel
 
 /-- Only a spoken assistant turn reaches the conversation. -/
 @[aw_spec (tier := T0)
@@ -130,7 +143,7 @@ theorem only_a_spoken_assistant_turn_is_a_chat_message :
     assistantResponse (.message none .assistant [.text "Tokyo."]) = none ∧
     assistantResponse (.message (some "m") .assistant [.text "   "]) = none ∧
     assistantResponse (.message (some "m") .assistant [.reasoning "private"]) = none ∧
-    assistantResponse (.result .endTurn none none) = none := by decide
+    assistantResponse (.result .endTurn none none) = none := by decide +kernel
 
 /-! ## Successors of the neutral-view theorems `WellFormed/SdkRuns.lean` held before ENG-03
 
@@ -163,7 +176,7 @@ The message frame comes first with its prose blocks in the model's order, then o
 no frame. Served from a stored row, the frames take sub-indices `0, 1, 2` in exactly that order, and
 the ids are strictly increasing. `Invariants/AgentFrames.lean`'s
 `served_frames_keep_emission_order` is the same statement for every row. -/
-@[aw_spec (tier := T0) (ts := "packages/core/src/schemas.ts#toAgentFrames")
+@[aw_spec (tier := T0) (ts := "packages/run-protocol/src/schemas.ts#toAgentFrames")
   (ts := "apps/web/server/runs/agent-frames.ts#upgradeStoredEvent")]
 theorem engine_message_fans_out_in_order :
     toAgentFrames (classify systemSubtypes resultSubtypes eventTypes fanoutMessage) =
@@ -176,7 +189,7 @@ theorem engine_message_fans_out_in_order :
        ((7, some 1), .toolCall "c1" "Read" .read (.obj [])),
        ((7, some 2), .toolCall "c2" "Bash" .execute (.obj []))] ∧
     idsIncreasing ((serveLegacyRow systemSubtypes resultSubtypes eventTypes 7
-        (legacyEnvelope "sdk-event" fanoutMessage)).map Prod.fst) = true := by decide
+        (legacyEnvelope "sdk-event" fanoutMessage)).map Prod.fst) = true := by decide +kernel
 
 /-- **A `result` with no readable subtype never claims success** (successor of
 `missing_result_subtype_is_provider`).
@@ -184,8 +197,8 @@ theorem engine_message_fans_out_in_order :
 Before ENG-03 such a message stayed an opaque provider event. It is now refused by name as
 `agent.malformed` — still not a result, and still not a success — and a subtype this build does not
 know is a result whose stop reason is `error`. `end_turn` is reachable from `success` alone. -/
-@[aw_spec (tier := T0) (ts := "packages/core/src/schemas.ts#classifySdkEvent")
-  (ts := "packages/core/src/schemas.ts#toAgentFrames")]
+@[aw_spec (tier := T0) (ts := "packages/run-protocol/src/schemas.ts#classifySdkEvent")
+  (ts := "packages/run-protocol/src/schemas.ts#toAgentFrames")]
 theorem result_without_a_readable_subtype_never_claims_success :
     toAgentFrames (classify systemSubtypes resultSubtypes eventTypes
         (.obj [("type", .str "result")])) =
@@ -194,7 +207,7 @@ theorem result_without_a_readable_subtype_never_claims_success :
         (.obj [("type", .str "result"), ("subtype", .str "error_from_the_future")])) =
       [.result .error none none] ∧
     ∀ subtype, stopReasonOf subtype = .endTurn → subtype = "success" := by
-  refine ⟨by decide, by decide, ?_⟩
+  refine ⟨by decide +kernel, by decide +kernel, ?_⟩
   intro subtype h
   unfold stopReasonOf at h
   by_cases h1 : (subtype == "success") = true
@@ -219,7 +232,7 @@ private def accountingMessage : JValue :=
 The engine's counters reach `agent.usage` and its turn count and cost reach `agent.result`, exactly;
 every frame the message produced carries the message itself as `raw` (under the cap, which a
 message this size is), and the SDK's parser hands all of it back. -/
-@[aw_spec (tier := T0) (ts := "packages/core/src/schemas.ts#toAgentFrames")
+@[aw_spec (tier := T0) (ts := "packages/run-protocol/src/schemas.ts#toAgentFrames")
   (ts := "packages/sdk/src/events/agent-event.ts#toAgentEvent")]
 theorem result_frame_preserves_accounting_and_raw :
     toAgentFramesJson "claude-agent-sdk" (some 256)
@@ -230,11 +243,11 @@ theorem result_frame_preserves_accounting_and_raw :
         (classify systemSubtypes resultSubtypes eventTypes accountingMessage)).map decode =
       [some ("claude-agent-sdk", accountingMessage, .usage ⟨2, 3, some 1, some 0, none⟩),
        some ("claude-agent-sdk", accountingMessage,
-         .result .endTurn (some 1) (some ⟨125, 4⟩))] := by decide
+         .result .endTurn (some 1) (some ⟨125, 4⟩))] := by decide +kernel
 
 /-- And for every message, not only that one: each frame it maps to carries the same capped message
 as its `raw`. -/
-@[aw_spec (tier := T0) (ts := "packages/core/src/schemas.ts#toAgentFrames")]
+@[aw_spec (tier := T0) (ts := "packages/run-protocol/src/schemas.ts#toAgentFrames")]
 theorem every_frame_of_a_message_carries_its_raw (engine : String) (encodedBytes : Option Nat)
     (classified : Classified) :
     ∀ j ∈ toAgentFramesJson engine encodedBytes classified, ∃ frame ∈ toAgentFrames classified,

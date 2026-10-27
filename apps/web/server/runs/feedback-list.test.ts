@@ -6,20 +6,15 @@ import { RunFeedbackListResponseSchema } from '@indx-workspace/contracts/feedbac
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { ORDER_STATUS_FRAMES } from '../evaluations/fixtures';
-import {
-  installRunApi,
-  resetRunApi,
-  type AgentFeedbackQuery,
-  type AgentFeedbackRow,
-  type Principal,
-} from './environment';
+import type { AgentFeedbackQuery, AgentFeedbackRow, RunPrincipal } from './environment';
 import { listAgentFeedback } from './feedback';
-import { InMemoryRunStore } from './store';
+import { InMemoryRunStore } from './memory-store';
+import { installTestRunApi, resetTestRunApi } from '../application-context-fixtures';
 
 const WORKSPACE = '22222222-2222-4222-8222-222222222222';
 const AGENT = '33333333-3333-4333-8333-333333333333';
 const RUN = '44444444-4444-4444-8444-444444444444';
-const OWNER: Principal = {
+const OWNER: RunPrincipal = {
   principalId: '77777777-7777-4777-8777-777777777777',
   ownerPrincipalId: '77777777-7777-4777-8777-777777777777',
   userId: '66666666-6666-4666-8666-666666666666',
@@ -41,9 +36,9 @@ const ROW: AgentFeedbackRow = {
   })),
 };
 
-function install(principal: Principal | null, rows: readonly AgentFeedbackRow[] | null = [ROW]) {
+function install(principal: RunPrincipal | null, rows: readonly AgentFeedbackRow[] | null = [ROW]) {
   const queries: AgentFeedbackQuery[] = [];
-  installRunApi({
+  installTestRunApi({
     authenticate: () => Promise.resolve(principal),
     findAgent: () => Promise.resolve(null),
     openSession: () => Promise.resolve(null),
@@ -66,7 +61,7 @@ async function codeOf(response: Response): Promise<string> {
   return body.error?.code ?? '(none)';
 }
 
-afterEach(() => resetRunApi());
+afterEach(() => resetTestRunApi());
 
 describe('GET /api/agents/:id/feedback (issue #620)', () => {
   it('answers each rating with its run’s prompt and final answer', async () => {
@@ -145,7 +140,7 @@ describe('GET /api/agents/:id/feedback (issue #620)', () => {
   });
 
   it('answers 503 when the deployment has no feedback list', async () => {
-    installRunApi({
+    installTestRunApi({
       authenticate: () => Promise.resolve(OWNER),
       findAgent: () => Promise.resolve(null),
       openSession: () => Promise.resolve(null),

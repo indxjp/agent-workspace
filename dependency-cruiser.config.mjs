@@ -10,7 +10,7 @@ export default {
         pathNot:
           '^packages/core/src/db/schema/(?:model-connections|workspaces|agents|agent-versions)\\.ts$',
       },
-      to: { circular: true },
+      to: { circular: true, viaOnly: { dependencyTypesNot: ['type-only'] } },
     },
     {
       name: 'schema-cycle-is-limited-to-agent-materialised-version',
@@ -61,12 +61,71 @@ export default {
       to: { path: '^packages/core/src/db/' },
     },
     {
+      name: 'web-contracts-do-not-import-persistence',
+      severity: 'error',
+      comment:
+        'Refactoring plan, architecture enforcement end state: a domain wire contract never names a database record; mappers take structural inputs. Covers every `<domain>/contract.ts` and `projects/resource.ts`, the other record → wire-resource mapper that is clean today. `runtimes/connections.ts` is not listed because it still imports `core/db`: its port and store live in the same file as its mapper.',
+      from: { path: '^apps/web/server/(?:[^/]+/contract|projects/resource)\\.ts$' },
+      to: { path: '^packages/core/src/db/' },
+    },
+    {
       name: 'libraries-do-not-import-applications',
       severity: 'error',
       from: {
-        path: '^packages/(core|runtime|gateway|contracts|sdk|react|aw|platforms|engine|engine-[^/]+)/',
+        path: '^packages/(core|runtime|gateway|contracts|sdk|react|aw|platforms|skills-office|engine|engine-[^/]+|cli|create|tool-host|egress-proxy)/',
       },
       to: { path: '^apps/' },
+    },
+    {
+      name: 'skills-office-depends-only-on-contracts',
+      severity: 'error',
+      comment:
+        'The built-in skill package ships files and names them; it reaches the wire contracts and nothing else in the workspace.',
+      from: { path: '^packages/skills-office/' },
+      to: { path: '^(apps|packages)/', pathNot: '^packages/(skills-office|contracts)/' },
+    },
+    {
+      name: 'core-depends-only-on-contracts',
+      severity: 'error',
+      comment:
+        'F-15, F-08: core is persistence, object storage and secrets; of the workspace it reaches only the wire contracts. The run protocol (RunRequest, the agent schemas, the agent.* mapping) and the engine port are not its business: callers import `@agent-workspace/run-protocol` directly (W2-9).',
+      from: { path: '^packages/core/' },
+      to: { path: '^(apps|packages)/', pathNot: '^packages/(core|contracts)/' },
+    },
+    {
+      name: 'runtime-depends-on-nothing-in-the-workspace',
+      severity: 'error',
+      comment:
+        'F-15: the runtime package is the in-sandbox execution layer; it must not drag the control plane, persistence or the wire contracts into a run image.',
+      from: { path: '^packages/runtime/' },
+      to: { path: '^(apps|packages)/', pathNot: '^packages/runtime/' },
+    },
+    {
+      name: 'gateway-depends-only-on-core-and-contracts',
+      severity: 'error',
+      comment:
+        'F-15: the model gateway reaches persistence through core and the wire contracts, never the runtime, an application or an SDK.',
+      from: { path: '^packages/gateway/' },
+      to: { path: '^(apps|packages)/', pathNot: '^packages/(gateway|core|contracts)/' },
+    },
+    {
+      name: 'egress-proxy-depends-on-nothing-in-the-workspace',
+      severity: 'error',
+      comment:
+        'F-15: the egress proxy is a standalone security fence in front of sandbox traffic; any workspace import widens what it must trust.',
+      from: { path: '^packages/egress-proxy/' },
+      to: { path: '^(apps|packages)/', pathNot: '^packages/egress-proxy/' },
+    },
+    {
+      name: 'tool-host-depends-only-on-aw-contracts-and-egress-proxy',
+      severity: 'error',
+      comment:
+        'F-15: the tool host runs inside the sandbox; it reaches the control plane through `aw`, the wire contracts and the egress proxy, never core, runtime or an application.',
+      from: { path: '^packages/tool-host/' },
+      to: {
+        path: '^(apps|packages)/',
+        pathNot: '^packages/(tool-host|aw|contracts|egress-proxy)/',
+      },
     },
     {
       name: 'platforms-depend-only-on-contracts',
@@ -88,12 +147,31 @@ export default {
       to: { dependencyTypes: ['core'] },
     },
     {
+      name: 'engine-testing-subpaths-are-for-tests',
+      severity: 'error',
+      comment:
+        'W3-8: an engine package root exports its port (packages/engine) or its one factory (an adapter); `@agent-workspace/engine(-<id>)?/testing` carries the conformance kit and the adapter internals, and only tests may reach it.',
+      from: {
+        path: '^(apps|packages)/',
+        pathNot: '^packages/engine[a-z-]*/src/testing[./]|\\.(?:test|spec)\\.[cm]?[jt]sx?$',
+      },
+      to: { path: '^packages/engine[a-z-]*/src/testing(?:\\.ts$|/)' },
+    },
+    {
       name: 'engine-port-depends-only-on-contracts',
       severity: 'error',
       comment:
         'ENG-04: the engine port is where a runner and an adapter meet, so anything it imported would become something every adapter has to carry — which is how a port turns back into a framework. `packages/contracts`, and nothing else — not even zod: the port is types and pure functions, and the trust-boundary parse belongs to the adapter that owns the policy arm.',
       from: { path: '^packages/engine/' },
       to: { path: '^(apps|packages)/', pathNot: '^packages/(engine|contracts)/' },
+    },
+    {
+      name: 'run-protocol-depends-only-on-contracts-and-engine',
+      severity: 'error',
+      comment:
+        'F-08: `run-protocol` is the private contract between the control plane, the runner and the engine adapters (`RunRequest`, the agent schemas, the Claude `agent.*` mapping). It sees the wire contracts and the engine port, whose frame builder the mapping shares with every adapter, and nothing else: importing core would give its callers the database and cloud SDKs back.',
+      from: { path: '^packages/run-protocol/' },
+      to: { path: '^(apps|packages)/', pathNot: '^packages/(run-protocol|contracts|engine)/' },
     },
     {
       name: 'engine-adapters-depend-only-on-the-port-and-contracts',
@@ -114,14 +192,14 @@ export default {
       },
     },
     {
-      name: 'claude-adapter-depends-only-on-the-port-contracts-and-core',
+      name: 'claude-adapter-depends-only-on-the-port-contracts-and-run-protocol',
       severity: 'error',
       comment:
-        "ENG-04: an adapter sees the port, the wire contracts, and its own third-party SDK. `packages/core` is on this list for one transitional reason, stated rather than implied: the private `/run` contract (`RunRequest`) and the ENG-03 `agent.*` mapping still live there, because the control plane runs the same mapping over pre-ENG-03 rows and may not import an adapter. The private contract's v2 (#303's follow-up) moves both and this entry goes with them. Only this adapter: the reason is Claude's `RunRequest` and mapping.",
+        'ENG-04, F-08: an adapter sees the port, the wire contracts, and its own third-party SDK. This adapter may also see `packages/run-protocol`, because the private `/run` contract (`RunRequest`) and the Claude `agent.*` mapping live there: the control plane runs the same mapping over pre-ENG-03 rows and may not import an adapter (ADR-0070 Deviation 2, closed by W2-9). Never `packages/core`, never another adapter.',
       from: { path: '^packages/engine-claude-agent-sdk/' },
       to: {
         path: '^(apps|packages)/',
-        pathNot: '^packages/(engine|contracts|core|engine-claude-agent-sdk)/',
+        pathNot: '^packages/(engine|contracts|run-protocol|engine-claude-agent-sdk)/',
       },
     },
     {
@@ -189,7 +267,7 @@ export default {
         pathNot:
           '^packages/aw/src/(cli-bridge|commands/deploy\\.test|commands/platforms\\.test)\\.ts$',
       },
-      to: { path: '^packages/cli/' },
+      to: { path: '^packages/cli/', dependencyTypesNot: ['type-only', 'type-import'] },
     },
     {
       name: 'cli-depends-only-on-sdk-and-contracts',
@@ -216,6 +294,123 @@ export default {
       to: { path: '^(apps|packages)/', pathNot: '^packages/(create|cli)/' },
     },
     {
+      name: 'routes-do-not-import-routes',
+      severity: 'error',
+      comment:
+        'F-15: a route handler is a delivery adapter; sharing logic between two routes belongs in a server domain, not in one route importing the other. Known violations live in .dependency-cruiser-known-violations.json and can only shrink.',
+      from: {
+        path: '^apps/web/app/.*/route\.ts$',
+        pathNot: '\.(?:test|spec)\.[cm]?[jt]sx?$',
+      },
+      to: { path: '^apps/web/app/.*/route\.ts$' },
+    },
+    {
+      name: 'app-does-not-import-core',
+      severity: 'error',
+      comment:
+        'F-15: Next.js `app/**` reaches persistence and infrastructure through server domains and composition, never `@agent-workspace/core` directly. Known violations live in .dependency-cruiser-known-violations.json and can only shrink.',
+      from: { path: '^apps/web/app/', pathNot: '\.(?:test|spec)\.[cm]?[jt]sx?$' },
+      to: { path: '^packages/core/' },
+    },
+    {
+      name: 'only-the-s3-boundary-imports-the-s3-sdk',
+      severity: 'error',
+      comment:
+        'The storage design, §07 rule 1: only one file per cloud imports that cloud library, so each loads only when its cloud is used. The S3 boundary is `packages/core/src/storage/s3-store.ts`. `packages/cli/src/validate.ts` is the one named exception (owner decision Q-9): the published CLI probes a bucket and may not import `packages/core` (ADR-0082). Test, live and acceptance files may import the SDK. `@aws-sdk/client-kms` is a key-management library, not storage, and is left out on purpose.',
+      from: {
+        path: '^(apps|packages)/',
+        pathNot:
+          '^packages/core/src/storage/s3-store\\.ts$|^packages/cli/src/validate\\.ts$|\\.(?:test|spec|acceptance)\\.[cm]?[jt]sx?$|\\.live\\.',
+      },
+      to: { path: '(^|/)@aws-sdk/(client-s3|lib-storage|s3-request-presigner)(/|$)' },
+    },
+    {
+      name: 'only-the-gcs-boundary-imports-the-gcs-sdk',
+      severity: 'error',
+      comment:
+        'The storage design, §07 rule 1: only `packages/core/src/storage/gcs-store.ts` imports `@google-cloud/storage`. `packages/cli/src/validate.ts` is the one named exception (Q-9, ADR-0082: the published CLI probes a bucket and may not import `packages/core`). Test, live and acceptance files may import the SDK.',
+      from: {
+        path: '^(apps|packages)/',
+        pathNot:
+          '^packages/core/src/storage/gcs-store\\.ts$|^packages/cli/src/validate\\.ts$|\\.(?:test|spec|acceptance)\\.[cm]?[jt]sx?$|\\.live\\.',
+      },
+      to: { path: '(^|/)@google-cloud/storage(/|$)' },
+    },
+    {
+      name: 'only-the-azure-boundary-imports-the-azure-sdk',
+      severity: 'error',
+      comment:
+        'The storage design, §07 rule 1: only `packages/core/src/storage/azure-blob-store.ts` imports `@azure/storage-blob`. `@azure/identity` is a credential library also used by the Key Vault provider and the runtime, so it is left out on purpose. Test, live and acceptance files may import the SDK.',
+      from: {
+        path: '^(apps|packages)/',
+        pathNot:
+          '^packages/core/src/storage/azure-blob-store\\.ts$|\\.(?:test|spec|acceptance)\\.[cm]?[jt]sx?$|\\.live\\.',
+      },
+      to: { path: '(^|/)@azure/storage-blob(/|$)' },
+    },
+    {
+      name: 'app-does-not-import-storage-adapters',
+      severity: 'error',
+      comment:
+        'The storage design, §07 rule 2: pages and API routes never touch storage directly; they call a server domain service. `app/**` may not value-import a domain `store.ts` or `composition/storage.ts`; a type-only import is allowed.',
+      from: { path: '^apps/web/app/', pathNot: '\\.(?:test|spec)\\.[cm]?[jt]sx?$' },
+      to: {
+        path: '^apps/web/server/(?:[^/]+/store|composition/storage)\\.ts$',
+        dependencyTypesNot: ['type-only', 'type-import'],
+      },
+    },
+    {
+      name: 'domain-does-not-import-persistence',
+      severity: 'error',
+      comment:
+        'F-15: a web server domain names no `packages/core/src/db` record or repository; only its `store.ts` adapter (and the test-only `catalog-store.memory.ts`) may. Known violations live in .dependency-cruiser-known-violations.json and can only shrink.',
+      from: {
+        path: '^apps/web/server/[^/]+/',
+        pathNot: '/store\.ts$|/catalog-store\.memory\.ts$|\.(?:test|spec)\.[cm]?[jt]sx?$',
+      },
+      to: { path: '^packages/core/src/db/' },
+    },
+    {
+      name: 'memory-catalog-store-is-for-tests',
+      severity: 'error',
+      comment:
+        'The storage design, §07 rule 4: the in-memory catalog store backs tests only; production wires `createResourceCatalogStoreProvider`.',
+      from: { path: '^(apps|packages)/', pathNot: '\\.(?:test|spec)\\.[cm]?[jt]sx?$' },
+      to: { path: '^apps/web/server/resources/catalog-store\\.memory\\.ts$' },
+    },
+    {
+      name: 'builder-core-is-pure',
+      severity: 'error',
+      comment:
+        'Builder design §04 "The core and its ports" (ADR-0108 B-D5, #1844): `builder/core/` is a pure decision core. It may import only files inside `core/`, the wire contracts (`packages/contracts/src/`) and zod; every Node built-in, other server module, workspace package and npm package is refused.',
+      from: {
+        path: '^apps/web/server/builder/core/',
+        pathNot: '\\.(?:test|spec)\\.[cm]?[jt]sx?$',
+      },
+      to: {
+        pathNot: '^apps/web/server/builder/core/|^packages/contracts/src/|(?:^|/)node_modules/zod/',
+      },
+    },
+    {
+      name: 'builder-memory-adapters-are-for-tests',
+      severity: 'error',
+      comment:
+        'Builder design §04 (#1844): the in-memory Builder adapters back tests only; production wires the real ports.',
+      from: {
+        pathNot:
+          '\\.(?:test|spec)\\.[cm]?[jt]sx?$|^apps/web/server/builder/testing/|^apps/web/server/builder/adapters/.+/memory(?:\\.tsx?|/)',
+      },
+      to: { path: '^apps/web/server/builder/adapters/.+/memory(?:\\.tsx?|/)' },
+    },
+    {
+      name: 'storage-backends-are-for-tests',
+      severity: 'error',
+      comment:
+        'The storage design, §07 "Load test": `@agent-workspace/core/storage/backends` loads the Azure and Google Cloud libraries and backs tests only; production opens a store with `openObjectStore`.',
+      from: { path: '^(apps|packages)/', pathNot: '\\.(?:test|spec)\\.[cm]?[jt]sx?$' },
+      to: { path: '^packages/core/src/storage/backends\\.ts$' },
+    },
+    {
       name: 'production-does-not-import-tests',
       severity: 'error',
       from: { path: '^(apps|packages)/', pathNot: '\\.(?:test|spec)\\.[cm]?[jt]sx?$' },
@@ -224,8 +419,13 @@ export default {
   ],
   options: {
     doNotFollow: { path: 'node_modules' },
-    exclude: '(^|/)(?:dist|coverage|\\.next(?:-embedded)?|node_modules)/',
+    // Build output of a workspace package only. node_modules is kept out of the scan by `doNotFollow`;
+    // an exclude that matched it (or a dependency's own `dist/`, as @azure/storage-blob has) would
+    // drop the resolved npm edge itself, so a rule on an npm package could never fire.
+    exclude: '^(?:apps|packages)/(?!.*node_modules/).*/(?:dist|coverage|\\.next(?:-embedded)?)/',
     tsConfig: { fileName: 'tsconfig.architecture.json' },
+    // Type-only imports are real dependency edges; without this every rule is blind to them.
+    tsPreCompilationDeps: 'specify',
     // Resolve a third-party subpath through its package's `exports` map, as Node does. ENG-09
     // (#308): `@openai/agents-extensions/ai-sdk` exists only as an `exports` entry (its files live
     // under `dist/ai-sdk/`), so without this the resolver reported a real import unresolvable.

@@ -53,6 +53,7 @@ export class AuditClient {
     const params = new URLSearchParams();
     if (query.limit !== undefined) params.set('limit', String(query.limit));
     if (query.cursor !== undefined) params.set('cursor', query.cursor);
+    if (query.action !== undefined) params.set('action', query.action);
     return this.#http.json({
       operation: 'observability.audit.list',
       method: 'GET',

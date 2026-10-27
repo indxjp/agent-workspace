@@ -30,11 +30,13 @@ One property per resource family.
 | [`models`](/reference/sdk/models) | `ModelsClient` |
 | [`files`](/reference/sdk/files) | `FilesClient` |
 | [`skills`](/reference/sdk/skills) | `SkillsClient` |
+| [`storage`](/reference/sdk/storage) | `StorageClient` |
 | [`toolBundles`](/reference/sdk/toolBundles) | `ToolBundlesClient` |
 | [`connectors`](/reference/sdk/connectors) | `ConnectorsClient` |
 | [`engines`](/reference/sdk/engines) | `EnginesClient` |
 | [`platforms`](/reference/sdk/platforms) | `PlatformsClient` |
 | [`endpointClients`](/reference/sdk/endpointClients) | `EndpointClientsClient` |
+| [`triggers`](/reference/sdk/triggers) | `TriggersClient` |
 | [`team`](/reference/sdk/team) | `TeamClient` |
 | [`shares`](/reference/sdk/shares) | `SharesClient` |
 | [`observability`](/reference/sdk/observability) | `ObservabilityClient` |
@@ -189,5 +191,5 @@ that holds a lone UTF-16 surrogate, which cannot be percent-encoded.
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `kind` | `"argument"` | Yes |  |
-| `code` | `"invalid_path_segment"` | Yes |  |
-| `value` | `string` | Yes | The refused value: `''`, `'.'`, `'..'` or a string holding a lone surrogate. |
+| `code` | `"invalid_path_segment" \| "unconvertible_output_schema"` | Yes |  |
+| `value` | `string \| null` | Yes | The refused value: `''`, `'.'`, `'..'` or a string holding a lone surrogate for `invalid_path_segment`; `null` for `unconvertible_output_schema`, whose `cause` is the failure. |

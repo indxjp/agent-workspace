@@ -14,6 +14,14 @@ Your support agent `assistant` has an `evals/assistant.yaml` that checks its ref
 `refund-policy` skill. When a run goes wrong you can open it and see each tool call, its tokens
 and its cost. If your own code calls the agent through the SDK, its tests run without a server.
 
+<Frame caption="npx aw runs trace on the run from chapter 1: each step, the skill it called, its timing, tokens and cost.">
+  <img src="/images/quickstart/07-run-trace.png" alt="Terminal output of aw runs trace showing two steps, a refund-policy skill call, tokens and an engine cost estimate" />
+</Frame>
+
+<Frame caption="aw eval scoring the refund cases in the terminal.">
+  <img src="/images/quickstart/06-eval.png" alt="Terminal output of aw eval with passing cases" />
+</Frame>
+
 ## The map
 
 Improving the agent is a loop. You talk to it, read what it did, write down what a good answer
@@ -70,6 +78,6 @@ The two kinds of test check different things. Most projects want both.
 
 The full list is in [Limits today](/features/run-observe-evaluate#limits-today).
 
-<Card title="Chapter 4: Put it in your product" icon="arrow-right" href="/path/embed">
+<Card title="Next: Chapter 4, Put it in your product" icon="arrow-right" href="/path/embed">
   Let users talk to the agent inside your site or app, or call it from your backend.
 </Card>

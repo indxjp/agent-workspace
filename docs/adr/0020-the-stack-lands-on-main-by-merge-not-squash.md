@@ -1,6 +1,6 @@
 # ADR-0020 — The stack lands on `main`, by real merges rather than squash
 
-Status: accepted — reverses [ADR-0001](0001-no-merge-to-main-wave-integration-branches.md)
+Status: accepted — reverses [ADR-0001](0001-no-merge-to-main-wave-integration-branches.md); Superseded by [ADR-0149](0149-main-requires-a-pull-request-and-the-ci-success-gate.md)
 Date: 2026-09-03
 Decided by: Owner (this session)
 Scope: whole programme

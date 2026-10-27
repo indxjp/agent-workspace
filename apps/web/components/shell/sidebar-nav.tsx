@@ -20,7 +20,7 @@ import { NAVIGATION, activeNavId } from './navigation';
 const ROW = 'mb-px flex items-center gap-[9px] rounded-(--radius-sm) px-2 py-1.5 text-[13.5px]';
 const GLYPH = 'size-[15px] flex-none opacity-75';
 
-export function SidebarNav() {
+export function SidebarNav({ managers }: { readonly managers: boolean }) {
   const active = activeNavId(usePathname());
 
   return (
@@ -32,35 +32,37 @@ export function SidebarNav() {
               {group.label}
             </div>
           )}
-          {group.items.map((item) =>
-            item.href === null ? (
-              // No destination in this wave. Disabled in the design system's own idiom
-              // (`.choice.disabled`: dimmed, not-allowed cursor) and announced to assistive
-              // technology, rather than a link that answers a click with a 404.
-              <span
-                key={item.id}
-                aria-disabled="true"
-                className={`${ROW} cursor-not-allowed text-text-2 opacity-[.62]`}
-              >
-                <Icon name={item.icon} className={GLYPH} />
-                <span>{item.label}</span>
-              </span>
-            ) : (
-              <Link
-                key={item.id}
-                href={item.href}
-                aria-current={item.id === active ? 'page' : undefined}
-                className={
-                  item.id === active
-                    ? `${ROW} bg-surface font-semibold text-text no-underline shadow-(--shadow) hover:no-underline`
-                    : `${ROW} text-text-2 no-underline hover:bg-surface-3 hover:text-text hover:no-underline`
-                }
-              >
-                <Icon name={item.icon} className={GLYPH} />
-                <span>{item.label}</span>
-              </Link>
-            ),
-          )}
+          {group.items
+            .filter((item) => managers || item.managersOnly !== true)
+            .map((item) =>
+              item.href === null ? (
+                // No destination in this wave. Disabled in the design system's own idiom
+                // (`.choice.disabled`: dimmed, not-allowed cursor) and announced to assistive
+                // technology, rather than a link that answers a click with a 404.
+                <span
+                  key={item.id}
+                  aria-disabled="true"
+                  className={`${ROW} cursor-not-allowed text-text-2 opacity-[.62]`}
+                >
+                  <Icon name={item.icon} className={GLYPH} />
+                  <span>{item.label}</span>
+                </span>
+              ) : (
+                <Link
+                  key={item.id}
+                  href={item.href}
+                  aria-current={item.id === active ? 'page' : undefined}
+                  className={
+                    item.id === active
+                      ? `${ROW} bg-surface font-semibold text-text no-underline shadow-(--shadow) hover:no-underline`
+                      : `${ROW} text-text-2 no-underline hover:bg-surface-3 hover:text-text hover:no-underline`
+                  }
+                >
+                  <Icon name={item.icon} className={GLYPH} />
+                  <span>{item.label}</span>
+                </Link>
+              ),
+            )}
         </div>
       ))}
     </nav>

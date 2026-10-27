@@ -35,9 +35,9 @@
  * #622) says so and closes its composer; its stored session is forgotten, so switching agent or
  * reloading starts another.
  */
-import { useEffect, useState, type ComponentType, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react';
 
-import type { SurfaceDefinition } from '@indx-workspace/contracts/surfaces';
+import { toolResultFor, type SurfaceDefinition } from '@indx-workspace/contracts/surfaces';
 
 import { AssistantProse } from './assistant-prose.js';
 import type { Message, RunFailureNotice } from './run-model.js';
@@ -79,6 +79,19 @@ export interface MessageProps {
   readonly feedback: ReactNode;
 }
 
+/** What a composer of a surface with the `attachments` part needs to attach files. */
+export interface ComposerAttachments {
+  /** The files chosen so far, sent with the next message. */
+  readonly files: readonly File[];
+  readonly onAdd: (files: readonly File[]) => void;
+  /** Drop the chosen file at `index`. */
+  readonly onRemove: (index: number) => void;
+  /** The attach button's accessible name, in the surface's language. */
+  readonly attachLabel: string;
+  /** The accessible name of the button that drops the file called `name`. */
+  readonly removeLabel: (name: string) => string;
+}
+
 /** The message box and its Send button. */
 export interface ComposerProps {
   readonly value: string;
@@ -92,6 +105,8 @@ export interface ComposerProps {
   /** The message box's accessible name, in the surface's language. */
   readonly label: string;
   readonly sendLabel: string;
+  /** Present only when the surface has the `attachments` part. */
+  readonly attachments?: ComposerAttachments;
 }
 
 /** The parts `<Chat/>` draws that a page may replace. Each one left out is the default. */
@@ -119,7 +134,6 @@ interface TurnToolsProps {
 
 /** One run's tool trace, then each finished step's result the surface names a component for. */
 function TurnTools({ turn, surface, strings, Result }: TurnToolsProps): ReactNode {
-  const toolResults = surface.toolResults ?? {};
   return (
     <>
       <ToolTrace
@@ -127,11 +141,12 @@ function TurnTools({ turn, surface, strings, Result }: TurnToolsProps): ReactNod
         steps={turn.tools}
         strings={strings}
       />
-      {turn.tools.map((step) =>
-        step.output === null || step.isError || !Object.hasOwn(toolResults, step.name) ? null : (
-          <Result key={step.id} output={step.output} component={toolResults[step.name] ?? 'text'} />
-        ),
-      )}
+      {turn.tools.map((step) => {
+        const component = toolResultFor(step.name, surface.toolResults);
+        return step.output === null || step.isError || component === undefined ? null : (
+          <Result key={step.id} output={step.output} component={component} />
+        );
+      })}
     </>
   );
 }
@@ -188,7 +203,9 @@ function SurfaceComposer({
   canSend,
   label,
   sendLabel,
+  attachments,
 }: ComposerProps): ReactNode {
+  const fileInput = useRef<HTMLInputElement>(null);
   return (
     <form
       className="aw-composer"
@@ -213,6 +230,48 @@ function SurfaceComposer({
           }
         }}
       />
+      {attachments === undefined ? null : (
+        <div className="aw-attachments">
+          {/* A real button, so the control is reached and pressed from the keyboard; it opens the
+              hidden file input, which is out of the tab order. */}
+          <button
+            type="button"
+            className="aw-attach"
+            disabled={disabled}
+            onClick={() => {
+              fileInput.current?.click();
+            }}
+          >
+            {attachments.attachLabel}
+          </button>
+          <input
+            ref={fileInput}
+            type="file"
+            multiple
+            hidden
+            disabled={disabled}
+            onChange={(event) => {
+              attachments.onAdd([...(event.target.files ?? [])]);
+              event.target.value = '';
+            }}
+          />
+          {attachments.files.map((file, index) => (
+            <span key={`${String(index)}-${file.name}`} className="aw-chip">
+              {file.name}
+              <button
+                type="button"
+                aria-label={attachments.removeLabel(file.name)}
+                disabled={disabled}
+                onClick={() => {
+                  attachments.onRemove(index);
+                }}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
       <button type="submit" className="aw-send" disabled={!canSend}>
         {sendLabel}
       </button>
@@ -245,6 +304,7 @@ function FailureNotice({ failure, environment, strings }: FailureNoticeProps): R
 export function Chat({ notice, components = {}, ...options }: ChatProps): ReactNode {
   const conversation = useConversation(options);
   const [draft, setDraft] = useState('');
+  const [files, setFiles] = useState<readonly File[]>([]);
   const {
     MessageList = TranscriptList,
     Message: MessagePart = TranscriptMessage,
@@ -273,7 +333,8 @@ export function Chat({ notice, components = {}, ...options }: ChatProps): ReactN
     const prompt = draft.trim();
     if (prompt === '' || locked) return;
     setDraft('');
-    conversation.send(prompt);
+    setFiles([]);
+    conversation.send(prompt, files);
   };
 
   const layout = surface.layout ?? SURFACE_DEFAULTS.layout;
@@ -315,6 +376,21 @@ export function Chat({ notice, components = {}, ...options }: ChatProps): ReactN
             canSend={!closed && draft.trim() !== ''}
             label={strings.messageLabel(agentName)}
             sendLabel={strings.send}
+            {...(surface.parts?.attachments === true
+              ? {
+                  attachments: {
+                    files,
+                    onAdd: (added: readonly File[]) => {
+                      setFiles((current) => [...current, ...added]);
+                    },
+                    onRemove: (index: number) => {
+                      setFiles((current) => current.filter((_, at) => at !== index));
+                    },
+                    attachLabel: strings.attachFiles,
+                    removeLabel: strings.removeFile,
+                  },
+                }
+              : {})}
           />
           {disclaimer === undefined ? null : (
             <SurfaceDisclaimer text={disclaimer} label={strings.disclaimerLabel} />
@@ -363,6 +439,11 @@ export function Chat({ notice, components = {}, ...options }: ChatProps): ReactN
       {pending === null ? null : (
         <TurnTools turn={pending} surface={surface} strings={strings} Result={Result} />
       )}
+      {(conversation.turns.at(-1)?.handoff ?? null) !== null ? (
+        <div className="aw-run-status" role="status">
+          {strings.handedOff}
+        </div>
+      ) : null}
       {runStatus === null ? null : (
         <div className="aw-run-status" role="status">
           {runStatus.label}

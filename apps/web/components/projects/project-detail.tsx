@@ -26,22 +26,16 @@
 import Link from 'next/link';
 import { useEffect, useState, type MouseEvent } from 'react';
 
-import { ProjectResourceSchema, type ProjectArchiveCapability } from '../../contracts/projects';
+import type { ProjectArchiveCapability } from '../../contracts/projects';
+import { browserClient } from '../../lib/browser-client';
 import { ShareDialog } from '../shares/share-dialog';
 import {
-  ARCHIVE_IMPACT_RUN_LIMIT,
-  archiveImpactFromReads,
-  buildProjectPatch,
   describeArchivedOn,
-  describeLifecycleFailure,
-  describeRequestFailure,
   draftFromProject,
   isProjectArchived,
   isProjectDirty,
   isValidProjectName,
   projectModelSaveTookEffect,
-  readRunPage,
-  readSessionProjectIds,
   resolveResourceNames,
   type ArchiveDialogState,
   type ArchiveImpactCounts,
@@ -61,6 +55,12 @@ import {
   useBeforeUnloadGuard,
   useProjectCatalogs,
 } from './project-form';
+import {
+  countArchiveImpact,
+  loadProject,
+  saveProject,
+  transitionProject,
+} from './project-requests-model';
 
 /** A caller whose capability could not be resolved may do nothing — the page's own fail-closed
  *  answer, repeated here so a test (and a future caller) can mount this screen without one. */
@@ -69,35 +69,6 @@ const NO_CAPABILITY: ProjectArchiveCapability = {
   canArchiveOther: false,
   viewerPrincipalId: null,
 };
-
-/**
- * Count what archiving this project makes read-only, from the two list endpoints the caller already
- * has read access to. `null` when either read failed — `archiveImpactFromReads` says why a half
- * answer is not reported as a zero.
- *
- * Both counts are "what this caller can see": `GET /api/sessions` and `GET /api/runs` narrow to the
- * caller's own rows for every role below Owner/Admin, and neither publishes a total. That is why
- * the sentence `summariseArchiveImpact` builds says so out loud.
- */
-async function countArchiveImpact(id: string): Promise<ArchiveImpactCounts | null> {
-  const accept = { headers: { accept: 'application/json' } };
-  const [sessions, runs] = await Promise.all([
-    fetch('/api/sessions', accept)
-      .then(async (response) =>
-        response.ok
-          ? readSessionProjectIds(await response.json()).filter((one) => one === id)
-          : null,
-      )
-      .catch(() => null),
-    fetch(
-      `/api/runs?project=${encodeURIComponent(id)}&limit=${String(ARCHIVE_IMPACT_RUN_LIMIT)}`,
-      accept,
-    )
-      .then(async (response) => (response.ok ? readRunPage(await response.json()) : null))
-      .catch(() => null),
-  ]);
-  return archiveImpactFromReads(sessions, runs);
-}
 
 export function ProjectDetail({
   id,
@@ -114,28 +85,16 @@ export function ProjectDetail({
 
   useEffect(() => {
     let active = true;
-    void fetch(`/api/projects/${encodeURIComponent(id)}`, {
-      headers: { accept: 'application/json' },
-    })
-      .then(async (response) => {
-        if (!active) return;
-        if (!response.ok) {
-          setLoadProblem(await describeRequestFailure(response, () => response.json()));
-          return;
-        }
-        const body = ProjectResourceSchema.parse(await response.json());
-        setProject(body);
-        setSaved(draftFromProject(body));
-        setDraft(draftFromProject(body));
-      })
-      .catch((error: unknown) => {
-        if (active) {
-          setLoadProblem({
-            kind: 'transport',
-            reason: `The project could not be loaded: ${error instanceof Error ? error.message : String(error)}`,
-          });
-        }
-      });
+    void loadProject(browserClient(), id).then((loaded) => {
+      if (!active) return;
+      if (!loaded.ok) {
+        setLoadProblem(loaded.problem);
+        return;
+      }
+      setProject(loaded.value);
+      setSaved(draftFromProject(loaded.value));
+      setDraft(draftFromProject(loaded.value));
+    });
     return () => {
       active = false;
     };
@@ -185,7 +144,7 @@ export function ProjectDetail({
       return;
     }
     setDialog({ kind: 'counting' });
-    void countArchiveImpact(id).then((impact: ArchiveImpactCounts | null) => {
+    void countArchiveImpact(browserClient(), id).then((impact: ArchiveImpactCounts | null) => {
       // Only replace a state this same open produced; a cancel/confirm in between owns it now.
       setDialog((current) =>
         current?.kind === 'counting'
@@ -200,43 +159,18 @@ export function ProjectDetail({
   async function applyTransition() {
     const current = project;
     if (current === null) return;
-    const segment = isProjectArchived(current) ? 'restore' : 'archive';
     setDialog({ kind: 'submitting' });
-    let response: Response;
-    try {
-      response = await fetch(`/api/projects/${encodeURIComponent(id)}/${segment}`, {
-        method: 'POST',
-        headers: { accept: 'application/json' },
-      });
-    } catch (error) {
-      setDialog({
-        kind: 'failed',
-        problem: {
-          kind: 'transport',
-          reason: `The request to ${segment} this project failed: ${error instanceof Error ? error.message : String(error)}`,
-        },
-      });
-      return;
-    }
-    if (!response.ok) {
-      const problem = await describeRequestFailure(response, () => response.json());
-      setDialog({ kind: 'failed', problem: describeLifecycleFailure(problem) });
-      return;
-    }
     // The transition's own response carries the whole project; local state is replaced from what
     // the server actually stored rather than from what this screen asked for — the same discipline
-    // `projectModelSaveTookEffect` applies to the PATCH above.
-    const parsed = ProjectResourceSchema.safeParse(await response.json().catch(() => null));
-    if (!parsed.success) {
-      setDialog({
-        kind: 'failed',
-        problem: { kind: 'transport', reason: 'The server returned an invalid project.' },
-      });
+    // `projectModelSaveTookEffect` applies to the PATCH below.
+    const result = await transitionProject(browserClient(), current);
+    if (!result.ok) {
+      setDialog({ kind: 'failed', problem: result.problem });
       return;
     }
-    setProject(parsed.data);
-    setSaved(draftFromProject(parsed.data));
-    setDraft(draftFromProject(parsed.data));
+    setProject(result.value);
+    setSaved(draftFromProject(result.value));
+    setDraft(draftFromProject(result.value));
     setSaveProblem(null);
     setDialog(null);
   }
@@ -245,41 +179,13 @@ export function ProjectDetail({
     if (draft === null || !canSave) return;
     setSaving(true);
     setSaveProblem(null);
-    let response: Response;
-    try {
-      response = await fetch(`/api/projects/${encodeURIComponent(id)}`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json', accept: 'application/json' },
-        body: JSON.stringify(buildProjectPatch(draft)),
-      });
-    } catch (error) {
-      setSaving(false);
-      setSaveProblem({
-        kind: 'transport',
-        reason: `The request to save this project failed: ${error instanceof Error ? error.message : String(error)}`,
-      });
-      return;
-    }
-    if (!response.ok) {
-      setSaveProblem(await describeRequestFailure(response, () => response.json()));
+    const result = await saveProject(browserClient(), id, draft);
+    if (!result.ok) {
+      setSaveProblem(result.problem);
       setSaving(false);
       return;
     }
-    let responseBody: unknown;
-    try {
-      responseBody = await response.json();
-    } catch {
-      setSaveProblem({ kind: 'transport', reason: 'The server returned invalid JSON.' });
-      setSaving(false);
-      return;
-    }
-    const parsed = ProjectResourceSchema.safeParse(responseBody);
-    if (!parsed.success) {
-      setSaveProblem({ kind: 'transport', reason: 'The server returned an invalid project.' });
-      setSaving(false);
-      return;
-    }
-    const updated = parsed.data;
+    const updated = result.value;
     // A 2xx from a stale or incompatible deployment is not proof this field took effect.
     const modelSaved = projectModelSaveTookEffect(draft.defaultModel, updated);
     setProject(updated);

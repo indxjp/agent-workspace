@@ -5,16 +5,6 @@
  * method on the result takes one, so there is no call site at which spec §25's tenant filter can be
  * forgotten.
  *
- * ## Every reference to core here is a type, and that is deliberate
- *
- * `apps/web/instrumentation.ts` is compiled for the edge runtime as well as for Node, and a
- * top-level VALUE import of `@agent-workspace/core/db` or `@agent-workspace/core/secrets` pulls in
- * `pg` and `node:crypto`'s heavier surface transitively — the exact failure
- * `apps/web/server/agents/store.ts`'s header documents happening with `@agent-workspace/core/db`.
- * So every reference to either package below is `import type`, and the one value this adapter
- * needs — {@link UnknownWorkspaceError} — is declared locally rather than imported, the same choice
- * `apps/web/server/secrets/store.ts` makes for its own copy of the same class.
- *
  * ## The credential split: two interfaces on one object, never one route holding both
  *
  * {@link WorkspaceConnectorsStore} is what `handlers.ts`'s CRUD operations call — `list`, `get`,
@@ -35,28 +25,32 @@
  * boundary — a CRUD handler that tried to call `resolveForProbe` would need to widen its own
  * parameter type first, which is a reviewable one-line change, not an accident.
  */
-import type {
-  CreateMcpServerOutcome as CoreCreateMcpServerOutcome,
-  CreateToolConnectorInput as CoreCreateToolConnectorInput,
-  DeleteMcpServerOutcome as CoreDeleteMcpServerOutcome,
-  McpServerRecord as CoreMcpServerRecord,
-  McpServerRepository as CoreMcpServerRepository,
-  McpServerRepositoryProvider as CoreMcpServerRepositoryProvider,
-  ToolConnectorRecord as CoreToolConnectorRecord,
-  UpdateMcpServerInput as CoreUpdateMcpServerInput,
-  UpdateToolConnectorInput as CoreUpdateToolConnectorInput,
-  UpdateToolConnectorOutcome as CoreUpdateToolConnectorOutcome,
-  UpdateMcpServerOutcome as CoreUpdateMcpServerOutcome,
-  McpAuthType,
-  McpTransport,
-  WorkspaceScope as CoreWorkspaceScope,
-  WorkspaceScopeResolver as CoreWorkspaceScopeResolver,
+import { log } from '../telemetry/logger';
+import {
+  UnknownWorkspaceError,
+  type CreateMcpServerOutcome as CoreCreateMcpServerOutcome,
+  type CreateToolConnectorInput as CoreCreateToolConnectorInput,
+  type DeleteMcpServerOutcome as CoreDeleteMcpServerOutcome,
+  type McpServerRecord as CoreMcpServerRecord,
+  type McpServerRepository as CoreMcpServerRepository,
+  type McpServerRepositoryProvider as CoreMcpServerRepositoryProvider,
+  type ToolConnectorRecord as CoreToolConnectorRecord,
+  type UpdateMcpServerInput as CoreUpdateMcpServerInput,
+  type UpdateToolConnectorInput as CoreUpdateToolConnectorInput,
+  type UpdateToolConnectorOutcome as CoreUpdateToolConnectorOutcome,
+  type UpdateMcpServerOutcome as CoreUpdateMcpServerOutcome,
+  type McpAuthType,
+  type McpTransport,
+  type WorkspaceScope as CoreWorkspaceScope,
+  type WorkspaceScopeResolver as CoreWorkspaceScopeResolver,
 } from '@agent-workspace/core/db';
 import type { SecretsService as CoreSecretsService } from '@agent-workspace/core/secrets';
+import type { ConnectorIdentity } from '@indx-workspace/contracts/identity-assertion';
 
 import {
   credentialFieldFor,
   credentialHeaderValue,
+  identityOf,
   toToolConnectorResource,
   type AnyConnectorResource,
   type ConnectorResource,
@@ -82,6 +76,8 @@ export interface ConnectorFieldPatch {
   readonly authType?: McpAuthType;
   /** A replacement credential, sealed as a secret; never returned. */
   readonly credential?: string;
+  /** The identity opt-in: a secret NAME to set, or `null` to opt out. */
+  readonly identity?: ConnectorIdentity | null;
 }
 
 export type UpdateConnectorOutcome =
@@ -107,25 +103,6 @@ export type RotateConnectorCredentialOutcome =
   | { readonly kind: 'rotated'; readonly connector: ConnectorResource }
   | { readonly kind: 'not-found' }
   | { readonly kind: 'credential-not-configured' };
-
-/**
- * Thrown when a store is asked for a workspace no `workspaces` row names.
- *
- * Transcribed rather than imported, for the edge-safety reason this file's header gives (matches
- * `apps/web/server/agents/store.ts`'s and `apps/web/server/secrets/store.ts`'s own copies).
- */
-export class UnknownWorkspaceError extends Error {
-  public readonly workspaceId: string;
-
-  public constructor(workspaceId: string) {
-    super(
-      `no workspace has id ${workspaceId}; a connectors store cannot be scoped to a workspace ` +
-        'that does not exist',
-    );
-    this.name = 'UnknownWorkspaceError';
-    this.workspaceId = workspaceId;
-  }
-}
 
 /** CRUD operations for exactly one workspace's connectors. No field or method here can produce a
  *  decrypted credential — see this file's header for why `resolveForProbe` is a separate type. */
@@ -184,6 +161,12 @@ export interface WorkspaceConnectorsProbeSource {
    *  rather than crashing the probe — the same "not found rather than forbidden" caution
    *  `resolveSecretByName`'s own header explains). */
   resolveForProbe(id: string): Promise<ResolvedConnectorProbeConfig | null>;
+  /**
+   * The key that signs the identity assertion for a connector of either kind (ADR-0142 D1):
+   * `undefined` when it has not opted in (or does not exist), `null` when it opted in but its
+   * secret cannot be resolved (the caller fails closed), otherwise the secret's value.
+   */
+  resolveIdentityKey(id: string): Promise<string | null | undefined>;
 }
 
 /** Hands out a {@link WorkspaceConnectorsStore} (and, on the same object, a
@@ -192,8 +175,7 @@ export interface ConnectorsStoreProvider {
   forWorkspace(workspaceId: string): WorkspaceConnectorsStore & WorkspaceConnectorsProbeSource;
 }
 
-/** What {@link createRepositoryConnectorsStoreProvider} needs. Every field is a type-only
- *  reference to core — see this file's header. */
+/** What {@link createRepositoryConnectorsStoreProvider} needs. */
 export interface RepositoryConnectorsStoreDependencies {
   readonly mcpServers: CoreMcpServerRepositoryProvider;
   /** The whole secrets subsystem, including `resolveByName` — the one legitimate caller this
@@ -218,6 +200,7 @@ function toResource(record: CoreMcpServerRecord): ConnectorResource {
     ownerPrincipalId: record.ownerPrincipalId,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
+    ...identityOf(record.identitySecretName),
   };
 }
 
@@ -260,6 +243,9 @@ function fieldsOf(patch: ConnectorFieldPatch): CoreUpdateMcpServerInput {
     ...(patch.args === undefined ? {} : { args: patch.args === null ? null : [...patch.args] }),
     ...(patch.url === undefined ? {} : { url: patch.url }),
     ...(patch.authType === undefined ? {} : { authType: patch.authType }),
+    ...(patch.identity === undefined
+      ? {}
+      : { identitySecretName: patch.identity === null ? null : patch.identity.secret }),
   };
 }
 
@@ -313,9 +299,10 @@ async function retireReplacedCredential(
   } catch (error) {
     failure = error instanceof Error ? error.name : 'unknown error';
   }
-  console.error(
+  log.error(
     `[connectors] connector ${connectorId} now uses a fresh credential secret, but deleting the ` +
-      `replaced secret ${secretId} failed (${failure}); it is orphaned until an Owner deletes it`,
+      `replaced secret ${secretId} failed; it is orphaned until an Owner deletes it`,
+    { failure },
   );
 }
 
@@ -444,6 +431,7 @@ export function createRepositoryConnectorsStoreProvider(
               url: input.url,
               authType: input.authType,
               credentialSecretId,
+              identitySecretName: input.identity?.secret ?? null,
               enabled: true,
               ownerPrincipalId: owner.principalId,
               createdBy: owner.userId,
@@ -611,6 +599,7 @@ export function createRepositoryConnectorsStoreProvider(
               toolConfig: { ...write.toolConfig },
               openapiDocument: write.openapiDocument,
               credentialSecretId: secretId,
+              identitySecretName: write.identity?.secret ?? null,
               enabled: true,
               ownerPrincipalId: owner.principalId,
               createdBy: owner.userId,
@@ -653,6 +642,7 @@ export function createRepositoryConnectorsStoreProvider(
               toolConfig: { ...change.toolConfig },
               openapiDocument: change.openapiDocument,
               credentialSecretId: secretId,
+              identitySecretName: change.identity?.secret ?? null,
             });
           } catch (error) {
             if (secretId !== null) await discardSealed(dependencies.secrets, resolved, secretId);
@@ -676,6 +666,18 @@ export function createRepositoryConnectorsStoreProvider(
           return toolRepository(dependencies.mcpServers.forScope(resolved)).openapiDocument(id);
         },
 
+        async resolveIdentityKey(id: string): Promise<string | null | undefined> {
+          const resolved = await scope();
+          const repository = dependencies.mcpServers.forScope(resolved);
+          const record = (await repository.get(id)) ?? (await toolRepository(repository).get(id));
+          if (record === null || record.identitySecretName === null) return undefined;
+          const secret = await dependencies.secrets.resolveByName(
+            resolved,
+            record.identitySecretName,
+          );
+          return secret === null ? null : secret.value.toString('utf8');
+        },
+
         // ponytail: dry run is the tool kinds' test; a saved tool connector has no probe (404).
         async resolveForProbe(id: string): Promise<ResolvedConnectorProbeConfig | null> {
           const resolved = await scope();
@@ -683,14 +685,12 @@ export function createRepositoryConnectorsStoreProvider(
           if (record === null) return null;
           if (record.credentialSecretId === null) return buildTestConfig(record, null);
 
-          // `SecretsService` resolves by NAME, not id — `resolveByName` is the one method this
-          // wave's plan names W2-CP-05 as the legitimate caller of. `list()` is metadata-only
-          // (never a value) and is how this file gets from an id to the name resolveByName needs.
-          const metadata = await dependencies.secrets.list(resolved);
-          const named = metadata.find((entry) => entry.id === record.credentialSecretId);
-          if (named === undefined) return buildTestConfig(record, null);
-
-          const resolvedSecret = await dependencies.secrets.resolveByName(resolved, named.name);
+          // The credential is resolved directly by its stored id — server-side only, the W2-CP-05
+          // caller this wave's plan names. A missing or foreign id answers `null`.
+          const resolvedSecret = await dependencies.secrets.resolveById(
+            resolved,
+            record.credentialSecretId,
+          );
           if (resolvedSecret === null) return buildTestConfig(record, null);
           return buildTestConfig(record, resolvedSecret.value.toString('utf8'));
         },

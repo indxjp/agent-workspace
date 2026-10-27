@@ -2,7 +2,7 @@
  [{"witnesses": ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.accepted_assignment_body_keeps_every_id"],
    "input": {"body": {"skillIds": [], "files": [], "connectorIds": []}},
    "id": "assignments-body/{\"connectorIds\":[],\"files\":[],\"skillIds\":[]}",
-   "expected": {"value": {"skillIds": [], "files": [], "connectorIds": []}, "valid": true}},
+   "expected": {"value": {"storageGrants": [], "skillIds": [], "files": [], "connectorIds": []}, "valid": true}},
   {"witnesses": ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.accepted_assignment_body_keeps_every_id"],
    "input":
    {"body":
@@ -13,7 +13,8 @@
    "assignments-body/{\"connectorIds\":[\"c1\"],\"files\":[{\"access\":\"read\",\"fileId\":\"f1\"},{\"access\":\"read-write\",\"fileId\":\"f2\"}],\"skillIds\":[\"k1\"]}",
    "expected":
    {"value":
-    {"skillIds": ["k1"],
+    {"storageGrants": [],
+     "skillIds": ["k1"],
      "files": [{"fileId": "f1", "access": "read"}, {"fileId": "f2", "access": "read-write"}],
      "connectorIds": ["c1"]},
     "valid": true}},
@@ -27,7 +28,8 @@
    "assignments-body/{\"connectorIds\":[\"c1\",\"c1\"],\"files\":[{\"access\":\"read\",\"fileId\":\"f1\"},{\"access\":\"read-write\",\"fileId\":\"f1\"}],\"skillIds\":[\"k1\",\"k1\"]}",
    "expected":
    {"value":
-    {"skillIds": ["k1", "k1"],
+    {"storageGrants": [],
+     "skillIds": ["k1", "k1"],
      "files": [{"fileId": "f1", "access": "read"}, {"fileId": "f1", "access": "read-write"}],
      "connectorIds": ["c1", "c1"]},
     "valid": true}},
@@ -73,7 +75,71 @@
    "id":
    "assignments-body/{\"connectorIds\":[\" \"],\"files\":[{\"access\":\"read\",\"fileId\":\" \"}],\"skillIds\":[\" \"]}",
    "expected":
-   {"value": {"skillIds": [" "], "files": [{"fileId": " ", "access": "read"}], "connectorIds": [" "]}, "valid": true}}],
+   {"value":
+    {"storageGrants": [], "skillIds": [" "], "files": [{"fileId": " ", "access": "read"}], "connectorIds": [" "]},
+    "valid": true}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.accepted_assignment_body_keeps_every_id"],
+   "input":
+   {"body":
+    {"storageGrants":
+     [{"prefix": "reports/", "connectionId": "0b9f1c7e-2d4a-4c1e-9a3b-5e6f7a8b9c0d", "access": "read"},
+      {"prefix": "a", "connectionId": "0B9F1C7E-2D4A-4C1E-9A3B-5E6F7A8B9C0D", "access": "read-write"}],
+     "skillIds": [],
+     "files": [],
+     "connectorIds": []}},
+   "id":
+   "assignments-body/{\"connectorIds\":[],\"files\":[],\"skillIds\":[],\"storageGrants\":[{\"access\":\"read\",\"connectionId\":\"0b9f1c7e-2d4a-4c1e-9a3b-5e6f7a8b9c0d\",\"prefix\":\"reports/\"},{\"access\":\"read-write\",\"connectionId\":\"0B9F1C7E-2D4A-4C1E-9A3B-5E6F7A8B9C0D\",\"prefix\":\"a\"}]}",
+   "expected":
+   {"value":
+    {"storageGrants":
+     [{"prefix": "reports/", "connectionId": "0b9f1c7e-2d4a-4c1e-9a3b-5e6f7a8b9c0d", "access": "read"},
+      {"prefix": "a", "connectionId": "0B9F1C7E-2D4A-4C1E-9A3B-5E6F7A8B9C0D", "access": "read-write"}],
+     "skillIds": [],
+     "files": [],
+     "connectorIds": []},
+    "valid": true}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.accepted_assignment_body_keeps_every_id"],
+   "input":
+   {"body":
+    {"storageGrants": [{"prefix": "reports/", "connectionId": "sc1", "access": "read"}],
+     "skillIds": [],
+     "files": [],
+     "connectorIds": []}},
+   "id":
+   "assignments-body/{\"connectorIds\":[],\"files\":[],\"skillIds\":[],\"storageGrants\":[{\"access\":\"read\",\"connectionId\":\"sc1\",\"prefix\":\"reports/\"}]}",
+   "expected": {"valid": false}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.accepted_assignment_body_keeps_every_id"],
+   "input":
+   {"body":
+    {"storageGrants": [{"prefix": "", "connectionId": "0b9f1c7e-2d4a-4c1e-9a3b-5e6f7a8b9c0d", "access": "read"}],
+     "skillIds": [],
+     "files": [],
+     "connectorIds": []}},
+   "id":
+   "assignments-body/{\"connectorIds\":[],\"files\":[],\"skillIds\":[],\"storageGrants\":[{\"access\":\"read\",\"connectionId\":\"0b9f1c7e-2d4a-4c1e-9a3b-5e6f7a8b9c0d\",\"prefix\":\"\"}]}",
+   "expected": {"valid": false}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.accepted_assignment_body_keeps_every_id"],
+   "input":
+   {"body":
+    {"storageGrants":
+     [{"prefix": "reports/", "connectionId": "0b9f1c7e-2d4a-4c1e-9a3b-5e6f7a8b9c0d", "access": "write"}],
+     "skillIds": [],
+     "files": [],
+     "connectorIds": []}},
+   "id":
+   "assignments-body/{\"connectorIds\":[],\"files\":[],\"skillIds\":[],\"storageGrants\":[{\"access\":\"write\",\"connectionId\":\"0b9f1c7e-2d4a-4c1e-9a3b-5e6f7a8b9c0d\",\"prefix\":\"reports/\"}]}",
+   "expected": {"valid": false}},
+  {"witnesses": ["AgentWorkspace.Theorems.Invariants.ConceptCatalog.accepted_assignment_body_keeps_every_id"],
+   "input":
+   {"body":
+    {"storageGrants":
+     [{"prefix": "reports/", "connectionId": "0b9f1c7e-2d4a-4c1e-9a3b-5e6f7a8b9c0d", "access": "READ"}],
+     "skillIds": [],
+     "files": [],
+     "connectorIds": []}},
+   "id":
+   "assignments-body/{\"connectorIds\":[],\"files\":[],\"skillIds\":[],\"storageGrants\":[{\"access\":\"READ\",\"connectionId\":\"0b9f1c7e-2d4a-4c1e-9a3b-5e6f7a8b9c0d\",\"prefix\":\"reports/\"}]}",
+   "expected": {"valid": false}}],
  "family": "concept-catalog",
  "description":
  "AgentResourceAssignmentsSchema: non-empty ids, the closed access set, no unknown key, duplicates admitted"}

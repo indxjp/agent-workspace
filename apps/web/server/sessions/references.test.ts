@@ -4,7 +4,7 @@
  * ## Why
  *
  * Three references shipped on this branch pointing at files that were never committed, and each
- * was the pointer to the evidence for one of the PR's three largest declared gaps. `file-store.ts`
+ * was the pointer to the evidence for one of the PR's three largest declared gaps. The file-backed transcript store
  * sent a reader after the PostgreSQL DDL to an ADR filename one clause short of the real one;
  * `resume.acceptance.ts` did the same for the live 403 transcript; and an ADR named the acceptance
  * harness with a `.test.ts` suffix — a filename that deliberately does not exist, because the

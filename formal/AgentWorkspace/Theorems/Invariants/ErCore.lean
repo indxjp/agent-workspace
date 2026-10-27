@@ -77,7 +77,7 @@ private theorem single_key_unique {S : Schema} {st : State} (hc : consistent S s
   simp only [tableConsistent, Bool.and_eq_true, List.all_eq_true] at h
   simp only [TableSpec.isSingleKey, Bool.or_eq_true, beq_iff_eq, List.any_eq_true,
     Bool.and_eq_true, List.isEmpty_iff] at hk
-  rcases hk with hpk | ⟨u, hu, hpn, hcols⟩
+  rcases hk with hpk | ⟨u, hu, ⟨hpn, -⟩, hcols⟩
   · have hkey := h.1.1.1.2
     rw [hpk] at hkey
     exact key_holds_single hkey h1 h2 hs hv
@@ -293,8 +293,8 @@ theorem principal_has_exactly_one_source (st : State) (hc : consistent catalogue
       (r.get "kind" = some "api_key" ∧ (r.get "api_key_id").isSome = true ∧
         r.get "membership_id" = none) := by
   have hx := other_check_holds hc (t := .workspacePrincipals)
-    (n := "workspace_principals_source_xor") (by decide) hr
-  have hk : (r.get "kind").isSome = true := not_null_holds hc (by decide) hr
+    (n := "workspace_principals_source_xor") (by decide +kernel) hr
+  have hk : (r.get "kind").isSome = true := not_null_holds hc (by decide +kernel) hr
   simp only [otherCheckHolds, principalSourceXor, beq_self_eq_true, ite_true] at hx
   cases hkind : r.get "kind" with
   | none => rw [hkind] at hk; cases hk
@@ -410,7 +410,7 @@ example : TenantPath catalogue Witness.state .agents Witness.state.agent .modelC
 
 example : (tenantOf catalogue .agents Witness.state.agent).isSome = true :=
   tenant_row_has_workspace catalogue Witness.state Witness.state_is_consistent rfl
-    (by decide) (by simp [Witness.state])
+    (by decide +kernel) (by simp [Witness.state])
 
 /-- The owner key of the witness agent: a tenant-paired reference to its principal. -/
 private def ownerKey : ForeignKey :=
@@ -429,7 +429,7 @@ example : tenantOf catalogue .agents Witness.state.agent =
 
 example : tenantOf catalogue .agents Witness.state.agent =
     tenantOf catalogue .workspacePrincipals principal :=
-  no_cross_tenant_reference catalogue (by decide) Witness.state Witness.state_is_consistent
+  no_cross_tenant_reference catalogue (by decide +kernel) Witness.state Witness.state_is_consistent
     (fk := ownerKey) rfl (by unfold References; decide +kernel)
 
 example : principal.get "kind" = some "membership" ∧ (principal.get "membership_id").isSome = true ∧
@@ -445,13 +445,13 @@ example : fkHolds (fun u => if u = .sessions then
     { name := "sessions_project_workspace_fk", columns := ["project_id", "workspace_id"],
       refTable := .projects, refColumns := ["id", "workspace_id"], onDelete := .setNull,
       inline := false } = true :=
-  null_key_row_preserves_fk State.empty .sessions _ _ (by decide) (by decide) (by decide)
+  null_key_row_preserves_fk State.empty .sessions _ _ (by decide +kernel) (by decide +kernel) (by decide +kernel)
 
 
 /-- The witness membership's role is one of the four roles `memberships_role_valid` admits. -/
 example : "owner" ∈ ["owner", "admin", "builder", "viewer"] :=
   closed_set_value_is_in_its_set catalogue Witness.state Witness.state_is_consistent
-    (t := .memberships) (n := "memberships_role_valid") (c := "role") (by decide)
+    (t := .memberships) (n := "memberships_role_valid") (c := "role") (by decide +kernel)
     (r := ⟨[("id", "m1"), ("workspace_id", "w1"), ("user_id", "u1"), ("role", "owner"),
       ("created_at", "t0"), ("updated_at", "t0")]⟩) (by simp [Witness.state]) rfl
 

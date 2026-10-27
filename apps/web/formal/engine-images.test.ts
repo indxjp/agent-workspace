@@ -13,7 +13,10 @@
  * `tests/formal/engine-images.test.ts` replays the package half. A disagreement is a failing test,
  * and the fix is never to edit a vector (`docs/formal/00-orchestrator-prompt.md` §10).
  */
-import { EngineImageConfigurationError, type EngineImageMap } from '@agent-workspace/runtime';
+import {
+  EngineImageConfigurationError,
+  type EngineImageMap,
+} from '@agent-workspace/runtime/engine-images';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { asRecord, asString, loadVectors } from '../../../tests/formal/vectors';

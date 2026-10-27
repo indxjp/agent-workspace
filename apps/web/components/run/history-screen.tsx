@@ -19,8 +19,8 @@
  * and which `docs/adr/W9-AUTH-165-admin-reads-workspace-run-history.md` resolved by widening that
  * one policy cell. This screen does not encode that policy anywhere: it renders whatever
  * page `GET /api/runs` answers for the signed-in caller, and shows the `user` filter control only
- * once a real request has confirmed the server accepts it ({@link classifyUserFilterProbe} in
- * `./history.ts`) — never by checking `role` against a table this file would have to keep in sync
+ * once a real request has confirmed the server accepts it (`probeUserFilter` in
+ * `./run-requests-model.ts`) — never by checking `role` against a table this file would have to keep in sync
  * with `permissions.ts` by hand. `#165` widened the server's grant and this screen widened with it,
  * needing no change — which is the point this paragraph is making.
  *
@@ -59,34 +59,27 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
+import { browserClient } from '../../lib/browser-client';
 import { RunDetailPanel } from './run-detail-panel';
+import { loadCatalog, loadRunPage, probeUserFilter } from './run-requests-model';
 import { StatusBadge } from './run-view';
 import {
-  PROJECT_CATALOG_URL,
   RUN_STATUS_NAMES,
   RUN_POLL_INTERVAL_MS,
-  USER_FILTER_PROBE_ID,
   badgeForRunStatus,
-  classifyUserFilterProbe,
   cursorFromSearchParams,
-  describeRequestFailure,
-  describeTransportRejection,
   filtersFromSearchParams,
   formatDuration,
   formatProviderModel,
   formatCostDisplay,
   formatTimestamp,
   formatTokenCount,
-  parseCatalog,
-  parseRunListPage,
   resolveResourceReference,
   runMatchesSearch,
   runIdFromSearchParams,
-  runsListQuery,
   shouldPollDurableRun,
   timestampAccessibilityLabel,
   withScreenState,
-  type Catalog,
   type CatalogKind,
   type CatalogState,
   type RequestProblem,
@@ -107,40 +100,22 @@ const BTN_DEFAULT = 'border-border-strong bg-surface text-text';
 // ── Loading one workspace catalogue ─────────────────────────────────────────────────────────────
 
 /** Fetch a `GET` list endpoint into a {@link CatalogState}. Never throws — a failure is `'unavailable'`. */
-function useCatalog(url: string, kind: CatalogKind): CatalogState {
+function useCatalog(kind: CatalogKind): CatalogState {
   const [state, setState] = useState<CatalogState>({ kind: 'loading' });
   useEffect(() => {
     let cancelled = false;
-    void (async () => {
-      let response: Response;
-      try {
-        response = await fetch(url, { headers: { accept: 'application/json' } });
-      } catch {
-        if (!cancelled) setState({ kind: 'unavailable' });
-        return;
-      }
-      if (!response.ok) {
-        if (!cancelled) setState({ kind: 'unavailable' });
-        return;
-      }
-      let body: unknown;
-      try {
-        body = await response.json();
-      } catch {
-        if (!cancelled) setState({ kind: 'unavailable' });
-        return;
-      }
-      try {
-        const catalog: Catalog = parseCatalog(body, kind);
+    loadCatalog(browserClient(), kind).then(
+      (catalog) => {
         if (!cancelled) setState({ kind: 'ready', catalog });
-      } catch {
+      },
+      () => {
         if (!cancelled) setState({ kind: 'unavailable' });
-      }
-    })();
+      },
+    );
     return () => {
       cancelled = true;
     };
-  }, [url, kind]);
+  }, [kind]);
   return state;
 }
 
@@ -149,24 +124,9 @@ function useUserFilterAvailability(): UserFilterAvailability | null {
   const [state, setState] = useState<UserFilterAvailability | null>(null);
   useEffect(() => {
     let cancelled = false;
-    void (async () => {
-      let response: Response;
-      try {
-        response = await fetch(`/api/runs?limit=1&user=${USER_FILTER_PROBE_ID}`, {
-          headers: { accept: 'application/json' },
-        });
-      } catch {
-        if (!cancelled) setState('unavailable');
-        return;
-      }
-      let body: unknown;
-      try {
-        body = await response.json();
-      } catch {
-        body = null;
-      }
-      if (!cancelled) setState(classifyUserFilterProbe(response.status, body));
-    })();
+    void probeUserFilter(browserClient()).then((availability) => {
+      if (!cancelled) setState(availability);
+    });
     return () => {
       cancelled = true;
     };
@@ -180,12 +140,11 @@ export function RunsHistoryScreen() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const agents = useCatalog('/api/agents', 'agents');
-  // Not the bare path: see `PROJECT_CATALOG_URL`. The role narrowing is unchanged by the filter;
-  // it strictly adds rows this caller may already see.
-  const projects = useCatalog(PROJECT_CATALOG_URL, 'projects');
-  const users = useCatalog('/api/users', 'users');
-  const workspaces = useCatalog('/api/workspaces', 'workspaces');
+  const agents = useCatalog('agents');
+  // `loadCatalog` asks for archived projects too (issue #184); the role narrowing is unchanged.
+  const projects = useCatalog('projects');
+  const users = useCatalog('users');
+  const workspaces = useCatalog('workspaces');
   const userFilterAvailability = useUserFilterAvailability();
 
   const runId = runIdFromSearchParams(searchParams);
@@ -266,56 +225,19 @@ function RunsListView({
     setState({ kind: 'loading' });
 
     async function load(): Promise<void> {
-      let response: Response;
-      try {
-        response = await fetch(`/api/runs?${runsListQuery(filters, cursor)}`, {
-          headers: { accept: 'application/json' },
-        });
-      } catch (error) {
-        if (!cancelled) setState({ kind: 'problem', problem: describeTransportRejection(error) });
+      const outcome = await loadRunPage(browserClient(), filters, cursor);
+      if (cancelled) return;
+      if (!outcome.ok) {
+        setState({ kind: 'problem', problem: outcome.problem });
         return;
       }
-      if (!response.ok) {
-        const problem = await describeRequestFailure(response, () => response.json());
-        if (!cancelled) setState({ kind: 'problem', problem });
-        return;
-      }
-      let body: unknown;
-      try {
-        body = await response.json();
-      } catch {
-        if (!cancelled) {
-          setState({
-            kind: 'problem',
-            problem: {
-              kind: 'transport',
-              reason: 'The server answered 200 with a body that was not JSON.',
-            },
-          });
-        }
-        return;
-      }
-      try {
-        const page = parseRunListPage(body);
-        if (!cancelled) {
-          // A poll replaces the complete page. No live estimate is added to durable ledger totals.
-          setState({ kind: 'loaded', runs: page.runs, nextCursor: page.nextCursor });
-          if (page.runs.some(shouldPollDurableRun)) {
-            timer = setTimeout(() => {
-              void load();
-            }, RUN_POLL_INTERVAL_MS);
-          }
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setState({
-            kind: 'problem',
-            problem: {
-              kind: 'transport',
-              reason: `The server's answer did not look like a run list: ${error instanceof Error ? error.message : String(error)}`,
-            },
-          });
-        }
+      const page = outcome.value;
+      // A poll replaces the complete page. No live estimate is added to durable ledger totals.
+      setState({ kind: 'loaded', runs: page.runs, nextCursor: page.nextCursor });
+      if (page.runs.some(shouldPollDurableRun)) {
+        timer = setTimeout(() => {
+          void load();
+        }, RUN_POLL_INTERVAL_MS);
       }
     }
 

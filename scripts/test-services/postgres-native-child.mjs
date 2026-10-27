@@ -40,6 +40,12 @@ const database = new EmbeddedPostgres({
     'unix_socket_directories=',
     '-c',
     'timezone=UTC',
+    // The cluster is thrown away, so durability buys nothing. `DROP DATABASE` waits for a forced
+    // checkpoint, and with dozens of suites dropping at once that checkpoint's fsyncs took seconds.
+    '-c',
+    'fsync=off',
+    '-c',
+    'full_page_writes=off',
   ],
   onLog: (/** @type {string} */ message) => process.stderr.write(message),
   onError: (/** @type {unknown} */ error) => process.stderr.write(`${String(error)}\n`),

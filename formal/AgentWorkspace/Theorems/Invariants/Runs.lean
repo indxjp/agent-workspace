@@ -19,7 +19,7 @@ private theorem terminal_run_step_is_noop (s : RunStatus) (h : s.isTerminal = tr
 @[aw_spec (tier := T2)
   (doc := "docs/sdk/site/concepts/run-lifecycle.mdx#from-start-to-a-terminal-status")
   (ts := "packages/core/src/db/repositories/runs.ts#finish")
-  (ts := "apps/web/server/runs/store.ts#InMemoryRunStore")]
+  (ts := "apps/web/server/runs/memory-store.ts#InMemoryRunStore")]
 theorem run_terminal_is_absorbing (s : RunStatus) (h : s.isTerminal = true) (ops : List RunOp) :
     applyRunOps s ops = s := by
   induction ops generalizing s with

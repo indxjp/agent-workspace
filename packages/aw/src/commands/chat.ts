@@ -165,6 +165,11 @@ function frameWriter(io: CliIo): {
     midLine = false;
   };
   const frame = (incoming: RunEventFrame): void => {
+    if (incoming.kind === 'run-warning') {
+      endLine();
+      io.stdout(`${dim(io, `  ! ${incoming.data.message ?? incoming.data.code}`)}\n`);
+      return;
+    }
     const event = toAgentEvent(incoming);
     if (event === null) return;
     if (event.frame === 'agent.message.delta' && event.block === 'text') {

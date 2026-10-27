@@ -15,10 +15,15 @@ export interface DraftParagraph {
 
 export interface Draft {
   readonly file: string;
+  /** The deal team whose folder holds the draft: `contracts/<team>/<file>`. */
+  readonly team: string;
   readonly paragraphs: readonly DraftParagraph[];
   /** The planted issues: rule and clause (`null` for an absence) the check must report. */
   readonly planted: readonly (readonly [string, string | null])[];
 }
+
+/** Where the draft lives, in the workspace and under `data/`: its deal team's folder. */
+export const contractPath = (draft: Draft): string => `contracts/${draft.team}/${draft.file}`;
 
 const h = (text: string): DraftParagraph => ({ style: 'Heading2', text });
 const p = (text: string): DraftParagraph => ({ text });
@@ -26,6 +31,7 @@ const p = (text: string): DraftParagraph => ({ text });
 /** 業務委託契約書: 甲 is the client (the counterparty), 乙 is 当社. Six planted issues. */
 export const SERVICE_AGREEMENT: Draft = {
   file: '業務委託契約書_株式会社ミナトシステムズ案.docx',
+  team: '営業一部',
   paragraphs: [
     { style: 'Title', text: '業務委託契約書' },
     p(
@@ -92,6 +98,7 @@ export const SERVICE_AGREEMENT: Draft = {
  */
 export const NDA: Draft = {
   file: '秘密保持契約書_Harborline Japan案.docx',
+  team: '営業一部',
   paragraphs: [
     p('秘密保持契約書'),
     p(
@@ -146,6 +153,7 @@ export const NDA: Draft = {
  */
 export const SUPPLY_AGREEMENT: Draft = {
   file: '売買基本契約書_北陸精工株式会社案.docx',
+  team: '購買部',
   paragraphs: [
     { style: 'Title', text: '売買基本契約書' },
     p(

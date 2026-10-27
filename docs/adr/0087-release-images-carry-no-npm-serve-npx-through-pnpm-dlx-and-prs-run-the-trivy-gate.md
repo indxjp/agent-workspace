@@ -189,3 +189,9 @@ from its tarball for `npx` (D1).
   ADR-0086 treats every image as absent. The untagged digests the failed run pushed are never
   referenced by a tag or a manifest.
 - Bumping the Docker client is one edit of the version and both checksums in `Dockerfile`.
+
+## Amendment 2026-10-24: pnpm 11.28.8
+
+pnpm 11.28.2 bundles undici 6.28.1, inside CVE-2026-109869 (HIGH, fixed in 6.29.1), which the
+`image-scan` gate reports under `/opt/pnpm` in the `runner` and runtime images. 11.28.8 is the first
+release that bundles 6.29.1 (11.28.6 bundles 6.29.0), so every pin in D5 moves to 11.28.8 together.

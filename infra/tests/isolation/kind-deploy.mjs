@@ -28,7 +28,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
-import { sessionLabelValue } from '../../../packages/runtime/dist/index.js';
+import { sessionLabelValue } from '../../../packages/runtime/dist/kubernetes.js';
 import { buildPinnedImages } from '../../../tests/generated-project/images.mjs';
 import { writeFakeProviderFixture } from '../../../tests/generated-project/project.mjs';
 import { StackClient, assistantText, terminalStatus } from '../../../tests/generated-project/stack-api.mjs';

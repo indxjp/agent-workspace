@@ -69,7 +69,8 @@ import {
 import { buildJourneyImages, startRegistry, stopRegistry } from './registry.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '../../..');
-const VERDACCIO_CONTAINER = 'build-deploy-journey-verdaccio';
+// Named per runner: the self-hosted CI host runs several jobs on one Docker daemon at once.
+const VERDACCIO_CONTAINER = `build-deploy-journey-verdaccio-${(process.env.RUNNER_NAME ?? 'local').replace(/[^\w.-]/gu, '-')}`;
 const SCRIPTS_DIR = path.join(import.meta.dirname, 'scripts');
 const SCRIPTED_MODEL = 'scripted:support-journey';
 const PREPARE_BUDGET_MS = 45 * 60_000;

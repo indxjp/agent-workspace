@@ -39,6 +39,10 @@ What you can do:
 - [Chapter 5 · Ship it to your servers](/path/ship): `allowedOrigins` take effect for visitors after promotion, in [Deploy](/guides/deploy).
 - [Chapter 6 · Run it for your team](/path/operate): sharing policy and snapshots in [Shares](/resources/shares).
 
+<Frame caption="The one-tag chat widget on a plain HTML page.">
+  <img src="/images/embed/01-widget.png" alt="The Agent Workspace chat widget open on a plain HTML page" />
+</Frame>
+
 ## Start a run from your backend and stream it
 
 **What it is.** Three calls on your server. `createClient` connects to your workspace with an API
@@ -219,7 +223,10 @@ The surface is then served at three addresses:
 
 - `theme`: `colour` (`#rrggbb`), `radius` (0 to 32 px), `mode` (`light`, `dark`, `system`),
   `density` (`compact`, `comfortable`), `locale` (`en`, `ja`) and `logo`.
-- `toolResults`: render a named tool's result as `text`, `card` or `table` (up to 64 entries).
+- `toolResults`: render a named tool's result as `text`, `card` or `table` (up to 64 entries). A key
+  matches the tool's exact name in the run, or the bare name after the last `__`, so
+  `toolResults: { find_files: 'table' }` also matches Claude's `mcp__<connector>__find_files`. A
+  single `_` is not a separator, so Mastra's `<server>_<tool>` needs the full name.
 - `allowedOrigins` and `limits.turnsPerConversation`: [below](#allow-the-sites-that-may-embed-it).
 - Anything else is refused: the schema is strict. Every bound is on
   [surfaces](/reference/contracts/surfaces).
@@ -401,10 +408,11 @@ user identity, rate limits and product logic.
   `AW_TRUSTED_PROXY_HOPS` is set; without it, every client shares one bucket. Several replicas
   each admit their own limit, and a restart resets the turn counts.
 - **`follow` reconnects after a fixed delay** and ignores `retry:`
-  ([K-3](/concepts/roadmap#k-3-backoff-and-retry-hints-in-follow)). `runs.start` has no
-  idempotency key yet ([S-6](/concepts/roadmap#s-6-idempotency-keys)).
-- **A run's files pass through your backend.** Presigned URLs for browsers are
-  [N-4](/concepts/roadmap#n-4-presigned-file-transfer-for-browsers).
+  ([K-3](/concepts/roadmap#k-3-backoff-and-retry-hints-in-follow)). Pass `runs.start` an
+  `idempotencyKey` to retry it safely ([S-6](/concepts/roadmap#s-6-idempotency-keys)).
+- **A run's files pass through your backend.** A session token can mint presigned download URLs only for
+  `.attachments/<sessionId>/` ([Files](/resources/files#createdownloadurl)); it uploads through
+  `POST /api/sessions/:id/attachments`.
 - **Shares are composed by the caller.** `publish` stores the label and content you send, not a
   server-authored snapshot, and the CLI has no `shares publish`
   ([RF-103](/concepts/roadmap#rf-103-server-owned-share-snapshots)). Today the ownership check

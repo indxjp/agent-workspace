@@ -16,20 +16,33 @@ import {
   PORTABLE_AGENT_SUBAGENTS_MAX,
 } from './portable-agent.js';
 import { SecretNameSchema } from './secret-reference.js';
+import { STORAGE_CONNECTION_PROBLEM_CODES } from './storage-connections.js';
 import { SurfaceDefinitionSchema } from './surfaces.js';
 import { ToolOperationNameSchema } from './tool-connectors.js';
 
 /**
  * Issue #440 (S1-02): the vocabulary of agent versions (ADR-0101). A version is an immutable,
  * numbered snapshot of one agent's definition and its surfaces (ADR-0108); an environment's
- * pointer names the version it runs. `aw push` (`via: 'aw-push'`), the browser (`via: 'ui'`) and
- * a plain API client (`via: 'api'`) all save one the same way. The routes arrive with S1-05 and
- * S1-06; this module is their shared shape.
+ * pointer names the version it runs. `aw push` (`via: 'aw-push'`), the browser (`via: 'ui'`),
+ * a plain API client (`via: 'api'`) and the Builder (`via: 'builder'`) all save one the same
+ * way. The routes arrive with S1-05 and S1-06; this module is their shared shape.
  */
-export const AGENT_VERSION_VIAS = ['ui', 'aw-push', 'api'] as const;
+export const AGENT_VERSION_VIAS = ['ui', 'aw-push', 'api', 'builder'] as const;
 export type AgentVersionVia = (typeof AGENT_VERSION_VIAS)[number];
 /** {@link AGENT_VERSION_VIAS} as a schema (ADR-0101; issue #440). */
 export const AgentVersionViaSchema = z.enum(AGENT_VERSION_VIAS);
+
+/**
+ * The `via` values a client may send: every one but `'builder'`. The Builder saves a version
+ * in-process, so a request body that named it would only let a member pose as the Builder in the
+ * version history (issue #1847). Derived from {@link AGENT_VERSION_VIAS}, never a second list.
+ */
+export const CLIENT_AGENT_VERSION_VIAS = AGENT_VERSION_VIAS.filter(
+  (via): via is Exclude<AgentVersionVia, 'builder'> => via !== 'builder',
+);
+export type ClientAgentVersionVia = (typeof CLIENT_AGENT_VERSION_VIAS)[number];
+/** {@link CLIENT_AGENT_VERSION_VIAS} as a schema, for every request and draft a client sends. */
+export const ClientAgentVersionViaSchema = z.enum(CLIENT_AGENT_VERSION_VIAS);
 
 /**
  * The environments a pointer may name (ADR-0101, ADR-0108; issues #440, #612). `local` is the
@@ -319,7 +332,7 @@ export const AgentVersionSummarySchema = z
 const AGENT_VERSION_DRAFT_SHAPE = {
   body: AgentVersionBodySchema,
   summary: AgentVersionSummarySchema,
-  via: AgentVersionViaSchema,
+  via: ClientAgentVersionViaSchema,
 };
 
 /** A version as a client submits it: the body, a summary and how it was saved (ADR-0101; #440). */
@@ -467,9 +480,18 @@ export const AgentVersionListResponseSchema = z
   .readonly();
 export type AgentVersionListResponse = z.infer<typeof AgentVersionListResponseSchema>;
 
-/** Points an environment at a saved version (S1-06; ADR-0101; issue #440). */
+/**
+ * Points an environment at a saved version (S1-06; ADR-0101; issue #440). `expectedVersion` makes
+ * the move a compare-and-set (#1847): the number the environment must point at when the move runs,
+ * or `null` for "must be unset". Another pointer answers `409 pointer_moved` and moves nothing;
+ * absent, the move is unconditional.
+ */
 export const SetAgentPointerRequestSchema = z
-  .object({ environment: AgentEnvironmentSchema, version: AgentVersionNumberSchema })
+  .object({
+    environment: AgentEnvironmentSchema,
+    version: AgentVersionNumberSchema,
+    expectedVersion: AgentVersionNumberSchema.nullable().optional(),
+  })
   .strict()
   .readonly();
 export type SetAgentPointerRequest = z.infer<typeof SetAgentPointerRequestSchema>;
@@ -574,10 +596,17 @@ export const AGENT_VERSION_PROBLEM_CODES = {
    * model's `version_not_found` (issue #615).
    */
   agent_version_not_found: 404,
+  /** Another save took the version number an in-process create named; start over (#1848). */
+  agent_version_number_taken: 409,
   /** A promote's source, `local`, points at no version, so there is nothing to promote (#615). */
   no_pointer: 409,
   /** A rollback's environment has no history entry before its pointer (issue #615). */
   nothing_to_roll_back: 409,
+  /**
+   * A pointer move's `expectedVersion` is not what the environment points at now (#1847); `details`
+   * is `[environment:<environment>, current:<n|none>]`. Read the agent again and decide anew.
+   */
+  pointer_moved: 409,
   /**
    * The deployment's policy sets a promotion bar, and the version has no evaluation; `details` is
    * `[version:<n>, bar:<bar>]` (issue #619).
@@ -649,6 +678,23 @@ export const AGENT_VERSION_PROBLEM_CODES = {
    * legacy `POST`/`PATCH /api/agents` answer. No `details` (issue #480; S1-09, issue #447).
    */
   agent_name_conflict: 409,
+  /** An assigned file is not in this workspace; `details` is `[<id>]` (resource assignments). */
+  unknown_file: 400,
+  /** An assigned skill is not in this workspace; `details` is `[<id>]`. */
+  unknown_skill: 400,
+  /** An assigned skill is being deleted and cannot be assigned any more; `details` is `[<id>]`. */
+  skill_deleting: 409,
+  /** An assigned connector is not in this workspace; `details` is `[<id>]`. */
+  unknown_connector: 400,
+  /**
+   * A `storage://<connection>/<folder>` grant names a folder outside the connection's allowed
+   * folders; `details` are the refused paths in body order (the storage design, §05).
+   */
+  storage_connection_prefix_not_allowed:
+    STORAGE_CONNECTION_PROBLEM_CODES.storage_connection_prefix_not_allowed,
+  /** A `read-write` storage grant names a connection that is read-only; `details` as above. */
+  storage_connection_write_not_allowed:
+    STORAGE_CONNECTION_PROBLEM_CODES.storage_connection_write_not_allowed,
 } as const;
 export type AgentVersionProblemCode = keyof typeof AGENT_VERSION_PROBLEM_CODES;
 

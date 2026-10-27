@@ -179,8 +179,9 @@ document.documentElement.className += location.hash ? " js no-reveal" : " js";
         <h3 class="h3 reveal" style="font-size:22px">A read-only manual-search agent</h3>
         <p class="reveal" data-d="1" style="margin-top:10px">
           This agent searches manuals and answers with a citation. It can read the
-          <code>manuals</code> files and call one MCP connector, <code>manual-index</code>, and
-          nothing else: no file writes, no commands. A run stops after <code>12</code> turns or
+          <code>manuals</code> files with the platform&#x27;s built-in <code>search_files</code>,
+          narrowed to the manuals the signed-in person may read, and nothing else: no file writes, no
+          network, and no index server or connector of your own. A run stops after <code>12</code> turns or
           <code>$0.5</code>. The project file's <code>policy</code> sets the ceiling for every agent
           in the project.
         </p>
@@ -191,28 +192,35 @@ document.documentElement.className += location.hash ? " js no-reveal" : " js";
           <button type="button" role="tab" id="a-t2" aria-controls="a-p2" aria-selected="false" tabindex="-1">agent-workspace.yaml (excerpt)</button>
           <button type="button" role="tab" id="a-t3" aria-controls="a-p3" aria-selected="false" tabindex="-1">SKILL.md format</button>
         </div>
-        <div role="tabpanel" id="a-p1" aria-labelledby="a-t1" class="on" tabindex="0"><pre data-file="tests/gallery/manual-search/agents/manual-search.ts" class="code"><span class="kw">import</span> { defineAgent, files, mcp, skill } <span class="kw">from</span> <span class="str">'@indx-workspace/sdk/define'</span>;
+        <div role="tabpanel" id="a-p1" aria-labelledby="a-t1" class="on" tabindex="0"><pre data-file="tests/gallery/manual-search/agents/manual-search.ts" class="code"><span class="kw">import</span> { builtinSkill, defineAgent, files, skill } <span class="kw">from</span> <span class="str">'@indx-workspace/sdk/define'</span>;
 
-<span class="kw">export default</span> <span class="fn">defineAgent</span>({
+<span class="kw">export</span> <span class="kw">default</span> <span class="fn">defineAgent</span>({
   name: <span class="str">'manual-search'</span>,
   instructions: { file: <span class="str">'./manual-search.md'</span> },
   model: <span class="str">'default'</span>,
-  engine: <span class="str">'claude-agent-sdk'</span>,
-  <span class="cm">// Read-only by construction: it can read the manuals and call the index, nothing else.</span>
-  permissions: { readFiles: <span class="kw">true</span> },
-  tools: [<span class="fn">mcp</span>(<span class="str">'manual-index'</span>)],
-  skills: [<span class="fn">skill</span>(<span class="str">'cite-answer'</span>)],
+  <span class="cm">// A run is unattended: without autoApprove the SDK stops the tools' calls on an approval prompt.</span>
+  engine: {
+    id: <span class="str">'claude-agent-sdk'</span>,
+    autoApprove: [<span class="str">'mcp__agent-workspace__run_skill_script'</span>, <span class="str">'mcp__agent-workspace__search_files'</span>],
+  },
+  <span class="cm">// Read-only by construction: it searches the manuals with the platform's `search_files` and</span>
+  <span class="cm">// reads the PDF through office-reader, nothing else. The portal narrows each run to the manuals</span>
+  <span class="cm">// the signed-in person may read (`runs.start({ fileScope })`). `runCommands` is what offers</span>
+  <span class="cm">// `run_skill_script`; no write, no network.</span>
+  permissions: { readFiles: <span class="kw">true</span>, runCommands: <span class="kw">true</span> },
+  skills: [<span class="fn">builtinSkill</span>(<span class="str">'office-reader'</span>), <span class="fn">skill</span>(<span class="str">'cite-answer'</span>)],
   files: [<span class="fn">files</span>(<span class="str">'manuals'</span>, <span class="str">'read'</span>)],
-  limits: { maxTurns: <span class="pr">12</span>, maxBudgetUsd: <span class="pr">0.5</span> },
+  limits: { maxTurns: 12, maxBudgetUsd: 0.5 },
 });</pre></div>
-        <div role="tabpanel" id="a-p2" aria-labelledby="a-t2" tabindex="0"><pre data-claim="illustrative" class="code"><span class="pr">connectors:</span>
-  <span class="pr">manual-index:</span>
-    url: <span class="str">http://127.0.0.1:8787/mcp</span>
-    transport: <span class="str">http</span>
-<span class="pr">policy:</span>
-  permissions: { writeFiles: <span class="kw">false</span>, runCommands: <span class="kw">false</span>, unrestrictedNetwork: <span class="kw">false</span> }
-  limits: { maxBudgetUsd: <span class="pr">1</span> }
-  promotion: { minEvalScore: <span class="pr">0.9</span> }</pre></div>
+        <div role="tabpanel" id="a-p2" aria-labelledby="a-t2" tabindex="0"><pre data-file="tests/gallery/manual-search/agent-workspace.yaml#excerpt" class="code"><span class="pr">policy:</span>
+  <span class="pr">permissions:</span>
+    writeFiles: <span class="kw">false</span>
+    runCommands: <span class="kw">true</span> # run_skill_script, for the office-reader skill that reads the PDFs
+    unrestrictedNetwork: <span class="kw">false</span>
+  <span class="pr">limits:</span>
+    maxBudgetUsd: <span class="pr">1</span>
+  <span class="pr">promotion:</span>
+    minEvalScore: <span class="pr">0.9</span></pre></div>
         <div role="tabpanel" id="a-p3" aria-labelledby="a-t3" tabindex="0"><pre data-claim="illustrative" class="code"><span class="cm"># skills/release-notes/SKILL.md — the format, shown with the skills guide's example</span>
 ---
 name: <span class="str">release-notes</span>
@@ -224,8 +232,8 @@ Read the merged PRs since the last tag and draft release notes as three bullets.
         <div class="codecap"><span>From <a href="https://docs.agentworkspace.indx.jp/tutorials/manual-search">Tutorial 1: manual search agent</a> and <a href="https://docs.agentworkspace.indx.jp/building/skills">Skills</a></span></div>
       </div>
       <p class="small reveal" style="margin-top:12px">
-        <code>model: 'default'</code> means the project or workspace default model. The connector is
-        an MCP server you host; use the <code>http</code> or <code>sse</code> transport today.
+        <code>model: 'default'</code> means the project or workspace default model. The portal
+        narrows each run with <code>runs.start({ fileScope })</code>, which can only shrink what the agent is granted.
       </p>
     </article>
 
@@ -235,8 +243,8 @@ Read the merged PRs since the last tag and draft release notes as three bullets.
         <span class="eyebrow reveal">Example 2 · Tools</span>
         <h3 class="h3 reveal" style="font-size:22px">Give an agent a tool: from an OpenAPI spec, or from code</h3>
         <p class="reveal" data-d="1" style="margin-top:10px">
-          <code>openapiTool()</code> turns an OpenAPI spec into a read-only tool: only
-          <code>GET</code>/<code>HEAD</code> calls, run by the gateway, authenticated with a workspace
+          <code>openapiTool()</code> turns an OpenAPI spec into a tool: reads run freely and
+          every write waits for a person's approval, run by the gateway, authenticated with a workspace
           secret. It works in every deployment. <code>defineTool()</code> lets you write the tool in
           TypeScript, with a <code>zod</code> schema and a separate run file.
         </p>

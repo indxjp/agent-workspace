@@ -18,7 +18,8 @@ import { run } from '../../generated-project/project.mjs';
 import { REGISTRY_IMAGE } from '../../generated-project/run.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
-const REGISTRY_CONTAINER = 'build-deploy-journey-registry';
+// Named per runner: the self-hosted CI host runs several jobs on one Docker daemon at once.
+const REGISTRY_CONTAINER = `build-deploy-journey-registry-${(process.env.RUNNER_NAME ?? 'local').replace(/[^\w.-]/gu, '-')}`;
 const SANDBOX_IMAGES = ['tool-host', 'egress-proxy'];
 
 /** @param {number} port */

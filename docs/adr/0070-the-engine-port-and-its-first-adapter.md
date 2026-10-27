@@ -109,6 +109,18 @@ is resolved, because the control plane (which may not import an adapter) still r
 pre-ENG-03 `run_events` rows; moving it would leave two copies of the same ~200 lines. The Claude
 adapter's own `start` skeleton is the port's `createEngineAdapter`, like the other adapters'.
 
+**Amendment (W2-8 #1387, W2-9; finding F-08) — Deviation 2 is closed.** The Claude mapping
+(`toAgentFrames`, `capAgentFrameRaw`), the agent configuration schemas and `RunRequest` left
+`packages/core` for the private package `packages/run-protocol` (`@agent-workspace/run-protocol`),
+which depends only on the contracts, `zod` and the engine port. The control plane, the runner and
+the Claude adapter import it directly, so the mapping is still one copy that the control plane can
+run over pre-ENG-03 rows without importing an adapter. It was not moved into the adapter itself:
+that would put the control plane back behind `web-does-not-import-an-engine-adapter`. `packages/core`
+no longer re-exports it, the Claude adapter no longer depends on `packages/core`, and
+`dependency-cruiser.config.mjs` holds `packages/core` to the contracts alone
+(`core-depends-only-on-contracts`). The Scope line's `packages/core/src/schemas.ts` now reads
+`packages/run-protocol/src/schemas.ts`.
+
 ## Consequences
 
 - **Adding an engine is adding a package.** A row in `apps/runner/src/engines.ts`, a row in

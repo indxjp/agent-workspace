@@ -185,6 +185,46 @@ ADR and moves between code and the platform with `aw push` and `aw pull`; infras
 `agent-workspace.yaml` (ADR-0103). Members, invitations, shares and runtime profiles are managed
 through the console, `aw` and the SDK. #334 is to be closed as superseded by this ADR.
 
+## Amendment — eject to code keeps Agent Workspace resources (#1855, 2026-10-25)
+
+Decided by the Owner (option (c) of #1855). Ejecting a version back into an Agent Workspace
+project (`aw agents export --format ts`, #1850) must not lose what a body only names: file grants,
+tools declared in the project's modules, and `mcp()` connector URLs.
+
+- **The printer's input is `AgentVersionSource`**: the body, the parsed `agent-workspace.yaml`, the
+  tools the project's modules export (`toolModulesOf()`) and the project's surfaces.
+  `agentFromVersionBody()` in `@indx-workspace/sdk/define` is the inverse of `toAgentVersionBody()`
+  and is pure; the caller evaluates the modules.
+- **Tool sources are the project's modules.** Each name in `resources.connectors` becomes the
+  module's exact tool value, so spec, `allow`, auth and `identity` survive. A name no module and no
+  `connectors:` entry supplies is a drop at `definition.resources.connectors.N`.
+- **MCP connectors stay in `agent-workspace.yaml`.** The converter returns the entries its `mcp()`
+  tools need; the printer never writes the project file, and the CLI says which entries to add.
+- **Nothing is dropped silently.** The converter runs its result back through
+  `toAgentVersionBody()` and reports every differing path.
+- **The portable converter is unchanged** (ADR-0133 D5). It keeps leaving Agent Workspace resources
+  out when exporting to another platform.
+- **Why a second converter.** Extending `PortableAgent` with grants and tool sources would put
+  Agent Workspace resources into the form every other platform reads, against ADR-0133. The tool
+  sources are the project's modules, which only the project has.
+
+## Amendment — export to code, the first half of aw pull (#1842, 2026-10-25)
+
+`aw agents export <id> --format ts` writes a saved version as `defineAgent` files, the first half of
+`aw pull`. The default `--format json` is unchanged, byte for byte.
+
+- **It writes `agents/<name>.ts` and `agents/<name>.md`** under `--out` (default: the current
+  directory, which is the project root when run inside one), through the pure `printAgentProject()`.
+  The version is the one the `local` pointer names, else the newest; `--agent-version <n>` names
+  another (`--version` is `aw`'s own switch).
+- **It never writes `agent-workspace.yaml`.** It reads the project file in `--out` for the
+  `connectors:` entries the `mcp()` tools need. A connector or module tool it cannot supply is a
+  refusal that names the body path (exit 1, nothing written), never a silent drop.
+- **It never overwrites without `--force`.** It lists the files that exist and writes none.
+- **The exported project passes `aw check`, and `aw push` saves the same body.** A test pins it.
+- **`aw pull` will reuse `printAgentProject()`** to write a whole project; only the choice of
+  versions and the module tools it evaluates are new.
+
 ## Context
 
 Today an agent is one mutable row. `aw.agents.update` and the agent screen overwrite it in place,

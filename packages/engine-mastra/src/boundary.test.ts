@@ -23,7 +23,7 @@ import path from 'node:path';
 
 import type { EngineFrame, EngineRunRequest } from '@agent-workspace/engine';
 import { createFakeSessionStore } from '@agent-workspace/engine/testing';
-import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   grantedFilesystemForTests,
@@ -184,6 +184,41 @@ function chatCompletion(value: string): Response {
   return new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } });
 }
 
+/** One OpenAI Responses stream answering `value` as a single text message. */
+function responsesText(value: string): Response {
+  const message = {
+    type: 'message',
+    id: 'msg_r1',
+    role: 'assistant',
+    status: 'completed',
+    content: [{ type: 'output_text', text: value, annotations: [] }],
+  };
+  const usage = { input_tokens: 5, output_tokens: 2, total_tokens: 7 };
+  return sse([
+    {
+      type: 'response.created',
+      response: { id: 'resp_1', created_at: 1, model: 'gpt-5', status: 'in_progress', output: [] },
+    },
+    {
+      type: 'response.output_item.added',
+      output_index: 0,
+      item: { ...message, status: 'in_progress', content: [] },
+    },
+    {
+      type: 'response.output_text.delta',
+      item_id: message.id,
+      output_index: 0,
+      content_index: 0,
+      delta: value,
+    },
+    { type: 'response.output_item.done', output_index: 0, item: message },
+    {
+      type: 'response.completed',
+      response: { id: 'resp_1', object: 'response', status: 'completed', output: [message], usage },
+    },
+  ]);
+}
+
 async function gatewayFetch(input: string | URL | Request, init?: RequestInit): Promise<Response> {
   const url = input instanceof Request ? input.url : String(input);
   const headers = new Headers(input instanceof Request ? input.headers : init?.headers);
@@ -273,6 +308,13 @@ const RESEARCHER = {
     unrestrictedNetwork: false,
   },
 };
+
+// Importing Mastra (and the MCP client) is a one-off cost of seconds on a cold or loaded machine.
+// Pay it here, under the hook's own limit, so no scenario's 5 s budget is spent on module loading
+// and every test measures only its own run.
+beforeAll(async () => {
+  await preloadMastra();
+}, 120_000);
 
 beforeEach(() => {
   seen.length = 0;
@@ -1021,6 +1063,143 @@ console.log(process.argv[2], fs.readFileSync('contracts/signed.pdf', 'utf8'), wr
     const frames = await drain(connection.frames);
     expect(frames.at(-1)).toMatchObject({ frame: 'agent.result', stopReason: 'cancelled' });
     expect(seen).toEqual([]);
+  });
+
+  describe('outputSchema (ADR-0143)', () => {
+    const schema = {
+      type: 'object',
+      properties: { verdict: { type: 'string' } },
+      required: ['verdict'],
+    };
+
+    async function runWith(
+      answer: string,
+      outputSchema: Record<string, unknown> | undefined,
+    ): Promise<{ frames: EngineFrame[]; failure: unknown }> {
+      script = [text(answer)];
+      const frames: EngineFrame[] = [];
+      const failure = await (async () => {
+        const connection = createMastraEngine().start(
+          request(workspace(), outputSchema === undefined ? {} : { outputSchema }),
+        );
+        for await (const frame of connection.frames) frames.push(frame);
+      })().then(
+        () => null,
+        (error: unknown) => error,
+      );
+      return { frames, failure };
+    }
+
+    it("sends the schema in the provider's response format", async () => {
+      await runWith('{"verdict":"ok"}', schema);
+      const format = (seen[0]?.body as { output_config?: { format?: Record<string, unknown> } })
+        .output_config?.format;
+      expect(format).toMatchObject({
+        type: 'json_schema',
+        schema: { type: 'object', properties: { verdict: { type: 'string' } } },
+      });
+    });
+
+    it('reports the text and the parsed object on agent.result for a matching answer', async () => {
+      const { frames, failure } = await runWith('{"verdict":"ok"}', schema);
+      expect(failure).toBeNull();
+      expect(frames.at(-1)).toMatchObject({
+        frame: 'agent.result',
+        stopReason: 'end_turn',
+        output: { text: '{"verdict":"ok"}', structured: { verdict: 'ok' } },
+      });
+    });
+
+    it.each([
+      ['an answer that does not match the schema', '{"verdict":5}'],
+      ['an answer that is not JSON', 'not json'],
+      ['an empty answer', ''],
+    ] as const)(
+      'fails with output_schema_unsatisfied, leaking neither schema nor answer, for %s',
+      async (_name, answer) => {
+        const { frames, failure } = await runWith(answer, schema);
+        expect(failure).toBeInstanceOf(Error);
+        const message = (failure as Error).message;
+        expect(message).toMatch(/^output_schema_unsatisfied: /u);
+        expect(message).not.toContain('verdict');
+        if (answer !== '') expect(message).not.toContain(answer);
+        const results = frames.filter((frame) => frame.frame === 'agent.result');
+        expect(results).toHaveLength(1);
+        expect(results[0]).not.toHaveProperty('output');
+        expect(seen).toHaveLength(1);
+      },
+    );
+
+    it.each([
+      [
+        'openai-responses',
+        responsesText,
+        (body: unknown) => (body as { text?: { format?: unknown } }).text?.format,
+      ],
+      [
+        'openai-chat-completions',
+        chatCompletion,
+        (body: unknown) => (body as { response_format?: unknown }).response_format,
+      ],
+    ] as const)(
+      'sends the schema and refuses a mismatched answer by name on the %s route',
+      async (protocol, answer, format) => {
+        const gateway = { baseUrl: GATEWAY, token: TOKEN, protocol } as const;
+        script = [answer('{"verdict":"ok"}')];
+        const matched = await drain(
+          createMastraEngine().start(request(workspace(), { gateway, outputSchema: schema }))
+            .frames,
+        );
+        expect(JSON.stringify(format(seen[0]?.body))).toContain('"verdict"');
+        expect(matched.at(-1)).toMatchObject({
+          frame: 'agent.result',
+          output: { structured: { verdict: 'ok' } },
+        });
+
+        seen.length = 0;
+        script = [answer('{"verdict":5}')];
+        const failure = await drain(
+          createMastraEngine().start(request(workspace(), { gateway, outputSchema: schema }))
+            .frames,
+        ).then(
+          () => null,
+          (error: unknown) => error,
+        );
+        expect(failure).toBeInstanceOf(Error);
+        const message = (failure as Error).message;
+        expect(message).toMatch(/^output_schema_unsatisfied: /u);
+        expect(message).not.toContain('verdict');
+        expect(message).not.toContain('{"verdict":5}');
+        expect(seen).toHaveLength(1);
+      },
+    );
+
+    it('leaves a malformed provider chunk as a plain failed run, not output_schema_unsatisfied', async () => {
+      // The AI SDK raises `AI_TypeValidationError` for a chunk off its wire schema, as it does for
+      // some answer failures; this one is the provider, so it must not be reported as the answer.
+      script = [sse([{ type: 'response.created', response: { id: 'resp_1' } }])];
+      const frames = await drain(
+        createMastraEngine().start(
+          request(workspace(), {
+            gateway: { baseUrl: GATEWAY, token: TOKEN, protocol: 'openai-responses' },
+            outputSchema: schema,
+          }),
+        ).frames,
+      );
+      expect(frames.filter((frame) => frame.frame === 'agent.result')).toMatchObject([
+        { stopReason: 'error' },
+      ]);
+    });
+
+    it('sends no response format and reports a null structured answer without a schema', async () => {
+      const { frames, failure } = await runWith('plain words', undefined);
+      expect(failure).toBeNull();
+      expect(seen[0]?.body).not.toHaveProperty('output_config');
+      expect(frames.at(-1)).toMatchObject({
+        frame: 'agent.result',
+        output: { text: 'plain words', structured: null },
+      });
+    });
   });
 
   it('turns Mastra telemetry and its catalogue refresh off in the process before Mastra loads', async () => {

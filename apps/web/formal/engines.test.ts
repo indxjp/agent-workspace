@@ -54,10 +54,10 @@ import {
 } from '../server/engines/images';
 import { parseRole } from '../server/rbac/roles';
 import { installRbacHarness, TEST_WORKSPACE_ID } from '../server/rbac/testing';
-import { installRunApi, resetRunApi } from '../server/runs/environment';
 import { startRun } from '../server/runs/api';
-import { InMemoryRunStore } from '../server/runs/store';
+import { InMemoryRunStore } from '../server/runs/memory-store';
 import { asRecord, asString, loadVectors } from '../../../tests/formal/vectors';
+import { installTestRunApi, resetTestRunApi } from '../server/application-context-fixtures';
 
 const catalogVectors = loadVectors('engines', 'catalog.json');
 const schemaVectors = loadVectors('engines', 'schemas.json');
@@ -306,7 +306,7 @@ function registerCapabilities(capabilities: {
 describe('engine enforcement', () => {
   afterEach(() => {
     clearEnginesRegisteredForTests();
-    resetRunApi();
+    resetTestRunApi();
   });
 
   it.each(
@@ -356,7 +356,7 @@ describe('engine enforcement', () => {
 
     const store = new InMemoryRunStore();
     const launched: unknown[] = [];
-    installRunApi({
+    installTestRunApi({
       authenticate: () =>
         Promise.resolve({
           principalId: '77777777-7777-4777-8777-777777777777',

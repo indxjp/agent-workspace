@@ -360,7 +360,7 @@ document.documentElement.className += location.hash ? " js no-reveal" : " js";
         <pre data-claim="illustrative" class="code reveal" data-d="1"><span class="kw">const</span> options = {
   settingSources: ["project"],     <span class="cm">// the session's own project only, never host user state</span>
   strictMcpConfig: <span class="kw">true</span>,  <span class="cm">// only this agent's connectors</span>
-  allowedTools: [<span class="str">'mcp__&lt;connector-name&gt;__*'</span>], <span class="cm">// manual-index</span>
+  allowedTools: [<span class="str">'mcp__&lt;connector-name&gt;__*'</span>], <span class="cm">// e.g. authority</span>
   disallowedTools: [
     <span class="str">'Write'</span>, <span class="str">'Edit'</span>, <span class="str">'NotebookEdit'</span>,      <span class="cm">// writeFiles off</span>
     <span class="str">'Bash'</span>, <span class="str">'BashOutput'</span>, <span class="str">'KillShell'</span>,    <span class="cm">// runCommands off</span>

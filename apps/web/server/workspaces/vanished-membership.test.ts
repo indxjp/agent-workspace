@@ -29,12 +29,12 @@
  * exactly that artefact, in addition to the refusing status, so inverting any one site back to the
  * fallback turns a named test red.
  */
+import { clearApplicationContext, applicationContext } from '../application-context';
+import { installTestDomains } from '../application-context-fixtures';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import type { DirectoryRoot, WorkspaceDirectory } from '../rbac/directory';
-import { configureRbacRuntime, currentRbacRuntime } from '../rbac/runtime';
 import { installRbacHarness, TEST_WORKSPACE_ID, type RbacHarness } from '../rbac/testing';
-import { clearWorkspacesRuntime, configureWorkspacesRuntime } from './runtime';
 import { createMemoryWorkspaceRepository } from './testing';
 import { GET as GET_COLLECTION, POST } from '../../app/api/workspaces/route';
 import { GET as GET_ITEM, PATCH } from '../../app/api/workspaces/[id]/route';
@@ -45,7 +45,7 @@ const OWNER = 'owner@example.com';
 const VIEWER = 'viewer@example.com';
 
 afterEach(() => {
-  clearWorkspacesRuntime();
+  clearApplicationContext();
 });
 
 interface Seeded {
@@ -91,9 +91,9 @@ async function seed(dropBeforeRead: number): Promise<Seeded> {
       },
     ],
   });
-  configureWorkspacesRuntime({ repository });
+  installTestDomains({ workspaces: { repository } });
 
-  const installed = currentRbacRuntime();
+  const installed = applicationContext()?.rbac ?? null;
   if (installed === null) throw new Error('the harness installed no runtime');
   const reads: string[][] = [];
   let readCount = 0;
@@ -116,7 +116,9 @@ async function seed(dropBeforeRead: number): Promise<Seeded> {
     ...installed.directory,
     forWorkspace: (workspaceId) => wrapScoped(installed.directory.forWorkspace(workspaceId)),
   };
-  configureRbacRuntime({ identify: (request) => installed.identify(request), directory: root });
+  installTestDomains({
+    rbac: { identify: (request) => installed.identify(request), directory: root },
+  });
 
   return { harness, ownerId, viewerId, repository, reads };
 }

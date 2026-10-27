@@ -1,6 +1,6 @@
 /**
  * Issue #509 (S1-24): the principal that owns what a caller writes, read from one of the
- * structural caller projections (the run API's `Principal`, `SessionPrincipal`, `ProjectActor`,
+ * structural caller projections (`RunPrincipal`, `SessionApiPrincipal`, `ProjectActor`,
  * `ShareActor`) that the composition roots build from the nominal `Principal` in `principal.ts`.
  *
  * Every composition root copies `Principal.ownerPrincipalId` into the projection, and the field is
@@ -19,4 +19,16 @@ interface OwnerProjection {
 /** The principal own/other is decided against and that owns what `caller` writes. */
 export function ownerPrincipalIdOf(caller: OwnerProjection): string {
   return caller.ownerPrincipalId;
+}
+
+/** Who may reach `session` (`canAccessSession`'s rule): its owner, or a workspace owner or admin. */
+export function mayAccessSession(
+  caller: OwnerProjection & { readonly role?: string },
+  session: { readonly ownerPrincipalId?: string | null },
+): boolean {
+  return (
+    session.ownerPrincipalId === ownerPrincipalIdOf(caller) ||
+    caller.role === 'owner' ||
+    caller.role === 'admin'
+  );
 }

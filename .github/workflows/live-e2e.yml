@@ -3,18 +3,24 @@ name: Live provider acceptance
 on:
   workflow_dispatch:
     inputs:
-      provider:
-        description: Provider configured for this protected environment
+      suite:
+        description: Which live suite to run
         required: true
+        default: provider-acceptance
+        type: choice
+        options: [provider-acceptance, storage]
+      provider:
+        description: Provider configured for this protected environment (provider-acceptance only)
+        required: false
         type: choice
         options: [anthropic, openai, azure-openai]
       model:
-        description: Exact provider model identifier
-        required: true
+        description: Exact provider model identifier (provider-acceptance only)
+        required: false
         type: string
 
 concurrency:
-  group: live-provider-${{ inputs.provider }}
+  group: live-${{ inputs.suite }}-${{ inputs.provider }}
   cancel-in-progress: false
 
 permissions:
@@ -22,7 +28,8 @@ permissions:
 
 jobs:
   eleven-step:
-    runs-on: ubuntu-latest
+    if: github.repository_owner == 'INDXDev' && (inputs.suite == 'provider-acceptance')
+    runs-on: [self-hosted, ms-a2]
     environment: live-provider-acceptance
     timeout-minutes: 45
     services:
@@ -32,7 +39,7 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: agent_workspace_e2e
-        ports: ['5432:5432']
+        ports: ['5432']
         options: >-
           --health-cmd "pg_isready -U postgres -d agent_workspace_e2e"
           --health-interval 5s
@@ -46,23 +53,30 @@ jobs:
       E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
       E2E_MCP_URL: http://aw-e2e-mcp:4319/mcp
       DATABASE_URL: postgres://agent_workspace:agent_workspace@postgres:5432/agent_workspace
-      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/agent_workspace_e2e
       MASTER_ENCRYPTION_KEY: ${{ secrets.E2E_MASTER_ENCRYPTION_KEY }}
       SESSION_SECRET: ${{ secrets.E2E_SESSION_SECRET }}
       BOOTSTRAP_ADMIN: e2e-admin@example.invalid
       BOOTSTRAP_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
       E2E_RUNTIME: docker
     steps:
+      # MS-A2 runs several jobs at once, so the service gets a random host port, not 5432.
+      - name: Point the job at its PostgreSQL port
+        run: |
+          {
+            echo "TEST_DATABASE_URL=postgres://postgres:postgres@localhost:${{ job.services.postgres.ports['5432'] }}/agent_workspace_e2e"
+          } >> "$GITHUB_ENV"
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
-          cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Refuse missing protected credentials
         run: |
           set -euo pipefail
+          test -n "$E2E_PROVIDER"
+          test -n "$E2E_MODEL"
           test -n "$E2E_PROVIDER_API_KEY"
           test -n "$E2E_ADMIN_PASSWORD"
           test -n "$MASTER_ENCRYPTION_KEY"
@@ -126,3 +140,194 @@ jobs:
         run: |
           docker rm --force aw-e2e-mcp || true
           docker compose down --volumes
+
+  # The own-bucket tutorial (apps/web/server/storage-connections/byo-bucket.live.test.ts) against a real bucket, one
+  # lane per cloud, with the Owner's OIDC federation in `providers-live` (it allows only main). No static
+  # cloud key exists: S3 assumes AWS_ROLE_ARN with the job's GitHub OIDC token, and Azure logs in with
+  # azure/login and mints short-lived user-delegation SAS tokens. Each lane's secrets reach only that
+  # lane's steps. GCS exchanges the job's workload identity for one short-lived access token, which
+  # the test hands to the connection as its credential; nothing is exported as ambient credentials.
+  byo-bucket:
+    if: github.repository_owner == 'INDXDev' && (inputs.suite == 'storage')
+    runs-on: [self-hosted, ms-a2]
+    environment: providers-live
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        lane: [s3, gcs, azblob]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec nx run-many -t build --exclude=@agent-workspace/web,@indx-workspace/embedded --parallel=3 --output-style=static
+
+      - name: Refuse the s3 lane without its secrets
+        if: matrix.lane == 's3'
+        env:
+          AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+          TEST_AWS_REGION: ${{ secrets.TEST_AWS_REGION }}
+          TEST_AWS_S3_BUCKET: ${{ secrets.TEST_AWS_S3_BUCKET }}
+        run: |
+          set -euo pipefail
+          for name in AWS_ROLE_ARN TEST_AWS_REGION TEST_AWS_S3_BUCKET; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is not set"
+              exit 1
+            fi
+          done
+      - name: Refuse the gcs lane without its secrets
+        if: matrix.lane == 'gcs'
+        env:
+          GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          TEST_GCP_PROJECT: ${{ secrets.TEST_GCP_PROJECT }}
+          TEST_GCS_BUCKET: ${{ secrets.TEST_GCS_BUCKET }}
+        run: |
+          set -euo pipefail
+          for name in GCP_WORKLOAD_IDENTITY_PROVIDER GCP_SERVICE_ACCOUNT TEST_GCP_PROJECT TEST_GCS_BUCKET; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is not set"
+              exit 1
+            fi
+          done
+      - name: Refuse the azblob lane without its secrets
+        if: matrix.lane == 'azblob'
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          AZURE_BLOB_LIVE_SERVICE_URL: ${{ secrets.AZURE_BLOB_LIVE_SERVICE_URL }}
+          AZURE_BLOB_LIVE_CONTAINER: ${{ secrets.AZURE_BLOB_LIVE_CONTAINER }}
+        run: |
+          set -euo pipefail
+          for name in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID AZURE_BLOB_LIVE_SERVICE_URL AZURE_BLOB_LIVE_CONTAINER; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is not set"
+              exit 1
+            fi
+          done
+
+      # Azure: the identity behind AZURE_CLIENT_ID needs Storage Blob Delegator at storage-account scope
+      # (getting the user delegation key is an account-level action) and Storage Blob Data Contributor
+      # on the container (the data itself). The connection gets an rlcw SAS (no delete); the test's
+      # admin store gets an rlcwd SAS for seeding and cleanup. Both expire in an hour.
+      - name: Log in to Azure with OIDC
+        if: matrix.lane == 'azblob'
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Mint the Azure user-delegation SAS tokens
+        id: azure-sas
+        if: matrix.lane == 'azblob'
+        env:
+          AZURE_BLOB_LIVE_SERVICE_URL: ${{ secrets.AZURE_BLOB_LIVE_SERVICE_URL }}
+          AZURE_BLOB_LIVE_CONTAINER: ${{ secrets.AZURE_BLOB_LIVE_CONTAINER }}
+        run: |
+          set -euo pipefail
+          service_url="${AZURE_BLOB_LIVE_SERVICE_URL%/}"
+          host="${service_url#*://}"
+          host="${host%%/*}"
+          account="${host%%.*}"
+          if [ -z "$account" ]; then
+            echo "::error::AZURE_BLOB_LIVE_SERVICE_URL has no account host"
+            exit 1
+          fi
+          expiry="$(date -u -d '+60 minutes' '+%Y-%m-%dT%H:%MZ')"
+          mint() {
+            az storage container generate-sas --account-name "$account" --name "$AZURE_BLOB_LIVE_CONTAINER" \
+              --as-user --auth-mode login --permissions "$1" --expiry "$expiry" --https-only -o tsv
+          }
+          # Mask each token, and its URL-decoded signature, before it is written anywhere.
+          mask() {
+            local sas="$1" sig
+            echo "::add-mask::$sas"
+            sig="$(printf '%s' "$sas" | tr '&' '\n' | sed -n 's/^sig=//p')"
+            if [ -z "$sig" ]; then
+              echo "::error::the minted SAS has no signature"
+              exit 1
+            fi
+            echo "::add-mask::$sig"
+            echo "::add-mask::$(printf '%b' "${sig//%/\\x}")"
+          }
+          sas="$(mint rlcw)"
+          mask "$sas"
+          admin_sas="$(mint rlcwd)"
+          mask "$admin_sas"
+          {
+            echo "sas=$sas"
+            echo "admin-sas=$admin_sas"
+          } >> "$GITHUB_OUTPUT"
+
+      # S3, with no action: the job's GitHub OIDC token for audience sts.amazonaws.com, which the test hands
+      # to the SDK's web-identity provider to assume AWS_ROLE_ARN. GitHub's token is short-lived, so this
+      # runs right before the test. The role needs s3:ListBucket (prefix aw-byo-live/*) and
+      # s3:GetObject, s3:PutObject and s3:DeleteObject on aw-byo-live/*; the connection's session policy
+      # drops delete, and the admin session uses it for cleanup.
+      - name: Write the GitHub OIDC token for AWS
+        if: matrix.lane == 's3'
+        run: |
+          set -euo pipefail
+          token="$(curl --silent --show-error --fail \
+            --header "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r '.value')"
+          echo "::add-mask::$token"
+          if [ -z "$token" ] || [ "$token" = null ]; then
+            echo "::error::the GitHub OIDC token request returned no token"
+            exit 1
+          fi
+          umask 077
+          printf '%s' "$token" > "$RUNNER_TEMP/aws-web-identity-token"
+
+      - name: Run the own-bucket tutorial against S3
+        if: matrix.lane == 's3'
+        env:
+          STORAGE_LIVE_LANE: ${{ matrix.lane }}
+          TEST_AWS_S3_BUCKET: ${{ secrets.TEST_AWS_S3_BUCKET }}
+          TEST_AWS_REGION: ${{ secrets.TEST_AWS_REGION }}
+          AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+          AWS_WEB_IDENTITY_TOKEN_FILE: ${{ runner.temp }}/aws-web-identity-token
+        run: pnpm --filter @agent-workspace/web exec vitest run server/storage-connections/byo-bucket.live.test.ts
+      # GCS: the service account behind GCP_SERVICE_ACCOUNT needs Workload Identity User for this
+      # principal and Service Account Token Creator on itself (to mint the access token), plus object
+      # access on the bucket. Neither a credentials file nor an environment variable is exported, so no
+      # ambient application default credentials can make the lane pass while the token is ignored.
+      - name: Get a short-lived GCS access token with workload identity
+        id: gcp-auth
+        if: matrix.lane == 'gcs'
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          token_format: access_token
+          create_credentials_file: false
+          export_environment_variables: false
+      - name: Run the own-bucket tutorial against GCS
+        if: matrix.lane == 'gcs'
+        env:
+          STORAGE_LIVE_LANE: ${{ matrix.lane }}
+          TEST_GCS_BUCKET: ${{ secrets.TEST_GCS_BUCKET }}
+          TEST_GCP_PROJECT: ${{ secrets.TEST_GCP_PROJECT }}
+          GCS_LIVE_ACCESS_TOKEN: ${{ steps.gcp-auth.outputs.access_token }}
+        run: pnpm --filter @agent-workspace/web exec vitest run server/storage-connections/byo-bucket.live.test.ts
+      - name: Run the own-bucket tutorial against Azure Blob
+        if: matrix.lane == 'azblob'
+        env:
+          STORAGE_LIVE_LANE: ${{ matrix.lane }}
+          AZURE_BLOB_LIVE_SERVICE_URL: ${{ secrets.AZURE_BLOB_LIVE_SERVICE_URL }}
+          AZURE_BLOB_LIVE_CONTAINER: ${{ secrets.AZURE_BLOB_LIVE_CONTAINER }}
+          AZURE_BLOB_LIVE_SAS: ${{ steps.azure-sas.outputs.sas }}
+          AZURE_BLOB_LIVE_ADMIN_SAS: ${{ steps.azure-sas.outputs.admin-sas }}
+        run: pnpm --filter @agent-workspace/web exec vitest run server/storage-connections/byo-bucket.live.test.ts
+
+      - name: Remove the OIDC token file
+        if: always()
+        run: rm -f "$RUNNER_TEMP/aws-web-identity-token"

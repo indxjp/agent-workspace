@@ -3,6 +3,8 @@
  * refusal of API-key callers on create, the audit trail, and that a key's plaintext is in exactly
  * one response.
  */
+import { captureLog } from '../telemetry/capture-log';
+import { log as webLogger } from '../telemetry/logger';
 import { randomUUID } from 'node:crypto';
 
 import type { EndpointClientResource } from '@indx-workspace/contracts/endpoint-clients';
@@ -13,20 +15,14 @@ import { POST as MINT } from '../../app/api/endpoint-clients/[id]/keys/route';
 import { POST as ROTATE } from '../../app/api/endpoint-clients/[id]/secret/route';
 import { GET as LIST, POST as CREATE } from '../../app/api/endpoint-clients/route';
 import { POST as TOKEN } from '../../app/oauth/token/route';
+import { applicationContext, clearApplicationContext } from '../application-context';
+import { installTestDomains } from '../application-context-fixtures';
 import { LOCAL_RUNTIME_API_KEY_NAME_PREFIX } from '../cli-auth/local-credential';
 import { resetOAuthLimits } from '../oauth/limits';
-import { clearOAuthRuntime, configureOAuthRuntime } from '../oauth/runtime';
 import { conferredBy } from '../rbac/conferral';
-import { installToolEndpoint, resetToolEndpoint } from '../tool-endpoint/env';
 import type { ToolEndpointEnvironment } from '../tool-endpoint/env';
 import { installRbacHarness, TEST_WORKSPACE_ID, type RbacHarness } from '../rbac/testing';
-import {
-  clearEndpointClientsRuntime,
-  configureEndpointClientsRuntime,
-  currentEndpointClientsRuntime,
-  type EndpointClientAuditEvent,
-  type EndpointClientsRuntime,
-} from './runtime';
+import type { EndpointClientAuditEvent, EndpointClientsRuntime } from './runtime';
 
 const OTHER_WORKSPACE = 'some-other-workspace';
 const ownerCaller = { email: 'owner@example.com' };
@@ -38,6 +34,8 @@ const viewerCaller = { email: 'viewer@example.com' };
 interface Fake {
   readonly clients: Map<string, EndpointClientResource & { workspaceId: string }>;
   readonly agentOwners: Map<string, string>;
+  /** `agentId:ownerPrincipalId` pairs an `agent_grants` row names. */
+  readonly agentGrants: Set<string>;
   readonly audits: EndpointClientAuditEvent[];
   /** Key id to key name, for every key minted. */
   readonly keyNames: Map<string, string>;
@@ -62,6 +60,7 @@ function installFake(): Fake {
   const state: Fake = {
     clients: new Map(),
     agentOwners: new Map(),
+    agentGrants: new Set(),
     audits: [],
     keyNames: new Map(),
     secretHashes: new Map(),
@@ -177,22 +176,27 @@ function installFake(): Fake {
     agentOwnership: (principal, agentId) => {
       const owner = state.agentOwners.get(agentId);
       if (owner === undefined) return 'unknown';
-      return owner === principal.ownerPrincipalId ? 'own' : 'other';
+      if (owner === principal.ownerPrincipalId) return 'own';
+      return state.agentGrants.has(`${agentId}:${principal.ownerPrincipalId}`)
+        ? 'permitted'
+        : 'other';
     },
     audit: (_principal, event) => {
       state.audits.push(event);
     },
   };
-  configureEndpointClientsRuntime({
-    list: (...a) => Promise.resolve(sync.list(...a)),
-    get: (...a) => Promise.resolve(sync.get(...a)),
-    create: (...a) => Promise.resolve(sync.create(...a)),
-    update: (...a) => Promise.resolve(sync.update(...a)),
-    revoke: (...a) => Promise.resolve(sync.revoke(...a)),
-    rotateSecret: (...a) => Promise.resolve(sync.rotateSecret(...a)),
-    mintKey: (...a) => Promise.resolve(sync.mintKey(...a)),
-    agentOwnership: (...a) => Promise.resolve(sync.agentOwnership(...a)),
-    audit: (...a) => Promise.resolve(sync.audit(...a)),
+  installTestDomains({
+    endpointClients: {
+      list: (...a) => Promise.resolve(sync.list(...a)),
+      get: (...a) => Promise.resolve(sync.get(...a)),
+      create: (...a) => Promise.resolve(sync.create(...a)),
+      update: (...a) => Promise.resolve(sync.update(...a)),
+      revoke: (...a) => Promise.resolve(sync.revoke(...a)),
+      rotateSecret: (...a) => Promise.resolve(sync.rotateSecret(...a)),
+      mintKey: (...a) => Promise.resolve(sync.mintKey(...a)),
+      agentOwnership: (...a) => Promise.resolve(sync.agentOwnership(...a)),
+      audit: (...a) => Promise.resolve(sync.audit(...a)),
+    },
   });
   return state;
 }
@@ -221,8 +225,8 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
-  resetToolEndpoint();
-  clearEndpointClientsRuntime();
+  clearApplicationContext();
+  clearApplicationContext();
   harness.teardown();
 });
 
@@ -291,6 +295,13 @@ describe('create: the four-role matrix', () => {
     expect(response.status).toBe(403);
     expect(response.body).toMatchObject({ error: { code: 'endpoint_client_agent_not_runnable' } });
     expect(fake.clients.size).toBe(0);
+  });
+
+  it('lets a builder bind another member’s agent it was granted (ADR-0152)', async () => {
+    const agent = agentOf(otherBuilderCaller);
+    fake.agentGrants.add(`${agent}:${principalIds[builderCaller.email] ?? 'missing'}`);
+    const response = await createAs(builderCaller, createBody([agent]));
+    expect(response.status, JSON.stringify(response.body)).toBe(201);
   });
 
   it('answers an absent agent the same as a foreign one', async () => {
@@ -481,11 +492,13 @@ describe('revoke and update', () => {
 
   it('answers 409 when the client is revoked between the read and the row lock', async () => {
     const client = await seedClient(ownerCaller);
-    const runtime = currentEndpointClientsRuntime();
+    const runtime = applicationContext()?.endpointClients ?? null;
     if (runtime === null) throw new Error('runtime not installed');
-    configureEndpointClientsRuntime({
-      ...runtime,
-      update: () => Promise.resolve({ kind: 'revoked' }),
+    installTestDomains({
+      endpointClients: {
+        ...runtime,
+        update: () => Promise.resolve({ kind: 'revoked' }),
+      },
     });
     const response = await harness.call(PATCH, {
       method: 'PATCH',
@@ -541,6 +554,82 @@ describe('revoke and update', () => {
     expect(tools.status).toBe(400);
   });
 
+  it('creates a builder client with no agent, and keeps it that way and keyless', async () => {
+    const body = { name: 'builder-door', kind: 'builder', agentIds: [] };
+    expect((await createAs(viewerCaller, body)).status).toBe(403);
+    const byBuilder = await createAs(builderCaller, body);
+    expect(byBuilder.status).toBe(403);
+    expect(byBuilder.body).toMatchObject({ error: { code: 'forbidden' } });
+    expect((await createAs(adminCaller, { ...body, name: 'by-admin' })).status).toBe(201);
+    const created = await createAs(ownerCaller, body);
+    expect(created.status).toBe(201);
+    const client = (created.body as { endpointClient: EndpointClientResource }).endpointClient;
+    expect(client).toMatchObject({ kind: 'builder', agentIds: [] });
+
+    const bind = await harness.call(PATCH, {
+      method: 'PATCH',
+      path: `/api/endpoint-clients/${client.id}`,
+      as: ownerCaller,
+      id: client.id,
+      body: { agentIds: [agentOf(ownerCaller)] },
+    });
+    expect(bind.status).toBe(400);
+    expect(bind.body).toMatchObject({ error: { code: 'endpoint_client_invalid' } });
+    const key = await mintAs(ownerCaller, client.id);
+    expect(key.status).toBe(400);
+    expect(key.body).toMatchObject({ error: { code: 'endpoint_client_invalid' } });
+  });
+
+  describe('a builder client whose acting principal is a Builder-role member', () => {
+    async function builderClientOf(caller: { email: string }) {
+      const created = await createAs(adminCaller, {
+        name: 'builder-door',
+        kind: 'builder',
+        agentIds: [],
+      });
+      expect(created.status).toBe(201);
+      const client = (created.body as { endpointClient: EndpointClientResource }).endpointClient;
+      const row = fake.clients.get(client.id);
+      if (row === undefined) throw new Error('the seeded client is missing');
+      fake.clients.set(client.id, {
+        ...row,
+        actsForPrincipalId: principalIds[caller.email] ?? 'missing',
+      });
+      return client;
+    }
+
+    it('refuses that member changing its redirect URIs and rotating its secret', async () => {
+      const client = await builderClientOf(builderCaller);
+      const patch = await harness.call(PATCH, {
+        method: 'PATCH',
+        path: `/api/endpoint-clients/${client.id}`,
+        as: builderCaller,
+        id: client.id,
+        body: { redirectUris: ['https://evil.example/callback'] },
+      });
+      expect(patch.status).toBe(403);
+      expect(patch.body).toMatchObject({ error: { code: 'forbidden' } });
+      const rotation = await rotateAs(builderCaller, client.id);
+      expect(rotation.status).toBe(403);
+      expect(rotation.body).toMatchObject({ error: { code: 'forbidden' } });
+      expect(fake.clients.get(client.id)?.redirectUris).toEqual([]);
+      expect(fake.secretHashes.has(client.id)).toBe(false);
+    });
+
+    it('lets an admin change it and rotate its secret', async () => {
+      const client = await builderClientOf(builderCaller);
+      const patch = await harness.call(PATCH, {
+        method: 'PATCH',
+        path: `/api/endpoint-clients/${client.id}`,
+        as: adminCaller,
+        id: client.id,
+        body: { redirectUris: ['https://app.example/callback'] },
+      });
+      expect(patch.status).toBe(200);
+      expect((await rotateAs(adminCaller, client.id)).status).toBe(201);
+    });
+  });
+
   it('re-checks that a replaced agent is runnable by the caller', async () => {
     const client = await seedClient(builderCaller);
     const response = await harness.call(PATCH, {
@@ -561,7 +650,12 @@ describe('revoking closes the client tool sandbox', () => {
   beforeEach(() => {
     closeSandbox.mockReset();
     closeSandbox.mockResolvedValue(undefined);
-    installToolEndpoint({ closeSandbox } as unknown as ToolEndpointEnvironment);
+    installTestDomains({
+      toolEndpoint: {
+        kind: 'serving',
+        environment: { closeSandbox } as unknown as ToolEndpointEnvironment,
+      },
+    });
   });
 
   async function revokeAs(caller: { email: string }, id: string) {
@@ -615,7 +709,7 @@ describe('revoking closes the client tool sandbox', () => {
   });
 
   it('still revokes, and writes every audit row, when the close fails', async () => {
-    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     try {
       closeSandbox.mockRejectedValue(new Error('runner unreachable'));
       const client = await seedProject(ownerCaller);
@@ -661,9 +755,7 @@ describe('minting a key', () => {
   });
 
   it('never writes the plaintext secret to a log', async () => {
-    const spies = (['log', 'info', 'warn', 'error', 'debug'] as const).map((method) =>
-      vi.spyOn(console, method).mockImplementation(() => undefined),
-    );
+    const capture = captureLog();
     try {
       const client = await seedClient(ownerCaller);
       const mint = await mintAs(ownerCaller, client.id);
@@ -674,10 +766,9 @@ describe('minting a key', () => {
         as: ownerCaller,
         id: client.id,
       });
-      const lines = spies.flatMap((spy) => spy.mock.calls.map((args) => JSON.stringify(args)));
-      expect(lines.join(' ')).not.toContain('PLAINTEXT-SECRET-VALUE');
+      expect(capture.text()).not.toContain('PLAINTEXT-SECRET-VALUE');
     } finally {
-      for (const spy of spies) spy.mockRestore();
+      capture.restore();
     }
   });
 
@@ -762,26 +853,28 @@ describe('rotating the OAuth client secret', () => {
   it('refuses the old secret at /oauth/token after a rotation and accepts the new one', async () => {
     vi.stubEnv('AW_PUBLIC_URL', 'https://aw.example');
     resetOAuthLimits();
-    configureOAuthRuntime({
-      findClient: (id) => {
-        const client = fake.clients.get(id);
-        if (client === undefined || client.revokedAt !== null) return Promise.resolve(null);
-        return Promise.resolve({
-          ...client,
-          clientSecretHash: fake.secretHashes.get(id) ?? null,
-          resourcePath: '/api/a2a/agents/helper',
-        });
+    installTestDomains({
+      oauth: {
+        findClient: (id) => {
+          const client = fake.clients.get(id);
+          if (client === undefined || client.revokedAt !== null) return Promise.resolve(null);
+          return Promise.resolve({
+            ...client,
+            clientSecretHash: fake.secretHashes.get(id) ?? null,
+            resourcePath: '/api/a2a/agents/helper',
+          });
+        },
+        canRunAll: () => Promise.resolve(true),
+        agentNames: () => Promise.resolve(null),
+        tokens: () =>
+          Promise.resolve({
+            issue: () => Promise.resolve(),
+            consume: () => Promise.resolve({ kind: 'invalid' }),
+            revokeFamily: () => Promise.resolve(0),
+            revoke: () => Promise.resolve(null),
+          }),
+        audit: () => Promise.resolve(),
       },
-      canRunAll: () => Promise.resolve(true),
-      agentNames: () => Promise.resolve(null),
-      tokens: () =>
-        Promise.resolve({
-          issue: () => Promise.resolve(),
-          consume: () => Promise.resolve({ kind: 'invalid' }),
-          revokeFamily: () => Promise.resolve(0),
-          revoke: () => Promise.resolve(null),
-        }),
-      audit: () => Promise.resolve(),
     });
     try {
       const client = await seedClient(ownerCaller);
@@ -804,7 +897,7 @@ describe('rotating the OAuth client secret', () => {
       expect(await stale.json()).toMatchObject({ error: 'invalid_client' });
       expect((await exchange(newSecret)).status).toBe(200);
     } finally {
-      clearOAuthRuntime();
+      clearApplicationContext();
       resetOAuthLimits();
       vi.unstubAllEnvs();
     }
@@ -889,16 +982,13 @@ describe('rotating the OAuth client secret', () => {
   });
 
   it('never writes the secret to a log', async () => {
-    const spies = (['log', 'info', 'warn', 'error', 'debug'] as const).map((method) =>
-      vi.spyOn(console, method).mockImplementation(() => undefined),
-    );
+    const capture = captureLog();
     try {
       const client = await seedClient(ownerCaller);
       const secret = secretOf(await rotateAs(ownerCaller, client.id));
-      const lines = spies.flatMap((spy) => spy.mock.calls.map((args) => JSON.stringify(args)));
-      expect(lines.join(' ')).not.toContain(secret);
+      expect(capture.text()).not.toContain(secret);
     } finally {
-      for (const spy of spies) spy.mockRestore();
+      capture.restore();
     }
   });
 });
@@ -938,7 +1028,7 @@ describe('redirect URIs', () => {
 
 describe('without a runtime', () => {
   it('answers 503', async () => {
-    clearEndpointClientsRuntime();
+    clearApplicationContext();
     const response = await harness.call(LIST, {
       method: 'GET',
       path: '/api/endpoint-clients',

@@ -5,6 +5,40 @@ description: "The @indx-workspace/contracts/files exports, sorted alphabetically
 
 <Note>This page is generated from `packages/contracts/src/files.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
 
+## CreateDownloadUrlRequest
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `ttlSeconds` | `undefined \| number` | No |  |
+
+## CreateDownloadUrlRequestSchema
+
+The body of `POST /api/files/:id/download-urls`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `ttlSeconds` | `undefined \| number` | No |  |
+
+## CreateUploadUrlRequest
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `sizeBytes` | `number` | Yes |  |
+| `contentType` | `undefined \| null \| string` | No |  |
+| `ttlSeconds` | `undefined \| number` | No |  |
+
+## CreateUploadUrlRequestSchema
+
+The body of `POST /api/files/:id/upload-urls`: what the holder is about to PUT. S3 and GCS sign
+the declared type and length, so an upload that differs is refused by the store, not the control
+plane; an Azure SAS binds no length, so Azure refuses to mint one for a `session` token. `sizeBytes` is bounded by `SIGNED_UPLOAD_HARD_MAX_BYTES`; the deployment's own limit may be lower.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `sizeBytes` | `number` | Yes |  |
+| `contentType` | `undefined \| null \| string` | No |  |
+| `ttlSeconds` | `undefined \| number` | No |  |
+
 ## DecodedResourcePathHeader
 
 - `{ ok: true; value: string | null; }`
@@ -17,6 +51,10 @@ Decode only requests that explicitly opt in; unmarked callers retain the legacy 
 ```ts
 decodeResourcePathHeader(value: string | null, encoding: string | null): DecodedResourcePathHeader
 ```
+
+## DEFAULT_SEARCH_LIMIT
+
+Value: `10`
 
 ## FILE_KINDS
 
@@ -113,10 +151,74 @@ vocabulary (`malformed_body`, `request_body_too_large`, `unsupported_media_type`
 | `name_conflict` | `409` |
 | `self_descendant` | `409` |
 | `folder_not_empty` | `409` |
+| `upload_in_progress` | `409` |
+| `upload_not_verified` | `409` |
 | `subtree_too_large` | `413` |
+| `too_many_pending_uploads` | `429` |
+| `link_rate_limited` | `429` |
 | `store_inconsistent` | `500` |
 | `rename_inconsistent` | `500` |
 | `files_runtime_not_configured` | `503` |
+| `invalid_search_query` | `400` |
+| `search_unavailable` | `500` |
+| `direct_transfer_unsupported` | `501` |
+
+## FileSearchHit
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | `string` | Yes |  |
+| `page` | `null \| number` | Yes |  |
+| `snippet` | `string` | Yes |  |
+| `score` | `number` | Yes |  |
+
+## FileSearchHitSchema
+
+One passage that matched. `page` is the PDF page or the 1-based sheet number of a workbook, and
+`null` for a format with no pages. `snippet` is the text around the match, ready to quote;
+`score` orders hits (larger is better) and means nothing across searches.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | `string` | Yes |  |
+| `page` | `null \| number` | Yes |  |
+| `snippet` | `string` | Yes |  |
+| `score` | `number` | Yes |  |
+
+## FileSearchQuery
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `q` | `string` | Yes |  |
+| `limit` | `unknown` | No |  |
+
+## FileSearchQuerySchema
+
+The query string of `GET /api/files/search`. Lexical search over the text of the files the
+caller may read (ADR-0147): `q` is words, not an operator language.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `q` | `string` | Yes |  |
+| `limit` | `number` | Yes |  |
+
+## FileSearchResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `hits` | `readonly FileSearchHit[]` | Yes |  |
+| `pending` | `number` | Yes |  |
+
+## FileSearchResponseSchema
+
+The `200` of `GET /api/files/search`. Text is extracted on demand, a bounded number of files per
+request, so `pending` counts the in-scope files not yet searchable: when it is above zero the
+answer is partial and the same request, repeated, continues the work.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `hits` | `readonly FileSearchHit[]` | Yes |  |
+| `pending` | `number` | Yes |  |
 
 ## FilesProblemCode
 
@@ -129,10 +231,43 @@ vocabulary (`malformed_body`, `request_body_too_large`, `unsupported_media_type`
 - `"name_conflict"`
 - `"self_descendant"`
 - `"folder_not_empty"`
+- `"upload_in_progress"`
+- `"upload_not_verified"`
 - `"subtree_too_large"`
+- `"too_many_pending_uploads"`
+- `"link_rate_limited"`
 - `"store_inconsistent"`
 - `"rename_inconsistent"`
 - `"files_runtime_not_configured"`
+- `"invalid_search_query"`
+- `"search_unavailable"`
+- `"direct_transfer_unsupported"`
+
+## LINK_REQUESTS_PER_MINUTE_PER_WORKSPACE
+
+Upload and download link requests one workspace may make per minute, per server; the next is a
+`429` `link_rate_limited` with `Retry-After` (the storage design, §05).
+
+Value: `60`
+
+## MAX_PENDING_UPLOADS_PER_WORKSPACE
+
+The most unfinished (pending) uploads one workspace may hold; a new signed upload link past it is
+a `429` `too_many_pending_uploads` (the storage design, §05).
+
+Value: `100`
+
+## MAX_SEARCH_LIMIT
+
+The most hits one `GET /api/files/search` returns; the default is `DEFAULT_SEARCH_LIMIT`.
+
+Value: `50`
+
+## MAX_SEARCH_QUERY_CHARS
+
+The longest `q` of `GET /api/files/search`, in characters after trimming.
+
+Value: `256`
 
 ## MAX_SUBTREE_OBJECTS
 
@@ -150,7 +285,15 @@ Value: `64 * 1024 * 1024`
 
 ## MoveFileInput
 
-The body of `PATCH /api/files/:id`.
+The body of `PATCH /api/files/:id`, as `MoveFileRequestSchema` parses it.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `newPath` | `string` | Yes |  |
+
+## MoveFileRequestSchema
+
+The body of `PATCH /api/files/:id`. An unknown field is refused, not ignored.
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -160,7 +303,7 @@ The body of `PATCH /api/files/:id`.
 
 - `FileResponse`
 - `Readonly<Readonly<{ status: "ok"; moved: number; }>>`
-- `Readonly<Readonly<{ status: "partial"; moved: number; total: number; remaining?: readonly string[] | undefined; }>>`
+- `Readonly<Readonly<{ status: "partial"; moved: number; total: number; phase?: "delete" | "copy" | "catalog" | undefined; remaining?: readonly string[] | undefined; }>>`
 
 ## MoveFileResponseSchema
 
@@ -168,7 +311,45 @@ The `200` of `PATCH /api/files/:id`: `{ file }` for a file, a subtree outcome fo
 
 - `FileResponse`
 - `Readonly<Readonly<{ status: "ok"; moved: number; }>>`
-- `Readonly<Readonly<{ status: "partial"; moved: number; total: number; remaining?: readonly string[] | undefined; }>>`
+- `Readonly<Readonly<{ status: "partial"; moved: number; total: number; phase?: "delete" | "copy" | "catalog" | undefined; remaining?: readonly string[] | undefined; }>>`
+
+## PRESIGNED_URL_DEFAULT_TTL_SECONDS
+
+Value: `300`
+
+## PRESIGNED_URL_MAX_TTL_SECONDS
+
+Value: `900`
+
+## PRESIGNED_URL_MIN_TTL_SECONDS
+
+The shortest, longest and default lifetime of a presigned URL, in seconds.
+
+Value: `60`
+
+## PresignedUrl
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `url` | `string` | Yes |  |
+| `method` | `"GET" \| "PUT"` | Yes |  |
+| `headers` | `Readonly<Record<string, string>>` | Yes |  |
+| `expiresAt` | `string` | Yes |  |
+| `path` | `string` | Yes |  |
+
+## PresignedUrlSchema
+
+The `201` of both presign routes: a short-lived URL on the object store itself. The holder sends
+`method` to `url` with exactly `headers` (every one is part of the signature) and the bytes as
+the body; the control plane never sees them. `expiresAt` is when the store stops accepting it.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `url` | `string` | Yes |  |
+| `method` | `"GET" \| "PUT"` | Yes |  |
+| `headers` | `Readonly<Record<string, string>>` | Yes |  |
+| `expiresAt` | `string` | Yes |  |
+| `path` | `string` | Yes |  |
 
 ## RemoveFileResponse
 
@@ -206,6 +387,14 @@ name ASCII-only without changing the raw upload body or making legacy ASCII clie
 resourcePathHeaders(name: ResourcePathHeaderName, path: string): Record<string, string>
 ```
 
+## SIGNED_UPLOAD_HARD_MAX_BYTES
+
+The most bytes one signed upload link may carry: the largest single S3 `PUT` (the storage
+design, §04 "Size limits"). A deployment may set a lower limit; a mint above it is a `413`
+`request_body_too_large`.
+
+Value: `5 * 1024 ** 3`
+
 ## SubtreeDeleteOutcome
 
 - `Readonly<Readonly<{ status: "ok"; deleted: readonly string[]; }>>`
@@ -224,14 +413,17 @@ with no body instead.
 ## SubtreeMoveOutcome
 
 - `Readonly<Readonly<{ status: "ok"; moved: number; }>>`
-- `Readonly<Readonly<{ status: "partial"; moved: number; total: number; remaining?: readonly string[] | undefined; }>>`
+- `Readonly<Readonly<{ status: "partial"; moved: number; total: number; phase?: "delete" | "copy" | "catalog" | undefined; remaining?: readonly string[] | undefined; }>>`
 
 ## SubtreeMoveOutcomeSchema
 
 The `200` of `PATCH /api/files/:id` when the path names a folder. A `partial` outcome is a
-declared state, not an error: every object was copied but `moved` of `total` originals could
-be removed (`remaining` lists the leftovers), or the copy itself stopped at `moved`. Retrying
-the same move converges — an already-copied object is not a collision.
+declared state, not an error, and `phase` names the step that stopped: `copy` stopped after
+`moved` of `total` objects; `catalog` copied every object but could not rewrite the catalog, so
+every original is still in place (`remaining`); `delete` finished the move but could not remove
+the originals in `remaining`. Retrying the same move after `copy` or `catalog` converges — an
+already-copied object is not a collision. After `delete` the rows already sit at the
+destination, so a retry answers `409` `name_conflict`: delete the keys in `remaining` instead.
 
 - `Readonly<Readonly<{ status: "ok"; moved: number; }>>`
-- `Readonly<Readonly<{ status: "partial"; moved: number; total: number; remaining?: readonly string[] | undefined; }>>`
+- `Readonly<Readonly<{ status: "partial"; moved: number; total: number; phase?: "delete" | "copy" | "catalog" | undefined; remaining?: readonly string[] | undefined; }>>`

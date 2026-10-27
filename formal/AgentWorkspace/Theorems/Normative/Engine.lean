@@ -45,10 +45,10 @@ private def piLike : EngineCapabilities :=
 
 example :
     compose ⟨[.instructions, .connectors, .limits], .anthropicMessages⟩ piLike
-      = .refused [.connectors] := by decide
+      = .refused [.connectors] := by decide +kernel
 
 example :
-    compose ⟨[.instructions, .limits], .anthropicMessages⟩ piLike = .accepted := by decide
+    compose ⟨[.instructions, .limits], .anthropicMessages⟩ piLike = .accepted := by decide +kernel
 
 /-! ## Billing independence (ADR-0065 D6) -/
 
@@ -73,6 +73,6 @@ usage, bills the same amount. -/
 example :
     billed ⟨.claudeAgentSdk, [⟨3, 5, 0, 0, 1⟩, ⟨1, 1, 0, 0, 0⟩], ⟨999, 999, 9, 9, 9⟩⟩
       = billed ⟨.openaiAgents, [⟨3, 5, 0, 0, 1⟩, ⟨1, 1, 0, 0, 0⟩], Concepts.Usage.Counters.zero⟩ := by
-  decide
+  decide +kernel
 
 end AgentWorkspace.Theorems.Normative.Engine

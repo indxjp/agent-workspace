@@ -16,16 +16,12 @@ import {
   workspaces,
   type IsolatedTestDatabase,
 } from '@agent-workspace/core/db/unscoped';
-import { clearAgentsRuntime } from '../agents/runtime';
-import { clearProjectsRuntime } from '../projects/runtime';
 import { mintApiKey } from '../rbac/api-key';
-import { clearRbacRuntime } from '../rbac/runtime';
-import { installRunApi, resetRunApi } from '../runs/environment';
-import { InMemoryRunStore } from '../runs/store';
-import { clearSharesRuntime, currentSharesRuntime } from '../shares/core/runtime';
-import { clearWorkspacesRuntime } from '../workspaces/runtime';
+import { InMemoryRunStore } from '../runs/memory-store';
 
 import { register, type RegisteredComposition } from './register';
+import { applicationContext, clearApplicationContext } from '../application-context';
+import { installTestRunApi, resetTestRunApi } from '../application-context-fixtures';
 
 const hasDatabase = Boolean(process.env['TEST_DATABASE_URL']?.trim());
 
@@ -37,14 +33,13 @@ if (!hasDatabase) {
 }
 
 const CONTROLLED_ENV = [
-  'AW_FILE_STORAGE_ROOT',
+  'AW_DEPLOYMENT_POLICY',
+  'AW_STORAGE_URL',
   'AW_RUNTIME_VERIFICATION_FILE',
-  'AW_SKILL_STORAGE_ROOT',
   'DATABASE_URL',
   'GATEWAY_TOKEN_SECRET',
   'MASTER_ENCRYPTION_KEY',
   'NEXT_RUNTIME',
-  'OBJECT_STORAGE_BUCKET',
   'RUNNER_MANAGER_TOKEN',
   'RUNNER_MANAGER_URL',
   'RUNNER_URL',
@@ -63,12 +58,8 @@ describe.skipIf(!hasDatabase)('production composition API-key principal', () => 
       else process.env[key] = value;
     }
     previousEnv.clear();
-    clearAgentsRuntime();
-    clearProjectsRuntime();
-    clearRbacRuntime();
-    resetRunApi();
-    clearSharesRuntime();
-    clearWorkspacesRuntime();
+    clearApplicationContext();
+    resetTestRunApi();
     if (isolated !== undefined) {
       await closeIsolatedTestResources(
         isolated,
@@ -78,6 +69,28 @@ describe.skipIf(!hasDatabase)('production composition API-key principal', () => 
     isolated = undefined;
     composition = undefined;
   });
+
+  // W3-6: the agents and version runtimes carry one ceiling, `enforced` whenever
+  // `AW_DEPLOYMENT_POLICY` is set and `disabled` only when it is unset.
+  it.each([
+    ['set', '{"models":["claude-opus-4-1"]}', 'enforced'],
+    ['unset', undefined, 'disabled'],
+  ] as const)(
+    'installs the agents ceiling with AW_DEPLOYMENT_POLICY %s',
+    async (_, policy, kind) => {
+      for (const key of CONTROLLED_ENV) previousEnv.set(key, process.env[key]);
+      isolated = await createIsolatedTestDatabase('aw_composition_agents_ceiling');
+      for (const key of CONTROLLED_ENV) delete process.env[key];
+      process.env['DATABASE_URL'] = isolated.url;
+      process.env['SESSION_SECRET'] = 'composition-api-key-test-secret-at-least-32-characters';
+      if (policy !== undefined) process.env['AW_DEPLOYMENT_POLICY'] = policy;
+      composition = await register();
+
+      const context = applicationContext();
+      expect(context?.agents.ceiling.kind).toBe(kind);
+      expect(context?.agents.ceiling).toBe(context?.agentVersions.ceiling);
+    },
+  );
 
   it('uses the persisted machine principal and refuses machine runnable shares without session writes', async () => {
     for (const key of CONTROLLED_ENV) previousEnv.set(key, process.env[key]);
@@ -174,9 +187,9 @@ describe.skipIf(!hasDatabase)('production composition API-key principal', () => 
 
     const [machineAgent] = await isolated.db.select().from(agents);
     if (machineAgent === undefined) throw new Error('the machine-owned agent was not persisted');
-    const sharesRuntime = currentSharesRuntime();
+    const sharesRuntime = applicationContext()?.shares ?? null;
     if (sharesRuntime === null) throw new Error('the production shares runtime was not installed');
-    installRunApi({
+    installTestRunApi({
       authenticate: () => Promise.resolve(null),
       findAgent: () => Promise.resolve(null),
       openSession: () => Promise.resolve(null),

@@ -4,7 +4,7 @@ import { AGENT_PERMISSION_KEYS } from './agents.js';
 import { DEFAULT_ENGINE_ID, ENGINE_IDS } from './engines.js';
 import { HOSTED_PLATFORM_IDS } from './platform-ids.js';
 import { NAME_KEY_PATTERN } from './project-file.js';
-import { MODEL_PROVIDERS } from './runs.js';
+import { MODEL_PROVIDERS, type ModelProvider } from './runs.js';
 import { urlCarriesCredential } from './url-credential.js';
 
 /**
@@ -20,6 +20,18 @@ import { urlCarriesCredential } from './url-credential.js';
  */
 export const SETUP_AUDIENCES = ['setup', 'admin', 'content', 'embedder'] as const;
 export type SetupAudience = (typeof SETUP_AUDIENCES)[number];
+
+/**
+ * The model providers first-run setup offers: {@link MODEL_PROVIDERS} without
+ * `anthropic-compatible`, which setup does not ask about.
+ */
+export const SETUP_PROVIDERS = [
+  'anthropic',
+  'openai',
+  'azure-openai',
+  'openai-compatible',
+] as const satisfies readonly ModelProvider[];
+export type SetupProvider = (typeof SETUP_PROVIDERS)[number];
 
 /** A `#rrggbb` colour. Exported so a surface's theme colour (S1-02) accepts the same grammar. */
 export const HEX_COLOUR_PATTERN = /^#[0-9a-fA-F]{6}$/u;

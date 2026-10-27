@@ -45,6 +45,7 @@ interface AgentRow {
   assignments: {
     files: { fileId: string; access: string }[];
     skillIds: string[];
+    skillRevisions?: Record<string, number>;
     connectorIds: string[];
   };
   /** `null` until a `PUT`: the route then answers the policy compiled from the agent. */
@@ -471,12 +472,31 @@ describe('AgentsClient.import', () => {
       files: [{ fileId: 'b-f-play', access: 'read' }],
       skillIds: ['b-skill-triage'],
       connectorIds: ['b-conn-crm'],
+      storageGrants: [],
     });
     expect(result.policy).toEqual(definition.policy);
     // Exporting the imported agent gives back the same definition.
     const again = await target.export(result.agent.id);
     expect(again).toEqual(definition);
     expect(b.agents.size).toBe(1);
+  });
+
+  it('carries a pinned skill revision by name and drops it with a skipped skill', async () => {
+    const { source, target, a } = setup();
+    const row = a.agents.get(SOURCE_AGENT);
+    if (row === undefined) throw new Error('seeded agent missing');
+    row.assignments.skillRevisions = { 'a-skill-triage': 2 };
+    const definition = await source.export(SOURCE_AGENT);
+    expect(definition.resources.skillRevisions).toEqual({ triage: 2 });
+
+    const result = await target.import(definition);
+    expect(result.assignments.skillRevisions).toEqual({ 'b-skill-triage': 2 });
+    expect(await target.export(result.agent.id)).toEqual(definition);
+
+    const bare = workspace('c', { skills: [] });
+    const { clientFor } = deployment({ ak_c: bare });
+    const skipped = await clientFor('ak_c').import(definition, { onMissing: 'skip' });
+    expect(skipped.assignments.skillRevisions).toBeUndefined();
   });
 
   it('never copies skill bytes or credentials across the boundary', async () => {

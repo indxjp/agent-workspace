@@ -204,7 +204,7 @@ describe('aw (entry behaviour)', () => {
     expect(run.calls[0]?.headers.get('authorization')).toBe('Bearer ak_live_test');
     expect(run.calls[0]?.url.href).toBe('https://aw.example.com/api/agents');
     expect(run.stdout.split('\n')[0]).toMatch(
-      /^id\s+name\s+model\s+modelConnectionId\s+runtimeProfileId\s+updatedAt$/u,
+      /^id\s+name\s+model\s+modelConnectionId\s+runtimeProfileId\s+updatedAt\s+builtin$/u,
     );
     expect(run.stdout).toContain('Summariser  claude-x');
   });

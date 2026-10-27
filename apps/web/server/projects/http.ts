@@ -1,21 +1,17 @@
-import type { ProjectListFilter } from '@agent-workspace/core/db';
-
+import { problemBody } from '../http/result';
 import { ownerPrincipalIdOf } from '../rbac/owner-principal';
 import { requireResourceAccess, type ResourceAccess } from '../resources/authorise';
 import type { ProjectCreateInput, ProjectPatchInput } from '../../contracts/projects';
 import { DomainError } from '../errors';
-import { currentProjectsRuntime } from './runtime';
+import { applicationContext } from '../application-context';
+import type { ProjectActor, ProjectsRuntime } from './runtime';
+import type { ProjectListFilter } from './store';
 
-export type ProjectContext = Awaited<
-  ReturnType<NonNullable<ReturnType<typeof currentProjectsRuntime>>['forWorkspace']>
-> & {
-  actor: Extract<
-    Awaited<ReturnType<NonNullable<ReturnType<typeof currentProjectsRuntime>>['resolveActor']>>,
-    { kind: 'workspace' }
-  >;
+export type ProjectContext = Awaited<ReturnType<ProjectsRuntime['forWorkspace']>> & {
+  actor: Extract<ProjectActor, { kind: 'workspace' }>;
 };
 export function problem(status: number, code: string, message: string): Response {
-  return Response.json({ error: { code, message } }, { status });
+  return Response.json(problemBody(code, message), { status });
 }
 export async function json(request: Request): Promise<unknown> {
   if (!request.headers.get('content-type')?.startsWith('application/json')) {
@@ -31,7 +27,7 @@ export async function withProjects(
   request: Request,
   fn: (context: ProjectContext) => Promise<Response> | Response,
 ): Promise<Response> {
-  const runtime = currentProjectsRuntime();
+  const runtime = applicationContext()?.projects;
   if (!runtime)
     return problem(503, 'projects_runtime_not_configured', 'The projects API is not configured.');
   const actor = await runtime.resolveActor(request);
@@ -128,12 +124,19 @@ const UNRESOLVABLE_MODEL_CONNECTION_CONSTRAINTS = new Set([
 
 /**
  * #586: the project repository refuses a binding that names a tool connector
- * (`ProjectConnectorKindError` in `packages/core/src/db/repositories/project-mcp-servers.ts`).
+ * (`ProjectConnectorKindError` in `packages/core/src/db/repositories/project-mcp-servers.ts`), and
+ * one that names a visitor upload (`ProjectFileReservedError`, ADR-0146 D6).
  * Matched by `name` for the reason {@link isUnresolvableModelConnection} reads codes: that class is
  * not on `@agent-workspace/core/db`'s public surface.
  */
 export function projectConnectorKindRefusal(error: unknown): Response | null {
-  if (!(error instanceof Error) || error.name !== 'ProjectConnectorKindError') return null;
+  if (!(error instanceof Error)) return null;
+  // ADR-0146 D6: a file under `.attachments/` (`ProjectFileReservedError`, `project-files.ts`) is
+  // not bindable. It answers as the agent assignment's unknown file, confirming nothing about it.
+  if (error.name === 'ProjectFileReservedError') {
+    return problem(400, 'unknown_file', 'An assigned file is not in this workspace.');
+  }
+  if (error.name !== 'ProjectConnectorKindError') return null;
   return problem(
     400,
     'project_connector_not_mcp',

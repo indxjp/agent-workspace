@@ -137,7 +137,7 @@ def Cost.toWire (c : Cost) : JValue := .num (Int.ofNat c.mantissa) c.exponent
 /-- A JSON number read as a cost: `none` for a negative number and for every non-number. JSON has no
 spelling for `NaN` or an infinity, so every `num` is finite, as `Number.isFinite` requires. This is
 both the parser's reading of `engineCostUsd` and the adapter's reading of `total_cost_usd`. -/
-@[aw_spec (ts := "packages/core/src/schemas.ts#toAgentFrames")]
+@[aw_spec (ts := "packages/run-protocol/src/schemas.ts#toAgentFrames")]
 def Cost.ofWire? : JValue → Option Cost
   | .num m e => if 0 ≤ m then some ⟨m.toNat, e⟩ else none
   | _ => none
@@ -164,6 +164,11 @@ inductive Frame where
   | result (stopReason : StopReason) (turns : Option Nat) (engineCostUsd : Option Cost)
   | native (type : String) (payload : JValue)
   | malformed (reason : String)
+  /-- The engine stopped before a tool call the agent requires approval for (ADR-0145). -/
+  | approvalRequested (toolCallId : String) (toolName : String) (canonicalCall : String)
+  /-- The agent handed the conversation to a person and the run ended (ADR-0145 D4). The reason is
+  the operator's: a visitor's stream is served the frame without it (`none`). -/
+  | handoff (reason : Option String)
   deriving DecidableEq, Repr
 
 /-- The `event:` name of a frame, which is also the `frame` field inside its payload. -/
@@ -178,6 +183,8 @@ def Frame.name : Frame → String
   | .result _ _ _ => "agent.result"
   | .native _ _ => "agent.native"
   | .malformed _ => "agent.malformed"
+  | .approvalRequested _ _ _ => "agent.approval.requested"
+  | .handoff _ => "agent.handoff"
 
 def optStr : Option String → JValue
   | some s => .str s
@@ -239,6 +246,10 @@ def Frame.body : Frame → JValue.Fields
     [("stopReason", .str stop.toWire), ("turns", optNat turns), ("engineCostUsd", optCost cost)]
   | .native type payload => [("type", .str type), ("payload", payload)]
   | .malformed reason => [("reason", .str reason)]
+  | .approvalRequested id toolName call =>
+    [("toolCallId", .str id), ("toolName", .str toolName), ("canonicalCall", .str call)]
+  | .handoff (some reason) => [("reason", .str reason)]
+  | .handoff none => []
 
 /-- The JSON one frame is sent as: the discriminant, the engine, the capped engine-native payload,
 then the arm's own fields. -/
@@ -300,7 +311,15 @@ where
       if name == "agent.native" then (nonEmptyStr? type).map fun t => Frame.native t payload
       else none
     | [("reason", reason)] =>
-      if name == "agent.malformed" then (nonEmptyStr? reason).map Frame.malformed else none
+      if name == "agent.malformed" then (nonEmptyStr? reason).map Frame.malformed
+      else if name == "agent.handoff" then (nonEmptyStr? reason).map fun r => Frame.handoff (some r)
+      else none
+    | [("toolCallId", id), ("toolName", toolName), ("canonicalCall", call)] =>
+      if name == "agent.approval.requested" then
+        (nonEmptyStr? id).bind fun id => (nonEmptyStr? toolName).bind fun toolName =>
+          (nonEmptyStr? call).map fun call => Frame.approvalRequested id toolName call
+      else none
+    | [] => if name == "agent.handoff" then some (Frame.handoff none) else none
     | _ => none
 
 /-! ## `raw`: capped, never rejected -/
@@ -318,7 +337,7 @@ def truncationMarker (encodedBytes : Option Nat) : JValue :=
 /-- Cap a payload: the value when it fits, the marker when it does not, and the marker with no size
 when it has no JSON representation to measure. **Total** — there is no arm that drops the frame,
 because the neutral fields beside `raw` are the part a consumer renders. -/
-@[aw_spec (ts := "packages/core/src/schemas.ts#capAgentFrameRaw")]
+@[aw_spec (ts := "packages/run-protocol/src/schemas.ts#capAgentFrameRaw")]
 def capRaw (encodedBytes : Option Nat) (raw : JValue) : JValue :=
   match encodedBytes with
   | some n => if n ≤ rawMaxBytes then raw else truncationMarker (some n)
@@ -328,7 +347,7 @@ def capRaw (encodedBytes : Option Nat) (raw : JValue) : JValue :=
 
 /-- `packages/core`'s `ClassifiedSdkEvent`. It is the *input* of `toAgentFrames` and names nothing on
 the wire any more. -/
-@[aw_spec (ts := "packages/core/src/types.ts#ClassifiedSdkEvent")]
+@[aw_spec (ts := "packages/run-protocol/src/types.ts#ClassifiedSdkEvent")]
 inductive Classified where
   | system (subtype : String) (event : JValue)
   | systemUnknown (subtype : String) (event : JValue)
@@ -363,7 +382,7 @@ def Classified.nativeName : Classified → String
 
 /-- `claudeToolKind`: only tools whose effect is known are named; an MCP tool by its prefix, and
 everything else `other`, which is the honest answer rather than a default that hides an effect. -/
-@[aw_spec (ts := "packages/core/src/schemas.ts#claudeToolKind")]
+@[aw_spec (ts := "packages/run-protocol/src/schemas.ts#claudeToolKind")]
 def toolKindOf (name : String) : ToolKind :=
   if "mcp__".isPrefixOf name then .mcp
   else if name == "Read" || name == "NotebookRead" then .read
@@ -377,7 +396,7 @@ def toolKindOf (name : String) : ToolKind :=
 
 /-- The neutral stop reason of a `result` subtype. An unrecognised subtype is an `error`: a turn
 whose outcome this build cannot name is not one it may report as having gone well. -/
-@[aw_spec (ts := "packages/core/src/schemas.ts#toAgentFrames")]
+@[aw_spec (ts := "packages/run-protocol/src/schemas.ts#toAgentFrames")]
 def stopReasonOf (subtype : String) : StopReason :=
   if subtype == "success" then .endTurn
   else if subtype == "error_max_turns" then .maxTurns
@@ -459,7 +478,7 @@ A `tool_use` block rides only on an `assistant` message and a `tool_result` only
 which is what makes the pairing invariant hold over a whole run without this function having to
 remember anything between messages. Each list is a `map` over the blocks it read, so "every frame
 here is a call" is an induction rather than an assertion. -/
-@[aw_spec (ts := "packages/core/src/schemas.ts#toAgentFrames")]
+@[aw_spec (ts := "packages/run-protocol/src/schemas.ts#toAgentFrames")]
 def toolFrames (role : String) : Option JValue → List Frame
   | some (.arr items) =>
     if role == "assistant" then (items.filterMap toolCallData).map callFrame
@@ -495,7 +514,7 @@ private def pairedFrom (seen : List String) : List Frame → Bool
 
 /-- Whether every `agent.tool.result` in a sequence is answered by an **earlier**
 `agent.tool.call` with the same id. -/
-@[aw_spec (ts := "packages/core/src/schemas.ts#toAgentFrames")]
+@[aw_spec (ts := "packages/run-protocol/src/schemas.ts#toAgentFrames")]
 def paired (frames : List Frame) : Bool := pairedFrom [] frames
 
 /-- A stream is `paired` when each of its `agent.tool.result` frames names an id that some earlier
@@ -581,7 +600,7 @@ Summed across models, because R-01 §4 records the record key as unstable; `thin
 reported as `reasoningTokens` and never added to `outputTokens`, which already contains it. An engine
 that reported nothing is not an engine that reported zero, so this is `none` rather than a zero
 frame. -/
-@[aw_spec (ts := "packages/core/src/schemas.ts#toAgentFrames")]
+@[aw_spec (ts := "packages/run-protocol/src/schemas.ts#toAgentFrames")]
 def usageOf (event : JValue) : Option Usage :=
   match field event "modelUsage" with
   | some (.obj entries) =>
@@ -664,7 +683,7 @@ def nonEmptyOr (fallback : Frame) : List Frame → List Frame
 **Never empty, by construction**: whatever `mappedFrames` cannot express becomes `agent.native`, and
 a message that could not be parsed becomes `agent.malformed`. There is no arm that returns `[]` for
 an event that arrived, and `never_drops_an_engine_message` is one line because of it. -/
-@[aw_spec (ts := "packages/core/src/schemas.ts#toAgentFrames")]
+@[aw_spec (ts := "packages/run-protocol/src/schemas.ts#toAgentFrames")]
 def toAgentFrames (classified : Classified) : List Frame :=
   nonEmptyOr (fallbackFrame classified) (mappedFrames classified)
 
@@ -723,9 +742,9 @@ def jsNumberString (m : Int) (e : Nat) : String :=
         else String.ofList (s.toList.take 1) ++ "." ++ String.ofList (s.toList.drop 1) ++ expPart
     sign ++ body
 
-/-- `describe` in `packages/core/src/schemas.ts`: the offending value in JavaScript's words. `none`
+/-- `describe` in `packages/run-protocol/src/schemas.ts`: the offending value in JavaScript's words. `none`
 is a key that is absent, which JavaScript reads as `undefined`. -/
-@[aw_spec (ts := "packages/core/src/schemas.ts#classifySdkEvent")]
+@[aw_spec (ts := "packages/run-protocol/src/schemas.ts#classifySdkEvent")]
 def describe : Option JValue → String
   | none => "a value of type undefined"
   | some .null => "null"
@@ -742,7 +761,7 @@ bytes, or `none` when it has no JSON representation.
 Every frame of the message carries it, not only the first: a consumer that resumed inside a
 message, or reads only `agent.result`, still holds the words the frame was derived from — and the
 result frame's accounting is checked against exactly that. -/
-@[aw_spec (ts := "packages/core/src/schemas.ts#toAgentFrames")]
+@[aw_spec (ts := "packages/run-protocol/src/schemas.ts#toAgentFrames")]
 def toAgentFramesJson (engine : String) (encodedBytes : Option Nat) (classified : Classified) :
     List JValue :=
   (toAgentFrames classified).map (encode engine (capRaw encodedBytes classified.message))
@@ -757,7 +776,7 @@ contract refuses, which is a dropped message by another route.
 
 A `malformed` reason is the code's whole diagnostic, `; got …` suffix included, so the replay
 compares it with `toEqual` like every other field. -/
-@[aw_spec (ts := "packages/core/src/schemas.ts#classifySdkEvent")]
+@[aw_spec (ts := "packages/run-protocol/src/schemas.ts#classifySdkEvent")]
 def classify (systemSubtypes resultSubtypes eventTypes : List String) (raw : JValue) :
     Classified :=
   match raw with

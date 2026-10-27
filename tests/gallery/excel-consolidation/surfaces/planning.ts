@@ -17,6 +17,4 @@ export default defineSurface({
     history: true,
     feedback: true,
   },
-  // Found files render as a table. The key is matched against the tool name exactly; see the
-  // tutorial for the prefixed name a Claude run gives an MCP tool.
 });

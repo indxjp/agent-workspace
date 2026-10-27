@@ -8,7 +8,7 @@
  * `MANAGE`, `apps/web/server/rbac/permissions.ts`).
  */
 import { revokeInvitation } from '../../../../server/invitations/handlers';
-import { currentInvitationsRuntime } from '../../../../server/invitations/runtime';
+import { applicationContext } from '../../../../server/application-context';
 import { authorise, problem, readIdParam, toResponse } from '../../../../server/rbac/http';
 
 export const dynamic = 'force-dynamic';
@@ -20,7 +20,7 @@ export async function DELETE(
   context: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   const result = await authorise(request, 'unknown', async ({ directory, principal }) => {
-    const invitations = currentInvitationsRuntime();
+    const invitations = applicationContext()?.invitations ?? null;
     if (invitations === null) {
       return problem(
         503,

@@ -19,7 +19,9 @@ import { BROWSER_TOKEN_PATTERN } from '@indx-workspace/contracts/tokens';
 
 import { mintBrowserToken } from './browser-token';
 import { installRbacHarness, TEST_WORKSPACE_ID, type RbacHarness } from './testing';
-import { clearTokensRuntime, configureTokensRuntime, type TokensRuntime } from '../tokens/runtime';
+import type { TokensRuntime } from '../tokens/runtime';
+import { clearApplicationContext } from '../application-context';
+import { installTestDomains } from '../application-context-fixtures';
 
 const OWNER_PRINCIPAL = 'principal-owner-under-test';
 const OWNER = { email: 'owner@example.test' };
@@ -65,14 +67,14 @@ let live: RbacHarness | null = null;
 afterEach(() => {
   live?.teardown();
   live = null;
-  clearTokensRuntime();
+  clearApplicationContext();
 });
 
 describe('the token is returned exactly once, and nothing recorded ever carries it', () => {
   it('returns a token matching the wire pattern, once, in the 201', async () => {
     const harness = harnessWithOwner();
     live = harness;
-    configureTokensRuntime(recordingTokensRuntime());
+    installTestDomains({ tokens: { kind: 'serving', runtime: recordingTokensRuntime() } });
 
     const response = await harness.call(MINT_TOKEN, {
       method: 'POST',
@@ -88,7 +90,7 @@ describe('the token is returned exactly once, and nothing recorded ever carries 
   it('puts the plaintext in exactly one response body across the whole exchange', async () => {
     const harness = harnessWithOwner();
     live = harness;
-    configureTokensRuntime(recordingTokensRuntime());
+    installTestDomains({ tokens: { kind: 'serving', runtime: recordingTokensRuntime() } });
 
     const minted = await harness.call(MINT_TOKEN, {
       method: 'POST',
@@ -122,7 +124,7 @@ describe('the token is returned exactly once, and nothing recorded ever carries 
     const harness = harnessWithOwner();
     live = harness;
     const runtime = recordingTokensRuntime();
-    configureTokensRuntime(runtime);
+    installTestDomains({ tokens: { kind: 'serving', runtime } });
 
     const response = await harness.call(MINT_TOKEN, {
       method: 'POST',

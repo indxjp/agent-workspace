@@ -1,4 +1,4 @@
-ARG NODE_IMAGE=node:24.21.0-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
+ARG NODE_IMAGE=node:24.22.1-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205
 
 FROM ${NODE_IMAGE} AS build
 
@@ -8,22 +8,25 @@ ENV PATH=$PNPM_HOME:$PATH
 # step has no TTY to answer it: ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY. Matches the CI=1 the
 # other two Dockerfiles' base stages already set for the same reason.
 ENV CI=1
-RUN corepack enable && corepack prepare pnpm@11.28.2 --activate
+RUN corepack enable && corepack prepare pnpm@11.28.8 --activate
 
 WORKDIR /workspace
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json ./
 COPY packages/contracts/package.json packages/contracts/tsconfig.json packages/contracts/tsconfig.build.json packages/contracts/
 COPY packages/engine/package.json packages/engine/tsconfig.json packages/engine/tsconfig.build.json packages/engine/
+COPY packages/run-protocol/package.json packages/run-protocol/tsconfig.json packages/run-protocol/tsconfig.build.json packages/run-protocol/
 COPY packages/core/package.json packages/core/tsconfig.json packages/core/tsconfig.build.json packages/core/
 COPY packages/gateway/package.json packages/gateway/tsconfig.json packages/gateway/tsconfig.build.json packages/gateway/
 RUN pnpm install --frozen-lockfile --filter @agent-workspace/core... --filter @agent-workspace/gateway...
 
 COPY packages/contracts packages/contracts
 COPY packages/engine packages/engine
+COPY packages/run-protocol packages/run-protocol
 COPY packages/core packages/core
 COPY packages/gateway packages/gateway
 RUN pnpm --filter @indx-workspace/contracts build \
     && pnpm --filter @agent-workspace/engine build \
+    && pnpm --filter @agent-workspace/run-protocol build \
     && pnpm --filter @agent-workspace/core build \
     && pnpm --filter @agent-workspace/gateway build
 # The production tree, installed fresh from the store this stage holds: a prune leaves unlinked
@@ -43,7 +46,7 @@ RUN apt-get update \
              /usr/local/bin/yarn /usr/local/bin/yarnpkg
 ARG VCS_REF=unknown
 LABEL org.opencontainers.image.title="Agent Workspace model gateway" \
-      org.opencontainers.image.source="https://github.com/indxdev/agent-workspace" \
+      org.opencontainers.image.source="https://github.com/indxjp/agent-workspace" \
       org.opencontainers.image.revision="$VCS_REF"
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \

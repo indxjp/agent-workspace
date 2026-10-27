@@ -47,11 +47,9 @@ import type { ApiKeySummary, RevokeApiKeyOutcome, WorkspaceDirectory } from './d
 import { revokeApiKey } from './handlers';
 import { createMemoryDirectory } from './memory-directory';
 import type { Role } from './roles';
-import {
-  installToolEndpoint,
-  resetToolEndpoint,
-  type ToolEndpointEnvironment,
-} from '../tool-endpoint/env';
+import { clearApplicationContext } from '../application-context';
+import { installTestDomains } from '../application-context-fixtures';
+import type { ToolEndpointEnvironment } from '../tool-endpoint/env';
 
 /**
  * A role an Owner may confer, for the fixture rows below.
@@ -488,7 +486,12 @@ describe('revoking an endpoint key tells the caller which project client it serv
     const harness = harnessWithOwner();
     live = harness;
     const closeSandbox = vi.fn(() => Promise.resolve());
-    installToolEndpoint({ closeSandbox } as unknown as ToolEndpointEnvironment);
+    installTestDomains({
+      toolEndpoint: {
+        kind: 'serving',
+        environment: { closeSandbox } as unknown as ToolEndpointEnvironment,
+      },
+    });
     try {
       // The memory directory never records an endpoint scope, so this reports one for the revoke.
       const { directory } = harness;
@@ -521,7 +524,7 @@ describe('revoking an endpoint key tells the caller which project client it serv
       expect(closeSandbox).toHaveBeenCalledTimes(1);
       expect(closeSandbox).toHaveBeenCalledWith(TEST_WORKSPACE_ID, 'client-one');
     } finally {
-      resetToolEndpoint();
+      clearApplicationContext();
     }
   });
 

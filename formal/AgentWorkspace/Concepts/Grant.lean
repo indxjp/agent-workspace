@@ -79,7 +79,8 @@ structure FileAssignment where
   access : FileAccess
   deriving DecidableEq, Repr
 
-/-- One `agent_skills` row. -/
+/-- One `agent_skills` row. Its nullable `revision` pin (SDK-19) is not modelled here: the
+assignment concept is the same whether the skill follows its current content or a revision. -/
 @[aw_spec (ts := "packages/core/src/db/schema/agent-skills.ts#agentSkills")]
 structure SkillAssignment where
   id : AgentSkillId
@@ -126,7 +127,7 @@ structure ProjectConnectorLink where
 def dbColumns : List (String × List String) :=
   [("agent_files", ["id", "workspace_id", "agent_id", "file_id", "access", "created_at",
       "updated_at"]),
-    ("agent_skills", ["id", "workspace_id", "agent_id", "skill_id", "created_at"]),
+    ("agent_skills", ["id", "workspace_id", "agent_id", "skill_id", "revision", "created_at"]),
     ("agent_mcp_servers", ["id", "workspace_id", "agent_id", "mcp_server_id", "created_at"]),
     ("agent_grants", ["id", "workspace_id", "agent_id", "user_id", "created_at"]),
     ("project_files", ["workspace_id", "project_id", "file_id"]),
@@ -339,14 +340,50 @@ structure RawFileEntry where
   access : String
   deriving DecidableEq, Repr
 
+/-- One raw storage grant of a body: the three strings as sent (the storage design, §05). -/
+structure RawStorageGrant where
+  connectionId : String
+  pathPrefix : String
+  access : String
+  deriving DecidableEq, Repr
+
 /-- A raw assignment body whose members already have the JSON types the schema asks for:
-`extra` lists any keys besides the three (`.strict()`). -/
+`extra` lists any keys besides the four (`.strict()`); an empty `storageGrants` is the key left
+out, which the schema reads as `[]`. -/
 structure RawAssignments where
   files : List RawFileEntry
   skillIds : List String
   connectorIds : List String
   extra : List String
+  storageGrants : List RawStorageGrant
   deriving DecidableEq, Repr
+
+/-- One folder of a storage connection an agent may reach, as the schema reads it: the agent's
+current grants (`agent_storage_grants`; written only by a materialised version, never by a `PUT`)
+and each version's own (`agent_version_storage_grants`, #1694; written once with the version). -/
+@[aw_spec (ts := "packages/contracts/src/agents.ts#AgentResourceAssignmentsSchema")
+  (ts := "packages/core/src/db/schema/agent-storage-grants.ts#agentStorageGrants")
+  (ts := "packages/core/src/db/schema/agent-version-storage-grants.ts#agentVersionStorageGrants")]
+structure StorageGrant where
+  connection : String
+  pathPrefix : String
+  access : FileAccess
+  deriving DecidableEq, Repr
+
+/-- One storage grant as the schema reads it: a UUID connection id, a non-empty prefix and an
+`access` of the closed set. -/
+def storageGrant? (g : RawStorageGrant) : Option StorageGrant :=
+  if Uuid.isCanonical g.connectionId && !g.pathPrefix.isEmpty then
+    (WireEnum.ofWire? g.access : Option FileAccess).map (StorageGrant.mk g.connectionId g.pathPrefix)
+  else none
+
+/-- The `storageGrants` member of `AgentResourceAssignmentsSchema.safeParse`: every entry in body
+order, or `none` when the schema refuses one. -/
+@[aw_spec (ts := "packages/contracts/src/agents.ts#AgentResourceAssignmentsSchema")]
+def storageGrantsBody (b : RawAssignments) : Option (List StorageGrant) :=
+  if b.storageGrants.all fun g => (storageGrant? g).isSome then
+    some (b.storageGrants.filterMap storageGrant?)
+  else none
 
 /-- One file entry as the schema reads it: a non-empty `fileId` and an `access` of the closed
 set. -/

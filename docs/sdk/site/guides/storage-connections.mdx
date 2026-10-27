@@ -1,0 +1,224 @@
+---
+title: "Use your own bucket"
+description: "Connect an S3, Google Cloud Storage or Azure Blob bucket, or a local folder, give an agent a folder in it, run the agent and read what it wrote back."
+---
+
+<Info>
+**Chapter 2 · Build your agent** · [the chapter map](/path/build)
+
+- **You will:** connect a bucket you own, give an agent one folder of it, and run the agent against that folder.
+- **You will learn:** the least-privilege key for each cloud, the three switches that let an agent write back, and what is never deleted.
+- **You need:** a project with an agent on the `local` draft ([Chapter 2](/path/build)), the `aw` CLI signed in as an owner or admin, and a bucket or folder to connect.
+
+</Info>
+
+Your files stay in your bucket. A **storage connection** is the name, the credential and the folders
+the platform may use; an agent is granted a folder of it, and each run sees that folder as a
+directory. The same steps work on S3, Google Cloud Storage, Azure Blob and a local folder; only the
+key and the URL differ.
+
+**What you can do**
+
+- [Make a key that can only read one folder](#make-a-key-that-can-only-read-one-folder)
+- [Connect it and check it](#connect-it-and-check-it)
+- [Let the agent write back](#let-the-agent-write-back)
+- [Give an agent the folder](#give-an-agent-the-folder)
+- [Save, run and read the result](#save-run-and-read-the-result)
+
+## Make a key that can only read one folder
+
+Create a key for the platform alone, limited to the folder you will share. Reading needs list and
+get; add put only if the agent should write back ([below](#let-the-agent-write-back)). The platform
+never deletes anything, so on S3 and Azure the key needs no delete permission. Google Cloud Storage
+treats overwriting an object as a delete, so a GCS key that writes back needs it.
+
+<Tabs>
+  <Tab title="S3">
+    Attach this policy to an IAM user, then create an access key for it. `s3:ListBucket` is on the
+    bucket, limited by the `s3:prefix` condition; `s3:GetObject` and `s3:PutObject` are on the
+    folder:
+
+    ```json title="IAM policy for s3://acme-bucket/reports/ (illustrative)" claim="illustrative"
+    {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Effect": "Allow",
+          "Action": "s3:ListBucket",
+          "Resource": "arn:aws:s3:::acme-bucket",
+          "Condition": { "StringLike": { "s3:prefix": "reports/*" } }
+        },
+        {
+          "Effect": "Allow",
+          "Action": ["s3:GetObject", "s3:PutObject"],
+          "Resource": "arn:aws:s3:::acme-bucket/reports/*"
+        }
+      ]
+    }
+    ```
+
+    ```json title="credential.json (illustrative placeholders)" claim="illustrative"
+    { "provider": "s3", "accessKeyId": "<access key id>", "secretAccessKey": "<secret access key>" }
+    ```
+
+    The storage URL names the bucket and its region:
+
+    ```bash title="S3 storage URL (illustrative)" claim="illustrative"
+    export STORAGE_URL="s3://acme-bucket?region=eu-west-1"
+    ```
+  </Tab>
+  <Tab title="Google Cloud Storage">
+    Create a service account and grant it **Storage Object Viewer** on the bucket. To write back,
+    grant **Storage Object User** instead: overwriting an existing object needs
+    `storage.objects.delete`, so **Storage Object Creator** alone cannot write back a changed file.
+    `storage.objects.list` is checked on the bucket, not on an object, so an IAM condition on the
+    name prefix alone breaks listing. Limit the account to the folder with
+    `resource.name.startsWith("projects/_/buckets/acme-bucket/objects/reports/") || resource.name == "projects/_/buckets/acme-bucket"`;
+    listing is then not limited to the folder. Download a JSON key:
+
+    ```json title="credential.json (illustrative placeholders)" claim="illustrative"
+    { "provider": "gcs", "serviceAccountJson": "<the service account key, as a JSON string>" }
+    ```
+
+    The storage URL names the bucket and its project:
+
+    ```bash title="GCS storage URL (illustrative)" claim="illustrative"
+    export STORAGE_URL="gcs://acme-bucket?project=acme-project"
+    ```
+
+    Temporary credentials: a short-lived access token also works, with the URL's `?project=` set.
+    It expires in about an hour, so rotate it with `aw storage connections credential`; for a
+    connection you keep, prefer the service-account key. A key file whose `type` is not
+    `service_account`, such as workload-identity JSON, is refused.
+
+    ```json title="credential.json, temporary (illustrative placeholders)" claim="illustrative"
+    { "provider": "gcs", "accessToken": "<access token>" }
+    ```
+  </Tab>
+  <Tab title="Azure Blob">
+    Create a shared access signature for the container with **read**, **list**, **create** and
+    **write** (`rlcw`; read and list, `rl`, if the agent only reads), scoped to the container and
+    expiring when you plan to rotate it. A user-delegation SAS needs **Storage Blob Delegator** at
+    storage-account scope, because generating the delegation key is an account-level action, plus
+    **Storage Blob Data Contributor** on the container for the data itself:
+
+    ```json title="credential.json (illustrative placeholders)" claim="illustrative"
+    { "provider": "azblob", "sasToken": "<sas token>" }
+    ```
+
+    The storage URL names the storage account and the container:
+
+    ```bash title="Azure Blob storage URL (illustrative)" claim="illustrative"
+    export STORAGE_URL="azblob://acmestorage/acme-data"
+    ```
+  </Tab>
+  <Tab title="Local folder">
+    A folder needs no key. The operator of the server lists the directories it may use in
+    `AW_STORAGE_CONNECTION_FILE_ROOTS`; a folder outside them is refused.
+
+    ```json title="credential.json (illustrative)" claim="illustrative"
+    { "provider": "file" }
+    ```
+
+    The storage URL is the folder:
+
+    ```bash title="Local folder storage URL (illustrative)" claim="illustrative"
+    export STORAGE_URL="file:///srv/acme-data"
+    ```
+  </Tab>
+</Tabs>
+
+Temporary credentials (an STS session or a short-lived token) expire, usually after an hour. A
+stored connection stops working then; rotate it with
+`aw storage connections credential <name> --credential-file …`. Prefer a long-lived least-privilege
+key.
+
+## Connect it and check it
+
+The credential is a file, never a flag, so it never lands in your shell history
+([the `aw storage` reference](/cli/storage)). With the storage URL from above in `STORAGE_URL`,
+connect, test and list:
+
+```bash title="Connect, test and list (illustrative)" claim="illustrative"
+aw storage connections create --name acme-data --storage-url "$STORAGE_URL" --allow reports --credential-file credential.json
+aw storage connections test acme-data
+aw storage ls acme-data/reports/
+```
+
+`--allow reports` is the only folder agents may be given. `test` reaches the bucket with the stored
+key; `ls` shows what an agent will see. The credential is stored encrypted and is never printed.
+
+You can do the same in the console under **Administration → Storage**.
+
+## Let the agent write back
+
+A run changes your bucket only when **all three** switches are on:
+
+1. the connection allows writes. A new connection is read-only, and a `read-write` grant of it is
+   refused when the agent is saved, so turn writes on first, with an update file:
+
+   ```json title="allow-writes.json (illustrative)" claim="illustrative"
+   { "writeAllowed": true }
+   ```
+
+   ```bash title="Allow writes (illustrative)" claim="illustrative"
+   aw storage connections update acme-data --file allow-writes.json
+   ```
+
+2. the agent's grant is `read-write` ([next](#give-an-agent-the-folder));
+3. the agent's `writeFiles` permission is on ([next](#give-an-agent-the-folder)).
+
+When a run ends, the files it created or changed under the granted folder are written to the bucket.
+**Deletes are never written back**: a file the agent removed stays in your bucket.
+
+Skip this section if the agent only reads, and grant the folder `read`.
+
+## Give an agent the folder
+
+Add the folder to the agent's files. `read` is the default; `read-write` together with the
+`writeFiles` permission lets a run write back:
+
+```ts title="agents/summarizer.ts (illustrative)" claim="illustrative"
+import { defineAgent, files } from '@indx-workspace/sdk/define';
+
+export default defineAgent({
+  name: 'summarizer',
+  instructions: 'Summarise the reports you are given.',
+  files: [
+    files('storage://acme-data/reports', 'read-write'),
+  ],
+  permissions: { readFiles: true, writeFiles: true },
+});
+```
+
+Without `writeFiles` the platform narrows a `read-write` grant to `read` when the agent is saved.
+
+In the console, open the agent's **Files**, choose **Add files or folders**, then **Connected
+storage**, and pick the connection and folder.
+
+## Save, run and read the result
+
+Saving the agent binds the grant to the connection; a folder outside `--allow`, or a `read-write`
+grant of a read-only connection, is refused then, not at run time.
+
+`aw push --yes` saves the version and `aw promote --yes` makes it the one that runs. `AGENT_ID` is
+the id of the agent `aw push` saved: `aw agents list` shows it next to the name `summarizer`.
+
+```bash title="Save, run and read (illustrative)" claim="illustrative"
+aw push --yes
+aw promote --yes
+aw runs start "$AGENT_ID" --prompt "Summarise the Q3 reports into summary.md"
+aw storage ls acme-data/reports/
+```
+
+To ship it to a deployment, see [Deploy](/guides/deploy). The run sees `reports/` as a directory in
+its sandbox; `aw storage ls` afterwards shows what it wrote back.
+
+## Security notes
+
+- The key lives encrypted in the platform and is never returned by the API, the CLI or a run. See
+  [Secrets](/resources/secrets) for how the platform holds them.
+- Give each connection its own key, limited to the folder; rotate it with
+  `aw storage connections credential acme-data --credential-file credential.json`.
+- A bucket address that resolves to a private network is refused unless the operator allows it; see
+  [Self-host securely](/features/self-host-securely) and the storage design, §05.

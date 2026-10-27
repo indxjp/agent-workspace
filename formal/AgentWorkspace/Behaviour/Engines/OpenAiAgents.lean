@@ -480,10 +480,11 @@ theorem mapFrom_nil (ctx : FrameContext) (announced : List String) : mapFrom ctx
 
 def mapAll (ctx : FrameContext) (events : List Event) : List Frame := mapFrom ctx [] events
 
-/-- The nine names of the closed `agent.*` vocabulary (`AGENT_FRAME_NAMES`). -/
+/-- The eleven names of the closed `agent.*` vocabulary (`AGENT_FRAME_NAMES`). -/
 def frameNames : List String :=
   ["agent.session", "agent.message", "agent.message.delta", "agent.tool.call",
-   "agent.tool.result", "agent.usage", "agent.result", "agent.native", "agent.malformed"]
+   "agent.tool.result", "agent.usage", "agent.result", "agent.native", "agent.malformed",
+   "agent.approval.requested", "agent.handoff"]
 
 /-- Is a frame in the closed vocabulary — a neutral frame, `agent.native` or `agent.malformed`? -/
 def isNeutral (f : Frame) : Bool := frameNames.contains f.name

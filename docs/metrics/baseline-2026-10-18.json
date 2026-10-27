@@ -1,0 +1,242 @@
+{
+  "schemaVersion": 1,
+  "commit": "5ca8e12466a8280c5a5f58e5cb5de8d3c1e4e605",
+  "measuredAt": "2026-10-18",
+  "node": "v24.19.0",
+  "scope": "git-tracked .ts/.tsx/.mts/.mjs files; test = *.test.*, *.spec.*, tests/, testing/, e2e/, acceptance/",
+  "sizes": {
+    "byWorkspace": {
+      ".claude": {
+        "productionLines": 2892,
+        "testLines": 0,
+        "productionFiles": 9,
+        "testFiles": 0
+      },
+      "apps/runner": {
+        "productionLines": 5208,
+        "testLines": 7707,
+        "productionFiles": 21,
+        "testFiles": 25
+      },
+      "apps/web": {
+        "productionLines": 84286,
+        "testLines": 108598,
+        "productionFiles": 538,
+        "testFiles": 348
+      },
+      "(root files)": {
+        "productionLines": 800,
+        "testLines": 0,
+        "productionFiles": 10,
+        "testFiles": 0
+      },
+      "docs": {
+        "productionLines": 4999,
+        "testLines": 0,
+        "productionFiles": 41,
+        "testFiles": 0
+      },
+      "infra": {
+        "productionLines": 3210,
+        "testLines": 5983,
+        "productionFiles": 32,
+        "testFiles": 18
+      },
+      "internal": {
+        "productionLines": 234,
+        "testLines": 0,
+        "productionFiles": 2,
+        "testFiles": 0
+      },
+      "packages/aw": {
+        "productionLines": 16743,
+        "testLines": 20331,
+        "productionFiles": 78,
+        "testFiles": 66
+      },
+      "packages/cli": {
+        "productionLines": 13662,
+        "testLines": 16842,
+        "productionFiles": 69,
+        "testFiles": 43
+      },
+      "packages/contracts": {
+        "productionLines": 13614,
+        "testLines": 11286,
+        "productionFiles": 50,
+        "testFiles": 45
+      },
+      "packages/core": {
+        "productionLines": 26667,
+        "testLines": 25967,
+        "productionFiles": 144,
+        "testFiles": 85
+      },
+      "packages/create": {
+        "productionLines": 70,
+        "testLines": 95,
+        "productionFiles": 3,
+        "testFiles": 2
+      },
+      "packages/egress-proxy": {
+        "productionLines": 533,
+        "testLines": 542,
+        "productionFiles": 6,
+        "testFiles": 4
+      },
+      "packages/embedded": {
+        "productionLines": 4722,
+        "testLines": 6741,
+        "productionFiles": 24,
+        "testFiles": 21
+      },
+      "packages/engine-claude-agent-sdk": {
+        "productionLines": 2120,
+        "testLines": 1871,
+        "productionFiles": 9,
+        "testFiles": 5
+      },
+      "packages/engine-mastra": {
+        "productionLines": 2365,
+        "testLines": 2337,
+        "productionFiles": 11,
+        "testFiles": 6
+      },
+      "packages/engine-openai-agents": {
+        "productionLines": 2240,
+        "testLines": 1959,
+        "productionFiles": 13,
+        "testFiles": 7
+      },
+      "packages/engine-pi": {
+        "productionLines": 1627,
+        "testLines": 1757,
+        "productionFiles": 10,
+        "testFiles": 6
+      },
+      "packages/engine": {
+        "productionLines": 2533,
+        "testLines": 4231,
+        "productionFiles": 14,
+        "testFiles": 17
+      },
+      "packages/gateway": {
+        "productionLines": 5923,
+        "testLines": 7266,
+        "productionFiles": 33,
+        "testFiles": 26
+      },
+      "packages/platforms": {
+        "productionLines": 10235,
+        "testLines": 9052,
+        "productionFiles": 48,
+        "testFiles": 37
+      },
+      "packages/react": {
+        "productionLines": 3152,
+        "testLines": 2791,
+        "productionFiles": 15,
+        "testFiles": 13
+      },
+      "packages/runtime": {
+        "productionLines": 6695,
+        "testLines": 7605,
+        "productionFiles": 21,
+        "testFiles": 21
+      },
+      "packages/sdk": {
+        "productionLines": 11639,
+        "testLines": 16299,
+        "productionFiles": 61,
+        "testFiles": 52
+      },
+      "packages/tool-host": {
+        "productionLines": 229,
+        "testLines": 564,
+        "productionFiles": 3,
+        "testFiles": 3
+      },
+      "scripts": {
+        "productionLines": 14019,
+        "testLines": 0,
+        "productionFiles": 57,
+        "testFiles": 0
+      },
+      "tests": {
+        "productionLines": 0,
+        "testLines": 74913,
+        "productionFiles": 0,
+        "testFiles": 394
+      }
+    },
+    "productionFilesOver500Lines": 93,
+    "productionFilesOver1000Lines": 9
+  },
+  "complexity": {
+    "filesMeasured": 1159,
+    "11-15": 296,
+    "16-20": 97,
+    "21-33": 92,
+    ">33": 0,
+    "max": 33,
+    "above10": 485,
+    "functionsOver80Lines": 312,
+    "functionsOver5Params": 28,
+    "depthOver4": 6
+  },
+  "coreDbImports": {
+    "webSpecifiersTotal": 87,
+    "webSpecifiersInComposition": 20,
+    "webSpecifiersInStoreFiles": 21,
+    "webSpecifiersElsewhere": 46,
+    "webFilesImporting": 81
+  },
+  "rawApiFetches": {
+    "webBrowserCode": 64,
+    "webBrowserCodeAllFetchCalls": 78
+  },
+  "consoleCalls": {
+    "webServerAndApp": 102,
+    "runner": 10,
+    "allAppsAndPackages": 146
+  },
+  "duplicateVocabularies": {
+    "SESSION_STATUSES": [
+      "apps/web/components/projects/model.ts",
+      "apps/web/server/sessions/api.ts",
+      "packages/aw/src/commands/sessions.ts",
+      "packages/core/src/db/repositories/projects.ts",
+      "packages/core/src/db/repositories/runs/sessions.ts",
+      "packages/core/src/db/repositories/runs/types.ts",
+      "packages/core/src/db/schema/sessions.ts"
+    ],
+    "MEMBERSHIP_ROLES": [
+      "apps/web/components/shell/workspaces-directory.ts",
+      "apps/web/components/team/invitations-model.ts",
+      "apps/web/server/cli-auth/local-credential.ts",
+      "apps/web/server/rbac/roles.ts",
+      "apps/web/server/runs/environment.ts",
+      "apps/web/server/sessions/environment.ts",
+      "packages/core/src/db/repositories/root.ts",
+      "packages/core/src/db/schema/memberships.ts",
+      "packages/embedded/src/local-launcher.ts"
+    ],
+    "EVALUATION_RUN_STATUSES": [
+      "apps/web/server/runs/store.ts",
+      "packages/core/src/db/repositories/agent-version-evaluations.ts",
+      "packages/core/src/db/schema/agent-version-evaluations.ts",
+      "packages/core/src/db/schema/runs.ts",
+      "packages/react/src/run-model.ts"
+    ],
+    "RUN_STATUSES": [
+      "apps/web/server/runs/store.ts",
+      "packages/core/src/db/schema/runs.ts",
+      "packages/react/src/run-model.ts"
+    ],
+    "TERMINAL_RUN_STATUSES": [
+      "apps/web/server/runs/store.ts",
+      "packages/core/src/db/schema/runs.ts",
+      "packages/react/src/run-model.ts"
+    ]
+  }
+}

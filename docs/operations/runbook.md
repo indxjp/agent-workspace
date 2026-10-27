@@ -7,7 +7,8 @@ deployment's private operations log; never commit credentials, database dumps, o
 ## Service health and rollout
 
 The Helm chart configures startup, readiness, and liveness probes for web (`/`), gateway
-(`/health`), and runner manager (`/healthz`). It also supplies rolling-update bounds, one
+(`/health`), and runner manager (`/healthz`); web's readiness probe alone reads `GET /api/readyz`.
+It also supplies rolling-update bounds, one
 PodDisruptionBudget per workload, and optional CPU autoscaling. Enable autoscaling only when the
 cluster has Metrics Server and after load testing:
 
@@ -19,6 +20,19 @@ helm upgrade agent-workspace infra/helm/agent-workspace \
 Treat a readiness failure as traffic protection and a liveness failure as a process fault. Alert on
 repeated restarts and rollout deadline failures; do not use liveness to test an external provider.
 
+`GET /api/readyz` needs no credential. It answers `200 {"status":"ready"}`, or `503` in the
+standard error envelope when the deployment is misconfigured in a way the operator must fix. Today
+that is one case: `MASTER_ENCRYPTION_KEY` is set but malformed (it must be 64 hex characters, from
+`openssl rand -hex 32`). The server still boots, the secrets, models and connectors routes answer
+`503 *_runtime_not_configured`, the boot log names the variable and the format, and the probe keeps
+the pod out of service so a rollout stops. Neither the log nor the probe ever contains the value.
+An unset key is not a misconfiguration: those routes answer the same `503`, and readiness passes.
+Other secrets-subsystem failures at boot (an unreachable database, a cloud key backend that cannot
+be read, an unknown `MASTER_KEY_PROVIDER`) keep today's behaviour and do not fail readiness. Only
+the Helm chart reads `/api/readyz`. Compose and the image `HEALTHCHECK` probe `/`, the Azure
+Container Apps module uses a TCP probe, and Cloud Run has no readiness probe, so on those targets
+read the boot log.
+
 Suggested initial objectives are 99.9% successful control-plane requests over 30 days, p95 API
 latency below 500 ms excluding streaming bodies, and 99% of accepted runs reaching a terminal state
 within their configured deadline. Tune these only from measured traffic. Page on sustained error
@@ -26,11 +40,18 @@ budget burn, database unavailability, gateway 5xx spikes, stuck runs, or exhaust
 
 ## Telemetry, retention, and privacy
 
-Configure `OTEL_EXPORTER_OTLP_ENDPOINT` to export run spans to an external collector. The in-process
+Configure `OTEL_EXPORTER_OTLP_ENDPOINT` (and optionally `OTEL_SERVICE_NAME`) on the web, runner and
+gateway processes to export their spans to an external collector; unset, none of them starts an
+OpenTelemetry SDK. The runner records one span per `/run`, the gateway one per request and one per
+model call (provider, model and status only), all in the trace the request's log lines carry. The in-process
 Runs projection is capped and is neither durable history nor a metrics backend. Apply bounded
 retention at the collector and object store. Workspace, agent, run, and session identifiers are
 operational metadata; prompts, model responses, connector payloads, secrets, tokens, and file
 contents must not be log attributes. Restrict dashboards and trace access to operators.
+The web, runner and gateway processes write one JSON object per line to stdout/stderr, carrying a
+`traceId` where a W3C `traceparent` reached them;
+[ADR-0155](../adr/0155-server-processes-log-json-lines-and-join-a-w3c-trace-for-correlation.md)
+records the line format, what is redacted, and why a trace id is for correlation only.
 
 ## PostgreSQL backup and restore
 

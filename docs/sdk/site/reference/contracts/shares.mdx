@@ -15,7 +15,8 @@ as `400 invalid_share`, so the SDK sends the command as given rather than guessi
 
 `subjectLabel` is client-authored until RF-103, when the server derives it from the subject:
 the route requires it today and stores it verbatim. The share's content (`snapshot`) is
-likewise server-owned; this command never carries a transcript, a definition or a snapshot.
+server-owned: a session share's `transcript` chooses runs of that session and the server copies
+their text (ADR-0158); this command never carries a definition, a snapshot or transcript text.
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -25,6 +26,7 @@ likewise server-owned; this command never carries a transcript, a definition or 
 | `visibility` | `"workspace" \| "private" \| "public"` | Yes |  |
 | `mode` | `undefined \| "definition" \| "runnable"` | No |  |
 | `include` | `undefined \| ShareInclude` | No |  |
+| `transcript` | `undefined \| ShareTranscriptSelection` | No | For a session share only: which of the session's turns to publish. |
 | `expiry` | `undefined \| "never" \| "24 h" \| "7 days" \| "30 days"` | No |  |
 | `passphrase` | `undefined \| string` | No | At most `SHARE_PASSPHRASE_MAX_LENGTH` code units; hashed at rest, never returned. |
 | `budgetCapUsd` | `undefined \| number` | No | A positive amount in USD; the server defaults a runnable share to 20. |
@@ -61,6 +63,18 @@ What a share publishes. Matches `shares.subject_type`.
 - `'session'`
 - `'project'`
 - `'skill'`
+
+## SHARE_TRANSCRIPT_MAX_BYTES
+
+The largest transcript a share publishes, in UTF-8 bytes of its JSON.
+
+Value: `1_048_576`
+
+## SHARE_TRANSCRIPT_MAX_RUNS
+
+The most turns one session share may publish.
+
+Value: `100`
 
 ## SHARE_VISIBILITIES
 
@@ -229,6 +243,24 @@ vocabulary (`unauthenticated`, `forbidden`, …) is `COMMON_PROBLEM_CODES` at th
 - `"skill"`
 - `"project"`
 - `"session"`
+
+## ShareTranscriptSelection
+
+A session share's chosen turns: `{ runIds }` of that session (ADR-0158).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `runIds` | `readonly string[]` | Yes |  |
+
+## ShareTranscriptSelectionSchema
+
+Which turns of the session a session share publishes (ADR-0158): ids of the session's own runs.
+The server copies each run's prompt and final answer from its stored record, in the order the
+runs were created, so a caller chooses turns but never writes them.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `runIds` | `readonly string[]` | Yes |  |
 
 ## ShareVisibility
 

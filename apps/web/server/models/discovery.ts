@@ -36,6 +36,7 @@
  * outage to ride out. Neither is a provider that refuses the connection or does not resolve
  * (issue #661): a run on this host would fail on the same network.
  */
+import { log as webLog } from '../telemetry/logger';
 import { createHmac, randomBytes } from 'node:crypto';
 
 import { EgressRefusedError } from '@agent-workspace/core';
@@ -198,7 +199,7 @@ export type ModelDiscoveryOptions = {
    * an id nothing else will use. Default `true`.
    */
   readonly cache?: boolean;
-  /** Where a failed provider call is reported. Defaults to `console.error`. */
+  /** Where a failed provider call is reported. Defaults to the web logger. */
   readonly log?: (message: string, cause: unknown) => void;
 };
 
@@ -216,7 +217,8 @@ export function createModelDiscovery(options: ModelDiscoveryOptions = {}): Model
   const caching = options.cache ?? true;
   const timeoutMs = options.timeoutMs ?? DEFAULT_DISCOVERY_TIMEOUT_MS;
   const now = options.now ?? (() => Date.now());
-  const log = options.log ?? ((message: string, cause: unknown) => console.error(message, cause));
+  const log =
+    options.log ?? ((message: string, cause: unknown) => webLog.error(message, { error: cause }));
   // One entry per connection id: storing a list for a new fingerprint replaces (evicts) the list
   // any other fingerprint of the same connection had.
   const cache = new Map<
@@ -237,7 +239,8 @@ export function createModelDiscovery(options: ModelDiscoveryOptions = {}): Model
       return { ok: true, models: cached.models, stale: false };
     }
 
-    const row = byId.get(registryProviderId(connection.provider));
+    const providerId = registryProviderId(connection.provider);
+    const row = byId.get(providerId);
     if (row === undefined) {
       return cached === undefined
         ? failed({ kind: 'unsupported-provider', provider: connection.provider })
@@ -248,7 +251,7 @@ export function createModelDiscovery(options: ModelDiscoveryOptions = {}): Model
       const signal = AbortSignal.timeout(timeoutMs);
       const infos = await bounded(
         row.listModels({
-          providerId: row.id,
+          providerId,
           credential,
           requestId: crypto.randomUUID(),
           settings: connection.config,

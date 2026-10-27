@@ -40,7 +40,10 @@ function refuse(
 }
 
 function toYaml(document: YamlDocument): string {
-  return stringify(document, { lineWidth: 0 });
+  return stringify(document, {
+    lineWidth: 0,
+    doubleQuotedMinMultiLineLength: Number.POSITIVE_INFINITY,
+  });
 }
 
 function basenameOf(path: string): string {

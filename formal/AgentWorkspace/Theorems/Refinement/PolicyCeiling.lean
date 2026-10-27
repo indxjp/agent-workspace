@@ -90,7 +90,7 @@ theorem all_fields_violations :
     violations allFields.config allFields.ceiling =
       ["permissions.writeFiles", "permissions.runCommands", "limits.maxTurns",
         "limits.maxBudgetUsd", "engine:pi", "model:gpt-5.1", "tool:alpha", "tool:zeta"] := by
-  decide
+  decide +kernel
 
 /-- Every field at once, met: the switches and limits come down to the ceiling, the tools keep the
 allowed ones in input order, and the engine and the model are unchanged. -/
@@ -99,7 +99,7 @@ theorem all_fields_meet :
     meet allFields.config allFields.ceiling =
       { permissions := ⟨true, false, false, false⟩, maxTurns := some 20, maxBudget := some 5,
         engine := "pi", model := some "gpt-5.1", tools := ["beta"] } := by
-  decide
+  decide +kernel
 
 /-- A `null` limit never widens, and the meet composes it at the ceiling's value. -/
 @[aw_spec (tier := T4) (ts := "packages/contracts/src/policy-ceiling.ts#policyWidenings")
@@ -108,7 +108,7 @@ theorem null_limit_never_widens :
     violations nullLimit.config nullLimit.ceiling = [] ∧
     (meet nullLimit.config nullLimit.ceiling).maxTurns = some 20 ∧
     (meet nullLimit.config nullLimit.ceiling).maxBudget = some 5 := by
-  decide
+  decide +kernel
 
 /-- On every fixture, the details are empty exactly when the configuration is within, and the
 met configuration's only details are the input's engine and model entries. -/
@@ -119,6 +119,6 @@ theorem fixtures_agree :
       (violations f.config f.ceiling == []) == within f.config f.ceiling &&
       violations (meet f.config f.ceiling) f.ceiling ==
         ((widenings f.config f.ceiling).filter Widening.fixed).map Widening.wire) = true := by
-  decide
+  decide +kernel
 
 end AgentWorkspace.Theorems.Refinement.PolicyCeiling

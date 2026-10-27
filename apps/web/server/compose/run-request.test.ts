@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 /**
  * The composer's own tests.
  *
@@ -6,21 +7,24 @@
  * believed to want. That is the whole point: the defect this file exists because of was a body
  * that had never been checked against the contract it was posted to.
  */
-import { RunRequest } from '@agent-workspace/core';
+import { log as webLogger } from '../telemetry/logger';
+import { RunRequest } from '@agent-workspace/run-protocol';
+import { RUN_FILES_MAX_BYTES } from '@agent-workspace/runtime/transfer';
 // ENG-04 (#303): the compile step moved into the Claude adapter. A *test* may reach an engine
 // adapter — `dependency-cruiser.config.mjs`'s `web-does-not-import-an-engine-adapter` rule
 // excludes test files, the same way the browser-boundary rule already does — because the two
 // assertions below are about what the composed request compiles to on the engine it named, and
 // there is no way to make that assertion without the engine.
-import { compileRunRequest } from '@agent-workspace/engine-claude-agent-sdk';
+import { compileRunRequest } from '@agent-workspace/engine-claude-agent-sdk/testing';
 import { toolSandboxRunToken } from '@agent-workspace/gateway/tokens';
 import {
   AgentPolicySchema,
   claudeDeniedToolsFor,
-  type AgentResourceAssignments,
+  type AgentResourceAssignmentsInput,
 } from '@indx-workspace/contracts/agents';
+import { verifyIdentity } from '@indx-workspace/contracts/identity-assertion';
 import type { ProjectPolicy } from '@indx-workspace/contracts/policy-ceiling';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { RunAgent } from '../agent-versions/session-version';
 import { createInMemoryAgentStoreProvider } from '../agents/memory-store';
@@ -30,7 +34,7 @@ import { createInMemoryModelsStoreProvider } from '../models/memory-store';
 import type { DeploymentDefaultModels } from '../models/deployment-default';
 import type { DiscoverModelsResult, DiscoveredModel } from '../models/discovery';
 import type { LaunchContext } from '../runs/environment';
-import { InMemoryRunStore } from '../runs/store';
+import { InMemoryRunStore } from '../runs/memory-store';
 import { publicRunFailure } from '../runs/failures';
 import { DomainError } from '../errors';
 import {
@@ -64,6 +68,9 @@ import {
   type RuntimeSettings,
   withToolHostRunHeaders,
 } from './run-request';
+
+/** The SHA-256 of no bytes, built at runtime: a reference whose content is never read here. */
+const EMPTY_SHA256 = createHash('sha256').digest('hex');
 
 const WORKSPACE = '22222222-2222-4222-8222-222222222222';
 const RUN = '11111111-1111-4111-8111-111111111111';
@@ -195,11 +202,11 @@ describe('portableAgentConfigFor', () => {
   /** One loaded skill assignment, in the shape `AgentRunResourceLoader` produces. */
   function skillResource(name: string): {
     name: string;
-    files: { path: string; contentBase64: string }[];
+    files: { path: string; size: number; sha256: string }[];
   } {
     return {
       name,
-      files: [{ path: 'SKILL.md', contentBase64: Buffer.from(`# ${name}`).toString('base64') }],
+      files: [{ path: 'SKILL.md', size: 0, sha256: EMPTY_SHA256 }],
     };
   }
 
@@ -368,9 +375,9 @@ describe('applyFileGrantPolicy — the compose-side legacy guard (ENG-04b, #325)
   it('answers the read-only-grant denials, in the order the adapter also derives them', () => {
     expect(
       applyFileGrantPolicy('/workspace/w/s', [
-        { kind: 'file', path: 'secret.txt', access: 'read', contentBase64: '' },
+        { kind: 'file', path: 'secret.txt', access: 'read', size: 0, sha256: EMPTY_SHA256 },
         { kind: 'directory', path: 'archive', access: 'read' },
-        { kind: 'file', path: 'draft.txt', access: 'read-write', contentBase64: '' },
+        { kind: 'file', path: 'draft.txt', access: 'read-write', size: 0, sha256: EMPTY_SHA256 },
       ]),
     ).toEqual([
       'Edit(//workspace/w/s/secret.txt)',
@@ -385,7 +392,7 @@ describe('applyFileGrantPolicy — the compose-side legacy guard (ENG-04b, #325)
     expect(applyFileGrantPolicy('/workspace/w/s', [])).toEqual([]);
     expect(
       applyFileGrantPolicy('/workspace/w/s', [
-        { kind: 'file', path: 'draft.txt', access: 'read-write', contentBase64: '' },
+        { kind: 'file', path: 'draft.txt', access: 'read-write', size: 0, sha256: EMPTY_SHA256 },
       ]),
     ).toEqual([]);
   });
@@ -400,7 +407,7 @@ async function rowRunAgent(
   if (agent === null) throw new Error(`agent ${context.agent.id} is not in the workspace`);
   return {
     agent,
-    assignments: { files: [], skillIds: [], connectorIds: [] },
+    assignments: { files: [], skillIds: [], connectorIds: [], storageGrants: [] },
     toolBundles: [],
     subagents: [],
   };
@@ -574,6 +581,25 @@ describe('buildRunRequestFor', () => {
     ]);
   });
 
+  it('forwards the run’s outputSchema, and carries none when the run had none (ADR-0143)', async () => {
+    const { context, agents } = await launchContext();
+    const outputSchema = { type: 'object', properties: { verdict: { type: 'string' } } };
+    const asked = await buildRunRequestFor(
+      { ...context, outputSchema },
+      await rowRunAgent(agents, context),
+      SETTINGS,
+      GATEWAY,
+    );
+    expect(RunRequest.parse(asked).outputSchema).toEqual(outputSchema);
+    const plain = await buildRunRequestFor(
+      context,
+      await rowRunAgent(agents, context),
+      SETTINGS,
+      GATEWAY,
+    );
+    expect(plain).not.toHaveProperty('outputSchema');
+  });
+
   it('composes the pinned configuration it is given, not the agent row (issue #612)', async () => {
     const { context, agents } = await launchContext();
     const row = await rowRunAgent(agents, context);
@@ -653,7 +679,8 @@ describe('buildRunRequestFor', () => {
                 kind: 'file' as const,
                 path: 'sources/readonly.txt',
                 access: 'read' as const,
-                contentBase64: Buffer.from('only this file').toString('base64'),
+                size: 0,
+                sha256: EMPTY_SHA256,
               },
             ],
             skills: [
@@ -662,7 +689,8 @@ describe('buildRunRequestFor', () => {
                 files: [
                   {
                     path: 'SKILL.md',
-                    contentBase64: Buffer.from('# assigned').toString('base64'),
+                    size: 0,
+                    sha256: EMPTY_SHA256,
                   },
                 ],
               },
@@ -688,15 +716,215 @@ describe('buildRunRequestFor', () => {
     expect(compiled.disallowedTools).toContain('Bash');
   });
 
+  describe('a fileScope narrows the agent’s file grants (issue #1539)', () => {
+    const fileOf = (path: string) => ({
+      kind: 'file' as const,
+      path,
+      access: 'read' as const,
+      size: 0,
+      sha256: EMPTY_SHA256,
+    });
+    const loader = {
+      load: () =>
+        Promise.resolve({
+          files: [
+            { kind: 'directory' as const, path: 'docs', access: 'read' as const },
+            fileOf('docs/alice/a.md'),
+            fileOf('docs/bob/b.md'),
+          ],
+          skills: [],
+          mcpServers: {},
+        }),
+    };
+
+    it('keeps only the files inside the scope in the request', async () => {
+      const { context, agents } = await launchContext();
+      const request = await buildRunRequestFor(
+        { ...context, fileScope: ['docs/alice'] },
+        await rowRunAgent(agents, context),
+        SETTINGS,
+        GATEWAY,
+        {},
+        ALL_ON,
+        null,
+        loader,
+      );
+      expect(request.resources?.files.map((file) => file.path)).toEqual(['docs/alice/a.md']);
+      const compiled = compileRunRequest(request);
+      expect(compiled.disallowedTools.join(' ')).not.toContain('docs/bob');
+    });
+
+    it('keeps every grant when the run has no scope', async () => {
+      const { context, agents } = await launchContext();
+      const request = await buildRunRequestFor(
+        context,
+        await rowRunAgent(agents, context),
+        SETTINGS,
+        GATEWAY,
+        {},
+        ALL_ON,
+        null,
+        loader,
+      );
+      expect(request.resources?.files).toHaveLength(3);
+    });
+
+    it('refuses a scope outside the grants before a token is issued', async () => {
+      const { context, agents } = await launchContext();
+      const before = issued;
+      await expect(
+        buildRunRequestFor(
+          { ...context, fileScope: ['docs/alice', 'finance'] },
+          await rowRunAgent(agents, context),
+          SETTINGS,
+          GATEWAY,
+          {},
+          ALL_ON,
+          null,
+          loader,
+        ),
+      ).rejects.toThrow(/^run_file_scope_not_granted: /u);
+      expect(issued).toBe(before);
+    });
+
+    it('refuses any scope for an agent that has no files', async () => {
+      const { context, agents } = await launchContext();
+      await expect(
+        buildRunRequestFor(
+          { ...context, fileScope: ['docs/alice'] },
+          await rowRunAgent(agents, context),
+          SETTINGS,
+          GATEWAY,
+          {},
+          ALL_ON,
+          null,
+          { load: () => Promise.resolve({ files: [], skills: [], mcpServers: {} }) },
+        ),
+      ).rejects.toThrow(/run_file_scope_not_granted/u);
+    });
+
+    // @story US-STO-06
+    it('[US-STO-06][unit][run] a scope that narrows a grant over the run limit still composes', async () => {
+      const { context, agents } = await launchContext();
+      const over = {
+        load: () =>
+          Promise.resolve({
+            files: [
+              { kind: 'directory' as const, path: 'docs', access: 'read' as const },
+              fileOf('docs/alice/a.md'),
+              { ...fileOf('docs/bob/b.bin'), size: RUN_FILES_MAX_BYTES + 1 },
+            ],
+            skills: [],
+            mcpServers: {},
+          }),
+      };
+      const compose = async (fileScope?: readonly string[]) =>
+        buildRunRequestFor(
+          fileScope === undefined ? context : { ...context, fileScope },
+          await rowRunAgent(agents, context),
+          SETTINGS,
+          GATEWAY,
+          {},
+          ALL_ON,
+          null,
+          over,
+        );
+      const scoped = await compose(['docs/alice']);
+      expect(scoped.resources?.files.map((file) => file.path)).toEqual(['docs/alice/a.md']);
+      // Unscoped, the same grant is over the limit: compose refuses it as the backstop.
+      await expect(compose()).rejects.toMatchObject({ code: 'run_files_too_large' });
+    });
+
+    it('words a refusal the same whether a path is outside the grants or does not exist', async () => {
+      const { context, agents } = await launchContext();
+      const refusal = async (fileScope: readonly string[]): Promise<string> => {
+        const failure: unknown = await buildRunRequestFor(
+          { ...context, fileScope },
+          await rowRunAgent(agents, context),
+          SETTINGS,
+          GATEWAY,
+          {},
+          ALL_ON,
+          null,
+          loader,
+        ).catch((e: unknown) => e);
+        return failure instanceof Error ? failure.message : 'resolved';
+      };
+      const outside = await refusal(['finance']);
+      expect(outside).toMatch(/^run_file_scope_not_granted: /u);
+      expect(outside).not.toContain('finance');
+      expect(await refusal(['no-such-folder/x.md'])).toBe(outside);
+    });
+  });
+
+  // @story US-STO-11
+  it('[US-STO-11][unit][run] an attachment is a read reference in the body, never its bytes, and removes the shell (ADR-0146)', async () => {
+    const { context, agents } = await launchContext();
+    const brief = {
+      kind: 'file' as const,
+      path: 'notes/brief.md',
+      access: 'read' as const,
+      size: 5,
+      sha256: createHash('sha256').update('brief').digest('hex'),
+    };
+    const loads: unknown[] = [];
+    const request = await buildRunRequestFor(
+      {
+        ...context,
+        attachments: [{ fileId: 'file-1', path: 'notes/brief.md', kind: 'file' }],
+      },
+      await rowRunAgent(agents, context),
+      SETTINGS,
+      GATEWAY,
+      {},
+      ALL_ON,
+      null,
+      {
+        load: (_workspaceId, assignments) => {
+          loads.push(assignments.files);
+          return Promise.resolve({
+            files: assignments.files.length === 0 ? [] : [{ ...brief, access: 'read-write' }],
+            skills: [],
+            mcpServers: {},
+          });
+        },
+      },
+    );
+
+    // The attachment's own load, by file id, read-only whatever the loader says.
+    expect(loads).toContainEqual([{ fileId: 'file-1', access: 'read' }]);
+    expect(request.resources?.files).toEqual([brief]);
+    expect(request.portable.permissions.runCommands).toBe(false);
+    const compiled = compileRunRequest(request);
+    expect(compiled.disallowedTools).toContain(
+      `Edit(//workspace/${WORKSPACE}/${SESSION}/notes/brief.md)`,
+    );
+    expect(compiled.disallowedTools).toContain('Bash');
+
+    // ADR-0146 Decision 2: the grant is the run's. A follow-up turn without the attachment does
+    // not name it, so the runner removes it like any revoked grant.
+    const followUp = await buildRunRequestFor(
+      context,
+      await rowRunAgent(agents, context),
+      SETTINGS,
+      GATEWAY,
+      {},
+      ALL_ON,
+      null,
+      { load: () => Promise.resolve({ files: [], skills: [], mcpServers: {} }) },
+    );
+    expect(followUp.resources?.files).toEqual([]);
+  });
+
   it('passes the run’s assignments, the session’s project id and the agent’s own permissions to the resource loader (issue #125)', async () => {
     const { context, agents } = await launchContext();
     const runAgent = {
       ...(await rowRunAgent(agents, context)),
-      assignments: { files: [], skillIds: ['a pinned skill'], connectorIds: [] },
+      assignments: { files: [], skillIds: ['a pinned skill'], connectorIds: [], storageGrants: [] },
     };
     const seen: {
       workspaceId: string | undefined;
-      assignments: AgentResourceAssignments | undefined;
+      assignments: AgentResourceAssignmentsInput | undefined;
       projectId: string | null | undefined;
       permissions: AgentPermissions | undefined;
     } = {
@@ -871,6 +1099,80 @@ describe('buildRunRequestFor', () => {
     expect(request.policy).toStrictEqual({ tools: null, fileGrantDeny: [] });
   });
 
+  it('puts the gate and the calls a decision admitted into the Claude arm (ADR-0145)', async () => {
+    const { context, agents, agentId } = await launchContext();
+    await agents.forWorkspace(WORKSPACE).replacePolicy(
+      agentId,
+      AgentPolicySchema.parse({
+        engine: 'claude-agent-sdk',
+        tools: {
+          base: 'claude_code_preset',
+          autoApprove: [],
+          deny: [],
+          permissionMode: 'default',
+          allowDangerouslySkipPermissions: false,
+        },
+        requireApproval: ['Bash'],
+        skills: { mode: 'all' },
+        limits: { maxTurns: null, maxBudgetUsd: null },
+      }),
+    );
+    const decided = {
+      ...context,
+      run: {
+        ...context.run,
+        approvedToolCalls: [{ toolName: 'Bash', canonicalCall: 'Bash {"command":"ls"}' }],
+      },
+    };
+
+    const request = await buildRunRequestFor(
+      decided,
+      await rowRunAgent(agents, decided),
+      SETTINGS,
+      GATEWAY,
+      {},
+    );
+
+    expect(request.policy).toMatchObject({
+      requireApproval: ['Bash'],
+      approvedToolCalls: ['Bash {"command":"ls"}'],
+    });
+    const first = await buildRunRequestFor(
+      context,
+      await rowRunAgent(agents, context),
+      SETTINGS,
+      GATEWAY,
+      {},
+    );
+    expect(first.policy).not.toHaveProperty('approvedToolCalls');
+  });
+
+  it('forwards the handoff opt-in only when the stored Claude arm has it (ADR-0145 D4)', async () => {
+    const { context, agents, agentId } = await launchContext();
+    const stored = (handoff: boolean) =>
+      AgentPolicySchema.parse({
+        engine: 'claude-agent-sdk',
+        tools: {
+          base: 'claude_code_preset',
+          autoApprove: [],
+          deny: [],
+          permissionMode: 'default',
+          allowDangerouslySkipPermissions: false,
+        },
+        ...(handoff ? { handoff: true } : {}),
+        skills: { mode: 'all' },
+        limits: { maxTurns: null, maxBudgetUsd: null },
+      });
+    const policyOf = async () =>
+      (await buildRunRequestFor(context, await rowRunAgent(agents, context), SETTINGS, GATEWAY, {}))
+        .policy;
+
+    await agents.forWorkspace(WORKSPACE).replacePolicy(agentId, stored(true));
+    expect(await policyOf()).toMatchObject({ handoff: true });
+    await agents.forWorkspace(WORKSPACE).replacePolicy(agentId, stored(false));
+    expect(await policyOf()).not.toHaveProperty('handoff');
+  });
+
   it('mints a fresh token for every serialization and closes the A.11 environment', async () => {
     const { context, agents } = await launchContext();
     const first = await buildRunRequestFor(
@@ -927,6 +1229,7 @@ describe('buildRunRequestFor', () => {
         ...mandatory,
         'AW_SESSION_MIRROR_TOKEN',
         'CLAUDE_CODE_PROJECT_DIR_NAME',
+        'ENABLE_TOOL_SEARCH',
         'ASSIGNED_AGENT_SECRET',
       ].sort(),
     );
@@ -1051,6 +1354,57 @@ describe('buildRunRequestFor — tool connectors through the gateway (S2-02f, #5
     const body = JSON.stringify(request);
     expect(body).not.toContain('orders.example.test');
     expect(body).not.toContain('upstream-secret');
+  });
+
+  describe('a write operation is implicitly requireApproval (ADR-0113 SD4)', () => {
+    const quote = {
+      key: 'erp',
+      name: 'erp',
+      connectorId: ORDERS_LOW,
+      operationNames: ['getRate', 'createQuote'],
+      approvalRules: ['mcp__erp__createQuote'],
+    };
+    const quotes = [quote];
+    const claudeWithGate: AgentPolicy = {
+      engine: 'claude-agent-sdk',
+      tools: {
+        base: 'claude_code_preset',
+        autoApprove: [],
+        deny: [],
+        permissionMode: 'default',
+        allowDangerouslySkipPermissions: false,
+      },
+      requireApproval: ['Bash', 'mcp__erp__createQuote'],
+      skills: { mode: 'all' },
+      limits: { maxTurns: null, maxBudgetUsd: null },
+    };
+
+    it('gives the Claude arm the connector write rule, carrying the run server key', async () => {
+      const request = await compose(loaderWith(quotes), () => Promise.resolve());
+      expect(request.policy).toMatchObject({ requireApproval: ['mcp__erp__createQuote'] });
+      const suffixed = await compose(
+        loaderWith([{ ...quote, key: 'erp_2', approvalRules: ['mcp__erp_2__createQuote'] }]),
+        () => Promise.resolve(),
+      );
+      expect(suffixed.policy).toMatchObject({ requireApproval: ['mcp__erp_2__createQuote'] });
+    });
+
+    it('merges the stored rules with the connector rules, without a duplicate', async () => {
+      const request = await compose(loaderWith(quotes), () => Promise.resolve(), claudeWithGate);
+      expect(request.policy).toMatchObject({
+        requireApproval: ['Bash', 'mcp__erp__createQuote'],
+      });
+    });
+
+    it('leaves requireApproval out for a read-only connector', async () => {
+      const request = await compose(loaderWith(orders), () => Promise.resolve());
+      expect(request.policy).not.toHaveProperty('requireApproval');
+    });
+
+    it('sends a withholding engine no requireApproval; the gateway backstop refuses the write', async () => {
+      const request = await compose(loaderWith(quotes), () => Promise.resolve(), openaiAgents);
+      expect(request.policy).not.toHaveProperty('requireApproval');
+    });
   });
 
   it('seam check 3: the tool url is on the gateway base the sandbox reaches, not the runner or web origin', async () => {
@@ -1396,11 +1750,12 @@ describe('buildRunRequestFor meets the policy ceiling (S2-04c)', () => {
       readonly snapshot?: RunToolSnapshot;
       readonly model?: ModelSelection;
       readonly gateway?: RunTokenIssuer;
+      readonly limits?: NonNullable<LaunchContext['limits']>;
     } = {},
   ) {
     const { context, agents } = await savedAgent(policy);
     return buildRunRequestFor(
-      context,
+      options.limits === undefined ? context : { ...context, limits: options.limits },
       await rowRunAgent(agents, context),
       SETTINGS,
       options.gateway ?? GATEWAY,
@@ -1453,6 +1808,21 @@ describe('buildRunRequestFor meets the policy ceiling (S2-04c)', () => {
     // An agent with no stored policy has null limits, and composes at the ceiling too.
     const compiled = await compose(null, ceiling);
     expect(compiled.portable.limits).toEqual({ maxTurns: 10, maxBudgetUsd: 2 });
+  });
+
+  it("a trial run's budget is the lower of the agent's policy and the trial budget, and a larger override cannot raise it", async () => {
+    const policy = claudeArm([], { maxTurns: 20, maxBudgetUsd: 1 });
+    const lowered = await compose(policy, null, { limits: { maxBudgetUsd: 0.3, maxTurns: 5 } });
+    expect(lowered.portable.limits).toEqual({ maxTurns: 5, maxBudgetUsd: 0.3 });
+    const larger = await compose(policy, null, { limits: { maxBudgetUsd: 5, maxTurns: 90 } });
+    expect(larger.portable.limits).toEqual({ maxTurns: 20, maxBudgetUsd: 1 });
+    const ceiling: ProjectPolicy = { limits: { maxTurns: 10, maxBudgetUsd: 0.5 } };
+    const under = await compose(policy, ceiling, { limits: { maxBudgetUsd: 0.3 } });
+    expect(under.portable.limits).toEqual({ maxTurns: 10, maxBudgetUsd: 0.3 });
+    const over = await compose(policy, ceiling, { limits: { maxBudgetUsd: 0.9 } });
+    expect(over.portable.limits).toEqual({ maxTurns: 10, maxBudgetUsd: 0.5 });
+    const uncapped = await compose(null, null, { limits: { maxBudgetUsd: 0.3 } });
+    expect(uncapped.portable.limits).toEqual({ maxTurns: null, maxBudgetUsd: 0.3 });
   });
 
   it('refuses a stored engine outside policy.engines before the loader or the gateway runs', async () => {
@@ -2396,5 +2766,226 @@ describe('withToolHostRunHeaders with a tool sandbox', () => {
       headers: { authorization: 'Bearer tok', 'x-aw-agent': encodeURIComponent('サポート') },
     });
     expect(servers['other']).toEqual({ type: 'http', url: 'https://mcp.example' });
+  });
+});
+
+const KEY = 'k'.repeat(32);
+const MCP_ID = '00000000-0000-4000-8000-0000000000a1';
+const TOOL_ID = '00000000-0000-4000-8000-0000000000a2';
+const MCP_KEY = 'crm';
+const optedInMcp: AgentRunResourceSelection = {
+  files: [],
+  skills: [],
+  mcpServers: {
+    [MCP_KEY]: {
+      type: 'http',
+      url: 'https://mcp.example.test/mcp',
+      headers: { 'X-Api-Key': 'kept', 'X-AW-Identity': 'forged' },
+    },
+  },
+  connectorIdentities: { [MCP_KEY]: { connectorId: MCP_ID, key: KEY } },
+};
+const optedInTool: AgentRunResourceSelection = {
+  files: [],
+  skills: [],
+  mcpServers: {},
+  toolConnectors: [
+    {
+      key: 'orders',
+      name: 'orders',
+      connectorId: TOOL_ID,
+      operationNames: ['getOrder'],
+      identity: true,
+    },
+  ],
+};
+const member = { via: 'session', kind: 'membership' } as const;
+const apiKey = { via: 'api-key', kind: 'api_key' } as const;
+
+async function compose(
+  resources: AgentRunResourceSelection,
+  principal: Partial<LaunchContext['principal']>,
+  subject?: string,
+  builtin?: 'builder',
+) {
+  const issued: unknown[] = [];
+  const gateway: RunTokenIssuer = {
+    baseUrl: 'http://gateway:4000',
+    issue(claims) {
+      issued.push(claims);
+      return Promise.resolve('run-token');
+    },
+  };
+  const { context, agents } = await launchContext();
+  const row = await rowRunAgent(agents, context);
+  const runAgent: RunAgent =
+    builtin === undefined ? row : { ...row, agent: { ...row.agent, builtin } };
+  const run = () =>
+    buildRunRequestFor(
+      {
+        ...context,
+        principal: { ...context.principal, ...principal },
+        ...(subject === undefined ? {} : { subject }),
+      },
+      runAgent,
+      SETTINGS,
+      gateway,
+      {},
+      undefined,
+      null,
+      { load: () => Promise.resolve(resources) },
+      undefined,
+      null,
+      undefined,
+      () => Promise.resolve(),
+    );
+  return { run, issued };
+}
+
+describe('buildRunRequestFor — the identity assertion (ADR-0142)', () => {
+  it('signs an assertion for the member, replaces a stored spelling of the header, and logs nothing', async () => {
+    const spies = (['info', 'warn', 'error'] as const).map((level) =>
+      vi.spyOn(webLogger, level).mockImplementation(() => undefined),
+    );
+    try {
+      const { run, issued } = await compose(optedInMcp, member);
+      const server = (await run()).portable.mcpServers[MCP_KEY] as {
+        headers: Record<string, string>;
+      };
+      expect(Object.keys(server.headers).sort()).toEqual(['X-Api-Key', 'x-aw-identity']);
+      const verified = await verifyIdentity(
+        server.headers['x-aw-identity'] ?? '',
+        KEY,
+        new Date(),
+        { audience: MCP_ID, workspace: WORKSPACE },
+      );
+      expect(verified).toMatchObject({
+        ok: true,
+        payload: { sub: USER, principalKind: 'membership', runId: RUN, aud: MCP_ID },
+      });
+      expect(issued).toEqual([
+        expect.objectContaining({ caller: { sub: USER, principalKind: 'membership' } }),
+      ]);
+      for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+    }
+  });
+
+  it('asserts the subject an API key names', async () => {
+    const { run, issued } = await compose(optedInTool, apiKey, 'customer-42');
+    await run();
+    expect(issued).toEqual([
+      expect.objectContaining({ caller: { sub: 'customer-42', principalKind: 'api-key' } }),
+    ]);
+  });
+
+  it.each([
+    ['an MCP connector', optedInMcp],
+    ['a tool connector', optedInTool],
+  ])(
+    'refuses before a token is issued when %s opted in and the run has no caller',
+    async (_name, resources) => {
+      for (const principal of [apiKey, {}]) {
+        const { run, issued } = await compose(resources, principal);
+        await expect(run()).rejects.toMatchObject({ code: 'connector_identity_unsupported' });
+        expect(issued).toEqual([]);
+      }
+    },
+  );
+
+  it('leaves a run with no opted-in connector, and no caller, as it was', async () => {
+    const { run, issued } = await compose({ files: [], skills: [], mcpServers: {} }, {});
+    await run();
+    expect(issued).toEqual([expect.not.objectContaining({ caller: expect.anything() as unknown })]);
+  });
+});
+
+describe('buildRunRequestFor — the aw-control door (#1846)', () => {
+  const mcp = (name: string): AgentRunResourceSelection => ({
+    files: [],
+    skills: [],
+    mcpServers: { [MCP_KEY]: { type: 'http', url: 'https://mcp.example.test/mcp' } },
+    connectorNames: { [MCP_KEY]: name },
+  });
+  const tool = (name: string): AgentRunResourceSelection => ({
+    ...optedInTool,
+    toolConnectors: [{ key: 'orders', name, connectorId: TOOL_ID, operationNames: ['getOrder'] }],
+  });
+
+  it.each([
+    'aw-control',
+    'AW-Control',
+    'AW-CONTROL',
+    ' aw-control ',
+    '\taw-control',
+    'aw-control\n',
+  ])('refuses a run that reaches the connector name %j before a token is issued', async (name) => {
+    for (const resources of [mcp(name), tool(name)]) {
+      const { run, issued } = await compose(resources, member);
+      await expect(run()).rejects.toMatchObject({ code: 'not_allowed_to_build' });
+      expect(issued).toEqual([]);
+    }
+  });
+
+  it.each([
+    [
+      'an MCP server key',
+      {
+        files: [],
+        skills: [],
+        mcpServers: { 'AW-Control': { type: 'http', url: 'https://mcp.example.test/mcp' } },
+        connectorNames: { 'AW-Control': 'crm' },
+      },
+    ],
+    [
+      'a tool connector key',
+      {
+        ...optedInTool,
+        toolConnectors: [
+          {
+            key: '\taw-control',
+            name: 'orders',
+            connectorId: TOOL_ID,
+            operationNames: ['getOrder'],
+          },
+        ],
+      },
+    ],
+  ] satisfies Array<[string, AgentRunResourceSelection]>)(
+    'refuses %s equal to the reserved name, whatever the connector is called',
+    async (_label, resources) => {
+      const { run, issued } = await compose(resources, member);
+      await expect(run()).rejects.toMatchObject({ code: 'not_allowed_to_build' });
+      expect(issued).toEqual([]);
+    },
+  );
+
+  it.each(['aw-control-2', 'aw_control', 'aw-dev-tools'])(
+    'leaves the connector %j alone',
+    async (name) => {
+      const { run, issued } = await compose(mcp(name), member);
+      await run();
+      expect(issued).toHaveLength(1);
+    },
+  );
+
+  it.each(['aw-control', 'AW-CONTROL', '\taw-control\n'])(
+    'refuses a Builder run that selects the workspace connector %j',
+    async (name) => {
+      const { run, issued } = await compose(mcp(name), member, undefined, 'builder');
+      await expect(run()).rejects.toMatchObject({ code: 'not_allowed_to_build' });
+      expect(issued).toEqual([]);
+    },
+  );
+
+  it('refuses the reserved name before asking for an identity the run has no caller for', async () => {
+    const resources: AgentRunResourceSelection = {
+      ...optedInMcp,
+      connectorNames: { [MCP_KEY]: 'aw-control' },
+    };
+    const { run, issued } = await compose(resources, apiKey);
+    await expect(run()).rejects.toMatchObject({ code: 'not_allowed_to_build' });
+    expect(issued).toEqual([]);
   });
 });

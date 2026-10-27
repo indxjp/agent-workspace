@@ -11,14 +11,18 @@ import type {
 import type { EngineDescriptor } from '../../contracts/engines';
 import {
   describeHalf,
-  describeRequestFailure,
-  describeTransportRejection,
-  readEngineCatalog,
   resolveSaveOutcome,
   type RequestProblem,
   type SaveOutcome,
   type SaveReport,
 } from './model';
+import { browserClient } from '../../lib/browser-client';
+import {
+  loadAgent,
+  loadEngines,
+  saveAgentAssignments,
+  saveAgentDefinition,
+} from './agent-requests-model';
 import { AgentResourcesEditor, useAgentProjects, useResourceCatalogs } from './resource-editor';
 import { describeInheritance, type ModelSelectionValue } from '../models/catalog';
 import { ModelSelector, ModelUnavailableNotice, useModelCatalog } from '../models/model-selector';
@@ -182,34 +186,14 @@ function useEngineCatalog(): EngineCatalogState {
   const [state, setState] = useState<EngineCatalogState>({ kind: 'loading' });
   useEffect(() => {
     let active = true;
-    void (async () => {
-      let response: Response;
-      try {
-        response = await fetch('/api/engines', { headers: { accept: 'application/json' } });
-      } catch (error) {
-        if (active)
-          setState({ kind: 'failed', reason: problemText(describeTransportRejection(error)) });
-        return;
-      }
-      if (!response.ok) {
-        const problem = await describeRequestFailure(response, () => response.json());
-        if (active) setState({ kind: 'failed', reason: problemText(problem) });
-        return;
-      }
-      // A body the published contract refuses is drift, reported as itself rather than as a
-      // transport failure it is not.
-      try {
-        const engines = readEngineCatalog(await response.json());
-        if (active) setState({ kind: 'ready', engines });
-      } catch (error) {
-        if (active) {
-          setState({
-            kind: 'failed',
-            reason: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
-    })();
+    void loadEngines(browserClient()).then((result) => {
+      if (!active) return;
+      setState(
+        result.ok
+          ? { kind: 'ready', engines: result.value }
+          : { kind: 'failed', reason: problemText(result.problem) },
+      );
+    });
     return () => {
       active = false;
     };
@@ -228,35 +212,22 @@ export function AgentDetailScreen({ agentId }: Readonly<{ agentId: string }>) {
   const [problem, setProblem] = useState<RequestProblem | null>(null);
   const [saveReport, setSaveReport] = useState<SaveReport | null>(null);
   const [saving, setSaving] = useState(false);
-  const agentPath = `/api/agents/${encodeURIComponent(agentId)}`;
 
   useEffect(() => {
     let active = true;
-    void Promise.all([
-      fetch(agentPath, { headers: { accept: 'application/json' } }),
-      fetch(`${agentPath}/resources`, { headers: { accept: 'application/json' } }),
-    ])
-      .then(async ([agentResponse, resourcesResponse]) => {
-        if (!agentResponse.ok || !resourcesResponse.ok) {
-          const failed = agentResponse.ok ? resourcesResponse : agentResponse;
-          const next = await describeRequestFailure(failed, () => failed.json());
-          if (active) setProblem(next);
-          return;
-        }
-        const agent = (await agentResponse.json()) as AgentResource;
-        const body = (await resourcesResponse.json()) as { assignments: AgentResourceAssignments };
-        if (active) {
-          setLoaded({ agent, assignments: body.assignments });
-          setAssignmentsDraft(body.assignments);
-        }
-      })
-      .catch((error: unknown) => {
-        if (active) setProblem(describeTransportRejection(error));
-      });
+    void loadAgent(browserClient(), agentId).then((result) => {
+      if (!active) return;
+      if (!result.ok) {
+        setProblem(result.problem);
+        return;
+      }
+      setLoaded(result.value);
+      setAssignmentsDraft(result.value.assignments);
+    });
     return () => {
       active = false;
     };
-  }, [agentPath]);
+  }, [agentId]);
 
   const catalogState = useModelCatalog();
   const catalogsState = useResourceCatalogs();
@@ -296,63 +267,23 @@ export function AgentDetailScreen({ agentId }: Readonly<{ agentId: string }>) {
     setProblem(null);
     setSaveReport(null);
 
-    let definitionResponse: Response;
-    try {
-      definitionResponse = await fetch(agentPath, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json', accept: 'application/json' },
-        body: JSON.stringify({
-          name: loaded.agent.name,
-          instructions: loaded.agent.instructions,
-          modelConnectionId: loaded.agent.modelConnectionId,
-          model: loaded.agent.model,
-          runtimeProfileId: loaded.agent.runtimeProfileId,
-          permissions: loaded.agent.permissions,
-        }),
-      });
-    } catch (error) {
-      // Verification round 2, finding 1: a rejected fetch (network failure, abort, reset) is a
-      // first-class outcome, reported the same way a non-ok response already is — never an
-      // uncaught exception that leaves `saving` stuck `true` forever.
-      applySaveOutcome({ kind: 'definition-failed', problem: describeTransportRejection(error) });
+    const client = browserClient();
+    const definition = await saveAgentDefinition(client, loaded.agent);
+    if (!definition.ok) {
+      applySaveOutcome({ kind: 'definition-failed', problem: definition.problem });
       setSaving(false);
       return;
     }
-    if (!definitionResponse.ok) {
-      const definitionProblem = await describeRequestFailure(definitionResponse, () =>
-        definitionResponse.json(),
-      );
-      applySaveOutcome({ kind: 'definition-failed', problem: definitionProblem });
-      setSaving(false);
-      return;
-    }
-    const savedAgent = (await definitionResponse.json()) as AgentResource;
+    const savedAgent = definition.value;
     setLoaded((current) => (current === null ? null : { ...current, agent: savedAgent }));
 
-    let assignmentsResponse: Response;
-    try {
-      assignmentsResponse = await fetch(`${agentPath}/resources`, {
-        method: 'PUT',
-        headers: { 'content-type': 'application/json', accept: 'application/json' },
-        body: JSON.stringify(assignmentsDraft),
-      });
-    } catch (error) {
-      applySaveOutcome({ kind: 'assignments-failed', problem: describeTransportRejection(error) });
+    const assignments = await saveAgentAssignments(client, agentId, assignmentsDraft);
+    if (!assignments.ok) {
+      applySaveOutcome({ kind: 'assignments-failed', problem: assignments.problem });
       setSaving(false);
       return;
     }
-    if (!assignmentsResponse.ok) {
-      const assignmentsProblem = await describeRequestFailure(assignmentsResponse, () =>
-        assignmentsResponse.json(),
-      );
-      applySaveOutcome({ kind: 'assignments-failed', problem: assignmentsProblem });
-      setSaving(false);
-      return;
-    }
-    const assignmentsBody = (await assignmentsResponse.json()) as {
-      assignments: AgentResourceAssignments;
-    };
-    applySaveOutcome({ kind: 'both-saved', persistedAssignments: assignmentsBody.assignments });
+    applySaveOutcome({ kind: 'both-saved', persistedAssignments: assignments.value });
     setSaving(false);
   }
 

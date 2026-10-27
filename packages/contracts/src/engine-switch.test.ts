@@ -58,7 +58,36 @@ function withheld(previous: ClaudeArm): readonly string[] | undefined {
   return policy.withheldPermissions;
 }
 
+describe('AgentPolicySchema: requireApproval (ADR-0145 D3)', () => {
+  it('accepts a whole-tool rule and refuses one that is also auto-approved or carries a specifier', () => {
+    const arm = (requireApproval: readonly string[], autoApprove: readonly string[] = []) => ({
+      ...claude([], 'default', 'claude_code_preset', autoApprove),
+      requireApproval,
+    });
+    expect(AgentPolicySchema.safeParse(arm(['Bash'])).success).toBe(true);
+    expect(AgentPolicySchema.safeParse(arm(['Bash'], ['Bash'])).success).toBe(false);
+    expect(AgentPolicySchema.safeParse(arm(['Bash(git status)'])).success).toBe(false);
+  });
+});
+
+describe('AgentPolicySchema: handoff (ADR-0145 D4)', () => {
+  it('accepts handoff: true on the Claude arm and refuses false, a non-boolean, or another arm', () => {
+    const arm = (handoff: unknown) => ({ ...claude([]), handoff });
+    expect(AgentPolicySchema.safeParse(arm(true)).success).toBe(true);
+    expect(AgentPolicySchema.safeParse(arm(false)).success).toBe(false);
+    expect(AgentPolicySchema.safeParse(arm('yes')).success).toBe(false);
+    expect(AgentPolicySchema.safeParse({ ...OPENAI, handoff: true }).success).toBe(false);
+  });
+});
+
 describe('translatePolicyForEngineSwitch: claude-agent-sdk -> openai-agents', () => {
+  it('refuses handoff, which no other arm can express (ADR-0145 D5)', () => {
+    const translation = toOpenAi({ ...claude(['Bash']), handoff: true });
+    expect(translation.ok).toBe(false);
+    if (translation.ok) return;
+    expect(translation.refused).toEqual(['handoff']);
+  });
+
   it.each([
     ['Read', ['readFiles']],
     ['Glob', ['readFiles']],
@@ -134,6 +163,13 @@ describe('translatePolicyForEngineSwitch: claude-agent-sdk -> openai-agents', ()
     if (translation.ok) return;
     expect(translation.refused).toEqual([rule]);
     expect(translation.carried).toEqual([{ from: 'Bash', tools: ['shell'] }]);
+  });
+
+  it('refuses a requireApproval rule, which no other arm can express (ADR-0145)', () => {
+    const translation = toOpenAi({ ...claude(['Bash']), requireApproval: ['Write'] });
+    expect(translation.ok).toBe(false);
+    if (translation.ok) return;
+    expect(translation.refused).toEqual(['requireApproval: Write']);
   });
 
   it('keeps withheld switches the new body already names, in declared key order', () => {

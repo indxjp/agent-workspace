@@ -5,10 +5,8 @@ import { proxy } from '../proxy';
 import { POST as mintTokenRoute } from '../app/api/tokens/route';
 import { MIN_SESSION_SECRET_LENGTH } from '../server/auth/session';
 import { readBearerBrowserTokenAttempt } from '../server/rbac/browser-token';
-import { Principal as RbacPrincipal } from '../server/rbac/principal';
-import { configureRbacRuntime } from '../server/rbac/runtime';
+import { Principal } from '../server/rbac/principal';
 import { installRbacHarness } from '../server/rbac/testing';
-import { clearTokensRuntime, configureTokensRuntime } from '../server/tokens/runtime';
 import {
   interruptRun,
   listRuns,
@@ -17,9 +15,15 @@ import {
   startRun,
   streamRunEvents,
 } from '../server/runs/api';
-import { installRunApi, resetRunApi, type Principal } from '../server/runs/environment';
-import { InMemoryRunStore } from '../server/runs/store';
+import type { RunPrincipal } from '../server/runs/environment';
+import { InMemoryRunStore } from '../server/runs/memory-store';
 import { asRecord, asString, loadVectors } from '../../../tests/formal/vectors';
+import { clearApplicationContext } from '../server/application-context';
+import {
+  installTestDomains,
+  installTestRunApi,
+  resetTestRunApi,
+} from '../server/application-context-fixtures';
 
 const vectors = loadVectors('adversarial-runs-access', 'access.json');
 
@@ -36,9 +40,9 @@ const OWNER_A = '99999999-9999-4999-8999-999999999999';
 const OTHER_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
 const principal = (
-  role: Principal['role'] = 'owner',
-  scope: Principal['scope'] = null,
-): Principal => ({
+  role: RunPrincipal['role'] = 'owner',
+  scope: RunPrincipal['scope'] = null,
+): RunPrincipal => ({
   principalId: OWNER_A,
   ownerPrincipalId: OWNER_A,
   userId: OWNER_A,
@@ -60,7 +64,7 @@ async function problemCode(response: Response): Promise<unknown> {
 }
 
 afterEach(() => {
-  resetRunApi();
+  resetTestRunApi();
   vi.restoreAllMocks();
 });
 
@@ -73,9 +77,9 @@ describe('adversarial-runs-access: real run handlers', () => {
     const condition = asString(scenario['condition'], 'condition');
     const scopeName = asString(scenario['scope'], 'scope');
     const roleName = asString(scenario['role'], 'role');
-    const role: Principal['role'] =
+    const role: RunPrincipal['role'] =
       roleName === 'builder' ? 'builder' : roleName === 'viewer' ? 'viewer' : 'owner';
-    const scope: Principal['scope'] =
+    const scope: RunPrincipal['scope'] =
       scopeName === 'run'
         ? { kind: 'run', id: RUN_A }
         : scopeName === 'session'
@@ -100,7 +104,7 @@ describe('adversarial-runs-access: real run handlers', () => {
       ownerPrincipalId: condition === 'other-owner' ? OTHER_A : OWNER_A,
     });
     const list = vi.spyOn(store, 'listRuns');
-    installRunApi({
+    installTestRunApi({
       authenticate: () => Promise.resolve(actor),
       findAgent: (_principal, agentId) =>
         Promise.resolve(
@@ -206,7 +210,7 @@ describe('adversarial-runs-access: real run handlers', () => {
     const before = await store.get(RUN_B);
     const revoke = vi.fn(() => Promise.resolve({ revoked: 1, outcome: 'revoked' as const }));
     const interrupt = vi.fn(() => Promise.resolve());
-    installRunApi({
+    installTestRunApi({
       authenticate: () => Promise.resolve(principal()),
       findAgent: () => Promise.resolve(null),
       openSession: () => Promise.resolve(null),
@@ -248,7 +252,7 @@ describe('adversarial-runs-access: real run handlers', () => {
   it('cannot start through a foreign agent or continue a foreign session', async () => {
     const store = new InMemoryRunStore();
     const launch = vi.fn();
-    installRunApi({
+    installTestRunApi({
       authenticate: () => Promise.resolve(principal()),
       findAgent: (_actor, id) =>
         Promise.resolve(
@@ -292,7 +296,7 @@ describe('adversarial-runs-access: real run handlers', () => {
     });
     const get = store.get.bind(store);
     vi.spyOn(store, 'get').mockImplementation((id) => get(id.toLowerCase()));
-    installRunApi({
+    installTestRunApi({
       authenticate: () => Promise.resolve(principal()),
       findAgent: () => Promise.resolve(null),
       openSession: () => Promise.resolve(null),
@@ -327,7 +331,7 @@ describe('adversarial-runs-access: real run handlers', () => {
         sessionId: SESSION_A,
         ownerPrincipalId: OTHER_A,
       });
-      installRunApi({
+      installTestRunApi({
         authenticate: () => Promise.resolve(principal(role)),
         findAgent: () => Promise.resolve(null),
         openSession: () => Promise.resolve(null),
@@ -375,7 +379,7 @@ describe('adversarial-runs-access: real run handlers', () => {
     let actor = principal('owner', { kind: 'run', id: RUN_A });
     const revoke = vi.fn(() => Promise.resolve({ revoked: 1, outcome: 'revoked' as const }));
     const interrupt = vi.fn(() => Promise.resolve());
-    installRunApi({
+    installTestRunApi({
       authenticate: () => Promise.resolve(actor),
       findAgent: () => Promise.resolve({ id: AGENT_A, workspaceId: A, engine: 'claude-agent-sdk' }),
       openSession: () => Promise.resolve({ id: SESSION_A, agentId: AGENT_A, engine: null }),
@@ -416,7 +420,7 @@ describe('adversarial-runs-access: real run handlers', () => {
 
   it('refuses browser-token minting through the real token route', async () => {
     const harness = installRbacHarness([]);
-    const minter = RbacPrincipal.fromDirectoryRecord({
+    const minter = Principal.fromDirectoryRecord({
       principalId: OWNER_A,
       kind: 'membership',
       workspaceId: A,
@@ -426,10 +430,12 @@ describe('adversarial-runs-access: real run handlers', () => {
       apiKeyId: null,
       actsForPrincipalId: null,
     });
-    const browser = RbacPrincipal.fromBrowserToken(minter, { kind: 'run', id: RUN_A });
-    configureRbacRuntime({
-      directory: harness.directory,
-      identify: () => Promise.resolve(browser),
+    const browser = Principal.fromBrowserToken(minter, { kind: 'run', id: RUN_A });
+    installTestDomains({
+      rbac: {
+        directory: harness.directory,
+        identify: () => Promise.resolve(browser),
+      },
     });
     const issue = vi.fn(() =>
       Promise.resolve({
@@ -437,9 +443,14 @@ describe('adversarial-runs-access: real run handlers', () => {
         expiresAt: new Date(),
       }),
     );
-    configureTokensRuntime({
-      findTarget: () => Promise.resolve({ kind: 'found', ownerPrincipalId: OWNER_A }),
-      issue,
+    installTestDomains({
+      tokens: {
+        kind: 'serving',
+        runtime: {
+          findTarget: () => Promise.resolve({ kind: 'found', ownerPrincipalId: OWNER_A }),
+          issue,
+        },
+      },
     });
     try {
       const response = await mintTokenRoute(
@@ -449,7 +460,7 @@ describe('adversarial-runs-access: real run handlers', () => {
       expect(issue).not.toHaveBeenCalled();
     } finally {
       harness.teardown();
-      clearTokensRuntime();
+      clearApplicationContext();
     }
   });
 });

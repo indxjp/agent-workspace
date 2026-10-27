@@ -14,6 +14,14 @@ The support agent `assistant`, with its `refund-policy` skill, runs on a deploym
 key and promoted to `production`, so your website talks to that deployment instead of your laptop.
 You know where the deployment's secrets live and how to back them up.
 
+```mermaid
+flowchart TD
+  L["Your laptop: aw dev"] --> P["aw push --yes"]
+  P --> W["Your deployment: a new version in the workspace"]
+  W --> R["aw promote --yes"]
+  R --> X["production: your website talks to this version"]
+```
+
 ## The map
 
 `aw dev` runs the project on your laptop. To go to production you stand up a deployment, then push
@@ -101,6 +109,6 @@ flowchart TD
   proxy exists as a package and image but no driver uses it yet
   ([Which runtime drivers are real today](/building/self-hosting#which-runtime-drivers-are-real-today)).
 
-<Card title="Chapter 6: Run it for your team" icon="arrow-right" href="/path/operate">
+<Card title="Next: Chapter 6, Run it for your team" icon="arrow-right" href="/path/operate">
   Give teammates roles, separate environments into workspaces, share agents and extend the platform.
 </Card>

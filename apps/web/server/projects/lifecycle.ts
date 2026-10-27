@@ -26,19 +26,19 @@
  *      successful transition produces an audit event" checkable by counting rows: archiving twice
  *      leaves exactly one `project-archived`.
  */
-import type { ProjectRecord, ProjectRepository } from '@agent-workspace/core/db';
-import { isProjectArchived } from '@agent-workspace/core/db';
 
+import { log } from '../telemetry/logger';
 import { InfrastructureError } from '../errors';
 import { errorResponse } from '../http/error-response';
 import { isUuid, problem, requireProjectAccess, withProjects, type ProjectContext } from './http';
 import { toProjectResource } from './resource';
+import { isProjectArchived, type ProjectRecord, type ProjectRows } from './store';
 
 /** One lifecycle transition: the repository method that performs it, and what it is called. */
 interface ProjectTransition {
   readonly action: 'project-archived' | 'project-restored';
   /** `null` when `id` names no project in the caller's workspace. */
-  apply(projects: ProjectRepository, id: string): Promise<ProjectRecord | null>;
+  apply(projects: ProjectRows, id: string): Promise<ProjectRecord | null>;
   /** The `operation` an audit-write failure is reported under. */
   readonly operation: string;
 }
@@ -124,14 +124,13 @@ async function recordTransition(
       subjectLabel: project.name,
     });
   } catch (error) {
-    console.error(
-      `[projects] ${transition.action} audit write failed`,
-      new InfrastructureError({
+    log.error(`[projects] ${transition.action} audit write failed`, {
+      error: new InfrastructureError({
         component: 'projects',
         operation: transition.operation,
         cause: error,
       }),
-    );
+    });
   }
 }
 

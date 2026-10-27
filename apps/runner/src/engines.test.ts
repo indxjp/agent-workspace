@@ -17,18 +17,18 @@ import path from 'node:path';
 
 import { describe, expect, it, afterEach } from 'vitest';
 
-import { RunRequest } from '@agent-workspace/core';
+import { RunRequest } from '@agent-workspace/run-protocol';
 
 import {
-  CLAUDE_AGENT_SDK_ENGINE_ADAPTER,
+  createClaudeAgentSdkEngine,
   CLAUDE_AGENT_SDK_ENGINE_ID,
-} from '@agent-workspace/engine-claude-agent-sdk';
+} from '@agent-workspace/engine-claude-agent-sdk/testing';
 import {
-  OPENAI_AGENTS_ENGINE_ADAPTER,
+  createOpenAiAgentsEngine,
   OPENAI_AGENTS_ENGINE_ID,
-} from '@agent-workspace/engine-openai-agents';
-import { MASTRA_ENGINE_ADAPTER, MASTRA_ENGINE_ID } from '@agent-workspace/engine-mastra';
-import { PI_ENGINE_ADAPTER, PI_ENGINE_ID } from '@agent-workspace/engine-pi';
+} from '@agent-workspace/engine-openai-agents/testing';
+import { createMastraEngine, MASTRA_ENGINE_ID } from '@agent-workspace/engine-mastra/testing';
+import { createPiEngine, PI_ENGINE_ID } from '@agent-workspace/engine-pi/testing';
 import { createScriptedEngine, SCRIPTED_ENGINE_ID } from '@agent-workspace/engine/testing';
 
 import {
@@ -39,6 +39,13 @@ import {
   resetEngineModules,
   toEngineRunRequest,
 } from './engines.js';
+import { withoutSkills } from './resources.js';
+
+// Each adapter package exports a factory, not a built adapter (W3-8): build one here.
+const CLAUDE_AGENT_SDK_ENGINE_ADAPTER = createClaudeAgentSdkEngine();
+const MASTRA_ENGINE_ADAPTER = createMastraEngine();
+const OPENAI_AGENTS_ENGINE_ADAPTER = createOpenAiAgentsEngine();
+const PI_ENGINE_ADAPTER = createPiEngine();
 
 afterEach(() => {
   resetEngineModules();
@@ -70,17 +77,29 @@ const RUN_REQUEST = {
   env: { PATH: '/usr/bin' },
   resources: {
     files: [
-      { kind: 'file' as const, path: 'a.md', contentBase64: 'YQ==', access: 'read' as const },
+      {
+        kind: 'file' as const,
+        path: 'a.md',
+        access: 'read' as const,
+        size: 1,
+        sha256: 'ab'.repeat(32),
+      },
     ],
     skills: [{ name: 'support', files: [{ path: 'SKILL.md', contentBase64: 'YQ==' }] }],
   },
+};
+
+/** The same run as it arrives on the wire: skills are references, resolved later from the inbox. */
+const WIRE_REQUEST = {
+  ...RUN_REQUEST,
+  resources: { files: RUN_REQUEST.resources.files, skills: [] },
 };
 
 describe('the real registry', () => {
   it('loads the Claude adapter and reports it installed', async () => {
     const lookup = await loadEngine(CLAUDE_AGENT_SDK_ENGINE_ID);
     expect(lookup.ok).toBe(true);
-    expect(lookup.ok ? lookup.engine : null).toBe(CLAUDE_AGENT_SDK_ENGINE_ADAPTER);
+    expect(lookup.ok ? lookup.engine.version : null).toBe(CLAUDE_AGENT_SDK_ENGINE_ADAPTER.version);
 
     const installed = await installedEngines();
     expect(installed.map((engine) => engine.id)).toEqual([
@@ -96,21 +115,21 @@ describe('the real registry', () => {
   it('loads the OpenAI Agents adapter from its own row (ENG-09, #308)', async () => {
     const lookup = await loadEngine(OPENAI_AGENTS_ENGINE_ID);
     expect(lookup.ok).toBe(true);
-    expect(lookup.ok ? lookup.engine : null).toBe(OPENAI_AGENTS_ENGINE_ADAPTER);
+    expect(lookup.ok ? lookup.engine.version : null).toBe(OPENAI_AGENTS_ENGINE_ADAPTER.version);
     expect(ADAPTER_ENGINE_IDS).toEqual(['claude-agent-sdk', 'mastra', 'openai-agents', 'pi']);
   });
 
   it('loads the pi adapter from its own row (ENG-08, #307)', async () => {
     const lookup = await loadEngine(PI_ENGINE_ID);
     expect(lookup.ok).toBe(true);
-    expect(lookup.ok ? lookup.engine : null).toBe(PI_ENGINE_ADAPTER);
+    expect(lookup.ok ? lookup.engine.version : null).toBe(PI_ENGINE_ADAPTER.version);
     expect(lookup.ok ? lookup.engine.protectedConfigDirectory : null).toBe('.pi');
   });
 
   it('loads the Mastra adapter from its own row (ENG-10, #309)', async () => {
     const lookup = await loadEngine(MASTRA_ENGINE_ID);
     expect(lookup.ok).toBe(true);
-    expect(lookup.ok ? lookup.engine : null).toBe(MASTRA_ENGINE_ADAPTER);
+    expect(lookup.ok ? lookup.engine.version : null).toBe(MASTRA_ENGINE_ADAPTER.version);
     expect(lookup.ok ? lookup.engine.protectedConfigDirectory : null).toBe('.mastra');
   });
 
@@ -181,7 +200,7 @@ describe('a module that loads but is not the engine it claims to be', () => {
     });
     const lookup = await loadEngine(CLAUDE_AGENT_SDK_ENGINE_ID);
     expect(lookup.ok).toBe(false);
-    expect(lookup.ok ? '' : lookup.reason).toContain('is not an AgentEngine');
+    expect(lookup.ok ? '' : lookup.reason).toContain('does not build an AgentEngine');
   });
 
   it('refuses an adapter whose own id is not the one it was registered under', async () => {
@@ -190,7 +209,7 @@ describe('a module that loads but is not the engine it claims to be', () => {
     // for one engine.
     configureEngineModulesForTests({
       [CLAUDE_AGENT_SDK_ENGINE_ID]: () =>
-        Promise.resolve({ CLAUDE_AGENT_SDK_ENGINE_ADAPTER: createScriptedEngine() }),
+        Promise.resolve({ createClaudeAgentSdkEngine: () => createScriptedEngine() }),
     });
     const lookup = await loadEngine(CLAUDE_AGENT_SDK_ENGINE_ID);
     expect(lookup.ok).toBe(false);
@@ -226,7 +245,9 @@ describe('toEngineRunRequest', () => {
       },
     ];
     const request = toEngineRunRequest(
-      RunRequest.parse({ ...RUN_REQUEST, portable: { ...RUN_REQUEST.portable, subagents } }),
+      withoutSkills(
+        RunRequest.parse({ ...WIRE_REQUEST, portable: { ...RUN_REQUEST.portable, subagents } }),
+      ),
     );
     expect(request.portable.subagents).toEqual(subagents);
     expect(toEngineRunRequest(RUN_REQUEST).portable.subagents).toBeUndefined();
@@ -250,6 +271,12 @@ describe('toEngineRunRequest', () => {
         },
       }).session,
     ).toEqual({ mode: 'fork', engineSessionId: 'c101d922-3c4b-4a12-9b1e-0a1b2c3d4e5f' });
+  });
+
+  it('forwards an outputSchema when the body has one, and carries no key when it does not', () => {
+    const outputSchema = { type: 'object', properties: { total: { type: 'number' } } };
+    expect(toEngineRunRequest({ ...RUN_REQUEST, outputSchema }).outputSchema).toEqual(outputSchema);
+    expect('outputSchema' in toEngineRunRequest(RUN_REQUEST)).toBe(false);
   });
 
   it('carries a gateway connection when the body has one and null when it does not', () => {
@@ -276,18 +303,20 @@ describe('toEngineRunRequest', () => {
       headers: { authorization: 'Bearer run-token' },
     };
     const request = toEngineRunRequest(
-      RunRequest.parse({
-        ...RUN_REQUEST,
-        engine,
-        portable: {
-          ...RUN_REQUEST.portable,
-          model: 'claude-sonnet-4-5',
-          mcpServers: { [key]: entry },
-        },
-        policy,
-        gateway: { baseUrl: 'http://gateway:4000', token: 'run-token', protocol },
-        resources: { files: [], skills: [] },
-      }),
+      withoutSkills(
+        RunRequest.parse({
+          ...RUN_REQUEST,
+          engine,
+          portable: {
+            ...RUN_REQUEST.portable,
+            model: 'claude-sonnet-4-5',
+            mcpServers: { [key]: entry },
+          },
+          policy,
+          gateway: { baseUrl: 'http://gateway:4000', token: 'run-token', protocol },
+          resources: { files: [], skills: [] },
+        }),
+      ),
     );
     expect(request.portable.mcpServers).toEqual({ [key]: entry });
     const lookup = await loadEngine(engine);

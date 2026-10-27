@@ -1,11 +1,12 @@
+import { log as webLogger } from '../telemetry/logger';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { GET } from '../../app/api/cron/retention/route';
+import { clearApplicationContext } from '../application-context';
+import { installTestDomains } from '../application-context-fixtures';
+import { InMemoryTranscriptStore } from './memory-store';
 import {
-  getRetentionCronPass,
   handleRetentionCron,
-  installRetentionCronPass,
-  resetRetentionCronPass,
   type RetentionCronPass,
   wireSessionRetention,
 } from './retention-cron';
@@ -22,10 +23,11 @@ const PURGED = {
   transcripts: 2,
   stateEntries: 3,
   stateBlobs: 1,
+  attachments: 0,
 } as const;
 
 afterEach(() => {
-  resetRetentionCronPass();
+  clearApplicationContext();
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
@@ -95,7 +97,7 @@ describe('GET /api/cron/retention', () => {
   });
 
   it('answers 500 without the failure text when the pass throws', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
 
     const response = await handleRetentionCron(request(`Bearer ${SECRET}`), {
       env: { CRON_SECRET: SECRET },
@@ -110,8 +112,12 @@ describe('GET /api/cron/retention', () => {
 
   it('is served by the route module from process.env and the installed pass', async () => {
     const pass = vi.fn<RetentionCronPass>(() => Promise.resolve([PURGED]));
-    installRetentionCronPass(pass);
-    expect(getRetentionCronPass()).toBe(pass);
+    const sessions = {
+      authenticate: () => Promise.resolve(null),
+      canAccessSession: () => Promise.resolve(false),
+      store: new InMemoryTranscriptStore(),
+    };
+    installTestDomains({ sessions: { ...sessions, retention: { kind: 'cron', pass } } });
 
     vi.stubEnv('CRON_SECRET', '');
     expect((await GET(request(`Bearer ${SECRET}`))).status).toBe(404);
@@ -120,52 +126,40 @@ describe('GET /api/cron/retention', () => {
     expect((await GET(request())).status).toBe(401);
     expect((await GET(request(`Bearer ${SECRET}`))).status).toBe(200);
     expect(pass).toHaveBeenCalledOnce();
+
+    // The interval driver, or no context at all, leaves the route nothing to run.
+    installTestDomains({ sessions: { ...sessions, retention: { kind: 'interval' } } });
+    expect((await GET(request(`Bearer ${SECRET}`))).status).toBe(503);
+    clearApplicationContext();
+    expect((await GET(request(`Bearer ${SECRET}`))).status).toBe(503);
+    expect(pass).toHaveBeenCalledOnce();
   });
 });
 
 describe('wireSessionRetention', () => {
-  it('installs the cron pass and starts no scheduler while CRON_SECRET is set', () => {
+  it('hands the cron route the pass and starts no scheduler while CRON_SECRET is set', () => {
     const runPass = vi.fn<RetentionCronPass>(() => Promise.resolve([]));
     const startScheduler = vi.fn();
-    const installPass = vi.fn();
 
-    const driver = wireSessionRetention({
-      env: { CRON_SECRET: SECRET },
-      runPass,
-      startScheduler,
-      installPass,
-    });
+    const driver = wireSessionRetention({ env: { CRON_SECRET: SECRET }, runPass, startScheduler });
 
-    expect(driver).toBe('cron');
-    expect(installPass).toHaveBeenCalledExactlyOnceWith(runPass);
+    expect(driver).toEqual({ kind: 'cron', pass: runPass });
     expect(startScheduler).not.toHaveBeenCalled();
   });
 
-  it('installs the pass the cron route reads by default', () => {
-    const runPass = vi.fn<RetentionCronPass>(() => Promise.resolve([]));
-
-    wireSessionRetention({ env: { CRON_SECRET: SECRET }, runPass, startScheduler: vi.fn() });
-
-    expect(getRetentionCronPass()).toBe(runPass);
-  });
-
   it.each([undefined, ''])(
-    'starts the scheduler and installs nothing while CRON_SECRET is %j',
+    'starts the scheduler and hands the cron route nothing while CRON_SECRET is %j',
     (value) => {
       const startScheduler = vi.fn();
-      const installPass = vi.fn();
 
       const driver = wireSessionRetention({
         env: value === undefined ? {} : { CRON_SECRET: value },
         runPass: vi.fn<RetentionCronPass>(() => Promise.resolve([])),
         startScheduler,
-        installPass,
       });
 
-      expect(driver).toBe('interval');
+      expect(driver).toEqual({ kind: 'interval' });
       expect(startScheduler).toHaveBeenCalledOnce();
-      expect(installPass).not.toHaveBeenCalled();
-      expect(getRetentionCronPass()).toBeNull();
     },
   );
 });

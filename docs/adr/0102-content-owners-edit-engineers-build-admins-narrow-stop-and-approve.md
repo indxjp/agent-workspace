@@ -47,6 +47,7 @@ Accepted now:
   - Slice-2 keys: `permissions`, `limits.maxTurns`, `limits.maxBudgetUsd`, `engines`, `models`
     and `tools`. Each of `maxCostPerDayUsd`, `network`, `approval` and a per-environment `policy`
     is refused at its path until it is built.
+  - Amendment: `maxCostPerDayUsd` is built (#1851 slice 3, 2026-10-26).
   - `policyWidenings(effective, ceiling)` and `meetPolicyCeiling(effective, ceiling)` are pure
     functions in contracts. The server's write paths and its compose step use them and no copy.
     The dry run and the save answer identically (C8), and a run start or preflight the ceiling

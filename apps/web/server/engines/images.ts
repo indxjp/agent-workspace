@@ -28,13 +28,10 @@
  */
 import { ENGINE_IDS } from '@indx-workspace/contracts/engines';
 import { readDeploymentPosture } from '@agent-workspace/core/posture';
-import { readEngineImageMap, type EngineImageMap } from '@agent-workspace/runtime';
+import { readEngineImageMap, type EngineImageMap } from '@agent-workspace/runtime/engine-images';
+import { defineSlot } from '../runtime-slot';
 
-interface GlobalEngineImages {
-  __agentWorkspaceEngineImages__?: EngineImageMap;
-}
-
-const globalImages = globalThis as typeof globalThis & GlobalEngineImages;
+const configuredImages = defineSlot<EngineImageMap>('__agentWorkspaceEngineImages__');
 
 /**
  * The image a development control plane assumes for `claude-agent-sdk` when nothing is configured.
@@ -89,7 +86,7 @@ const CONFIGURED_ENGINE_IMAGES: EngineImageMap = readConfiguredEngineImages(proc
  * handler signature.
  */
 export function configuredEngineImages(): EngineImageMap {
-  return globalImages.__agentWorkspaceEngineImages__ ?? CONFIGURED_ENGINE_IMAGES;
+  return configuredImages.current() ?? CONFIGURED_ENGINE_IMAGES;
 }
 
 /**
@@ -119,10 +116,10 @@ export function engineNotInstalledMessage(engineId: string): string {
 
 /** Install a map, for tests only. Call {@link clearEngineImagesConfiguredForTests} afterwards. */
 export function configureEngineImagesForTests(images: EngineImageMap): void {
-  globalImages.__agentWorkspaceEngineImages__ = images;
+  configuredImages.set(images);
 }
 
 /** Undo every {@link configureEngineImagesForTests}. Call it in `afterEach`. */
 export function clearEngineImagesConfiguredForTests(): void {
-  delete globalImages.__agentWorkspaceEngineImages__;
+  configuredImages.clear();
 }

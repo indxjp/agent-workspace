@@ -15,20 +15,20 @@ theorem prompt_source_cases :
     promptSource false false "" = .missing ∧
     promptSource true true "file" = .conflict ∧
     promptSource false true "-" = .stdin ∧
-    promptSource false true "file" = .file := by decide
+    promptSource false true "file" = .file := by decide +kernel
 
 /-- A failed path read is a usage failure; stdin does not attempt that path read. -/
 @[aw_spec (tier := T0) (ts := "packages/aw/src/commands/runs.ts#promptOf")]
 theorem unreadable_prompt_file_is_usage :
     promptFileFailure .file false = true ∧
-    promptFileFailure .stdin false = false := by decide
+    promptFileFailure .stdin false = false := by decide +kernel
 
 /-- The model flag splits at the first colon and requires both sides. -/
 @[aw_spec (tier := T0) (ts := "packages/aw/src/commands/runs.ts#modelOverride")]
 theorem model_override_cases :
     modelOverride "conn:model:variant" = some ("conn", "model:variant") ∧
     modelOverride "conn:" = none ∧ modelOverride ":model" = none ∧
-    modelOverride "missing" = none := by decide
+    modelOverride "missing" = none := by decide +kernel
 
 /-- Raw stream output wins over structured flags; JSONL wins for record output. -/
 @[aw_spec (tier := T0) (ts := "packages/aw/src/stream.ts#renderFrame")
@@ -37,7 +37,7 @@ theorem output_mode_precedence :
     streamOutputMode true true true = .raw ∧
     streamOutputMode false true false = .jsonl ∧
     recordOutputMode true true = .jsonl ∧
-    recordOutputMode true false = .json := by decide
+    recordOutputMode true false = .json := by decide +kernel
 
 /-- The public exit-code table and its failure priority are exact. -/
 @[aw_spec (tier := T0) (ts := "packages/aw/src/output.ts#EXIT_CODE")
@@ -48,7 +48,7 @@ theorem exit_code_table :
     exitCode false (some .usage) = 2 ∧
     exitCode false (some .contractViolation) = 3 ∧
     exitCode false (some .transport) = 4 ∧
-    exitCode true (some .contractViolation) = 130 := by decide
+    exitCode true (some .contractViolation) = 130 := by decide +kernel
 
 /-- API details follow the headline, while interruption suppresses every other failure line. -/
 @[aw_spec (tier := T0) (ts := "packages/aw/src/output.ts#reportFailure")]
@@ -56,6 +56,6 @@ theorem error_stderr_order :
     reportLines false .apiProblem "conflict" "try later" ["field: bad"] =
       ["error: conflict: try later", "  field: bad"] ∧
     reportLines true .apiProblem "conflict" "try later" ["field: bad"] =
-      ["interrupted"] := by decide
+      ["interrupted"] := by decide +kernel
 
 end AgentWorkspace.Theorems.WellFormed.CliRuns

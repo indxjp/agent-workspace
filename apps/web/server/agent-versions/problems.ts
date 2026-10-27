@@ -3,15 +3,19 @@
  * (`pointers.ts`, with promote and rollback since #615) and the create-from-version
  * (`create-from-version.ts`) answer these the same way, so they are stated once.
  */
-import type { ResolveDefinitionOutcome, ResolvedReferences } from '@agent-workspace/core/db';
+import type {
+  ResolveDefinitionOutcome,
+  ResolvedReferences,
+  WorkspaceAgentVersionStore,
+} from './store';
+import { BUILDER_REFUSAL_CODES } from '@indx-workspace/contracts/builder';
 import { AW_DEV_TOOLS_CONNECTOR } from '@indx-workspace/contracts/tool-connectors';
 import {
   AGENT_VERSION_PROBLEM_CODES,
   type AgentVersionProblemCode,
 } from '@indx-workspace/contracts/agent-versions';
 
-import { problem, type ApiResult } from '../agents/handlers';
-import type { WorkspaceAgentVersionStore } from './store';
+import { problem, type ApiResult } from '../http/result';
 
 /**
  * A problem whose status is read from the contract's code table, so no refusal here restates a
@@ -39,6 +43,14 @@ export function resolutionRefusal(
       'agent_definition_references_missing',
       'The definition names resources this workspace does not have.',
       resolution.missing.map((reference) => `${reference.kind}:${reference.name}`),
+    );
+  }
+  // A skill being deleted is a conflict with its state, as for `PUT /api/agents/:id/skills`.
+  if (resolution.deleting !== undefined && resolution.deleting.length > 0) {
+    return versionProblem(
+      'skill_deleting',
+      'An assigned skill is being deleted.',
+      resolution.deleting.map((reference) => reference.name),
     );
   }
   return problem(
@@ -176,6 +188,18 @@ export function nothingToRollBack(environment: string): ApiResult {
   );
 }
 
+/**
+ * `409 pointer_moved` (#1847): a move's `expectedVersion` is not what `environment` points at now.
+ * `details` carries only this agent's current version number, `none` when it points at none.
+ */
+export function pointerMoved(environment: string, current: number | null): ApiResult {
+  return versionProblem(
+    'pointer_moved',
+    'The environment no longer points at the version the move expected.',
+    [`environment:${environment}`, `current:${current === null ? 'none' : String(current)}`],
+  );
+}
+
 /** `409 surface_name_taken` (C9), naming the surface another pointed version already serves. */
 export function surfaceNameTaken(name: string): ApiResult {
   return versionProblem(
@@ -197,6 +221,20 @@ export function agentNameConflict(name: string): ApiResult {
   );
 }
 
+/** The agent named as the creator is gone, so the lineage foreign key refused the new agent. */
+export function creatorAgentGone(): ApiResult {
+  return versionProblem(
+    'agent_not_found',
+    'The agent that is creating this agent is not one of this workspace.',
+  );
+}
+
+/** The workspace used today's creation quota; the Builder's own refusal table names the status and fix. */
+export function quotaExceeded(): ApiResult {
+  const { status, fix } = BUILDER_REFUSAL_CODES.quota_exceeded;
+  return problem(status, 'quota_exceeded', fix);
+}
+
 /**
  * Run `write` with the pipeline's references; on `reference-gone`, re-resolve once and either
  * answer the resolution's refusal or run `write` once more with today's ids. A second
@@ -211,7 +249,7 @@ export async function withReferenceRetry<Outcome extends { readonly kind: string
   if (first.kind !== 'reference-gone') return first;
   const again = await reresolve();
   if (again.kind === 'unresolved') return { kind: 'refused', result: resolutionRefusal(again) };
-  const second = await write(again.references);
+  const second = await write({ ...again.references, storageGrants: references.storageGrants });
   if (second.kind === 'reference-gone') {
     throw new Error(
       'A definition reference was deleted twice between resolving it and writing it; the write ' +

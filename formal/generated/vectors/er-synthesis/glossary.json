@@ -136,9 +136,23 @@
    ["AgentWorkspace.Theorems.Meta.ErSynthesis.glossary_names_are_unique",
     "AgentWorkspace.Theorems.Meta.ErSynthesis.every_alias_names_one_term",
     "AgentWorkspace.Theorems.Meta.ErSynthesis.every_table_is_home_to_one_term"],
+   "input": {"term": "skill revision"},
+   "id": "term/skill revision",
+   "expected": {"tables": ["skill_revisions"], "aliases": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Meta.ErSynthesis.glossary_names_are_unique",
+    "AgentWorkspace.Theorems.Meta.ErSynthesis.every_alias_names_one_term",
+    "AgentWorkspace.Theorems.Meta.ErSynthesis.every_table_is_home_to_one_term"],
    "input": {"term": "file"},
    "id": "term/file",
    "expected": {"tables": ["files"], "aliases": ["folder"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Meta.ErSynthesis.glossary_names_are_unique",
+    "AgentWorkspace.Theorems.Meta.ErSynthesis.every_alias_names_one_term",
+    "AgentWorkspace.Theorems.Meta.ErSynthesis.every_table_is_home_to_one_term"],
+   "input": {"term": "file text"},
+   "id": "term/file text",
+   "expected": {"tables": ["file_texts"], "aliases": []}},
   {"witnesses":
    ["AgentWorkspace.Theorems.Meta.ErSynthesis.glossary_names_are_unique",
     "AgentWorkspace.Theorems.Meta.ErSynthesis.every_alias_names_one_term",
@@ -153,7 +167,7 @@
    "input": {"term": "assignment"},
    "id": "term/assignment",
    "expected":
-   {"tables": ["agent_files", "agent_skills", "agent_mcp_servers"],
+   {"tables": ["agent_files", "agent_skills", "agent_storage_grants", "agent_mcp_servers"],
     "aliases": ["resources", "capabilities", "file grant", "read-only grant"]}},
   {"witnesses":
    ["AgentWorkspace.Theorems.Meta.ErSynthesis.glossary_names_are_unique",
@@ -175,7 +189,7 @@
     "AgentWorkspace.Theorems.Meta.ErSynthesis.every_table_is_home_to_one_term"],
    "input": {"term": "agent version"},
    "id": "term/agent version",
-   "expected": {"tables": ["agent_versions"], "aliases": []}},
+   "expected": {"tables": ["agent_versions", "agent_version_storage_grants"], "aliases": []}},
   {"witnesses":
    ["AgentWorkspace.Theorems.Meta.ErSynthesis.glossary_names_are_unique",
     "AgentWorkspace.Theorems.Meta.ErSynthesis.every_alias_names_one_term",
@@ -276,6 +290,13 @@
    "input": {"term": "secret"},
    "id": "term/secret",
    "expected": {"tables": ["secrets"], "aliases": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Meta.ErSynthesis.glossary_names_are_unique",
+    "AgentWorkspace.Theorems.Meta.ErSynthesis.every_alias_names_one_term",
+    "AgentWorkspace.Theorems.Meta.ErSynthesis.every_table_is_home_to_one_term"],
+   "input": {"term": "storage connection"},
+   "id": "term/storage connection",
+   "expected": {"tables": ["storage_connections"], "aliases": []}},
   {"witnesses":
    ["AgentWorkspace.Theorems.Meta.ErSynthesis.glossary_names_are_unique",
     "AgentWorkspace.Theorems.Meta.ErSynthesis.every_alias_names_one_term",
@@ -418,6 +439,34 @@
    "input": {"term": "surface session key"},
    "id": "term/surface session key",
    "expected": {"tables": ["surface_session_keys"], "aliases": ["resumeKey"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Meta.ErSynthesis.glossary_names_are_unique",
+    "AgentWorkspace.Theorems.Meta.ErSynthesis.every_alias_names_one_term",
+    "AgentWorkspace.Theorems.Meta.ErSynthesis.every_table_is_home_to_one_term"],
+   "input": {"term": "trigger"},
+   "id": "term/trigger",
+   "expected": {"tables": ["triggers"], "aliases": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Meta.ErSynthesis.glossary_names_are_unique",
+    "AgentWorkspace.Theorems.Meta.ErSynthesis.every_alias_names_one_term",
+    "AgentWorkspace.Theorems.Meta.ErSynthesis.every_table_is_home_to_one_term"],
+   "input": {"term": "trigger delivery"},
+   "id": "term/trigger delivery",
+   "expected": {"tables": ["trigger_deliveries"], "aliases": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Meta.ErSynthesis.glossary_names_are_unique",
+    "AgentWorkspace.Theorems.Meta.ErSynthesis.every_alias_names_one_term",
+    "AgentWorkspace.Theorems.Meta.ErSynthesis.every_table_is_home_to_one_term"],
+   "input": {"term": "builder tool call"},
+   "id": "term/builder tool call",
+   "expected": {"tables": ["builder_tool_calls"], "aliases": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Meta.ErSynthesis.glossary_names_are_unique",
+    "AgentWorkspace.Theorems.Meta.ErSynthesis.every_alias_names_one_term",
+    "AgentWorkspace.Theorems.Meta.ErSynthesis.every_table_is_home_to_one_term"],
+   "input": {"term": "storage migration run"},
+   "id": "term/storage migration run",
+   "expected": {"tables": ["storage_migration_runs"], "aliases": []}},
   {"witnesses":
    ["AgentWorkspace.Theorems.Meta.ErSynthesis.glossary_names_are_unique",
     "AgentWorkspace.Theorems.Meta.ErSynthesis.every_alias_names_one_term",

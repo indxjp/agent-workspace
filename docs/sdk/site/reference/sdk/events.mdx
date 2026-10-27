@@ -19,9 +19,11 @@ first.
 - `Readonly<{ toolCallId: string; name: string; kind: "read" | "edit" | "delete" | "move" | "search" | "execute" | "fetch" | "mcp" | "other"; input: unknown; engine: "claude-agent-sdk" | "openai-agents" | "pi" | "mastra"; raw: unknown; frame: "agent.tool.call"; }>`
 - `Readonly<{ toolCallId: string; status: "completed" | "failed"; output: string; isError: boolean; engine: "claude-agent-sdk" | "openai-agents" | "pi" | "mastra"; raw: unknown; frame: "agent.tool.result"; }>`
 - `Readonly<{ inputTokens: number; outputTokens: number; cacheReadInputTokens: number | null; cacheCreationInputTokens: number | null; reasoningTokens: number | null; engine: "claude-agent-sdk" | "openai-agents" | "pi" | "mastra"; raw: unknown; frame: "agent.usage"; }>`
-- `Readonly<{ stopReason: "error" | "end_turn" | "max_turns" | "max_budget" | "refusal" | "cancelled"; turns: number | null; engineCostUsd: number | null; engine: "claude-agent-sdk" | "openai-agents" | "pi" | "mastra"; raw: unknown; frame: "agent.result"; }>`
+- `Readonly<{ stopReason: "error" | "end_turn" | "max_turns" | "max_budget" | "refusal" | "cancelled"; turns: number | null; engineCostUsd: number | null; engine: "claude-agent-sdk" | "openai-agents" | "pi" | "mastra"; raw: unknown; frame: "agent.result"; output?: Readonly<{ text: string; structured: unknown; }> | undefined; }>`
 - `Readonly<{ type: string; payload: unknown; engine: "claude-agent-sdk" | "openai-agents" | "pi" | "mastra"; raw: unknown; frame: "agent.native"; }>`
 - `Readonly<{ reason: string; engine: "claude-agent-sdk" | "openai-agents" | "pi" | "mastra"; raw: unknown; frame: "agent.malformed"; }>`
+- `Readonly<{ toolCallId: string; toolName: string; canonicalCall: string; engine: "claude-agent-sdk" | "openai-agents" | "pi" | "mastra"; raw: unknown; frame: "agent.approval.requested"; }>`
+- `Readonly<{ engine: "claude-agent-sdk" | "openai-agents" | "pi" | "mastra"; raw: unknown; frame: "agent.handoff"; reason?: string | undefined; }>`
 
 ## AgentMalformedFrame
 
@@ -74,6 +76,7 @@ first.
 | `engine` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
 | `raw` | `unknown` | Yes | The engine-native message, verbatim, capped by `capAgentFrameRaw`. Typed `unknown` deliberately: it is another vendor's shape and this contract makes no promise about it. |
 | `frame` | `"agent.result"` | Yes |  |
+| `output` | `undefined \| Readonly<{ text: string; structured: unknown; }>` | No | What the engine produced for its turn (ADR-0143), present when it returned a final answer. Authoritative only once the run is `completed`; `RunResource.output` is the record. |
 
 ## AgentSessionFrame
 
@@ -181,6 +184,9 @@ async readSseFrames(body: ReadableStream<Uint8Array>, signal?: AbortSignal): Asy
 One frame of a run's event stream, classified.
 
   * `run-status`   — the platform's durable lifecycle event; `id` is a resume cursor.
+  * `run-warning`  — a durable platform notice about the run (ADR-0146), such as
+                     `attachments_removed_shell`; `id` is a resume cursor. Not an agent frame,
+                     and not an outcome: show it and keep reading.
   * `runtime`      — a durable event the runtime produced; `id` is a resume cursor. Since ENG-03
                      (#302) `name` is one of `@indx-workspace/contracts`' `AGENT_FRAME_NAMES` and
                      `data` is that frame — one engine-neutral vocabulary, normalised by the
@@ -190,7 +196,7 @@ One frame of a run's event stream, classified.
   * `stream-reset` — what follows is not contiguous with what the client already has.
   * `done`         — the stream is over. It says nothing about whether the run succeeded.
 
-`at` on the two durable variants is when the control plane recorded the event, not when the
+`at` on the durable variants is when the control plane recorded the event, not when the
 engine produced it. It is absent when the server sent none (a server before the `at:` field).
 
 `data` is left `unknown` here and validated by the parser rather than by this classifier, so that
@@ -198,6 +204,7 @@ the frame's *kind* and the frame's *payload* fail separately: a payload that doe
 schema must not make the stream unreadable for a consumer that only wanted the resume cursor.
 
 - `{ readonly kind: "run-status"; readonly id: string | null; readonly at?: string; readonly data: RunStatusEventData; }`
+- `{ readonly kind: "run-warning"; readonly id: string | null; readonly at?: string; readonly data: RunWarningEventData; }`
 - `{ readonly kind: "runtime"; readonly id: string | null; readonly at?: string; readonly name: string; readonly data: unknown; }`
 - `{ readonly kind: "run-failed"; readonly data: RunFailedFrameData; }`
 - `{ readonly kind: "stream-reset"; readonly data: StreamResetFrameData; }`
@@ -227,7 +234,7 @@ One parsed SSE frame: the `event:` name, its `id:` when the server sent one, and
 
 The neutral event one frame carries, or `null` for the platform's own frames.
 
-`run-status`, `run-failed`, `stream-reset` and `done` are already typed on `RunEventFrame`
+`run-status`, `run-warning`, `run-failed`, `stream-reset` and `done` are already typed on `RunEventFrame`
 and are not agent events: they are the *platform* speaking about the run and the stream, not the
 engine speaking about the turn. Conflating the two is how a failed run gets rendered as a
 finished one, so they stay apart.

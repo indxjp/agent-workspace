@@ -5,6 +5,7 @@
  * not be able to hold that request open after the durable half of the interrupt — terminal status
  * and token revocation — has already been committed. See `./interrupt.ts`'s own header.
  */
+import { log as webLogger } from '../telemetry/logger';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { registerLiveRun, resetLiveRuns, signalLiveRun, signalRuntimeInterrupt } from './interrupt';
@@ -19,7 +20,7 @@ afterEach(() => {
 
 describe('signalRuntimeInterrupt', () => {
   it('gives up on a runtime that accepts the connection and never answers', async () => {
-    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     // Nothing settles this request but its deadline: a blackholed container, in one fixture.
     const attached: { signal?: AbortSignal | null } = {};
     const doFetch: typeof globalThis.fetch = (_input, init) =>
@@ -41,7 +42,7 @@ describe('signalRuntimeInterrupt', () => {
   });
 
   it('reports a runner that refuses the signal, so a 409 is not logged like a delivered one', async () => {
-    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     // §14.3: the runner answers `409 no_run_in_flight` when it is not holding the run — reachable
     // while the launcher has registered the run but has not yet posted it to the runtime.
     const doFetch: typeof globalThis.fetch = () =>

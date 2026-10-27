@@ -23,6 +23,16 @@ export {
   type InUseReferrerKind,
 } from './problem.js';
 export {
+  McpHttpServerConfigSchema,
+  McpServerConfigSchema,
+  McpServerRecordSchema,
+  McpSseServerConfigSchema,
+  McpStdioServerConfigSchema,
+  McpToolPolicySchema,
+  type McpServerRecord,
+  type McpToolPolicy,
+} from './mcp-server-config.js';
+export {
   CONTRACTS_MINIMUM_VERSION_HEADER,
   CONTRACTS_VERSION,
   CONTRACTS_VERSION_HEADER,

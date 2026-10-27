@@ -2,9 +2,9 @@
  * The main navigation — spec §44, in §44's order.
  *
  * §44 prints the navigation as a literal block and says "keep the navigation close to" it. The
- * table below is that block transcribed: two groups, thirteen entries, the order unchanged, the
+ * table below is that block transcribed: two groups, fourteen entries, the order unchanged, the
  * labels unchanged, the second group titled **Administration**. The mockups' shell
- * (`ui/assets/app.js`, the `NAV` constant) prints the same thirteen in the same order, which is
+ * (`ui/assets/app.js`, the `NAV` constant) prints the same fourteen in the same order, which is
  * the artefact the acceptance criterion compares against. Adding an entry here is a §38/§43
  * change and needs the spec changed first.
  *
@@ -35,6 +35,8 @@ interface NavItem {
    * never a fallback for "unknown".
    */
   readonly href: string | null;
+  /** Shown to workspace Owners and Admins only; everyone else does not see the entry. */
+  readonly managersOnly?: true;
 }
 
 export interface NavGroup {
@@ -60,6 +62,13 @@ export const NAVIGATION: readonly NavGroup[] = [
     label: 'Administration',
     items: [
       { id: 'models', label: 'Models', icon: 'models', href: '/admin/models' },
+      {
+        id: 'storage',
+        label: 'Storage',
+        icon: 'files',
+        href: '/admin/storage',
+        managersOnly: true,
+      },
       { id: 'users', label: 'Users', icon: 'users', href: '/admin/users' },
       { id: 'apikeys', label: 'API Keys', icon: 'keys', href: '/admin/api-keys' },
       { id: 'runtimes', label: 'Runtimes', icon: 'runtimes', href: '/admin/runtimes' },
@@ -68,6 +77,11 @@ export const NAVIGATION: readonly NavGroup[] = [
     ],
   },
 ];
+
+/** Whether this directory role sees the entries marked `managersOnly` (Owner and Admin). */
+export function managesWorkspace(role: unknown): boolean {
+  return role === 'owner' || role === 'admin';
+}
 
 /**
  * `usePathname()` is typed `string`, but a component can be rendered outside a router and a

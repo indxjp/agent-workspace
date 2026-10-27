@@ -23,12 +23,7 @@ import {
 } from '@indx-workspace/contracts/engines';
 
 import { registeredEngines } from './registry';
-
-/** A handler's answer before it becomes a `Response`, in `rbac/http.ts`'s shape. */
-export interface ApiResult {
-  readonly status: number;
-  readonly body: unknown;
-}
+import { problem, type ApiResult } from '../http/result';
 
 /**
  * The catalogue, in the registry's order.
@@ -39,17 +34,12 @@ export interface ApiResult {
 export function listEngines(): ApiResult {
   const parsed = EngineListResponseSchema.safeParse({ engines: registeredEngines() });
   if (!parsed.success) {
-    return {
-      status: ENGINE_PROBLEM_CODES.engine_catalogue_invalid,
-      body: {
-        error: {
-          code: 'engine_catalogue_invalid',
-          message:
-            'This deployment registers an engine the published engine contract cannot describe, ' +
-            'so its catalogue cannot be served. No partial catalogue is returned in its place.',
-        },
-      },
-    };
+    return problem(
+      ENGINE_PROBLEM_CODES.engine_catalogue_invalid,
+      'engine_catalogue_invalid',
+      'This deployment registers an engine the published engine contract cannot describe, ' +
+        'so its catalogue cannot be served. No partial catalogue is returned in its place.',
+    );
   }
   return { status: 200, body: parsed.data satisfies EngineListResponse };
 }

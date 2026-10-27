@@ -3,16 +3,14 @@
  * this task's globs (issue #117; see `run-ownership.ts`'s own header for why the call site is a
  * declared out-of-bounds touch rather than a file this task owns).
  */
+import { clearApplicationContext } from '../application-context';
+import { installTestDomains } from '../application-context-fixtures';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { isBuilderAgent } from '../builder/agent/is-builder-agent';
 import { ownershipOf, resolveAgentRunOwnership } from './run-ownership';
 import { createInMemoryAgentStoreProvider } from './memory-store';
-import {
-  clearAgentsRuntime,
-  configureAgentsRuntime,
-  type AgentsRuntime,
-  type WorkspaceResolution,
-} from './runtime';
+import { type AgentsRuntime, type WorkspaceResolution } from './runtime';
 
 const CREATE_INPUT = {
   name: 'Support',
@@ -40,7 +38,7 @@ const resolveWorkspace = (): Promise<WorkspaceResolution> =>
   Promise.resolve({ kind: 'workspace', workspaceId: WORKSPACE });
 
 afterEach(() => {
-  clearAgentsRuntime();
+  clearApplicationContext();
 });
 
 it('answers unknown when no agents runtime is configured', async () => {
@@ -60,10 +58,12 @@ describe('with an agents runtime configured', () => {
   /** Configures a fresh runtime (optionally with `agentGrants`) and creates one agent in it. */
   async function setUp(agentGrants?: AgentsRuntime['agentGrants']): Promise<string> {
     const agents = createInMemoryAgentStoreProvider();
-    configureAgentsRuntime({
-      agents,
-      resolveWorkspace,
-      ...(agentGrants === undefined ? {} : { agentGrants }),
+    installTestDomains({
+      agents: {
+        agents,
+        resolveWorkspace,
+        ...(agentGrants === undefined ? {} : { agentGrants }),
+      },
     });
     const outcome = await agents.forWorkspace(WORKSPACE).create(CREATE_INPUT, {
       principalId: CREATOR_PRINCIPAL,
@@ -178,6 +178,22 @@ describe('ownershipOf', () => {
   it('answers permitted for a grant and other without one', async () => {
     expect(await ownershipOf(principal, agent, grants(true))).toBe('permitted');
     expect(await ownershipOf(principal, agent, grants(false))).toBe('other');
+  });
+
+  it('answers permitted for a person on a built-in agent, with no grant, and other without a user', async () => {
+    const builtin = { ...agent, builtin: 'builder' as const };
+    expect(await ownershipOf(principal, builtin, grants(false))).toBe('permitted');
+    expect(await ownershipOf(principal, builtin, undefined)).toBe('permitted');
+    expect(await ownershipOf({ ...principal, userId: null }, builtin, grants(false))).toBe('other');
+    expect(await ownershipOf(principal, agent, grants(false))).toBe('other');
+  });
+
+  it('does not make a built-in other than the Builder runnable by every member', async () => {
+    // `BuiltinAgentKey` has one member today; a future key must be decided on, not inherited, so
+    // the rule follows `isBuilderAgent` and not "carries any built-in marker".
+    const future = { ...agent, builtin: 'future' as unknown as 'builder' };
+    expect(isBuilderAgent(future)).toBe(false);
+    expect(await ownershipOf(principal, future, grants(false))).toBe('other');
   });
 
   it('answers other when no grant store is wired or the caller has no user', async () => {

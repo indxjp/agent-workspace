@@ -1,3 +1,4 @@
+import { log as webLogger } from '../telemetry/logger';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createWebRuntimeRegistry, type TestableDriverRegistry } from './registry';
@@ -42,13 +43,15 @@ describe('renewing a lapsed Test Runtime pass (BH061-002)', () => {
   });
 
   it('answers false, and logs why, when the re-verification fails', async () => {
-    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     const { registry } = registryWith({
       hasPassed: () => true,
       test: () => Promise.reject(new Error('readiness timed out')),
     });
     expect(await registry.renew?.('docker', SCOPE)).toBe(false);
-    expect(log).toHaveBeenCalledWith(expect.stringContaining('readiness timed out'));
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('re-verifying docker'), {
+      error: new Error('readiness timed out'),
+    });
     log.mockRestore();
   });
 });

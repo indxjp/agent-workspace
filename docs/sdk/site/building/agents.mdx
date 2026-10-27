@@ -108,7 +108,7 @@ async function main(): Promise<void> {
   ].join('\n');
   const skill = await aw.skills.import({
     name: 'release-notes',
-    files: [{ path: 'SKILL.md', contentBase64: Buffer.from(skillMd, 'utf8').toString('base64') }],
+    files: [{ path: 'SKILL.md', body: skillMd }],
   });
   // A skill is addressed by name everywhere else on this site, but resource *assignment* is by
   // id — see "Assigning resources" below.

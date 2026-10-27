@@ -35,6 +35,22 @@ const MASTER_KEY_BYTES = 32;
 /** The environment variable this module reads. Named once, so an error message cannot drift. */
 export const MASTER_KEY_ENV_VAR = 'MASTER_ENCRYPTION_KEY';
 
+/** The format {@link loadMasterKey} accepts, as an operator-facing sentence. Names no value. */
+export const MASTER_KEY_EXPECTED_FORMAT =
+  `${MASTER_KEY_ENV_VAR} must be 64 hex characters (32 bytes). ` +
+  'Generate one with: openssl rand -hex 32';
+
+/**
+ * {@link MASTER_KEY_ENV_VAR} is set, but not to a usable key (issue #1562, owner decision D9).
+ *
+ * Distinct from an unset key, which means "secrets are not configured here": a malformed one is a
+ * misconfiguration the operator meant to make work, so the web server reports it on its readiness
+ * probe instead of looking healthy. The message never contains the value or any part of it.
+ */
+export class MalformedMasterKeyError extends Error {
+  override readonly name = 'MalformedMasterKeyError';
+}
+
 /** A validated master key: the raw key bytes, and a non-secret id that names which key this is. */
 export interface MasterKey {
   /** The 32-byte AES-256 key. Never logged, never serialised, never returned from a route. */
@@ -118,10 +134,16 @@ export function masterKeyFromBytes(value: Uint8Array): MasterKey {
 export function loadMasterKey(
   env: Readonly<Record<string, string | undefined>> = process.env,
 ): MasterKey {
+  const raw = env[MASTER_KEY_ENV_VAR];
   try {
-    return parseMasterKeyHex(env[MASTER_KEY_ENV_VAR], MASTER_KEY_ENV_VAR);
+    return parseMasterKeyHex(raw, MASTER_KEY_ENV_VAR);
   } catch (error) {
     const message = error instanceof Error ? error.message : `${MASTER_KEY_ENV_VAR} is invalid.`;
+    if (raw !== undefined && raw.trim() !== '') {
+      throw new MalformedMasterKeyError(`${message} ${MASTER_KEY_EXPECTED_FORMAT}`, {
+        cause: error,
+      });
+    }
     throw new Error(`${message} Generate one with: openssl rand -hex 32`, { cause: error });
   }
 }

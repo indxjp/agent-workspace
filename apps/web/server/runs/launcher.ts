@@ -10,20 +10,35 @@
  * §37 belong to W1-INF-01, and a second place that invents a `RUNNER_URL` is a second source of
  * truth for one value.
  */
-import { RUNTIME_CAPACITY_EXHAUSTED } from '@indx-workspace/contracts/runs';
+import {
+  archiveWorkspacePaths,
+  extractUstarStream,
+  readStream,
+  RUN_FILES_MAX_BYTES,
+} from '@agent-workspace/runtime/transfer';
+import { EngineIdSchema } from '@indx-workspace/contracts/engines';
+import {
+  OUTPUT_SCHEMA_UNSATISFIED,
+  OUTPUT_SCHEMA_UNSATISFIED_MESSAGE,
+  RUNTIME_CAPACITY_EXHAUSTED,
+} from '@indx-workspace/contracts/runs';
 import { z } from 'zod';
 
 import { registerLiveRun, releaseLiveRun, signalRuntimeInterrupt } from './interrupt';
 import { relayRunnerStream, type RelayOutcome } from './relay';
-import { RUN_STATUS_EVENT } from './sse';
+import { RUN_STATUS_EVENT, RUN_WARNING_EVENT } from './sse';
+import { withStreamedDigests } from './streamed-digests';
 import { atStep, publicPreparationFailure, publicRunFailure } from './failures';
 import { DomainError, InfrastructureError } from '../errors';
-import type { LaunchContext } from './environment';
-import type { RunStatus, RunStore } from './store';
-import type { RuntimeLaunchTarget, RuntimeRunResolver } from '../compose/runtime-profile';
-import { runStartRefusalError } from '../compose/run-preflight';
 
-export interface FinishedRunTelemetry {
+import type { LaunchContext } from './environment';
+import type { ApprovalCall, RunOutput, RunStatus, RunStore } from './store';
+import type { RuntimeLaunchTarget, RuntimeRunResolver } from '../compose/runtime-profile';
+import { relativeRuntimePath } from '../runtimes/contract';
+import { runStartRefusalError } from '../compose/run-preflight';
+import { STALE_RUN_SWEEP_MARGIN_MS } from './stale-sweep';
+
+interface FinishedRunTelemetry {
   readonly runId: string;
   readonly workspaceId: string;
   readonly agentId: string;
@@ -73,6 +88,10 @@ function publicOutcomeMessage(
   context: LaunchContext,
   outcome: Extract<RelayOutcome, { kind: 'failed' | 'cancelled' }>,
 ): string {
+  // ADR-0143: the engine's reason is already fixed text, but the stored one is the contract's.
+  if (outcome.kind === 'failed' && outcome.reason.startsWith(`${OUTPUT_SCHEMA_UNSATISFIED}:`)) {
+    return `${OUTPUT_SCHEMA_UNSATISFIED}: ${OUTPUT_SCHEMA_UNSATISFIED_MESSAGE}`;
+  }
   const coded =
     outcome.kind === 'failed' ? options.codeRuntimeFailure?.(context, outcome.reason) : null;
   return coded ?? publicRelayFailure(outcome);
@@ -161,6 +180,22 @@ export interface RunnerLauncherOptions {
   ) => Readonly<Record<string, string>>;
   /** Maximum tar accepted from a runtime before durable promotion is refused. */
   readonly maxOutputArchiveBytes?: number;
+  /**
+   * Saves what a run left in its read-write storage folders, once it is decided `completed` and
+   * before that is stored, so the session stays busy until the save ends. Best effort: a throw is
+   * logged and never changes the run's outcome. `collect` streams the tar of one runtime-root-relative
+   * path (`null` when absent); `cwd` is the run's directory relative to the runtime root; `signal`
+   * aborts at the write-back deadline, at the host's remaining budget, or on an interrupt.
+   */
+  readonly storageWriteback?: (run: {
+    readonly context: LaunchContext;
+    readonly body: unknown;
+    readonly cwd: string;
+    readonly collect: (path: string) => Promise<ReadableStream<Uint8Array> | null>;
+    readonly signal: AbortSignal;
+  }) => Promise<unknown>;
+  /** The write-back's deadline; {@link STORAGE_WRITEBACK_DEADLINE_MS} unless finite and positive. */
+  readonly storageWritebackDeadlineMs?: number;
   /** Receives one terminal measurement after the durable run status has been written. */
   readonly onRunFinished?: (measurement: FinishedRunTelemetry) => void;
   /**
@@ -198,18 +233,47 @@ export interface RunnerLauncherOptions {
 }
 
 export interface RuntimeWorkspaceLifecycle {
-  /** Return the authorized tenant-scoped input archive, or null for an intentionally empty root. */
-  inputArchive(context: LaunchContext, runtime: RuntimeLaunchTarget): Promise<Uint8Array | null>;
-  /** Atomically stage/promote a collected archive into the workspace's durable object store. */
+  /**
+   * The run's input archive as a stream, or null for an intentionally empty root. Resolving it
+   * loads the references and judges the total (`run_files_too_large`); no file is read until the
+   * stream is pulled. `onDigest` hears the SHA-256 of each file (by its path under the run's cwd)
+   * once its bytes have gone through.
+   */
+  inputArchive(
+    context: LaunchContext,
+    onDigest?: (path: string, sha256: string) => void,
+  ): Promise<ReadableStream<Uint8Array> | null>;
+  /**
+   * Stage and promote a collected archive into the workspace's durable object store. Every file
+   * lands under `runs/<runId>/outputs/`, never at a bare workspace path; `options.base` is a
+   * directory inside the archive that is stripped first (and every entry must sit under it).
+   */
   promoteOutputs(
     context: LaunchContext,
     runtime: RuntimeLaunchTarget,
     archive: Uint8Array,
+    options?: { readonly base?: string },
   ): Promise<void>;
 }
 
 const DEFAULT_CONNECT_TIMEOUT_MS = 30_000;
-const DEFAULT_MAX_OUTPUT_ARCHIVE_BYTES = 128 * 1024 * 1024;
+/**
+ * How long a completed run's storage write-back may take. The run stays `running`, and its session
+ * busy, until the write-back ends, so it is bounded.
+ */
+export const STORAGE_WRITEBACK_DEADLINE_MS = 5 * 60_000;
+/**
+ * How long a run may stay `running` before the stale-run sweep fails it: its maximum duration, the
+ * write-back allowance after it, and the sweep's margin. The write-back is cut short of it.
+ */
+export function staleRunAfterMs(maxRunDurationMs: number): number {
+  return maxRunDurationMs + STORAGE_WRITEBACK_DEADLINE_MS + STALE_RUN_SWEEP_MARGIN_MS;
+}
+/**
+ * What the write-back leaves of the host's function limit, so it stops, records its audit rows and
+ * concludes the run before the host ends the function.
+ */
+export const STORAGE_WRITEBACK_HOST_MARGIN_MS = 10_000;
 const DEFAULT_CAPACITY_MAX_WAIT_MS = 120_000;
 const DEFAULT_CAPACITY_INITIAL_DELAY_MS = 250;
 const DEFAULT_CAPACITY_MAX_DELAY_MS = 5_000;
@@ -314,35 +378,39 @@ function waitUnlessAborted(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
-function relativeRuntimePath(value: string): string {
-  const normalized = value.replaceAll('\\', '/').replace(/^\/workspace\/?/u, '');
-  if (
-    normalized.length === 0 ||
-    normalized.startsWith('/') ||
-    normalized.split('/').some((part) => part === '' || part === '.' || part === '..')
-  ) {
-    throw new Error(`persist path ${JSON.stringify(value)} is not workspace-relative`);
+/** The coded failure (e.g. `run_file_corrupt`) an aborted request body carried, if any. */
+function domainCause(error: unknown): DomainError | null {
+  for (let at: unknown = error; at instanceof Error; at = at.cause) {
+    if (at instanceof DomainError) return at;
   }
-  return normalized;
+  return null;
 }
 
+/** Stream the input archive into the runtime's `POST /files`; the body is never held whole. */
+// @story US-STO-06
 async function hydrateRuntime(
-  lifecycle: RuntimeWorkspaceLifecycle,
-  context: LaunchContext,
-  target: RuntimeLaunchTarget,
+  archive: ReadableStream<Uint8Array>,
   base: string,
   doFetch: typeof globalThis.fetch,
   requestHeaders: Readonly<Record<string, string>>,
 ): Promise<void> {
-  const archive = await lifecycle.inputArchive(context, target);
-  if (archive === null) return;
-  const response = await doFetch(`${base}/files`, {
+  // A variable, not a literal: the DOM `RequestInit` apps/web type-checks against has no `duplex`.
+  const init = {
     method: 'POST',
     headers: { ...requestHeaders, 'Content-Type': 'application/x-tar' },
-    // Copy into a concrete ArrayBuffer: Uint8Array's generic backing store may be a
-    // SharedArrayBuffer, which Fetch deliberately does not accept as BodyInit.
-    body: Uint8Array.from(archive).buffer,
-  });
+    body: archive,
+    duplex: 'half' as const,
+    // Not only a policy: unless redirects are an error, fetch clones the request to replay it, and
+    // the clone tees the body, buffering every byte of it (measured: 127 MiB for 128 MiB sent).
+    redirect: 'error' as const,
+  };
+  let response: Response;
+  try {
+    response = await doFetch(`${base}/files`, init);
+  } catch (error) {
+    // A corrupt file aborts the body; fetch rejects with that reason somewhere in its causes.
+    throw domainCause(error) ?? error;
+  }
   if (!response.ok) {
     throw new InfrastructureError({
       component: 'runtime',
@@ -351,6 +419,18 @@ async function hydrateRuntime(
       cause: await runtimeHttpFailure(response),
     });
   }
+}
+
+/**
+ * A `local` runner runs on this host and creates the run's `cwd` under `target.workspaceRoot`, so
+ * its input archive is extracted there directly: its `/files` endpoint is not session-scoped
+ * (issue #881). The runner then checks the references against what landed.
+ */
+async function hydrateLocalWorkspace(
+  archive: ReadableStream<Uint8Array>,
+  target: RuntimeLaunchTarget,
+): Promise<void> {
+  await extractUstarStream(archive, target.workspaceRoot, { maxBytes: RUN_FILES_MAX_BYTES });
 }
 
 /**
@@ -368,43 +448,279 @@ async function runtimeHttpFailure(response: Response): Promise<Error> {
   );
 }
 
-async function collectRuntimeOutputs(
-  lifecycle: RuntimeWorkspaceLifecycle | undefined,
-  context: LaunchContext,
-  target: RuntimeLaunchTarget | undefined,
-  base: string,
-  doFetch: typeof globalThis.fetch,
-  maxBytes: number,
-  requestHeaders: Readonly<Record<string, string>>,
-): Promise<string | null> {
-  if (lifecycle === undefined || target === undefined || target.persistPaths?.length === 0) {
-    return null;
+/*
+ * What the body the runtime was actually sent says about where a run writes. A projection, not a
+ * contract: a body without both fields (a test stub) simply has no `outputs/` to collect. The
+ * fields sit where `RunRequest` puts them: the composed permissions are under `portable`.
+ */
+const RunOutputScopeSchema = z.object({
+  cwd: z.string(),
+  portable: z.object({ permissions: z.object({ writeFiles: z.boolean() }) }),
+});
+
+const RunnerFileNotFoundSchema = z.object({ error: z.literal('file_not_found') });
+
+/** The part of a run's `cwd` below the runtime's workspace root; a `cwd` outside the root throws. */
+function cwdBelowRoot(cwdOfBody: string, target: RuntimeLaunchTarget): string {
+  const root = `${target.workspaceRoot.replaceAll('\\', '/').replace(/\/+$/u, '')}/`;
+  const cwd = cwdOfBody.replaceAll('\\', '/');
+  if (!cwd.startsWith(root)) {
+    throw new Error(`run directory ${JSON.stringify(cwd)} is outside ${JSON.stringify(root)}`);
   }
-  if (target.persistPaths === undefined) return null;
-  try {
-    const query = new URLSearchParams();
-    for (const path of target.persistPaths) query.append('path', relativeRuntimePath(path));
-    const response = await doFetch(`${base}/files?${query.toString()}`, {
-      method: 'GET',
-      headers: { ...requestHeaders, Accept: 'application/x-tar' },
+  return cwd.slice(root.length);
+}
+
+/** The runtime-root-relative `<workspace>/<session>/outputs` of a run allowed to write files. */
+function outputsDirectory(body: unknown, target: RuntimeLaunchTarget): string | null {
+  const scope = RunOutputScopeSchema.safeParse(body);
+  if (!scope.success || !scope.data.portable.permissions.writeFiles) return null;
+  return relativeRuntimePath(`${cwdBelowRoot(scope.data.cwd, target)}/outputs`);
+}
+
+/** Reads the whole body, so call it on a clone: an unread tee branch makes the other's cancel hang. */
+async function isFileNotFound(response: Response): Promise<boolean> {
+  const parsed: unknown = await response.json().catch(() => null);
+  return RunnerFileNotFoundSchema.safeParse(parsed).success;
+}
+
+interface OutputCollection {
+  readonly lifecycle: RuntimeWorkspaceLifecycle | undefined;
+  readonly context: LaunchContext;
+  readonly target: RuntimeLaunchTarget | undefined;
+  readonly base: string;
+  readonly doFetch: typeof globalThis.fetch;
+  readonly maxBytes: number;
+  readonly requestHeaders: Readonly<Record<string, string>>;
+  /** The body the runtime was sent, which says where the run writes. */
+  readonly body: unknown;
+  /** Only a run that ended `completed` within its lifetime has its `outputs/` collected. */
+  readonly outcome: RelayOutcome;
+  readonly lifetimeExpired: boolean;
+}
+
+/**
+ * Read a response body, counting the bytes as they arrive and cancelling the stream once they pass
+ * `maxBytes`: a chunked archive declares no `Content-Length`, so the header check alone is not a cap.
+ */
+async function readCappedArchive(response: Response, maxBytes: number): Promise<Uint8Array> {
+  if (response.body === null) return new Uint8Array();
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let length = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    length += value.byteLength;
+    if (length > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      throw new Error(`runtime output archive exceeds ${String(maxBytes)} bytes`);
+    }
+    chunks.push(value);
+  }
+  return new Uint8Array(Buffer.concat(chunks, length));
+}
+
+/** `GET /files` for `paths`: the response, or `null` for a missing path when `tolerateMissing`. */
+async function fetchRuntimeArchive(
+  input: OutputCollection,
+  paths: readonly string[],
+  tolerateMissing: boolean,
+): Promise<Response | null> {
+  const query = new URLSearchParams();
+  for (const path of paths) query.append('path', path);
+  const response = await input.doFetch(`${input.base}/files?${query.toString()}`, {
+    method: 'GET',
+    headers: { ...input.requestHeaders, Accept: 'application/x-tar' },
+  });
+  if (!response.ok) {
+    // An `outputs/` the agent never created is not a failure; a missing `persistPaths` entry is.
+    if (tolerateMissing && response.status === 404) {
+      if (await isFileNotFound(response.clone())) return null;
+    }
+    throw new InfrastructureError({
+      component: 'runtime',
+      operation: 'collect-workspace-outputs',
+      failureKind: 'upstream',
+      cause: await runtimeHttpFailure(response),
     });
-    if (!response.ok) {
-      throw new InfrastructureError({
-        component: 'runtime',
-        operation: 'collect-workspace-outputs',
-        failureKind: 'upstream',
-        cause: await runtimeHttpFailure(response),
-      });
-    }
-    const declared = response.headers.get('content-length');
-    if (declared !== null && /^\d+$/u.test(declared) && Number(declared) > maxBytes) {
-      throw new Error(`runtime output archive exceeds ${String(maxBytes)} bytes`);
-    }
-    const archive = new Uint8Array(await response.arrayBuffer());
-    if (archive.byteLength > maxBytes) {
-      throw new Error(`runtime output archive exceeds ${String(maxBytes)} bytes`);
-    }
-    await lifecycle.promoteOutputs(context, target, archive);
+  }
+  const declared = response.headers.get('content-length');
+  if (declared !== null && /^\d+$/u.test(declared) && Number(declared) > input.maxBytes) {
+    throw new Error(`runtime output archive exceeds ${String(input.maxBytes)} bytes`);
+  }
+  return response;
+}
+
+async function promoteFromRuntime(
+  input: OutputCollection & {
+    readonly lifecycle: RuntimeWorkspaceLifecycle;
+    readonly target: RuntimeLaunchTarget;
+  },
+  paths: readonly string[],
+  outputsBase?: string,
+): Promise<void> {
+  const response = await fetchRuntimeArchive(input, paths, outputsBase !== undefined);
+  if (response === null) return;
+  const archive = await readCappedArchive(response, input.maxBytes);
+  await input.lifecycle.promoteOutputs(
+    input.context,
+    input.target,
+    archive,
+    outputsBase === undefined ? undefined : { base: outputsBase },
+  );
+}
+
+function isMissingPath(error: unknown): boolean {
+  return error instanceof Error && 'code' in error && error.code === 'ENOENT';
+}
+
+/**
+ * A `local` run's `outputs/` is on this host, under the same root its `cwd` is (issue #1576): it is
+ * archived from disk, with the same byte cap and confinement as the runner's own `GET /files`.
+ */
+async function promoteFromLocalWorkspace(
+  input: OutputCollection & {
+    readonly lifecycle: RuntimeWorkspaceLifecycle;
+    readonly target: RuntimeLaunchTarget;
+  },
+  directory: string,
+): Promise<void> {
+  let archive: Uint8Array;
+  try {
+    archive = await readStream(
+      await archiveWorkspacePaths(input.target.workspaceRoot, [directory], {
+        maxBytes: input.maxBytes,
+      }),
+    );
+  } catch (cause) {
+    // An `outputs/` the agent never created is not a failure.
+    if (isMissingPath(cause)) return;
+    throw cause;
+  }
+  await input.lifecycle.promoteOutputs(input.context, input.target, archive, { base: directory });
+}
+
+/**
+ * Collect what a run left behind into `runs/<runId>/outputs/`: the profile's `persistPaths` after
+ * any outcome, and the agent's own `outputs/` directory after a completed run that could write files.
+ */
+async function collectRuntimeOutputs(input: OutputCollection): Promise<string | null> {
+  const { lifecycle, target } = input;
+  if (lifecycle === undefined || target === undefined) return null;
+  const ready = { ...input, lifecycle, target };
+  const persistPaths = target.persistPaths ?? [];
+  // Two independent collections: a bad persist path must not cost the run its outputs/.
+  const persisted =
+    persistPaths.length === 0
+      ? null
+      : await collectionFailure(() =>
+          promoteFromRuntime(ready, persistPaths.map(relativeRuntimePath)),
+        );
+  if (input.outcome.kind !== 'completed' || input.lifetimeExpired) return persisted;
+  const outputs = await collectionFailure(async () => {
+    const directory = outputsDirectory(input.body, target);
+    if (directory === null) return;
+    // A local-disk runner shares this host's workspace, mirroring the hydrate path (issue #1576).
+    if (target.fileTransfer === 'local-disk') await promoteFromLocalWorkspace(ready, directory);
+    else await promoteFromRuntime(ready, [directory], directory);
+  });
+  return persisted ?? outputs;
+}
+
+/**
+ * Whether a relayed run concludes `completed`, decided before anything is stored: it completed
+ * within its lifetime, its outputs were saved, and it answered the output schema it was asked for.
+ */
+function concludesCompleted(
+  context: LaunchContext,
+  outcome: RelayOutcome,
+  persistenceFailure: string | null,
+  lifetimeExpired: boolean,
+): boolean {
+  return (
+    !lifetimeExpired &&
+    outcome.kind === 'completed' &&
+    persistenceFailure === null &&
+    (context.outputSchema === undefined || (outcome.output?.structured ?? null) !== null)
+  );
+}
+
+/**
+ * The write-back's own deadline, cut to what the host's limit leaves and to what the stale-run
+ * sweep's threshold leaves (from the stored `startedAt` it measures), each less the margin.
+ */
+function writeBackDeadlineMs(
+  deadlineMs: number,
+  hostMaxMs: number | null,
+  startedAtMs: number,
+  staleAfterMs: number | null,
+  storedStartedAt: Date | null,
+): number {
+  const now = Date.now();
+  const hostLeftMs =
+    hostMaxMs === null
+      ? deadlineMs
+      : hostMaxMs - (now - startedAtMs) - STORAGE_WRITEBACK_HOST_MARGIN_MS;
+  const sinceStartMs = now - (storedStartedAt?.getTime() ?? startedAtMs);
+  const staleLeftMs =
+    staleAfterMs === null
+      ? deadlineMs
+      : staleAfterMs - sinceStartMs - STORAGE_WRITEBACK_HOST_MARGIN_MS;
+  return Math.max(0, Math.min(deadlineMs, hostLeftMs, staleLeftMs));
+}
+
+/**
+ * Save the read-write storage folders of a run decided `completed`, while it is still `running`:
+ * its session stays busy, so no next run hydrates over the folders before they are saved. A run
+ * already terminal (an interrupt on another replica) is not saved. Never throws, and never changes
+ * the outcome. `signal` is made once the save starts, from the stored run's `startedAt`, so its
+ * deadline counts from then.
+ */
+async function writeBackRunStorage(
+  input: OutputCollection,
+  store: RunStore,
+  storageWriteback: RunnerLauncherOptions['storageWriteback'],
+  signal: (storedStartedAt: Date | null) => AbortSignal,
+): Promise<void> {
+  const { target } = input;
+  if (storageWriteback === undefined || target === undefined) return;
+  try {
+    const stored = await store.get(input.context.run.id);
+    if (stored?.status !== 'running') return;
+    const scope = RunOutputScopeSchema.pick({ cwd: true }).safeParse(input.body);
+    if (!scope.success) return;
+    await storageWriteback({
+      context: input.context,
+      body: input.body,
+      signal: signal(stored.startedAt),
+      cwd: relativeRuntimePath(cwdBelowRoot(scope.data.cwd, target)),
+      collect: async (path) => {
+        if (target.fileTransfer === 'local-disk') {
+          try {
+            return await archiveWorkspacePaths(target.workspaceRoot, [path], {
+              maxBytes: input.maxBytes,
+            });
+          } catch (cause) {
+            if (isMissingPath(cause)) return null;
+            throw cause;
+          }
+        }
+        return (await fetchRuntimeArchive(input, [path], true))?.body ?? null;
+      },
+    });
+  } catch (cause) {
+    publicRunFailure(cause, {
+      operation: 'write-back-storage',
+      failureKind: 'upstream',
+      publicMessage: 'Run storage could not be saved.',
+    });
+  }
+}
+
+/** Run one output collection; answer its public failure message, or `null` when it succeeded. */
+async function collectionFailure(collect: () => Promise<void>): Promise<string | null> {
+  try {
+    await collect();
     return null;
   } catch (cause) {
     return publicRunFailure(cause, {
@@ -424,10 +740,14 @@ async function conclude(
   startedAtMs: number,
   options: RunnerLauncherOptions,
   target: RuntimeLaunchTarget | undefined,
+  output: RunOutput | null = null,
+  approval: ApprovalCall | null = null,
 ): Promise<void> {
   const runId = context.run.id;
   await releaseRunSandboxesBestEffort(options, context, target);
-  await store.finish(runId, status, error, true);
+  // A pause is a stop, not an ending (ADR-0145): the run keeps its sandbox-free state and waits.
+  if (approval === null) await store.finish(runId, status, error, true, output);
+  else await store.awaitApproval(runId, approval);
   // Read back after `finish`: whatever the gateway's (separately-processed) usage settlement has
   // landed by now is what this terminal measurement reports. `Number.isFinite` is the positive
   // assertion — an unparsable or non-numeric stored value reports `null` rather than `NaN`.
@@ -636,6 +956,18 @@ async function concludePreparationFailure(
 }
 
 /**
+ * ADR-0146 Decision 3: compose removed the shell for the attachments' read grants. Said before
+ * `/run` is posted, so the warning precedes the run's first agent frame.
+ */
+async function warnAttachmentsRemovedShell(store: RunStore, context: LaunchContext): Promise<void> {
+  if ((context.attachments?.length ?? 0) === 0) return;
+  await store.appendPlatformEvent(context.run.id, {
+    type: RUN_WARNING_EVENT,
+    data: { code: 'attachments_removed_shell' },
+  });
+}
+
+/**
  * Finalise a launch that must not reach the runtime, because the run went terminal while it was
  * still `queued` (issue #235, S-14).
  *
@@ -709,6 +1041,118 @@ function describeLifetime(maxRunDurationMs: number | null, hostRemainingMs: numb
 }
 
 /**
+ * Record the public `agent.approval.requested` frame, then pause the run on the call (ADR-0145).
+ * A run whose frame cannot be saved fails instead, so a paused run always carries its request.
+ */
+async function pauseForApproval(
+  store: RunStore,
+  options: RunnerLauncherOptions,
+  context: LaunchContext,
+  outcome: Extract<RelayOutcome, { kind: 'awaiting_approval' }>,
+  startedAtMs: number,
+  target: RuntimeLaunchTarget | undefined,
+): Promise<void> {
+  const engine = EngineIdSchema.safeParse(context.run.engine);
+  const appended = engine.success
+    ? await store.append(context.run.id, {
+        type: 'agent.approval.requested',
+        data: {
+          frame: 'agent.approval.requested',
+          engine: engine.data,
+          raw: null,
+          toolCallId: outcome.toolCallId,
+          toolName: outcome.call.toolName,
+          canonicalCall: outcome.call.canonicalCall,
+        },
+      })
+    : null;
+  if (appended?.kind !== 'appended') {
+    await conclude(
+      store,
+      context,
+      'failed',
+      'The approval request could not be saved.',
+      startedAtMs,
+      options,
+      target,
+    );
+    return;
+  }
+  await conclude(
+    store,
+    context,
+    'awaiting_approval',
+    null,
+    startedAtMs,
+    options,
+    target,
+    null,
+    outcome.call,
+  );
+}
+
+/**
+ * Maps how the relayed stream ended, plus any output-persistence failure, to the run's terminal
+ * status and records it.
+ */
+async function concludeRelayed(
+  store: RunStore,
+  options: RunnerLauncherOptions,
+  context: LaunchContext,
+  outcome: RelayOutcome,
+  persistenceFailure: string | null,
+  startedAtMs: number,
+  target: RuntimeLaunchTarget | undefined,
+): Promise<void> {
+  const publicOutcomeFailure =
+    outcome.kind === 'completed' || outcome.kind === 'awaiting_approval'
+      ? null
+      : publicOutcomeMessage(options, context, outcome);
+  if (outcome.kind === 'awaiting_approval' && persistenceFailure === null) {
+    await pauseForApproval(store, options, context, outcome, startedAtMs, target);
+  } else if (
+    outcome.kind === 'completed' &&
+    persistenceFailure === null &&
+    context.outputSchema !== undefined &&
+    (outcome.output?.structured ?? null) === null
+  ) {
+    // ADR-0143: a request that carried a schema is answered with a conforming `structured`
+    // or fails; a completed run with none must not read as a success.
+    await conclude(
+      store,
+      context,
+      'failed',
+      `${OUTPUT_SCHEMA_UNSATISFIED}: ${OUTPUT_SCHEMA_UNSATISFIED_MESSAGE}`,
+      startedAtMs,
+      options,
+      target,
+      null,
+    );
+  } else if (outcome.kind === 'completed' && persistenceFailure === null) {
+    await conclude(store, context, 'completed', null, startedAtMs, options, target, outcome.output);
+  } else if (outcome.kind === 'cancelled') {
+    // Issue #235: the runner itself reported the interrupt — either this replica's own
+    // `POST /api/runs/:id/interrupt` reached it, or an operator/credential-lifetime signal
+    // did. `cancelled`, not `failed`: a user or the platform stopping a run on purpose is not
+    // an error (`packages/core/src/db/schema/runs.ts`'s own comment on the status). `finish`
+    // is first-call-wins, so this is a no-op when the interrupt route already concluded it.
+    const reason =
+      persistenceFailure === null
+        ? publicOutcomeFailure
+        : `${publicOutcomeFailure} ${persistenceFailure}`;
+    await conclude(store, context, 'cancelled', reason, startedAtMs, options, target);
+  } else {
+    const reason =
+      outcome.kind === 'completed' || outcome.kind === 'awaiting_approval'
+        ? String(persistenceFailure)
+        : persistenceFailure === null
+          ? publicOutcomeFailure
+          : `${publicOutcomeFailure} ${persistenceFailure}`;
+    await conclude(store, context, 'failed', reason, startedAtMs, options, target);
+  }
+}
+
+/**
  * Build a `launch` for {@link import('./environment.js').RunApiEnvironment}.
  *
  * Fire-and-forget by contract: it returns as soon as the run is queued, and every outcome —
@@ -739,7 +1183,14 @@ export function createRunnerLauncher(options: RunnerLauncherOptions): (c: Launch
     Number.isSafeInteger(options.maxOutputArchiveBytes) &&
     options.maxOutputArchiveBytes > 0
       ? options.maxOutputArchiveBytes
-      : DEFAULT_MAX_OUTPUT_ARCHIVE_BYTES;
+      : RUN_FILES_MAX_BYTES;
+  const storageWritebackDeadlineMs = positiveOr(
+    options.storageWritebackDeadlineMs,
+    STORAGE_WRITEBACK_DEADLINE_MS,
+  );
+  // Where the stale-run sweep fails a run still `running`; the write-back stops short of it.
+  const staleAfterMs =
+    configuredMaxRunDurationMs === null ? null : staleRunAfterMs(configuredMaxRunDurationMs);
   const capacityRetry: CapacityRetry = {
     maxWaitMs: positiveOr(options.capacityRetry?.maxWaitMs, DEFAULT_CAPACITY_MAX_WAIT_MS),
     initialDelayMs: positiveOr(
@@ -763,7 +1214,18 @@ export function createRunnerLauncher(options: RunnerLauncherOptions): (c: Launch
       let hydrating = false;
       let runtimeHeaders: Readonly<Record<string, string>> = {};
       let hostRemainingMs: number | null;
+      let archive: ReadableStream<Uint8Array> | null = null;
+      const digests = new Map<string, string>();
       try {
+        // Before the runtime is resolved, which may create its sandbox: a run whose files are over
+        // the limit (`run_files_too_large`) is refused with nothing allocated. Nothing is read yet.
+        const lifecycle = options.workspaceLifecycle;
+        archive =
+          lifecycle === undefined
+            ? null
+            : await atStep('resources', () =>
+                lifecycle.inputArchive(context, (path, sha256) => digests.set(path, sha256)),
+              );
         const runtime = options.runtime;
         target =
           runtime === undefined
@@ -777,25 +1239,22 @@ export function createRunnerLauncher(options: RunnerLauncherOptions): (c: Launch
         base = selectedUrl.replace(/\/+$/, '');
         runtimeHeaders = options.runtimeRequestHeaders?.(target) ?? {};
         body = await atStep('compose', () => options.buildRunRequest(context, target));
-        // The in-process runner already materialises `resources.files` into the run's cwd, and
-        // its `/files` endpoint is not session-scoped, so a `local` target is never hydrated.
-        if (
-          options.workspaceLifecycle !== undefined &&
-          target !== undefined &&
-          target.driver !== 'local'
-        ) {
+        // The in-process runner's `/files` endpoint is not session-scoped, so a `local-disk` target
+        // is hydrated on this host instead. The driver's id is never compared (the storage design, §03).
+        if (archive !== null && target?.fileTransfer === 'local-disk') {
           hydrating = true;
-          await hydrateRuntime(
-            options.workspaceLifecycle,
-            context,
-            target,
-            base,
-            doFetch,
-            runtimeHeaders,
-          );
+          await hydrateLocalWorkspace(archive, target);
+        } else if (archive !== null && target !== undefined) {
+          hydrating = true;
+          await hydrateRuntime(archive, base, doFetch, runtimeHeaders);
+        } else {
+          await archive?.cancel();
         }
+        body = withStreamedDigests(body, digests);
         hostRemainingMs = hostBudgetLeft(hostMaxRunDurationMs, startedAtMs);
       } catch (cause) {
+        // Unread when a step before the hydrate threw; a consumed or locked one rejects, ignored.
+        await archive?.cancel().catch(() => undefined);
         const detail = hydrating
           ? publicRunFailure(cause, {
               operation: 'hydrate-workspace',
@@ -819,7 +1278,13 @@ export function createRunnerLauncher(options: RunnerLauncherOptions): (c: Launch
       // connection, for `POST /api/runs/:id/interrupt` (issue #235, S-14) to find through
       // `interrupt.ts`'s registry. Released in `finally` below, whatever the run's outcome —
       // including a failure that never reaches the runtime at all.
-      registerLiveRun(runId, { base, headers: runtimeHeaders });
+      // An interrupt served by this process also stops the run's storage write-back.
+      const interrupted = new AbortController();
+      registerLiveRun(runId, {
+        base,
+        headers: runtimeHeaders,
+        onInterrupt: () => interrupted.abort(new Error('the run was interrupted')),
+      });
       try {
         // `markRunning` moves a run only out of `queued`, and reports whether *this* call is what
         // moved it. `false` here means something else already took the run out of `queued`, and on
@@ -840,6 +1305,7 @@ export function createRunnerLauncher(options: RunnerLauncherOptions): (c: Launch
           type: RUN_STATUS_EVENT,
           data: { status: 'running', error: null },
         });
+        await warnAttachmentsRemovedShell(store, context);
 
         // The timeout covers the CONNECT, and is cancelled the moment response headers arrive.
         // `AbortSignal.timeout(ms)` was here first and was wrong: its signal stays attached to the
@@ -895,15 +1361,41 @@ export function createRunnerLauncher(options: RunnerLauncherOptions): (c: Launch
           await options.onSessionIdentified?.(context, sessionId);
         });
         if (lifetimeTimer !== null) clearTimeout(lifetimeTimer);
-        const persistenceFailure = await collectRuntimeOutputs(
-          options.workspaceLifecycle,
+        const collection: OutputCollection = {
+          lifecycle: options.workspaceLifecycle,
           context,
           target,
           base,
           doFetch,
-          maxOutputArchiveBytes,
-          runtimeHeaders,
-        );
+          maxBytes: maxOutputArchiveBytes,
+          requestHeaders: runtimeHeaders,
+          body,
+          outcome,
+          lifetimeExpired,
+        };
+        const persistenceFailure = await collectRuntimeOutputs(collection);
+        // Decided first, saved while the run is still `running`, then concluded: the session stays
+        // busy until the save ends, and the save's result never changes the stored status.
+        if (concludesCompleted(context, outcome, persistenceFailure, lifetimeExpired)) {
+          await writeBackRunStorage(
+            collection,
+            store,
+            options.storageWriteback,
+            (storedStartedAt) =>
+              AbortSignal.any([
+                AbortSignal.timeout(
+                  writeBackDeadlineMs(
+                    storageWritebackDeadlineMs,
+                    hostMaxRunDurationMs,
+                    startedAtMs,
+                    staleAfterMs,
+                    storedStartedAt,
+                  ),
+                ),
+                interrupted.signal,
+              ]),
+          );
+        }
         if (lifetimeExpired) {
           const reason = lifetimeFailure;
           await conclude(
@@ -915,31 +1407,16 @@ export function createRunnerLauncher(options: RunnerLauncherOptions): (c: Launch
             options,
             target,
           );
-          return;
-        }
-        const publicOutcomeFailure =
-          outcome.kind === 'completed' ? null : publicOutcomeMessage(options, context, outcome);
-        if (outcome.kind === 'completed' && persistenceFailure === null) {
-          await conclude(store, context, 'completed', null, startedAtMs, options, target);
-        } else if (outcome.kind === 'cancelled') {
-          // Issue #235: the runner itself reported the interrupt — either this replica's own
-          // `POST /api/runs/:id/interrupt` reached it, or an operator/credential-lifetime signal
-          // did. `cancelled`, not `failed`: a user or the platform stopping a run on purpose is not
-          // an error (`packages/core/src/db/schema/runs.ts`'s own comment on the status). `finish`
-          // is first-call-wins, so this is a no-op when the interrupt route already concluded it.
-          const reason =
-            persistenceFailure === null
-              ? publicOutcomeFailure
-              : `${publicOutcomeFailure} ${persistenceFailure}`;
-          await conclude(store, context, 'cancelled', reason, startedAtMs, options, target);
         } else {
-          const reason =
-            outcome.kind === 'completed'
-              ? String(persistenceFailure)
-              : persistenceFailure === null
-                ? publicOutcomeFailure
-                : `${publicOutcomeFailure} ${persistenceFailure}`;
-          await conclude(store, context, 'failed', reason, startedAtMs, options, target);
+          await concludeRelayed(
+            store,
+            options,
+            context,
+            outcome,
+            persistenceFailure,
+            startedAtMs,
+            target,
+          );
         }
       } finally {
         releaseLiveRun(runId);

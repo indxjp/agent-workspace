@@ -21,7 +21,7 @@ import {
   sseRetryFrame,
   sseStreamResponse,
 } from '../server/runs/sse';
-import { InMemoryRunStore } from '../server/runs/store';
+import { InMemoryRunStore } from '../server/runs/memory-store';
 import { asRecord, asString, loadVectors } from '../../../tests/formal/vectors';
 
 const FAMILY = 'events-sse';
@@ -282,7 +282,7 @@ describe('the real inbound runner relay', () => {
         return Promise.resolve();
       },
     );
-    expect(outcome).toEqual({ kind: 'completed', events: 1 });
+    expect(outcome).toEqual({ kind: 'completed', events: 1, output: null });
     expect(sessions).toEqual(['session-new']);
     await store.finish(runId, 'completed', null);
     const stream = await store.openStream(runId, null);
@@ -328,12 +328,14 @@ describe('the real outbound SSE response', () => {
     'renders terminal frames for %s',
     async (_id, vector) => {
       const kind = asString(vector.input, vector.id);
-      const outcome =
-        kind === 'succeeded'
-          ? { kind: 'succeeded' as const }
-          : kind === 'failed'
-            ? { kind: 'failed' as const, status: 'failed', message: 'safe' }
-            : { kind: 'indeterminate' as const, reason: 'lost' };
+      const outcomes = {
+        succeeded: { kind: 'succeeded' as const },
+        paused: { kind: 'paused' as const },
+        failed: { kind: 'failed' as const, status: 'failed', message: 'safe' },
+      };
+      const outcome = Object.hasOwn(outcomes, kind)
+        ? outcomes[kind as keyof typeof outcomes]
+        : { kind: 'indeterminate' as const, reason: 'lost' };
       const response = sseStreamResponse({
         source: {
           [Symbol.asyncIterator]() {
@@ -365,12 +367,14 @@ describe('the real outbound SSE response', () => {
           sessionId: '44444444-4444-4444-8444-444444444444',
         });
         const status = input['status'];
-        if (status === 'running') await store.markRunning(runId);
-        else if (status === 'completed' || status === 'failed' || status === 'cancelled') {
+        if (status === 'running' || status === 'awaiting_approval') await store.markRunning(runId);
+        if (status === 'awaiting_approval') {
+          await store.awaitApproval(runId, { toolName: 'Bash', canonicalCall: 'Bash(ls)' });
+        } else if (status === 'completed' || status === 'failed' || status === 'cancelled') {
           const error = input['error'];
           if (error !== null && typeof error !== 'string') throw new Error('bad error');
           await store.finish(runId, status, error);
-        } else if (status !== 'queued') throw new Error('bad run status');
+        } else if (status !== 'queued' && status !== 'running') throw new Error('bad run status');
         run = await store.get(runId);
       }
       expect(classifyRunOutcome(run, runId)).toEqual(vector.expected);

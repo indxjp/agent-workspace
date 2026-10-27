@@ -1,0 +1,1 @@
+ALTER TABLE "runs" ADD COLUMN "consumed_tool_calls" jsonb DEFAULT '[]'::jsonb NOT NULL;

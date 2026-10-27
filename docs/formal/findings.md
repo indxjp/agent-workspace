@@ -288,7 +288,7 @@ Raised by P1-publication. Details are in the private ledger, outside the reposit
 
 - **Raised by.** P1-configuration ([unit report](units/concept-configuration.md)). Severity: naming.
 - **Finding.** Blank names disagree: model-connection and runtime-connection names are refused when blank after JS trim (U+3000 refused), the runtime-profile contract accepts any non-empty name and its CHECK strips spaces only (U+3000 or a tab is a valid profile name); apiKey/credential of spaces accepted. Lean: Meta.blank_name_rules_disagree.
-- **Source.** packages/core/src/schemas.ts#RuntimeProfile; apps/web/server/models/contract.ts#parseCreateModelConnection; apps/web/server/runtimes/connections.ts#parseCreateRuntimeConnectionInput
+- **Source.** packages/run-protocol/src/schemas.ts#RuntimeProfile; apps/web/server/models/contract.ts#parseCreateModelConnection; apps/web/server/runtimes/connections.ts#parseCreateRuntimeConnectionInput
 - **Proposed resolution.** ADR or 04 §4 rule: a configuration name is non-blank after JS trim, enforced by the contract and mirrored by a CHECK over the same set; credentials stay opaque non-empty strings.
 - **Outcome.** open. To be triaged in its domain (handover §5.2 step 7).
 
@@ -368,7 +368,7 @@ Raised by P1-publication. Details are in the private ledger, outside the reposit
 
 - **Raised by.** P1-configuration ([unit report](units/concept-configuration.md)). Severity: correctness.
 - **Finding.** Runtime-profile contract accepts a space-only name that runtime_profiles_name_not_blank refuses (unclassified 23514); model_connections has no name check. Lean: Meta.blank_profile_name_passes_the_contract_but_not_the_check, Meta.model_connection_name_has_no_database_check.
-- **Source.** packages/core/src/schemas.ts#RuntimeProfile
+- **Source.** packages/run-protocol/src/schemas.ts#RuntimeProfile
 - **Proposed resolution.** Trimmed non-blank refinement and a model_connections_name_not_blank migration.
 - **Outcome.** open. To be triaged in its domain (handover §5.2 step 7).
 
@@ -776,7 +776,7 @@ Raised by P1-publication. Details are in the private ledger, outside the reposit
 
 - **Raised by.** D1 Phase-1 debt review, concept-work. Severity: documentation.
 - **Finding.** The stores stamp `startedAt` when a queued run starts and `endedAt` when the first terminal status is set. A queued run that becomes terminal receives both stamps in that transition. No product document states this lifecycle rule.
-- **Source.** `apps/web/server/runs/store.ts#InMemoryRunStore`; `packages/core/src/db/repositories/runs.ts#RunRepository`.
+- **Source.** `apps/web/server/runs/memory-store.ts#InMemoryRunStore`; `packages/core/src/db/repositories/runs.ts#RunRepository`.
 - **Lean.** `Invariants.ConceptWork`.
 - **Outcome.** The timestamp rules are now documented in `docs/sdk/site/concepts/run-lifecycle.mdx`.
 
@@ -820,7 +820,7 @@ Raised by P1-publication. Details are in the private ledger, outside the reposit
 - **Raised by.** D1 authorisation decision, AD-2 ([unit report](units/authz-decide.md)). Severity: correctness.
 - **Finding.** A Builder's `own` run grant rejects `permitted` ownership, while a Viewer's `permitted` grant accepts it. Lean: `Adversarial.AuthzDecide.granted_builder_cannot_run_the_agent_a_granted_viewer_can`.
 - **Source.** `apps/web/server/agents/run-ownership.ts#resolveAgentRunOwnership`; `apps/web/server/rbac/decide.ts#applyGrant`.
-- **Resolution.** Decide the intended grant ordering, then fix or document it. Outcome: awaiting triage.
+- **Resolution.** ADR-0152 (roles are monotonic) gives Builder `run: permitted` on agents and makes `permitted` admit `own` as well as granted agents, so a granted Builder runs what a granted Viewer runs and still not an ungranted, unowned agent. Lean: `Meta.AuthzDecide.granted_builder_runs_the_agent_a_granted_viewer_can`, `Meta.AuthzDecide.roles_are_monotonic`. Outcome: fixed.
 
 ## F-089 — Admin token revocation differs between decision and handler
 
@@ -875,14 +875,14 @@ Raised by P1-publication. Details are in the private ledger, outside the reposit
 
 - **Raised by.** D1 lifecycle ([unit report](units/lifecycle-run.md)). Severity: correctness.
 - **Finding.** Interrupt and launcher conclusion each appended a terminal event before the first-call-wins `finish`. Both appends could succeed while only one status was stored. The repaired Lean model proves `interrupt_conclude_race_agrees`.
-- **Source.** `apps/web/server/composition/register.ts#interruptRun`; `apps/web/server/runs/launcher.ts#conclude`.
+- **Source.** `apps/web/server/composition/wiring/run-api.ts#interruptRun`; `apps/web/server/runs/launcher.ts#conclude`.
 - **Resolution.** [PR #290](https://github.com/indxjp/agent-workspace/pull/290) commits the winning terminal state and event together under the existing per-run lock and transaction. The shared memory/PostgreSQL race regression failed before repair and passed afterward. Outcome: fixed and merged.
 
 ## F-097 — Ordinary finish leaves browser-token rows active
 
 - **Raised by.** D1 lifecycle ([unit report](units/lifecycle-run.md)). Severity: correctness.
 - **Finding.** Finishing a run revokes gateway run tokens but does not revoke its browser-token rows. A later resolution refuses the terminal run, so storage and effective access differ. Lean: `finish_leaves_browser_token_row`.
-- **Source.** `packages/core/src/db/repositories/runs.ts#finish`; `apps/web/server/composition/register.ts#revokeAllRunTokensFor`.
+- **Source.** `packages/core/src/db/repositories/runs.ts#finish`; `apps/web/server/composition/wiring/run-api.ts#revokeAllRunTokensFor`.
 - **Resolution.** Triage whether row revocation is required or effective access alone is the contract. Outcome: awaiting triage.
 
 ## F-098 — Preparation failure records a running transition
@@ -903,7 +903,7 @@ Raised by P1-publication. Details are in the private ledger, outside the reposit
 
 - **Raised by.** D1 event stream ([unit report](units/events-sse.md)). Severity: correctness.
 - **Finding.** The repository stream could list events, then observe a terminal run and exit after a concurrent final append. The in-memory stream waits for the cursor to reach the final event. The original divergence was `repository_follow_can_lose_terminal_tail`; the repaired model proves `repository_follow_delivers_terminal_tail` and `repository_terminal_read_drains_tail`.
-- **Source.** `apps/web/server/runs/store.ts#openStream`.
+- **Source.** `apps/web/server/runs/repository-store.ts#openStream`.
 - **Resolution.** [PR #282](https://github.com/indxjp/agent-workspace/pull/282) added a controlled PostgreSQL interleaving regression and a final durable drain after terminal status becomes visible. The regression failed before the change and passed after it; the full run-store suite passed 132/132. Outcome: fixed and merged.
 
 ## F-101 — SDK frame splitting differs on a lone carriage return
@@ -924,7 +924,7 @@ Raised by P1-publication. Details are in the private ledger, outside the reposit
 
 - **Raised by.** D1 run composition ([unit report](units/run-compose.md)). Severity: correctness.
 - **Finding.** The requested-session branch checked workspace, agent, owner and project but not session status. An archived session with a Claude session id was returned for resume. The original divergence was `archived_session_reuse_diverges`; the repaired model proves `archived_session_reuse_refused`.
-- **Source.** `apps/web/server/composition/register.ts#openSession`; `apps/web/server/composition/session-launch.ts#sessionForLaunch`.
+- **Source.** `apps/web/server/composition/wiring/run-api.ts#openSession`; `apps/web/server/composition/session-launch.ts#sessionForLaunch`.
 - **Resolution.** [PR #286](https://github.com/indxjp/agent-workspace/pull/286) added a PostgreSQL-backed regression through the composed run API and rejects archived requested sessions. The regression failed before repair and all four suite tests passed afterward. Outcome: fixed and merged.
 
 ## F-104 — Server start parser accepts an empty model rejected by the contract

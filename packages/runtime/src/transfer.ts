@@ -1,10 +1,34 @@
 /** Dependency-free POSIX ustar hydration and collection for runtime workspaces. */
-import { randomUUID } from 'node:crypto';
-import { lstat, mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import type { Stats } from 'node:fs';
+import {
+  chmod,
+  lstat,
+  mkdir,
+  open as fsOpen,
+  readdir,
+  rename,
+  unlink,
+  writeFile,
+} from 'node:fs/promises';
 import path from 'node:path';
+import { Readable } from 'node:stream';
+
+/** The most bytes of files one run moves in either direction (the storage design, §04 "Size limits"). */
+export const RUN_FILES_MAX_BYTES = 128 * 1024 * 1024;
+/** The most archive members one `POST /files` creates, so a headers-only archive stays bounded. */
+export const RUN_FILES_MAX_MEMBERS = 100_000;
 
 const BLOCK = 512;
 const ZERO_TRAILER = BLOCK * 2;
+
+/**
+ * The most wire bytes of one `POST /files` archive: the payload limit plus each member's header
+ * and payload padding (at most one block each) and the trailer. The extractor still enforces
+ * {@link RUN_FILES_MAX_BYTES} and {@link RUN_FILES_MAX_MEMBERS} on what the archive holds.
+ */
+export const RUN_FILES_MAX_ARCHIVE_BYTES =
+  RUN_FILES_MAX_BYTES + RUN_FILES_MAX_MEMBERS * 2 * BLOCK + ZERO_TRAILER;
 
 export type TarEntry = Readonly<{
   path: string;
@@ -13,54 +37,120 @@ export type TarEntry = Readonly<{
   data?: Uint8Array;
 }>;
 
-function decodePath(value: string): string {
-  let decoded = value;
+/** One member of a streamed archive. A file is opened only when its turn comes. */
+export type StreamTarEntry =
+  | Readonly<{ path: string; type: 'directory'; mode: number }>
+  | Readonly<{
+      path: string;
+      type: 'file';
+      mode: number;
+      size: number;
+      open(): Promise<ReadableStream<Uint8Array>>;
+    }>;
+
+/** Every refusal of the codec. The runner answers it with a 400; filesystem errors stay plain. */
+export class ArchiveValidationError extends Error {
+  override readonly name: string = 'ArchiveValidationError';
+}
+
+/** The collected files exceed the caller's byte budget. A validation error the runner answers 413. */
+export class ArchiveTooLargeError extends ArchiveValidationError {
+  override readonly name: string = 'ArchiveTooLargeError';
+}
+
+function unsafePath(value: string, reason = ''): ArchiveValidationError {
+  return new ArchiveValidationError(`unsafe archive path ${JSON.stringify(value)}${reason}`);
+}
+
+/** The value, then each percent-decoding of it (at most three). Decoding stops at a malformed `%`. */
+function percentSpellings(value: string): { spellings: string[]; malformed: boolean } {
+  const spellings = [value];
+  let current = value;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     let next: string;
     try {
-      next = decodeURIComponent(decoded);
+      next = decodeURIComponent(current);
     } catch {
-      throw new Error(`unsafe archive path ${JSON.stringify(value)}: malformed percent encoding`);
+      return { spellings, malformed: true };
     }
-    if (next === decoded) return decoded;
-    decoded = next;
+    if (next === current) break;
+    spellings.push(next);
+    current = next;
   }
-  return decoded;
+  return { spellings, malformed: false };
 }
 
-/** Normalize a tar member or requested path and prove that it stays relative. */
-export function normalizeArchivePath(value: string): string {
-  if (typeof value !== 'string' || value.length === 0 || value.includes('\0')) {
-    throw new Error(`unsafe archive path ${JSON.stringify(value)}`);
+/** Refuse one spelling of a path that is empty, absolute or climbs out. Returns it with `\` folded. */
+function assertSafeSpelling(spelling: string, original: string): string {
+  const folded = spelling.replaceAll('\\', '/');
+  if (folded.length === 0 || folded.includes('\0')) throw unsafePath(original);
+  if (folded.startsWith('/') || /^[A-Za-z]:/u.test(folded)) {
+    throw unsafePath(original, ': absolute paths are forbidden');
   }
-  const decoded = decodePath(value).replaceAll('\\', '/');
-  if (decoded.length === 0 || decoded.includes('\0')) {
-    throw new Error(`unsafe archive path ${JSON.stringify(value)}`);
+  if (folded.split('/').some((segment) => segment === '..')) {
+    throw unsafePath(original, ': parent traversal is forbidden');
   }
-  if (decoded.startsWith('/') || /^[A-Za-z]:/u.test(decoded)) {
-    throw new Error(`unsafe archive path ${JSON.stringify(value)}: absolute paths are forbidden`);
-  }
-  const segments = decoded.split('/');
-  if (segments.some((segment) => segment === '..')) {
-    throw new Error(`unsafe archive path ${JSON.stringify(value)}: parent traversal is forbidden`);
-  }
-  const normalized = path.posix.normalize(decoded).replace(/^\.\//u, '').replace(/\/$/u, '');
+  return folded;
+}
+
+function tidyPath(candidate: string, original: string): string {
+  const normalized = path.posix.normalize(candidate).replace(/^\.\//u, '').replace(/\/$/u, '');
   if (normalized.length === 0 || normalized === '.' || normalized.startsWith('../')) {
-    throw new Error(`unsafe archive path ${JSON.stringify(value)}`);
+    throw unsafePath(original);
   }
   return normalized;
 }
 
+/**
+ * Normalize an untrusted request path (a `?path=` parameter) and prove that it stays relative.
+ * It percent-decodes and folds `\`, so it must not be applied to a real on-disk file name.
+ */
+// @story US-STO-06
+export function normalizeArchivePath(value: string): string {
+  if (typeof value !== 'string' || value.length === 0 || value.includes('\0')) {
+    throw unsafePath(value);
+  }
+  const { spellings, malformed } = percentSpellings(value);
+  if (malformed) throw unsafePath(value, ': malformed percent encoding');
+  const tidied = tidyPath(assertSafeSpelling(spellings.at(-1) ?? value, value), value);
+  // Tidying can expose a drive letter (`./C:/x`), and a `%` that survives the last decoding means
+  // the encoding is nested deeper than decoded, so a consumer decoding once more could climb out.
+  assertSafeSpelling(tidied, value);
+  if (tidied.includes('%')) throw unsafePath(value, ': percent encoding nested too deeply');
+  return tidied;
+}
+
+/**
+ * Validate the name of a tar member and return it literally: `50%.txt` and `a%2Eb` are real file
+ * names. The name is refused when it, or any percent-decoded or `\`-folded spelling of it, is
+ * unsafe, so a consumer that decodes it later still cannot be walked out of the workspace.
+ */
+function archiveMemberPath(value: string): string {
+  if (typeof value !== 'string' || value.length === 0 || value.includes('\0')) {
+    throw unsafePath(value);
+  }
+  for (const spelling of percentSpellings(value).spellings) assertSafeSpelling(spelling, value);
+  return tidyPath(value, value);
+}
+
+/** One entry name read from a directory: a literal that must be a single path segment. */
+function assertSegment(name: string, parent: string): void {
+  if (name.length === 0 || name === '.' || name === '..' || /[/\0]/u.test(name)) {
+    throw unsafePath(`${parent}/${name}`);
+  }
+}
+
 function writeText(block: Buffer, offset: number, length: number, value: string): void {
   const bytes = Buffer.from(value, 'utf8');
-  if (bytes.byteLength > length) throw new Error(`ustar field is too long: ${value}`);
+  if (bytes.byteLength > length)
+    throw new ArchiveValidationError(`ustar field is too long: ${value}`);
   bytes.copy(block, offset);
 }
 
 function writeOctal(block: Buffer, offset: number, length: number, value: number): void {
   const encoded = value.toString(8).padStart(length - 1, '0');
   if (encoded.length >= length)
-    throw new Error(`ustar numeric field is too large: ${String(value)}`);
+    throw new ArchiveValidationError(`ustar numeric field is too large: ${String(value)}`);
   writeText(block, offset, length, `${encoded}\0`);
 }
 
@@ -75,18 +165,20 @@ function splitName(memberPath: string): { name: string; prefix: string } {
     const name = memberPath.slice(index + 1);
     if (Buffer.byteLength(prefix) <= 155 && Buffer.byteLength(name) <= 100) return { name, prefix };
   }
-  throw new Error(`archive path exceeds the POSIX ustar name limit: ${memberPath}`);
+  throw new ArchiveValidationError(
+    `archive path exceeds the POSIX ustar name limit: ${memberPath}`,
+  );
 }
 
-function headerFor(entry: TarEntry): Buffer {
-  const memberPath = normalizeArchivePath(entry.path);
+function headerFor(entry: Pick<TarEntry, 'path' | 'type' | 'mode'>, size: number): Buffer {
+  const memberPath = archiveMemberPath(entry.path);
   const { name, prefix } = splitName(entry.type === 'directory' ? `${memberPath}/` : memberPath);
   const block = Buffer.alloc(BLOCK);
   writeText(block, 0, 100, name);
   writeOctal(block, 100, 8, entry.mode & 0o7777);
   writeOctal(block, 108, 8, 1000);
   writeOctal(block, 116, 8, 1000);
-  writeOctal(block, 124, 12, entry.type === 'file' ? (entry.data?.byteLength ?? 0) : 0);
+  writeOctal(block, 124, 12, entry.type === 'file' ? size : 0);
   writeOctal(block, 136, 12, Math.floor(Date.now() / 1000));
   block.fill(0x20, 148, 156);
   block[156] = entry.type === 'directory' ? 0x35 : 0x30;
@@ -109,7 +201,7 @@ export function encodeUstar(entries: readonly TarEntry[]): Uint8Array {
   for (const entry of entries) {
     const data =
       entry.type === 'file' ? Buffer.from(entry.data ?? new Uint8Array()) : Buffer.alloc(0);
-    chunks.push(headerFor(entry), data);
+    chunks.push(headerFor(entry, data.byteLength), data);
     const padding = paddedLength(data.byteLength) - data.byteLength;
     if (padding > 0) chunks.push(Buffer.alloc(padding));
   }
@@ -128,42 +220,63 @@ function readText(block: Uint8Array, offset: number, length: number): string {
 
 function readOctal(block: Uint8Array, offset: number, length: number, field: string): number {
   const value = readText(block, offset, length).trim();
-  if (!/^[0-7]+$/u.test(value)) throw new Error(`invalid ustar ${field}: ${JSON.stringify(value)}`);
+  if (!/^[0-7]+$/u.test(value)) {
+    throw new ArchiveValidationError(`invalid ustar ${field}: ${JSON.stringify(value)}`);
+  }
   return Number.parseInt(value, 8);
+}
+
+type UstarHeader = Readonly<{
+  path: string;
+  type: 'file' | 'directory';
+  mode: number;
+  size: number;
+}>;
+
+/** Validate one 512-byte header block: magic, checksum, member name and type. */
+function parseHeader(header: Uint8Array): UstarHeader {
+  if (readText(header, 257, 6) !== 'ustar')
+    throw new ArchiveValidationError('archive is not POSIX ustar');
+  const storedChecksum = readOctal(header, 148, 8, 'checksum');
+  const checksumHeader = Buffer.from(header);
+  checksumHeader.fill(0x20, 148, 156);
+  const actualChecksum = checksumHeader.reduce((sum, byte) => sum + byte, 0);
+  if (storedChecksum !== actualChecksum)
+    throw new ArchiveValidationError('invalid ustar header checksum');
+  const name = readText(header, 0, 100);
+  const prefix = readText(header, 345, 155);
+  const memberPath = archiveMemberPath(prefix.length > 0 ? `${prefix}/${name}` : name);
+  const mode = readOctal(header, 100, 8, 'mode');
+  const size = readOctal(header, 124, 12, 'size');
+  const type = header[156];
+  if (type !== 0 && type !== 0x30 && type !== 0x35) {
+    throw new ArchiveValidationError(
+      `unsupported ustar member type ${String(type)} for ${memberPath}`,
+    );
+  }
+  return { path: memberPath, type: type === 0x35 ? 'directory' : 'file', mode, size };
 }
 
 export function decodeUstar(bytes: Uint8Array): readonly TarEntry[] {
   const entries: TarEntry[] = [];
   let offset = 0;
   while (offset + BLOCK <= bytes.byteLength) {
-    const header = bytes.subarray(offset, offset + BLOCK);
-    if (header.every((byte) => byte === 0)) return entries;
-    if (readText(header, 257, 6) !== 'ustar') throw new Error('archive is not POSIX ustar');
-    const storedChecksum = readOctal(header, 148, 8, 'checksum');
-    const checksumHeader = Buffer.from(header);
-    checksumHeader.fill(0x20, 148, 156);
-    const actualChecksum = checksumHeader.reduce((sum, byte) => sum + byte, 0);
-    if (storedChecksum !== actualChecksum) throw new Error('invalid ustar header checksum');
-    const name = readText(header, 0, 100);
-    const prefix = readText(header, 345, 155);
-    const memberPath = normalizeArchivePath(prefix.length > 0 ? `${prefix}/${name}` : name);
-    const mode = readOctal(header, 100, 8, 'mode');
-    const size = readOctal(header, 124, 12, 'size');
-    const type = header[156];
+    const block = bytes.subarray(offset, offset + BLOCK);
+    if (block.every((byte) => byte === 0)) return entries;
+    const header = parseHeader(block);
     offset += BLOCK;
-    if (offset + size > bytes.byteLength) throw new Error(`truncated ustar member ${memberPath}`);
-    if (type !== 0 && type !== 0x30 && type !== 0x35) {
-      throw new Error(`unsupported ustar member type ${String(type)} for ${memberPath}`);
+    if (offset + header.size > bytes.byteLength) {
+      throw new ArchiveValidationError(`truncated ustar member ${header.path}`);
     }
     entries.push({
-      path: memberPath,
-      type: type === 0x35 ? 'directory' : 'file',
-      mode,
-      ...(type === 0x35 ? {} : { data: bytes.slice(offset, offset + size) }),
+      path: header.path,
+      type: header.type,
+      mode: header.mode,
+      ...(header.type === 'directory' ? {} : { data: bytes.slice(offset, offset + header.size) }),
     });
-    offset += paddedLength(size);
+    offset += paddedLength(header.size);
   }
-  throw new Error('ustar archive has no zero-block terminator');
+  throw new ArchiveValidationError('ustar archive has no zero-block terminator');
 }
 
 export async function readStream(stream: ReadableStream<Uint8Array>): Promise<Uint8Array> {
@@ -194,13 +307,145 @@ export function bytesToStream(bytes: Uint8Array): ReadableStream<Uint8Array> {
   });
 }
 
-function targetPath(root: string, memberPath: string): string {
+type PreparedMember = Readonly<{ entry: StreamTarEntry; header: Buffer }>;
+
+/** Build every header and sum the declared sizes, so a bad name or a total over the cap fails first. */
+function prepareMembers(entries: readonly StreamTarEntry[], maxBytes: number): PreparedMember[] {
+  let total = 0;
+  const members = entries.map((entry): PreparedMember => {
+    if (entry.type === 'file') {
+      if (!Number.isSafeInteger(entry.size) || entry.size < 0) {
+        throw new ArchiveValidationError(`invalid size for archive member ${entry.path}`);
+      }
+      total += entry.size;
+    }
+    return { entry, header: headerFor(entry, entry.type === 'file' ? entry.size : 0) };
+  });
+  if (total > maxBytes) {
+    throw new ArchiveTooLargeError(`the archived files exceed ${String(maxBytes)} bytes.`);
+  }
+  return members;
+}
+
+/**
+ * Stream a ustar archive, pulling one file at a time: memory is one chunk plus one header (the
+ * storage design, §04 "Giving files to a run"). `maxBytes` caps the sum of declared file sizes; an
+ * array source throws `ArchiveTooLargeError` before any byte, an async source errors the stream
+ * before its first chunk. A file whose bytes differ from its declared size errors the stream.
+ */
+// @story US-STO-06
+export function encodeUstarStream(
+  entries: AsyncIterable<StreamTarEntry> | Iterable<StreamTarEntry>,
+  options: {
+    readonly maxBytes: number;
+    /** Called with a file member's SHA-256 once its bytes ended at exactly its declared size. */
+    readonly onEntryDigest?: (path: string, sha256: string) => void;
+  },
+): ReadableStream<Uint8Array> {
+  const isAsync = Symbol.asyncIterator in entries;
+  let members: PreparedMember[] = isAsync ? [] : prepareMembers([...entries], options.maxBytes);
+  let index = 0;
+  let open: { reader: ReadableStreamDefaultReader<Uint8Array>; member: PreparedMember } | null =
+    null;
+  let seen = 0;
+  let hash = createHash('sha256');
+  // Set by `cancel`, which can arrive while a file's `open()` is still pending.
+  let cancelled: { readonly reason: unknown } | null = null;
+
+  async function closeOpen(reason?: unknown): Promise<void> {
+    const current = open;
+    open = null;
+    await current?.reader.cancel(reason).catch(() => undefined);
+  }
+
+  return new ReadableStream<Uint8Array>(
+    {
+      async start() {
+        if (!isAsync) return;
+        const collected: StreamTarEntry[] = [];
+        for await (const entry of entries) collected.push(entry);
+        members = prepareMembers(collected, options.maxBytes);
+      },
+      async pull(controller) {
+        try {
+          for (;;) {
+            if (open === null) {
+              const member = members[index];
+              index += 1;
+              if (member === undefined) {
+                controller.enqueue(Buffer.alloc(ZERO_TRAILER));
+                controller.close();
+                return;
+              }
+              controller.enqueue(member.header);
+              // An empty file is opened too, so its EOF proves it is still empty.
+              if (member.entry.type === 'file') {
+                seen = 0;
+                hash = createHash('sha256');
+                open = { reader: (await member.entry.open()).getReader(), member };
+                // The source arrived after `cancel` ran: nothing else will cancel it.
+                if (cancelled !== null) await closeOpen(cancelled.reason);
+                return;
+              }
+              continue;
+            }
+            const { member, reader } = open;
+            const size = member.entry.type === 'file' ? member.entry.size : 0;
+            const { done, value } = await reader.read();
+            if (done) {
+              open = null;
+              if (seen !== size) {
+                throw new ArchiveValidationError(
+                  `${member.entry.path} changed size while streaming`,
+                );
+              }
+              options.onEntryDigest?.(member.entry.path, hash.digest('hex'));
+              const padding = paddedLength(size) - size;
+              if (padding > 0) controller.enqueue(Buffer.alloc(padding));
+              else continue;
+              return;
+            }
+            seen += value.byteLength;
+            if (seen > size) {
+              throw new ArchiveValidationError(`${member.entry.path} changed size while streaming`);
+            }
+            hash.update(value);
+            controller.enqueue(value);
+            return;
+          }
+        } catch (error) {
+          await closeOpen(error);
+          throw error;
+        }
+      },
+      async cancel(reason) {
+        cancelled = { reason };
+        await closeOpen(reason);
+      },
+    },
+    // Pull only on demand: the default high-water mark opens the first file at construction,
+    // before the consumer reads, so a change made in between would escape the size check.
+    { highWaterMark: 0 },
+  );
+}
+
+/** Resolve an already-validated relative path under `root` and prove it did not escape. */
+function resolveWithin(root: string, relativePath: string): string {
   const resolvedRoot = path.resolve(root);
-  const resolved = path.resolve(resolvedRoot, ...normalizeArchivePath(memberPath).split('/'));
+  const resolved = path.resolve(resolvedRoot, ...relativePath.split('/'));
   if (resolved !== resolvedRoot && !resolved.startsWith(`${resolvedRoot}${path.sep}`)) {
-    throw new Error(`archive member escapes workspace: ${memberPath}`);
+    throw new ArchiveValidationError(`archive member escapes workspace: ${relativePath}`);
   }
   return resolved;
+}
+
+async function lstatOrNull(target: string): Promise<Stats | null> {
+  try {
+    return await lstat(target);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw error;
+  }
 }
 
 async function refuseSymlinkParents(root: string, target: string): Promise<void> {
@@ -209,47 +454,48 @@ async function refuseSymlinkParents(root: string, target: string): Promise<void>
   let current = path.resolve(root);
   for (const segment of segments) {
     current = path.join(current, segment);
-    try {
-      if ((await lstat(current)).isSymbolicLink()) {
-        const relativeParent = path.relative(path.resolve(root), current).split(path.sep).join('/');
-        throw new Error(`symlink parent is forbidden: ${relativeParent}`);
-      }
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    if ((await lstatOrNull(current))?.isSymbolicLink()) {
+      const relativeParent = path.relative(path.resolve(root), current).split(path.sep).join('/');
+      throw new ArchiveValidationError(`symlink parent is forbidden: ${relativeParent}`);
     }
+  }
+}
+
+/**
+ * Give the owner write permission back on each existing directory above `target`. A run's read
+ * grants leave their directories `0o555` (the runner's mode pass), and the next hydrate into the
+ * same session cwd must write there; the runner re-applies the grant's mode after it. Runs after
+ * {@link refuseSymlinkParents}, so no segment is a symlink.
+ */
+async function restoreWritableParents(root: string, target: string): Promise<void> {
+  let current = path.resolve(root);
+  for (const segment of path.relative(current, target).split(path.sep).slice(0, -1)) {
+    current = path.join(current, segment);
+    const found = await lstatOrNull(current);
+    if (found === null || !found.isDirectory()) return;
+    if ((found.mode & 0o200) === 0) await chmod(current, (found.mode & 0o7777) | 0o200);
   }
 }
 
 async function refuseLeafSymlink(target: string): Promise<void> {
-  try {
-    if ((await lstat(target)).isSymbolicLink()) {
-      throw new Error(`symlink archive target is forbidden`);
-    }
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  if ((await lstatOrNull(target))?.isSymbolicLink()) {
+    throw new ArchiveValidationError(`symlink archive target is forbidden`);
   }
 }
 
 async function existingRegularFile(target: string): Promise<boolean> {
-  try {
-    const stat = await lstat(target);
-    if (stat.isSymbolicLink()) throw new Error(`symlink archive target is forbidden`);
-    if (!stat.isFile()) throw new Error(`archive file target is not a regular file`);
-    return true;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
-    throw error;
-  }
+  const stat = await lstatOrNull(target);
+  if (stat === null) return false;
+  if (stat.isSymbolicLink())
+    throw new ArchiveValidationError(`symlink archive target is forbidden`);
+  if (!stat.isFile()) throw new ArchiveValidationError(`archive file target is not a regular file`);
+  return true;
 }
 
 async function requireMissingLeaf(target: string): Promise<void> {
-  try {
-    await lstat(target);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
-    throw error;
+  if ((await lstatOrNull(target)) !== null) {
+    throw new ArchiveValidationError(`archive target appeared while it was being materialized`);
   }
-  throw new Error(`archive target appeared while it was being materialized`);
 }
 
 async function installTemporaryFile(temporary: string, target: string): Promise<void> {
@@ -267,9 +513,11 @@ async function installTemporaryFile(temporary: string, target: string): Promise<
   try {
     const moved = await lstat(backup);
     if (moved.isSymbolicLink()) {
-      throw new Error(`symlink archive target is forbidden`);
+      throw new ArchiveValidationError(`symlink archive target is forbidden`);
     }
-    if (!moved.isFile()) throw new Error(`archive file target is not a regular file`);
+    if (!moved.isFile()) {
+      throw new ArchiveValidationError(`archive file target is not a regular file`);
+    }
     await requireMissingLeaf(target);
     await rename(temporary, target);
   } catch (error) {
@@ -292,7 +540,7 @@ async function installTemporaryFile(temporary: string, target: string): Promise<
 async function writeArchiveFile(
   root: string,
   target: string,
-  data: Uint8Array,
+  data: Uint8Array | AsyncIterable<Uint8Array>,
   mode: number,
 ): Promise<void> {
   await mkdir(path.dirname(target), { recursive: true });
@@ -317,61 +565,263 @@ async function writeArchiveFile(
   }
 }
 
-export async function extractUstar(
+/** Reads a ustar stream block by block, holding at most the unconsumed rest of one chunk. */
+function ustarReader(stream: ReadableStream<Uint8Array>) {
+  const reader = stream.getReader();
+  let pending: Uint8Array = new Uint8Array(0);
+
+  async function fill(): Promise<boolean> {
+    while (pending.byteLength === 0) {
+      const { done, value } = await reader.read();
+      if (done) return false;
+      pending = value;
+    }
+    return true;
+  }
+
+  return {
+    /** The next 512-byte header block, or null when the stream ends before a whole one. */
+    async header(): Promise<Uint8Array | null> {
+      if (!(await fill())) return null;
+      if (pending.byteLength >= BLOCK) {
+        const block = pending.subarray(0, BLOCK);
+        pending = pending.subarray(BLOCK);
+        return block;
+      }
+      const block = Buffer.alloc(BLOCK);
+      for (let have = 0; have < BLOCK;) {
+        if (!(await fill())) return null;
+        const take = Math.min(BLOCK - have, pending.byteLength);
+        block.set(pending.subarray(0, take), have);
+        pending = pending.subarray(take);
+        have += take;
+      }
+      return block;
+    },
+    /** The member body in chunks; its padding is consumed once the body is. */
+    async *body(size: number, memberPath: string): AsyncGenerator<Uint8Array> {
+      for (let left = size; left > 0;) {
+        if (!(await fill())) {
+          throw new ArchiveValidationError(`truncated ustar member ${memberPath}`);
+        }
+        const chunk = pending.subarray(0, left);
+        pending = pending.subarray(chunk.byteLength);
+        left -= chunk.byteLength;
+        yield chunk;
+      }
+      for (let padding = paddedLength(size) - size; padding > 0;) {
+        if (!(await fill())) {
+          throw new ArchiveValidationError(`truncated ustar member ${memberPath}`);
+        }
+        const skipped = Math.min(padding, pending.byteLength);
+        pending = pending.subarray(skipped);
+        padding -= skipped;
+      }
+    },
+    cancel: (): Promise<void> => reader.cancel().catch(() => undefined),
+  };
+}
+
+/**
+ * Extract a ustar stream as it arrives. Link members, unsafe paths, bad checksums and a total of
+ * member sizes over `maxBytes` or more than `maxMembers` members (`ArchiveTooLargeError`, raised
+ * before the member is written) are refused (the storage design, §05 "A harmful archive"). Members before a refused one stay on disk.
+ */
+// @story US-STO-06
+export async function extractUstarStream(
+  archive: ReadableStream<Uint8Array>,
+  workspaceRoot: string,
+  options: { readonly maxBytes: number; readonly maxMembers?: number },
+): Promise<readonly string[]> {
+  const maxMembers = options.maxMembers ?? Number.POSITIVE_INFINITY;
+  const source = ustarReader(archive);
+  const written: string[] = [];
+  let total = 0;
+  let rootCreated = false;
+  try {
+    for (;;) {
+      const block = await source.header();
+      if (block === null) {
+        throw new ArchiveValidationError('ustar archive has no zero-block terminator');
+      }
+      // After the first header, so an empty or non-archive body is refused before the disk is touched.
+      if (!rootCreated) {
+        await mkdir(workspaceRoot, { recursive: true });
+        rootCreated = true;
+      }
+      if (block.every((byte) => byte === 0)) {
+        // Release the body: the trailer and anything after it are not read.
+        await source.cancel();
+        return written;
+      }
+      if (written.length >= maxMembers) {
+        throw new ArchiveTooLargeError(`the archive has more than ${String(maxMembers)} members.`);
+      }
+      const member = parseHeader(block);
+      // Every member counts, so a forged directory body cannot get past the cap either.
+      total += member.size;
+      if (total > options.maxBytes) {
+        throw new ArchiveTooLargeError(
+          `the archived files exceed ${String(options.maxBytes)} bytes.`,
+        );
+      }
+      const target = resolveWithin(workspaceRoot, member.path);
+      await refuseSymlinkParents(workspaceRoot, target);
+      await restoreWritableParents(workspaceRoot, target);
+      if (member.type === 'directory') {
+        await refuseLeafSymlink(target);
+        await mkdir(target, { recursive: true, mode: member.mode });
+        for await (const skipped of source.body(member.size, member.path)) void skipped;
+      } else {
+        await writeArchiveFile(
+          workspaceRoot,
+          target,
+          source.body(member.size, member.path),
+          member.mode,
+        );
+      }
+      written.push(member.path);
+    }
+  } catch (error) {
+    await source.cancel();
+    throw error;
+  }
+}
+
+/** One member of {@link readUstarStream}; `body` is the member's bytes in chunks, empty for a directory. */
+export type UstarMember = Readonly<{
+  path: string;
+  type: 'file' | 'directory';
+  mode: number;
+  size: number;
+  body: AsyncIterable<Uint8Array>;
+}>;
+
+/**
+ * Read a ustar stream member by member without touching a disk: the checks of
+ * {@link extractUstarStream} (link members, unsafe paths, bad checksums, `maxBytes`, `maxMembers`)
+ * run before a member is yielded. A member's `body` may be left unread, or abandoned part-way: the
+ * rest of it is skipped before the next header, so a consumer that fails on one file can go on.
+ */
+// @story US-STO-12
+export async function* readUstarStream(
+  archive: ReadableStream<Uint8Array>,
+  options: { readonly maxBytes: number; readonly maxMembers?: number },
+): AsyncGenerator<UstarMember> {
+  const maxMembers = options.maxMembers ?? Number.POSITIVE_INFINITY;
+  const source = ustarReader(archive);
+  let skip: AsyncGenerator<Uint8Array> | null = null;
+  let members = 0;
+  let total = 0;
+  try {
+    for (;;) {
+      if (skip !== null) for await (const rest of skip) void rest;
+      const block = await source.header();
+      if (block === null) {
+        throw new ArchiveValidationError('ustar archive has no zero-block terminator');
+      }
+      if (block.every((byte) => byte === 0)) return;
+      members += 1;
+      if (members > maxMembers) {
+        throw new ArchiveTooLargeError(`the archive has more than ${String(maxMembers)} members.`);
+      }
+      const member = parseHeader(block);
+      total += member.size;
+      if (total > options.maxBytes) {
+        throw new ArchiveTooLargeError(
+          `the archived files exceed ${String(options.maxBytes)} bytes.`,
+        );
+      }
+      const chunks = source.body(member.size, member.path);
+      skip = chunks;
+      // `return` is a no-op: abandoning the body must not finish the generator the reader shares.
+      const body: AsyncIterable<Uint8Array> = {
+        [Symbol.asyncIterator]: () => ({
+          next: () => chunks.next(),
+          return: () => Promise.resolve({ done: true, value: undefined }),
+        }),
+      };
+      yield { ...member, body };
+    }
+  } finally {
+    await source.cancel();
+  }
+}
+
+export function extractUstar(
   archive: ReadableStream<Uint8Array>,
   workspaceRoot: string,
 ): Promise<readonly string[]> {
-  const entries = decodeUstar(await readStream(archive));
-  const written: string[] = [];
-  await mkdir(workspaceRoot, { recursive: true });
-  for (const entry of entries) {
-    const target = targetPath(workspaceRoot, entry.path);
-    await refuseSymlinkParents(workspaceRoot, target);
-    if (entry.type === 'directory') {
-      await refuseLeafSymlink(target);
-      await mkdir(target, { recursive: true, mode: entry.mode });
-    } else {
-      await writeArchiveFile(workspaceRoot, target, entry.data ?? new Uint8Array(), entry.mode);
-    }
-    written.push(entry.path);
-  }
-  return written;
+  return extractUstarStream(archive, workspaceRoot, { maxBytes: Number.POSITIVE_INFINITY });
 }
 
+type CollectBudget = { remaining: number; readonly limit: number };
+
+/** `relativePath` is already validated; each directory child is a literal checked only as a segment. */
 async function collectEntry(
   root: string,
   relativePath: string,
-  entries: TarEntry[],
+  entries: StreamTarEntry[],
+  budget: CollectBudget,
 ): Promise<void> {
-  const normalized = normalizeArchivePath(relativePath);
-  const absolute = targetPath(root, normalized);
+  const absolute = resolveWithin(root, relativePath);
   // A linked parent (`outputs -> /etc`) would export files from outside the workspace.
   await refuseSymlinkParents(root, absolute);
   const stat = await lstat(absolute);
-  if (stat.isSymbolicLink())
-    throw new Error(`symlink archive entries are forbidden: ${normalized}`);
+  if (stat.isSymbolicLink()) {
+    throw new ArchiveValidationError(`symlink archive entries are forbidden: ${relativePath}`);
+  }
   if (stat.isDirectory()) {
-    entries.push({ path: normalized, type: 'directory', mode: stat.mode & 0o7777 });
+    entries.push({ path: relativePath, type: 'directory', mode: stat.mode & 0o7777 });
     const children = await readdir(absolute);
     children.sort();
-    for (const child of children) await collectEntry(root, `${normalized}/${child}`, entries);
+    for (const child of children) {
+      assertSegment(child, relativePath);
+      await collectEntry(root, `${relativePath}/${child}`, entries, budget);
+    }
     return;
   }
-  if (!stat.isFile()) throw new Error(`unsupported workspace entry: ${normalized}`);
+  if (!stat.isFile()) {
+    throw new ArchiveValidationError(`unsupported workspace entry: ${relativePath}`);
+  }
+  budget.remaining -= stat.size;
+  if (budget.remaining < 0) {
+    throw new ArchiveTooLargeError(`the collected files exceed ${String(budget.limit)} bytes.`);
+  }
   entries.push({
-    path: normalized,
+    path: relativePath,
     type: 'file',
     mode: stat.mode & 0o7777,
-    data: await readFile(absolute),
+    size: stat.size,
+    // Opened late, so prove it is still the file checked above: a leaf or parent swapped for a
+    // symlink since then would export a host file.
+    open: async () => {
+      const handle = await fsOpen(absolute, 'r');
+      const opened = await handle.stat();
+      if (opened.dev !== stat.dev || opened.ino !== stat.ino || !opened.isFile()) {
+        await handle.close();
+        throw new ArchiveValidationError(
+          `workspace entry changed while streaming: ${relativePath}`,
+        );
+      }
+      return Readable.toWeb(handle.createReadStream());
+    },
   });
 }
 
 export async function archiveWorkspacePaths(
   workspaceRoot: string,
   paths: readonly string[],
+  options: { readonly maxBytes?: number } = {},
 ): Promise<ReadableStream<Uint8Array>> {
-  if (paths.length === 0) throw new Error('at least one workspace path is required');
-  const entries: TarEntry[] = [];
-  for (const requested of paths) await collectEntry(workspaceRoot, requested, entries);
-  return bytesToStream(encodeUstar(entries));
+  if (paths.length === 0) {
+    throw new ArchiveValidationError('at least one workspace path is required');
+  }
+  const limit = options.maxBytes ?? Number.POSITIVE_INFINITY;
+  const budget: CollectBudget = { remaining: limit, limit };
+  const entries: StreamTarEntry[] = [];
+  for (const requested of paths) {
+    await collectEntry(workspaceRoot, normalizeArchivePath(requested), entries, budget);
+  }
+  return encodeUstarStream(entries, { maxBytes: limit });
 }

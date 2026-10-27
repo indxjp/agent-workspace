@@ -1,0 +1,1 @@
+CREATE INDEX "trigger_deliveries_trigger_created_idx" ON "trigger_deliveries" USING btree ("workspace_id","trigger_id","created_at");

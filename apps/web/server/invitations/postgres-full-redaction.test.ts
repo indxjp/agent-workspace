@@ -1,3 +1,4 @@
+import { captureLog } from '../telemetry/capture-log';
 import crypto from 'node:crypto';
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -25,9 +26,9 @@ import {
 } from '../auth';
 import { createPostgresDirectory } from '../rbac/postgres-directory';
 import { Principal } from '../rbac/principal';
-import { clearRbacRuntime, configureRbacRuntime } from '../rbac/runtime';
-import { clearInvitationsRuntime, configureInvitationsRuntime } from './runtime';
 import { createManualLinkInvitationSender } from './send-invitation';
+import { clearApplicationContext } from '../application-context';
+import { installTestDomains } from '../application-context-fixtures';
 
 const hasDatabase = Boolean(process.env['TEST_DATABASE_URL']?.trim());
 const SECRET = 'postgres-redaction-session-secret-long-enough';
@@ -78,8 +79,7 @@ describe.skipIf(!hasDatabase)('full PostgreSQL invitation and audit redaction', 
 
   afterAll(async () => {
     delete process.env['SESSION_SECRET'];
-    clearInvitationsRuntime();
-    clearRbacRuntime();
+    clearApplicationContext();
     vi.restoreAllMocks();
     await root.close();
     await isolated.close();
@@ -109,18 +109,15 @@ describe.skipIf(!hasDatabase)('full PostgreSQL invitation and audit redaction', 
       },
     );
     if (!built.ok) throw new Error('principal setup failed');
-    configureRbacRuntime({ directory, identify: () => Promise.resolve(built.principal) });
-    configureInvitationsRuntime({
-      recordAuditEvent: (event) => root.recordAuditEvent(event),
-      sendInvitation: createManualLinkInvitationSender(),
+    installTestDomains({ rbac: { directory, identify: () => Promise.resolve(built.principal) } });
+    installTestDomains({
+      invitations: {
+        recordAuditEvent: (event) => root.recordAuditEvent(event),
+        sendInvitation: createManualLinkInvitationSender(),
+      },
     });
 
-    const logs: unknown[][] = [];
-    for (const method of ['log', 'warn', 'error'] as const) {
-      vi.spyOn(console, method).mockImplementation((...args: unknown[]) => {
-        logs.push(args);
-      });
-    }
+    const logs = captureLog();
 
     const createdResponse = await CREATE(
       new Request('https://control-plane.test/api/invitations', {
@@ -199,7 +196,7 @@ describe.skipIf(!hasDatabase)('full PostgreSQL invitation and audit redaction', 
     ]);
     expect(JSON.stringify(invitationRows)).not.toContain(token);
     expect(JSON.stringify(auditRows)).not.toContain(token);
-    expect(JSON.stringify(logs)).not.toContain(token);
+    expect(logs.text()).not.toContain(token);
     const acceptedUser = await root.directory.findUserByEmail('new-user@example.test');
     expect(acceptedUser).not.toBeNull();
     expect(await root.directory.membershipsForUser(acceptedUser?.id ?? '')).toEqual([

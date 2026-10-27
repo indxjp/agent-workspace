@@ -1,6 +1,8 @@
 /**
- * What the public MCP project endpoint (ADR-0134 part 2) needs from the rest of the control plane,
- * installed by the composition root the way `a2a/env.ts` installs the A2A endpoint. The client, its
+ * What the public MCP project endpoint (ADR-0134 part 2) needs from the rest of the control plane.
+ * The composition root builds it once the run runtime is wired and installs it as
+ * `ApplicationContext.toolEndpoint`; until then, and in a deployment with no runtime at all, the
+ * endpoint answers `503 tool_endpoint_not_configured`. The client, its
  * audit trail and the agents' run permission stay the endpoint-clients runtime's; this seam adds only
  * who is calling, which code tools the client's agents publish and how to reach their sandbox.
  */
@@ -9,10 +11,10 @@ import type { AgentVersionToolBundle } from '@indx-workspace/contracts/agent-ver
 import type { RunOwnershipPrincipal } from '../agents/run-ownership';
 import type { OAuthGrant } from '../rbac/principal';
 import type { Ownership } from '../rbac/decide';
-import type { Principal } from '../runs/environment';
+import type { RunPrincipal } from '../runs/environment';
 
 export interface ToolEndpointIdentity {
-  readonly principal: Principal;
+  readonly principal: RunPrincipal;
   /** Only `api-key` and `oauth-token` are accepted. */
   readonly via: 'session' | 'api-key' | 'browser-token' | 'user-token' | 'oauth-token';
   /** `api_keys.id`, set exactly when `via` is `api-key`. It keys the rate limit; it is not a secret. */
@@ -49,26 +51,11 @@ export interface ToolEndpointEnvironment {
   ): Promise<ToolEndpointRoute>;
   /** Closes the client's tool sandbox; one that is not open is not an error. */
   closeSandbox(workspaceId: string, clientId: string): Promise<void>;
-  readonly fetch?: typeof fetch;
+  readonly fetch: typeof fetch;
   now(): number;
 }
 
-interface ToolEndpointRegistry {
-  __agentWorkspaceToolEndpointEnvironment__?: ToolEndpointEnvironment;
-}
-
-// On `globalThis` for the reason `runs/environment.ts` gives: route bundles and instrumentation
-// are separate module graphs in one process.
-const registry = globalThis as typeof globalThis & ToolEndpointRegistry;
-
-export function installToolEndpoint(environment: ToolEndpointEnvironment): void {
-  registry.__agentWorkspaceToolEndpointEnvironment__ = environment;
-}
-
-export function resetToolEndpoint(): void {
-  delete registry.__agentWorkspaceToolEndpointEnvironment__;
-}
-
-export function getToolEndpoint(): ToolEndpointEnvironment | null {
-  return registry.__agentWorkspaceToolEndpointEnvironment__ ?? null;
-}
+/** The endpoint as the context holds it: `disabled` while no runtime can open a tool sandbox. */
+export type ToolEndpoint =
+  | { readonly kind: 'serving'; readonly environment: ToolEndpointEnvironment }
+  | { readonly kind: 'disabled' };

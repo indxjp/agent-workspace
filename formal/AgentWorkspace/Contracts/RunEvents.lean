@@ -12,6 +12,13 @@ def controlFrameNames : List String := ["done", "run-failed", "stream-reset"]
 @[aw_spec (ts := "packages/contracts/src/run-events.ts#RUN_STATUS_EVENT")]
 def runStatusEvent : String := "run.status"
 
+@[aw_spec (ts := "packages/contracts/src/run-events.ts#RUN_WARNING_EVENT")]
+def runWarningEvent : String := "run.warning"
+
+/-- The durable names only the platform writes, in wire order. -/
+@[aw_spec (ts := "packages/contracts/src/run-events.ts#PLATFORM_EVENT_NAMES")]
+def platformEventNames : List String := [runStatusEvent, runWarningEvent]
+
 @[aw_spec (ts := "packages/contracts/src/run-events.ts#RELAYED_EVENT_NAMES")]
 def relayedEventNames : List String :=
   ["system", "system-unknown", "result", "result-unknown", "sdk-event", "unknown", "malformed"]
@@ -35,6 +42,14 @@ private def status (j : JValue) : Bool :=
 @[aw_spec (ts := "packages/contracts/src/run-events.ts#RunStatusEventDataSchema")]
 def runStatusData : JValue → Bool := Runs.object
   [("status", status), ("error", Runs.nullable string)]
+
+/-- `{code, message?}` is strict: a nonempty `code`, and `message` text when present. -/
+@[aw_spec (ts := "packages/contracts/src/run-events.ts#RunWarningEventDataSchema")]
+def runWarningData : JValue → Bool
+  | .obj fs =>
+    Obj.onlyKeys ["code", "message"] fs && (JValue.lookup "code" fs).any nonempty &&
+      Runs.optField string "message" fs
+  | _ => false
 
 /-- A stream failure also admits the outcome `unknown`. -/
 @[aw_spec (ts := "packages/contracts/src/run-events.ts#RunFailedFrameDataSchema")]
@@ -61,7 +76,8 @@ re-sorted. -/
 @[aw_spec (ts := "packages/contracts/src/run-events.ts#AGENT_FRAME_NAMES")]
 def agentFrameNames : List String :=
   ["agent.session", "agent.message", "agent.message.delta", "agent.tool.call",
-   "agent.tool.result", "agent.usage", "agent.result", "agent.native", "agent.malformed"]
+   "agent.tool.result", "agent.usage", "agent.result", "agent.native", "agent.malformed",
+   "agent.approval.requested", "agent.handoff"]
 
 @[aw_spec (ts := "packages/contracts/src/run-events.ts#AGENT_TOOL_KINDS")]
 def agentToolKinds : List String :=

@@ -9,6 +9,8 @@
 export { ENVELOPE_ALGORITHM, KEY_BYTES, NONCE_BYTES, TAG_BYTES } from './crypto.js';
 export {
   MASTER_KEY_ENV_VAR,
+  MASTER_KEY_EXPECTED_FORMAT,
+  MalformedMasterKeyError,
   loadMasterKey,
   parseMasterKeyHex,
   type MasterKey,

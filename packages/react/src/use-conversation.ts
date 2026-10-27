@@ -69,8 +69,11 @@ export interface Conversation {
   readonly failure: RunFailureNotice | null;
   /** Each run's tool steps and answers. */
   readonly turns: readonly SurfaceTurn[];
-  /** Send `prompt`; ignored when it is empty or while restoring or sending. */
-  readonly send: (prompt: string) => void;
+  /**
+   * Send `prompt`, with `files` attached when the surface offers the `attachments` part; ignored
+   * when it is empty or while restoring or sending.
+   */
+  readonly send: (prompt: string, files?: readonly File[]) => void;
   readonly rate: (runId: string, rating: RunFeedbackRating) => void;
   readonly rated: Readonly<Record<string, RunFeedbackRating>>;
   /** The runs whose rating was not sent, which may be rated again. */
@@ -183,7 +186,7 @@ export function useConversation({
     void restore(agent ?? ownAgentName);
   }, []);
 
-  const send = (prompt: string): void => {
+  const send = (prompt: string, files: readonly File[] = []): void => {
     if (prompt === '' || busy || restoring) return;
     setBusy(true);
     sentRef.current += 1;
@@ -193,6 +196,7 @@ export function useConversation({
       { ...driverFor(agentRef.current), signal: unmountRef.current?.signal },
       `visitor-${String(sentRef.current)}`,
       prompt,
+      files,
     ).finally(() => {
       setBusy(false);
     });

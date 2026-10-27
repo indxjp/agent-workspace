@@ -5,6 +5,15 @@ description: "The @indx-workspace/contracts/policy-ceiling exports, sorted alpha
 
 <Note>This page is generated from `packages/contracts/src/policy-ceiling.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
 
+## builderAllows
+
+Whether `ceiling` lets the agent named `agentName` build agents (issue #1851). Fails closed: an
+absent or `null` ceiling, an absent `builder` or an unlisted name allows nothing. Pure.
+
+```ts
+builderAllows(ceiling: ProjectPolicy | null | undefined, agentName: string): boolean
+```
+
 ## EffectivePolicyConfiguration
 
 The configuration a ceiling judges at one step (C14, issue #524): an agent's permissions and
@@ -128,9 +137,27 @@ A parsed `ProjectPolicySchema` (ADR-0102 SD6, issue #524).
 | `models` | `undefined \| readonly string[]` | No |  |
 | `tools` | `undefined \| readonly string[]` | No |  |
 | `promotion` | `undefined \| ProjectPolicyPromotion` | No |  |
-| `maxCostPerDayUsd` | `undefined` | No |  |
+| `maxCostPerDayUsd` | `undefined \| number` | No |  |
+| `builder` | `undefined \| ProjectPolicyBuilder` | No |  |
 | `network` | `undefined` | No |  |
 | `approval` | `undefined` | No |  |
+
+## ProjectPolicyBuilder
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `allow` | `readonly string[]` | Yes |  |
+
+## ProjectPolicyBuilderSchema
+
+Which agents may build agents (issue #1851): the names of the agents whose runs may use the
+Builder's `aw-control` tools. It judges no agent configuration, so neither
+`policyWidenings` nor `meetPolicyCeiling` reads it, and no widening check is needed:
+unlike the narrowing keys above, a longer list grants more rather than capping an agent.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `allow` | `readonly string[]` | Yes |  |
 
 ## ProjectPolicyLimits
 
@@ -201,10 +228,16 @@ absent key caps nothing:
 - `tools` — the connector names an agent may use, none twice. An empty list means no tools.
 - `promotion` — `minEvalScore`, the bar promotion to `production` must reach (issue #619). It is
   not a widening of any agent: unset, promotion needs no evaluation.
+- `maxCostPerDayUsd` — the model spend, in USD, a workspace may run up per UTC day (issue #1851).
+  Like `promotion` it is not a widening of any agent: a run start over it is refused
+  `daily_cost_cap_reached`.
+- `builder` — `allow`, the names of the agents that may build agents (issue #1851). It is not a
+  widening of any agent either. An absent `builder` allows no agent (fail closed), and an empty
+  `allow` says the same.
 
-`maxCostPerDayUsd`, `network` and `approval` are not built yet and are each refused at their own
-path. `connections` has no field: an allowlist of connections is out of scope in slice 2, so the
-strict object refuses it as an unknown key.
+`network` and `approval` are not built yet and are each refused at their own path. `connections`
+has no field: an allowlist of connections is out of scope in slice 2, so the strict object
+refuses it as an unknown key.
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -214,6 +247,7 @@ strict object refuses it as an unknown key.
 | `models` | `undefined \| readonly string[]` | No |  |
 | `tools` | `undefined \| readonly string[]` | No |  |
 | `promotion` | `undefined \| ProjectPolicyPromotion` | No |  |
-| `maxCostPerDayUsd` | `undefined` | No |  |
+| `maxCostPerDayUsd` | `undefined \| number` | No |  |
+| `builder` | `undefined \| ProjectPolicyBuilder` | No |  |
 | `network` | `undefined` | No |  |
 | `approval` | `undefined` | No |  |

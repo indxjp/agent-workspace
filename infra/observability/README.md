@@ -9,4 +9,5 @@ on-call destination.
 Set `OTEL_COLLECTOR_IMAGE` to a reviewed contrib-collector digest and run Compose with both the
 production file and this overlay. Workload identity comes from the VM metadata server; do not mount
 a service-account key. Before enabling the overlay, verify the selected collector image contains
-the `googlecloud` exporter and that the application build emits OTLP.
+the `googlecloud` exporter. The web, runner and gateway export spans to it once the overlay sets
+`OTEL_EXPORTER_OTLP_ENDPOINT` on them.

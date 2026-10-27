@@ -1,6 +1,6 @@
 {
   "name": "@indx-workspace/platforms",
-  "version": "0.6.9",
+  "version": "0.6.11",
   "description": "The PlatformTarget port, the per-field verdict model and the conformance kit that every agent-platform translator (Copilot Studio, Foundry, Gemini Enterprise, AgentCore, ...) is built on; pure, no I/O.",
   "license": "Apache-2.0",
   "homepage": "https://docs.agentworkspace.indx.jp",
@@ -133,12 +133,12 @@
   "dependencies": {
     "@indx-workspace/contracts": "workspace:*",
     "yaml": "2.9.1",
-    "zod": "4.6.6"
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@typescript/native": "npm:typescript@7.0.2",
     "typescript": "npm:@typescript/typescript6@6.0.2",
-    "vitest": "5.0.3"
+    "vitest": "5.0.5"
   },
   "nx": {
     "targets": {

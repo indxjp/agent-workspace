@@ -23,3 +23,18 @@ export function urlCarriesCredential(url: URL): boolean {
   if (url.username !== '' || url.password !== '') return true;
   return [...url.searchParams.keys()].some((name) => CREDENTIAL_QUERY_PARAMETER_PATTERN.test(name));
 }
+
+/** Whether `value` is an http(s) URL with no credential, query or fragment: a bare endpoint. */
+export function isHttpEndpoint(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (
+      (url.protocol === 'http:' || url.protocol === 'https:') &&
+      !urlCarriesCredential(url) &&
+      url.search === '' &&
+      url.hash === ''
+    );
+  } catch {
+    return false;
+  }
+}

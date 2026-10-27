@@ -29,7 +29,6 @@
  * are structurally identical and nominally unrelated, which is a real duplication and is
  * declared as one. See `docs/adr/W1-RN-02-runtime-driver-is-generic.md`.
  */
-import type { RunRequest } from '@agent-workspace/core';
 import {
   withStoreWriteFailures,
   type AgentEngine,
@@ -37,8 +36,11 @@ import {
   type EngineRefusalCode,
   type EngineRunRequest,
   type EngineStartContext,
+  type EngineApprovalRequest,
   type SessionDurabilityVerdict,
 } from '@agent-workspace/engine';
+
+import type { ResolvedRunRequest } from './resources.js';
 
 /**
  * §14.2's `AgentConnection`, for the runner, plus the one thing §14.9 makes a release blocker.
@@ -72,6 +74,8 @@ export type RunnerAgentConnection = {
   interrupt(): Promise<void>;
   /** See {@link SessionDurabilityVerdict}. Meaningful once `frames` has been exhausted. */
   sessionDurability(): SessionDurabilityVerdict;
+  /** The call the run stopped on for want of approval, or `null` (ADR-0145 D5). Absent on an engine that cannot. */
+  approvalRequest?(): EngineApprovalRequest | null;
   /** The adapter's own version, reported on the run's terminal frame (`run-done`). */
   readonly engineVersion: string;
 };
@@ -90,18 +94,19 @@ export type EngineStartOutcome =
 /**
  * How `server.ts` starts a run. A parameter so a caller can substitute one; see `server.ts`.
  *
- * It takes the **private-contract** `RunRequest` rather than the port's `EngineRunRequest`, and
- * that is deliberate: a starter is also what materialises the run's granted files into the
- * sandbox (`apps/runner/src/index.ts`), and those bytes are on the contract's request and not on
- * the port's — the port hands an adapter grants, not content. Translating at the top of
- * `server.ts` instead would mean carrying the bytes through the port to reach the one function
- * that writes them.
+ * It takes the **private-contract** request (`ResolvedRunRequest`: the validated `RunRequest` with
+ * its skill bytes read) rather than the port's `EngineRunRequest`, and
+ * that is deliberate: a starter is also what materialises the run's grants into the sandbox
+ * (`apps/runner/src/index.ts`). File bytes never ride on the request — they arrive through
+ * `POST /files` and materialisation only checks paths and sets modes — but it needs the
+ * contract's directory grants and revocation, and the skill bytes read from the inbox, none of
+ * which the port's request carries.
  *
  * It is **async** because choosing an engine is a dynamic `import()` (`./engines.ts`). The
  * refusal it can answer with is a value, not a throw, so `server.ts` can put a stable code on
  * the wire.
  */
-export type RunnerAgentStarter = (request: RunRequest) => Promise<EngineStartOutcome>;
+export type RunnerAgentStarter = (request: ResolvedRunRequest) => Promise<EngineStartOutcome>;
 
 /**
  * Start one agent in **this** process — the `local` driver of §14.4, and what the runtime image's
@@ -145,6 +150,9 @@ export function startEngineAgent(
           ? connection.sessionDurability()
           : withStoreWriteFailures(connection.sessionDurability(), storeFailures()),
       engineVersion: engine.version,
+      ...(connection.approvalRequest === undefined
+        ? {}
+        : { approvalRequest: () => connection.approvalRequest?.() ?? null }),
     },
   };
 }

@@ -55,6 +55,26 @@ function withAgent(patch: Record<string, unknown>): unknown {
   return { ...definition, agent: { ...definition.agent, ...patch } };
 }
 
+describe('AgentDefinitionSchema skill revision pins', () => {
+  const pinned = (skillRevisions: unknown): unknown => ({
+    ...definition,
+    resources: { ...definition.resources, skillRevisions },
+  });
+
+  it('accepts a pin on a listed skill and a definition with no pins', () => {
+    expect(AgentDefinitionSchema.safeParse(definition).success).toBe(true);
+    expect(AgentDefinitionSchema.parse(pinned({ triage: 2 }))).toMatchObject({
+      resources: { skillRevisions: { triage: 2 } },
+    });
+  });
+
+  it('refuses a pin on a skill the definition does not list, revision 0 and the word latest', () => {
+    expect(AgentDefinitionSchema.safeParse(pinned({ other: 1 })).success).toBe(false);
+    expect(AgentDefinitionSchema.safeParse(pinned({ triage: 0 })).success).toBe(false);
+    expect(AgentDefinitionSchema.safeParse(pinned({ triage: 'latest' })).success).toBe(false);
+  });
+});
+
 describe('AgentDefinitionSchema', () => {
   it('accepts a complete, name-keyed definition', () => {
     expect(AgentDefinitionSchema.parse(definition)).toEqual(definition);

@@ -362,3 +362,34 @@ export function toObjectKey(raw: string): string {
 export function toObjectPrefix(raw: string): string {
   return evaluateRelativePath(raw, true).canonical;
 }
+
+/**
+ * `name` when it is a legal key, `null` when the guard refuses it. For listings only: a bucket can
+ * hold names other tools wrote (a console folder's zero-byte `name/`, a bare `%`), and one of those
+ * must drop out of a listing rather than fail it.
+ */
+export function addressableObjectName(name: string): string | null {
+  try {
+    return toObjectKey(name);
+  } catch (error) {
+    if (error instanceof UnsafeObjectKeyError) return null;
+    throw error;
+  }
+}
+
+/** Normalise an adapter's configured key prefix to `''` or `'<validated>/'`. */
+export function storeKeyPrefix(value: string | undefined): string {
+  if (value === undefined || value.trim() === '') return '';
+  return `${toObjectPrefix(value.replace(/\/+$/u, ''))}/`;
+}
+
+/** Validate `key` and join it under an adapter prefix from {@link storeKeyPrefix}. */
+export function prefixedObjectKey(prefix: string, key: string): string {
+  return `${prefix}${toObjectKey(key)}`;
+}
+
+/** Validate a `list` prefix and join it under an adapter prefix from {@link storeKeyPrefix}. */
+export function prefixedListPrefix(prefix: string, key: string): string {
+  const safe = toObjectPrefix(key);
+  return safe === '' ? prefix : `${prefix}${safe}/`;
+}

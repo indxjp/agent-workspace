@@ -48,29 +48,21 @@ import {
   createRepositoryAgentStoreProvider,
   type AgentStoreProvider,
 } from '../../../../../server/agents/store';
-import {
-  clearAgentsRuntime,
-  configureAgentsRuntime,
-  type WorkspaceResolution,
-} from '../../../../../server/agents/runtime';
+import { type WorkspaceResolution } from '../../../../../server/agents/runtime';
 import {
   fixtureSurface,
   versionRequest,
   type FixtureEdits,
 } from '../../../../../server/agent-versions/fixtures';
-import {
-  clearAgentVersionsRuntime,
-  configureAgentVersionsRuntime,
-} from '../../../../../server/agent-versions/runtime';
+import { clearApplicationContext } from '../../../../../server/application-context';
+import { installTestDomains } from '../../../../../server/application-context-fixtures';
 import { setAgentPointer } from '../../../../../server/agent-versions/pointers';
 import {
   createRepositoryAgentVersionStoreProvider,
   type AgentVersionStoreProvider,
 } from '../../../../../server/agent-versions/store';
-import { clearAuditRuntime, configureAuditRuntime } from '../../../../../server/audit/runtime';
 import { createMemoryDirectory } from '../../../../../server/rbac/memory-directory';
 import { Principal } from '../../../../../server/rbac/principal';
-import { clearRbacRuntime, configureRbacRuntime } from '../../../../../server/rbac/runtime';
 
 const rawUrl = process.env['TEST_DATABASE_URL'];
 const hasDatabase = rawUrl !== undefined && rawUrl.trim() !== '';
@@ -159,40 +151,43 @@ describe.skipIf(!hasDatabase)('PUT /api/agents/:id/pointers on PostgreSQL', () =
       evaluations: createDatabaseAgentVersionEvaluationRepositoryProvider(isolated.db),
       scopes,
     });
-    configureAgentsRuntime({
-      agents: agentStores,
-      agentResources: createRepositoryAgentResourceStoreProvider({
-        repositories: createDatabaseAgentResourceRepositoryProvider(isolated.db),
+    installTestDomains({
+      agents: {
+        agents: agentStores,
+        agentResources: createRepositoryAgentResourceStoreProvider({
+          repositories: createDatabaseAgentResourceRepositoryProvider(isolated.db),
+          scopes,
+        }),
+        resolveWorkspace: (): Promise<WorkspaceResolution> =>
+          Promise.resolve({ kind: 'workspace', workspaceId }),
+      },
+    });
+    installTestDomains({ agentVersions: { versions: versionStores } });
+    installTestDomains({
+      audit: {
         scopes,
-      }),
-      resolveWorkspace: (): Promise<WorkspaceResolution> =>
-        Promise.resolve({ kind: 'workspace', workspaceId }),
+        repositories: createDatabaseAuditEventRepositoryProvider(isolated.db),
+      },
     });
-    configureAgentVersionsRuntime({ versions: versionStores });
-    configureAuditRuntime({
-      scopes,
-      repositories: createDatabaseAuditEventRepositoryProvider(isolated.db),
-    });
-    configureRbacRuntime({
-      directory: createMemoryDirectory({ users: [] }),
-      identify: () =>
-        Promise.resolve(
-          Principal.fromApiKey({
-            principalId: ownerPrincipalId,
-            apiKeyId: crypto.randomUUID(),
-            workspaceId,
-            role: 'owner',
-            label: 'pointers owner key',
-          }),
-        ),
+    installTestDomains({
+      rbac: {
+        directory: createMemoryDirectory({ users: [] }),
+        identify: () =>
+          Promise.resolve(
+            Principal.fromApiKey({
+              principalId: ownerPrincipalId,
+              apiKeyId: crypto.randomUUID(),
+              workspaceId,
+              role: 'owner',
+              label: 'pointers owner key',
+            }),
+          ),
+      },
     });
   }, 180_000);
 
   afterAll(async () => {
-    clearAgentsRuntime();
-    clearAgentVersionsRuntime();
-    clearAuditRuntime();
-    clearRbacRuntime();
+    clearApplicationContext();
     await isolated.close();
   });
 
@@ -412,7 +407,7 @@ describe.skipIf(!hasDatabase)('PUT /api/agents/:id/pointers on PostgreSQL', () =
     );
     expect(assigned.status, await assigned.clone().text()).toBe(200);
     expect(await assigned.json()).toEqual({
-      assignments: { files: [], skillIds: [], connectorIds: [crmId] },
+      assignments: { files: [], skillIds: [], connectorIds: [crmId], storageGrants: [] },
     });
     const afterPut = await listing();
     expect(afterPut.items[2]).toMatchObject({

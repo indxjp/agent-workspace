@@ -126,3 +126,19 @@ other content; a fix is a new version.
 - A re-run after a partial failure publishes only what is missing; a tag already published from
   another commit fails the run, and the release takes a new version.
 - Changing the pinned version is one edit to `release-images.json`, which the CLI then ships.
+
+## Amendment — the images publish from the public repository to `ghcr.io/indxjp` (2026-10-26)
+
+Owner decision, 2026-10-26: the releases run in the public repository `indxjp/agent-workspace` on
+free GitHub-hosted runners (see ADR-0082, Amendment 2026-10-26). Every job of `images.yml` and
+`release.yml` starts with `if: github.repository == 'indxjp/agent-workspace'` and runs on
+`ubuntu-latest`, which `scripts/check-workflows.mjs` requires. The run's `GITHUB_TOKEN` can write
+only its own organisation's packages, so the registry in `packages/cli/src/release-images.json` is
+now `ghcr.io/indxjp`, and the images' `org.opencontainers.image.source` names the public repository.
+The keyless signing identity follows `github.repository` and needs no change.
+
+Versions up to 0.6.10 stay at `ghcr.io/indxdev/agent-workspace/*`, where the CLIs that pin them
+resolve them; D6 still holds there. The first release after 0.6.10 is the first at
+`ghcr.io/indxjp`, and each of its packages starts private, so its `verify-public` job fails until
+the Owner makes each one public. Until that `images-v` tag runs, a CLI built from `main` pins a
+version the new registry does not have yet, as between any release pull request and its image tag.

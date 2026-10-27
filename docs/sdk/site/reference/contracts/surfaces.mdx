@@ -3,7 +3,7 @@ title: "surfaces"
 description: "The @indx-workspace/contracts/surfaces exports, sorted alphabetically."
 ---
 
-<Note>This page is generated from `packages/contracts/src/surfaces.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+<Note>This page is generated from `packages/contracts/src/attachment-limits.ts`, `packages/contracts/src/surfaces.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
 
 ## SURFACE_AGENT_SWITCHER_MAX
 
@@ -16,6 +16,45 @@ Value: `6`
 The most origins `allowedOrigins` may list (issue #622).
 
 Value: `20`
+
+## SURFACE_ATTACHMENT_MAX_BYTES
+
+The most bytes one attachment may carry, 10 MiB (ADR-0146 D5, D6). Run and surface uploads share it.
+
+Value: `10 * 1024 * 1024`
+
+## SURFACE_ATTACHMENT_NAME_MAX_BYTES
+
+The longest attachment file name, in UTF-8 bytes (ADR-0146 D2).
+
+Value: `255`
+
+## SURFACE_ATTACHMENT_PROBLEM_CODES
+
+The problem codes `POST /api/sessions/:id/attachments` answers with, and each one's HTTP status
+(ADR-0146 D6; issue #1308). `file_not_found` is also the answer for a session whose surface does
+not offer attachments, so the route is not visible without the part. `request_body_too_large`
+is the 10 MiB cap and `attachments_quota_exceeded` the per-session 20 files or 50 MiB.
+
+| Key | Value |
+| --- | --- |
+| `file_not_found` | `404` |
+| `invalid_attachment_name` | `400` |
+| `request_body_too_large` | `413` |
+| `attachments_quota_exceeded` | `413` |
+| `surface_rate_limited` | `SURFACE_LIMIT_PROBLEM_CODES.surface_rate_limited` |
+
+## SURFACE_ATTACHMENTS_MAX_FILES
+
+The most files one visitor session may store through the upload route (ADR-0146 D6).
+
+Value: `20`
+
+## SURFACE_ATTACHMENTS_MAX_TOTAL_BYTES
+
+The most bytes one visitor session may store through the upload route, 50 MiB (ADR-0146 D6).
+
+Value: `50 * 1024 * 1024`
 
 ## SURFACE_DENSITIES
 
@@ -43,8 +82,9 @@ body carries next to its agent definition (ADR-0101), and what the hosted widget
 `/p/s/<name>` reads its look from. It accepts rungs ① (look) and ② (layout and parts) of
 ADR-0108; rung ② is complete since issue #537 (ADR-0108 SD10): history, feedback, the agent
 switcher, a full tool trace and built-in tool-result components. Allowed origins and limits
-embed a surface on a customer's own site (issue #622). Audience and attachments arrive in later
-units, and until then a strict object refuses each of them rather than accepting and ignoring it.
+embed a surface on a customer's own site (issue #622). Attachments (`parts.attachments`,
+ADR-0146; issue #1308) join the parts. Audience arrives in a later unit, and until then a strict
+object refuses it rather than accepting and ignoring it.
 
 Every schema here is plain structure: no default and no transform, so the parsed value is the
 value written, and `z.toJSONSchema` can emit an editor schema from the same definitions.
@@ -155,7 +195,7 @@ The colour schemes a surface may follow (ADR-0108 rung ①; issue #440).
 
 A `toolResults` key: a tool name as a run's `agent.tool.call` frame carries it, up to the
 64-character model-visible cap, so engine-prefixed names such as `mcp__<key>__<op>` fit; how a
-prefixed MCP name is matched is S2-05d's (ADR-0108 SD10; issue #537).
+prefixed name is matched is `toolResultFor`'s (ADR-0108 SD10; issues #537, #1276).
 
 Value: `/^[A-Za-z0-9_-]{1,64}$/u`
 
@@ -229,6 +269,38 @@ the page's `frame-ancestors`, the session route's `Origin` check and its CORS an
 | `with` | `(index: number, value: string) => string[]` | Yes | Copies an array, then overwrites the value at the provided index with the given value. If the index is negative, then it replaces from the end of the array |
 | `[Symbol.iterator]` | `() => ArrayIterator<string>` | Yes | Iterator of values in the array. |
 | `[Symbol.unscopables]` | `{ readonly [x: number]: boolean \| undefined; readonly length?: boolean; toString?: boolean; toLocaleString?: boolean; concat?: boolean; join?: boolean; slice?: boolean; indexOf?: boolean; lastIndexOf?: boolean; every?: boolean; some?: boolean; forEach?: boolean; map?: boolean; filter?: boolean; reduce?: boolean; reduceRight?: boolean; find?: boolean; findIndex?: boolean; entries?: boolean; keys?: boolean; values?: boolean; includes?: boolean; flatMap?: boolean; flat?: boolean; at?: boolean; findLast?: boolean; findLastIndex?: boolean; toReversed?: boolean; toSorted?: boolean; toSpliced?: boolean; with?: boolean; [Symbol.iterator]?: boolean; readonly [Symbol.unscopables]?: boolean; }` | Yes | Is an object whose properties have the value 'true' when they will be absent when used in a 'with' statement. |
+
+## SurfaceAttachmentProblemCode
+
+A key of `SURFACE_ATTACHMENT_PROBLEM_CODES` (issue #1308).
+
+- `"request_body_too_large"`
+- `"file_not_found"`
+- `"invalid_attachment_name"`
+- `"attachments_quota_exceeded"`
+- `"surface_rate_limited"`
+
+## SurfaceAttachmentResponse
+
+A parsed `SurfaceAttachmentResponseSchema` (issue #1308).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `fileId` | `string` | Yes |  |
+| `path` | `string` | Yes |  |
+| `size` | `number` | Yes |  |
+
+## SurfaceAttachmentResponseSchema
+
+The `201` of `POST /api/sessions/:id/attachments` (ADR-0146 D6; issue #1308): the `fileId` to send
+as `attachments: [{ fileId }]` on `runs.start`, the store path the agent will read it at, and the
+stored size in bytes.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `fileId` | `string` | Yes |  |
+| `path` | `string` | Yes |  |
+| `size` | `number` | Yes |  |
 
 ## SurfaceDefinition
 
@@ -367,13 +439,14 @@ issue #440).
 | `toolTrace` | `undefined \| "hidden" \| "collapsed" \| "full"` | No |  |
 | `history` | `undefined \| false \| true` | No | Whether the surface lists the visitor's earlier conversations (ADR-0108 SD10; #537). |
 | `feedback` | `undefined \| false \| true` | No | Whether the surface asks for a thumbs-up or -down on each answer (ADR-0108 SD10; #537). |
+| `attachments` | `undefined \| false \| true` | No | Whether the composer offers a file input; the visitor's files go to `POST /api/sessions/:id/attachments` and ride on the run as `attachments` (ADR-0146 D7; issue #1308). |
 | `agentSwitcher` | `undefined \| Readonly<{ agents: readonly string[]; }>` | No | The agents a visitor may switch between, by name, 1–`SURFACE_AGENT_SWITCHER_MAX` with no repeat. Whether each is the surface owner's is a runtime check, not this schema's (ADR-0108 SD10; issue #537). |
 
 ## SurfacePartsSchema
 
 The parts a surface shows — ADR-0108's rung ②, complete since issue #537 (SD10): history,
-feedback and the agent switcher join the slice-1 parts. Attachments are a later unit, so a
-strict object refuses them (ADR-0108, ADR-0101; issues #440, #537).
+feedback and the agent switcher join the slice-1 parts, and attachments follow in ADR-0146
+(ADR-0108, ADR-0101; issues #440, #537, #1308).
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -383,6 +456,7 @@ strict object refuses them (ADR-0108, ADR-0101; issues #440, #537).
 | `toolTrace` | `undefined \| "hidden" \| "collapsed" \| "full"` | No |  |
 | `history` | `undefined \| false \| true` | No | Whether the surface lists the visitor's earlier conversations (ADR-0108 SD10; #537). |
 | `feedback` | `undefined \| false \| true` | No | Whether the surface asks for a thumbs-up or -down on each answer (ADR-0108 SD10; #537). |
+| `attachments` | `undefined \| false \| true` | No | Whether the composer offers a file input; the visitor's files go to `POST /api/sessions/:id/attachments` and ride on the run as `attachments` (ADR-0146 D7; issue #1308). |
 | `agentSwitcher` | `undefined \| Readonly<{ agents: readonly string[]; }>` | No | The agents a visitor may switch between, by name, 1–`SURFACE_AGENT_SWITCHER_MAX` with no repeat. Whether each is the surface owner's is a runtime check, not this schema's (ADR-0108 SD10; issue #537). |
 
 ## SurfaceSessionProblemCode
@@ -391,6 +465,7 @@ A key of `SURFACE_SESSION_PROBLEM_CODES` (ADR-0105; S1-17, issue #455).
 
 - `"invalid_body"`
 - `"policy_cannot_widen"`
+- `"builder_model_unavailable"`
 - `"agent_runtime_profile_missing"`
 - `"model_connection_unresolved"`
 - `"model_connection_failed"`
@@ -401,6 +476,16 @@ A key of `SURFACE_SESSION_PROBLEM_CODES` (ADR-0105; S1-17, issue #455).
 - `"runtime_connection_missing"`
 - `"runtime_connection_credential_unavailable"`
 - `"runtime_not_verified"`
+- `"run_attachments_unreadable"`
+- `"run_attachments_too_large"`
+- `"run_attachments_unsupported_runtime"`
+- `"run_attachments_untranscribable"`
+- `"run_files_too_large"`
+- `"run_storage_grant_unavailable"`
+- `"run_subject_forbidden"`
+- `"run_file_scope_not_granted"`
+- `"daily_cost_cap_reached"`
+- `"daily_cost_unavailable"`
 - `"surface_rate_limited"`
 - `"surface_sessions_unavailable"`
 - `"surface_origin_not_allowed"`
@@ -537,3 +622,13 @@ Which built-in component each named tool's result renders as: tool names in
 - `"hidden"`
 - `"collapsed"`
 - `"full"`
+
+## toolResultFor
+
+The component `toolResults` names for a run's tool: the exact key first, else the key equal to
+the part after the last `__`, so `find_files` matches Claude's `mcp__<connector>__find_files`
+(issue #1276). A single `_` is never a separator: Mastra's `<server>_<tool>` is ambiguous.
+
+```ts
+toolResultFor(toolName: string, toolResults: z.infer<typeof SurfaceToolResultsSchema> | undefined): SurfaceToolResultComponent | undefined
+```

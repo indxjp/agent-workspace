@@ -7,6 +7,8 @@
  * gives: `tests/route-inventory.test.ts`'s `classifyAppFile` would otherwise read a colocated
  * `route.test.ts` as a second route file.
  */
+import { clearApplicationContext } from '../../../../server/application-context';
+import { installTestDomains } from '../../../../server/application-context-fixtures';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
@@ -18,16 +20,8 @@ import {
 } from '../../../../server/auth';
 import { conferredBy } from '../../../../server/rbac/conferral';
 import { createMemoryDirectory } from '../../../../server/rbac/memory-directory';
-import {
-  clearRbacRuntime,
-  configureRbacRuntime,
-  type RbacRuntime,
-} from '../../../../server/rbac/runtime';
-import {
-  clearWorkspacesRuntime,
-  configureWorkspacesRuntime,
-  type WorkspaceRepositoryPort,
-} from '../../../../server/workspaces/runtime';
+import { type RbacRuntime } from '../../../../server/rbac/runtime';
+import type { WorkspaceRepositoryPort } from '../../../../server/workspaces/runtime';
 
 import { GET, POST } from './route';
 
@@ -117,12 +111,12 @@ describe('POST /api/auth/workspace', () => {
       ],
     });
     const runtime: RbacRuntime = { directory, identify: () => Promise.resolve(null) };
-    configureRbacRuntime(runtime);
+    installTestDomains({ rbac: runtime });
   });
 
   afterEach(() => {
     delete process.env['SESSION_SECRET'];
-    clearRbacRuntime();
+    clearApplicationContext();
   });
 
   it('refuses a workspace outside the caller’s memberships — identically by id, by slug, and for one that does not exist', async () => {
@@ -365,12 +359,12 @@ describe('GET /api/auth/workspace', () => {
       workspaces: [{ id: 'ws-a', slug: 'acme', name: 'Acme' }],
       users: [{ email: 'u1@example.test', name: 'U1', workspaceId: 'ws-a', role: 'admin' }],
     });
-    configureRbacRuntime({ directory, identify: () => Promise.resolve(null) });
+    installTestDomains({ rbac: { directory, identify: () => Promise.resolve(null) } });
   });
 
   afterEach(() => {
     delete process.env['SESSION_SECRET'];
-    clearRbacRuntime();
+    clearApplicationContext();
   });
 
   it('renders the caller’s current memberships when the selection cookie is valid', async () => {
@@ -455,6 +449,7 @@ describe('POST /api/auth/workspace (application/json)', () => {
     };
     return {
       listForUser: notImplemented,
+      ownerPrincipalId: notImplemented,
       get: (id) => Promise.resolve(id === WS_A_RECORD.id ? { ...WS_A_RECORD } : null),
       getForMember: (id, userId) => {
         const memberRole = role[userId];
@@ -474,19 +469,20 @@ describe('POST /api/auth/workspace (application/json)', () => {
       workspaces: [{ id: 'ws-a', slug: 'acme', name: 'Acme' }],
       users: [{ email: 'u1@example.test', name: 'U1', workspaceId: 'ws-a', role: 'admin' }],
     });
-    configureRbacRuntime({ directory, identify: () => Promise.resolve(null) });
+    installTestDomains({ rbac: { directory, identify: () => Promise.resolve(null) } });
   });
 
   afterEach(() => {
     delete process.env['SESSION_SECRET'];
-    clearRbacRuntime();
-    clearWorkspacesRuntime();
+    clearApplicationContext();
   });
 
   it('answers 200 with the membership view and the new session cookie', async () => {
     const u1 = await directory.findUserByEmail('u1@example.test');
     if (u1 === null) throw new Error('seed missing u1@example.test');
-    configureWorkspacesRuntime({ repository: fakeWorkspaceRepository({ [u1.id]: 'admin' }) });
+    installTestDomains({
+      workspaces: { repository: fakeWorkspaceRepository({ [u1.id]: 'admin' }) },
+    });
 
     const session = await mintSessionToken(newSessionClaims('u1@example.test', 'acme'), SECRET);
     const response = await POST(
@@ -507,7 +503,9 @@ describe('POST /api/auth/workspace (application/json)', () => {
   it('answers a workspace the caller does not belong to exactly like one that does not exist', async () => {
     const u1 = await directory.findUserByEmail('u1@example.test');
     if (u1 === null) throw new Error('seed missing u1@example.test');
-    configureWorkspacesRuntime({ repository: fakeWorkspaceRepository({ [u1.id]: 'admin' }) });
+    installTestDomains({
+      workspaces: { repository: fakeWorkspaceRepository({ [u1.id]: 'admin' }) },
+    });
     const session = await mintSessionToken(newSessionClaims('u1@example.test', 'acme'), SECRET);
 
     const notMine = await POST(

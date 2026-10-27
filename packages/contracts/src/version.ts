@@ -12,7 +12,7 @@
  */
 
 /** The version of `@indx-workspace/contracts` this build is; equal to its `package.json` version. */
-export const CONTRACTS_VERSION = '0.6.9';
+export const CONTRACTS_VERSION = '0.6.11';
 
 /** Request: the contracts version the client was built against. Response: the server's current one. */
 export const CONTRACTS_VERSION_HEADER = 'x-agent-workspace-contracts';

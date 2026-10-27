@@ -133,7 +133,7 @@ once, in the response; store it then.
 
 | Job                                                                                                  | Mint with                  | Why                                                                                                                                                                                                                                                              |
 | ---------------------------------------------------------------------------------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Run-only automation — start agents, read runs and sessions, nothing else                             | `builder`                  | Builder has "read any, write/run own" on agents and "read own" on runs: it runs only agents this key's member created, so an agent `aw dev` or another member saved needs `admin`.                                                                               |
+| Run-only automation — start agents, read runs and sessions, nothing else                             | `builder`                  | Builder has "read any, write own, run _permitted_" on agents and "read own" on runs: it starts agents this key's member created or was granted (`aw.agents.replaceGrants`), so another member's ungranted agent needs `admin`.                                   |
 | Administration — managing team members, secrets, model connections, runtime profiles and connections | `owner` or `admin`         | A Builder or Viewer key gets `403 forbidden` on every write to them. A Builder may read runtime profiles, but not change them; secrets are Owner-only.                                                                                                           |
 | Anything under `/api/workspaces` or `/api/invitations`                                               | Neither — no API key works | Every route in both families refuses an API-key principal, any role, with `403 api_key_not_permitted`. Only `auth: { kind: 'session' }` reaches them — see [Which credential for which job](/concepts/workspaces-and-principals#which-credential-for-which-job). |
 
@@ -192,8 +192,8 @@ redelivery), list by `agent` and correlate by `sessionId` —
 pattern and the retry rule for every other method.
 
 <Note>
-  **Today:** a retried `runs.start` after a lost response may start a second run; detect it yourself
-  by listing. **Target:** an `Idempotency-Key` request header, honoured server-side. Tracked as
+  **Today:** pass `idempotencyKey` to `runs.start` and reuse it when you retry: a retry after a
+  lost response returns the run the first start queued instead of starting a second one. Tracked as
   [S-6](/concepts/roadmap#s-6-idempotency-keys).
 </Note>
 

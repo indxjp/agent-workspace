@@ -21,7 +21,7 @@ import crypto from 'node:crypto';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import type { AgentPermissions } from '@agent-workspace/core';
+import type { AgentPermissions } from '@agent-workspace/run-protocol';
 import { openDatabaseRoot, type DatabaseRoot } from '@agent-workspace/core/db';
 import {
   closeIsolatedTestResources,
@@ -161,8 +161,8 @@ describe.skipIf(!hasDatabase)(
     });
 
     it('the projects runtime’s session provider refuses a new session in an archived project', async () => {
-      const { currentProjectsRuntime } = await import('./runtime');
-      const projectsRuntime = currentProjectsRuntime();
+      const { applicationContext } = await import('../application-context');
+      const projectsRuntime = applicationContext()?.projects ?? null;
       expect(projectsRuntime).not.toBeNull();
       if (projectsRuntime === null) return;
       const repositories = await projectsRuntime.forWorkspace(workspace.id);
@@ -261,8 +261,8 @@ describe.skipIf(!hasDatabase)(
     });
 
     it('runPublic refuses a run on a session inside an archived project, and writes no run row', async () => {
-      const { currentSharesRuntime } = await import('../shares/core/runtime');
-      const sharesRuntime = currentSharesRuntime();
+      const { applicationContext } = await import('../application-context');
+      const sharesRuntime = applicationContext()?.shares ?? null;
       expect(sharesRuntime).not.toBeNull();
       if (sharesRuntime === null) return;
 

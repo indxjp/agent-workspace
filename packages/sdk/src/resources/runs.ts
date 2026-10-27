@@ -1,14 +1,17 @@
 import type { RunFeedbackRequest } from '@indx-workspace/contracts/feedback';
+import { FileListResponseSchema, type FileResource } from '@indx-workspace/contracts/files';
 import {
   InterruptRunResponseSchema,
   RevokeRunTokensResponseSchema,
+  RunApprovalResponseSchema,
   RunListResponseSchema,
   RunResponseSchema,
   StartRunResponseSchema,
-  isTerminalRunStatus,
+  isStoppedRunStatus,
   parseRunFailure,
   runListSearchParams,
   type RevokeRunTokensResponse,
+  type RunApprovalResponse,
   type RunFailure,
   type RunListQuery,
   type RunListResponse,
@@ -17,7 +20,12 @@ import {
 } from '@indx-workspace/contracts/runs';
 import { z } from 'zod';
 
-import { ApiProblemError, ContractViolationError, TransportError } from '../errors.js';
+import {
+  ApiProblemError,
+  ContractViolationError,
+  InvalidArgumentError,
+  TransportError,
+} from '../errors.js';
 import { classifyRunEventFrame, type RunEventFrame } from '../events/run-events.js';
 import { readSseFrames } from '../events/sse.js';
 import { segment, type HttpClient, type RequestOptions } from '../http.js';
@@ -36,6 +44,22 @@ export function runFailure(run: RunResource): RunFailure | null {
   return parseRunFailure(run.error) ?? { code: null, message: 'the run failed without a reason' };
 }
 
+export function wireOutputSchema(
+  schema: z.ZodType | Readonly<Record<string, unknown>>,
+): Readonly<Record<string, unknown>> {
+  if (!(schema instanceof z.ZodType)) return schema;
+  try {
+    return z.toJSONSchema(schema, { target: 'draft-2020-12' });
+  } catch (cause) {
+    throw new InvalidArgumentError({
+      code: 'unconvertible_output_schema',
+      message:
+        'outputSchema cannot be sent as JSON Schema: it holds a Zod type with no JSON Schema form. Pass a JSON Schema object instead.',
+      cause,
+    });
+  }
+}
+
 /** What a caller supplies to start a run; the wire body is derived from it. */
 export interface StartRunInput {
   readonly prompt: string;
@@ -48,6 +72,63 @@ export interface StartRunInput {
    * An unknown number is `404 agent_version_not_found`; with `sessionId` it is refused.
    */
   readonly version?: number;
+  /**
+   * Workspace files the run receives read-only, by the `id` `files.list` returns: one to ten,
+   * no repeats. An id the caller cannot read, another workspace's, or one that does not exist is
+   * `404 file_not_found`, the same answer for each; an agent without the `readFiles` permission
+   * is `422 run_attachments_unreadable`; over 10 MiB a file, more than 20 attachments (a folder
+   * counts as one) or 50 MiB in total (the session's earlier uploads count) is
+   * `422 run_attachments_too_large`. A read grant removes the shell from the run. An audio file
+   * (flac, mp3, mp4, mpeg, mpga, m4a, ogg, wav, webm) is transcribed into the run's first turn
+   * when the run's model connection is an `openai` one, and is `422 run_attachments_untranscribable`
+   * on any other provider.
+   */
+  readonly attachments?: readonly { readonly fileId: string }[];
+  /**
+   * Ask for an answer that matches this schema (ADR-0143): a Zod schema, sent as JSON Schema
+   * 2020-12, or a JSON Schema object as is. Its root must be an object. Refused `400 invalid_body`
+   * when it is over a limit, and `422 engine_capability_unsupported` when the agent's engine
+   * cannot produce structured output; neither creates a run. Read the answer with
+   * {@link RunsClient.result}.
+   */
+  readonly outputSchema?: z.ZodType | Readonly<Record<string, unknown>>;
+  /**
+   * The person this run acts for (ADR-0142 D2): it becomes the `sub` of the identity assertion
+   * every opted-in connector receives. Only an API-key caller may set it; any other caller is
+   * `403 run_subject_forbidden`. A connector verifies the assertion with `verifyIdentity`.
+   */
+  readonly subject?: string;
+  /**
+   * Narrow the run's file grants (ADR-0147): workspace paths, files or folders, one to 100, each
+   * inside what the agent is granted. Built-in `search_files` and the files the sandbox receives
+   * cover only these. A path the agent is not granted, a parent of a granted file, or any path
+   * when the agent has no files fails the run with `403 run_file_scope_not_granted`, read
+   * through {@link runFailure}. Omit it to keep all the agent's grants; a continuation after an
+   * approval keeps the scope of the run it continues.
+   */
+  readonly fileScope?: readonly string[];
+  /**
+   * Sent as the `Idempotency-Key` header (ADR-0151): a start sent again with the same key and the
+   * same input answers `202` with the run the first one started, whatever its status, instead of
+   * starting another. Use one key per logical start and reuse it when you retry that start. The same
+   * key with a different input is `409 run_idempotency_conflict`; a blank key or one over 255
+   * characters is `400 invalid_idempotency_key`. A key is scoped to the caller and never freed.
+   */
+  readonly idempotencyKey?: string;
+}
+
+/** What {@link RunsClient.result} returns: the settled run, its prose and its structured answer. */
+export interface RunResult<Output> {
+  readonly run: RunResource;
+  /** The run's answer as text; `null` unless the run `completed`. */
+  readonly text: string | null;
+  /** The structured answer; `null` unless the run `completed` with one. */
+  readonly output: Output | null;
+}
+
+export interface RunResultOptions<Schema extends z.ZodType | undefined> extends FollowRunOptions {
+  /** Validate the structured answer against this and return it typed. */
+  readonly schema?: Schema;
 }
 
 export interface RunEventsOptions extends RequestOptions {
@@ -71,6 +152,16 @@ export interface RunStreamEnd {
 }
 
 const SSE_MEDIA_TYPE = 'text/event-stream';
+
+/** A file a run left behind: the files resource, plus its name relative to the run's outputs. */
+export type RunOutputFile = FileResource & {
+  /** The path under the run's `outputs/` directory, for example `BRK-1101.dxf`. */
+  readonly name: string;
+};
+
+// Where the server collects a run's files: `OUTPUTS_PREFIX` in
+// apps/web/server/compose/workspace-lifecycle.ts.
+const outputsPath = (runId: string): string => `runs/${segment(runId)}/outputs`;
 const NoContentSchema = z.null();
 
 /** An abort while the follower waits to reconnect is still one of the three typed failures. */
@@ -132,14 +223,18 @@ export class RunsClient {
    *
    * The `422`s of `RUN_START_PROBLEM_CODES` (issue #393) name the configuration a run is missing,
    * and none of them creates a run either: `agent_runtime_profile_missing`,
-   * `model_connection_unresolved`, `model_connection_failed`, `model_unavailable` and
-   * `model_credential_rejected`. Five more `RUN_START_PROBLEM_CODES` are judged only when the run
-   * launches, so the start answers `202` and the run fails with the code, read through
-   * {@link runFailure}: `network_policy_unenforceable`, `run_deadline_exceeds_host`,
-   * `runtime_connection_missing`, `runtime_connection_credential_unavailable` and
-   * `runtime_not_verified`. A run that fails
-   * one of the first five checks after it was queued reports its code through {@link runFailure}
-   * too.
+   * `model_connection_unresolved`, `model_connection_failed`, `model_unavailable`,
+   * `model_credential_rejected` and `run_files_too_large` (the run's granted files, skill files and
+   * attachments total more than 128 MiB; the message names the total and the limit). Seven more
+   * `RUN_START_PROBLEM_CODES` are judged only when the run launches, so the start answers `202` and
+   * the run fails with the code, read through {@link runFailure}: `network_policy_unenforceable`,
+   * `run_deadline_exceeds_host`, `runtime_connection_missing`,
+   * `runtime_connection_credential_unavailable`, `runtime_not_verified`,
+   * `run_file_scope_not_granted` and `run_storage_grant_unavailable` (a granted storage
+   * connection's folder cannot be delivered). A run whose granted file's stored bytes do not match their
+   * checksum fails with `run_file_corrupt` the same way. A run that fails one of the first six
+   * checks after it was queued (its configuration changed in between) reports its code through
+   * {@link runFailure} too.
    */
   public async start(
     agentId: string,
@@ -156,7 +251,18 @@ export class RunsClient {
         modelConnectionId: input.modelOverride?.connectionId ?? null,
         model: input.modelOverride?.model ?? null,
         ...(input.version === undefined ? {} : { version: input.version }),
+        ...(input.subject === undefined ? {} : { subject: input.subject }),
+        ...(input.fileScope === undefined ? {} : { fileScope: [...input.fileScope] }),
+        ...(input.attachments === undefined
+          ? {}
+          : { attachments: input.attachments.map(({ fileId }) => ({ fileId })) }),
+        ...(input.outputSchema === undefined
+          ? {}
+          : { outputSchema: wireOutputSchema(input.outputSchema) }),
       },
+      ...(input.idempotencyKey === undefined
+        ? {}
+        : { headers: { 'idempotency-key': input.idempotencyKey } }),
       expect: [202],
       schema: StartRunResponseSchema,
       signal: options.signal,
@@ -190,6 +296,52 @@ export class RunsClient {
       signal: options.signal,
     });
     return response.run;
+  }
+
+  /**
+   * Approve the tool call a run paused on (`POST /api/runs/:id/approval`, ADR-0145). The decision
+   * starts a continuation run in the same session, which may make exactly that call; follow it
+   * with `client.runs.follow(response.run.id)`. `comment` reaches the continuation's prompt.
+   *
+   * Throws {@link ApiProblemError}: `409 run_not_awaiting_approval`, `409 approval_already_decided`,
+   * `409 approval_expired` (the pause is older than 24 hours), `404 run_not_found`.
+   */
+  public async approve(
+    runId: string,
+    input: { readonly comment?: string } = {},
+    options: RequestOptions = {},
+  ): Promise<RunApprovalResponse> {
+    return this.#decide(runId, 'approve', input.comment, options);
+  }
+
+  /**
+   * Reject the tool call a run paused on (`POST /api/runs/:id/approval`, ADR-0145). The
+   * continuation run starts without permission to make the call and is told it was refused.
+   * Refuses like `approve`.
+   */
+  public async reject(
+    runId: string,
+    input: { readonly comment?: string } = {},
+    options: RequestOptions = {},
+  ): Promise<RunApprovalResponse> {
+    return this.#decide(runId, 'reject', input.comment, options);
+  }
+
+  async #decide(
+    runId: string,
+    decision: 'approve' | 'reject',
+    comment: string | undefined,
+    options: RequestOptions,
+  ): Promise<RunApprovalResponse> {
+    return this.#http.json({
+      operation: 'runs.approval',
+      method: 'POST',
+      path: `/api/runs/${segment(runId)}/approval`,
+      body: comment === undefined ? { decision } : { decision, comment },
+      expect: [202],
+      schema: RunApprovalResponseSchema,
+      signal: options.signal,
+    });
   }
 
   /**
@@ -234,6 +386,40 @@ export class RunsClient {
       schema: NoContentSchema,
       signal: options.signal,
     });
+  }
+
+  /**
+   * The files a run wrote, found under the run's outputs in the workspace files (the `files` list,
+   * no route of its own): every file below `outputs/`, folders walked, each with its `name`
+   * relative to that directory and the `path` `files.download` takes.
+   *
+   * A run has outputs only once it is `completed` and its agent has `writeFiles` on; any other run
+   * answers with an empty list. Throws {@link ApiProblemError} and {@link ContractViolationError}
+   * like the files list does.
+   */
+  public async outputs(
+    runId: string,
+    options: RequestOptions = {},
+  ): Promise<readonly RunOutputFile[]> {
+    const root = outputsPath(runId);
+    const found: RunOutputFile[] = [];
+    const pending = [root];
+    for (let dir = pending.shift(); dir !== undefined; dir = pending.shift()) {
+      const { files } = await this.#http.json({
+        operation: 'runs.outputs',
+        method: 'GET',
+        path: '/api/files',
+        query: new URLSearchParams({ path: dir }),
+        expect: [200],
+        schema: FileListResponseSchema,
+        signal: options.signal,
+      });
+      for (const file of files) {
+        if (file.kind === 'folder') pending.push(file.path);
+        else found.push({ ...file, name: file.path.slice(root.length + 1) });
+      }
+    }
+    return found;
   }
 
   /** One page of the workspace's run history, newest first. Pass `nextCursor` back as `cursor`. */
@@ -290,7 +476,12 @@ export class RunsClient {
       for await (const raw of readSseFrames(response.body, options.signal)) {
         const frame = classifyRunEventFrame(raw);
         if (frame.kind === 'done') return { lastEventId };
-        if ((frame.kind === 'run-status' || frame.kind === 'runtime') && frame.id !== null) {
+        if (
+          (frame.kind === 'run-status' ||
+            frame.kind === 'run-warning' ||
+            frame.kind === 'runtime') &&
+          frame.id !== null
+        ) {
           lastEventId = frame.id === '' ? null : frame.id;
         }
         yield frame;
@@ -341,7 +532,12 @@ export class RunsClient {
             const next = await stream.next();
             if (next.done) return next.value;
             const frame = next.value;
-            if ((frame.kind === 'run-status' || frame.kind === 'runtime') && frame.id !== null) {
+            if (
+              (frame.kind === 'run-status' ||
+                frame.kind === 'run-warning' ||
+                frame.kind === 'runtime') &&
+              frame.id !== null
+            ) {
               lastSeen = frame.id === '' ? null : frame.id;
             }
             yield frame;
@@ -378,7 +574,7 @@ export class RunsClient {
       if (next.done) break;
     }
     const run = await this.get(runId, options);
-    if (!isTerminalRunStatus(run.status)) {
+    if (!isStoppedRunStatus(run.status)) {
       // The store writes the terminal status before the stream's last frame, so a live status
       // after `done` is the platform contradicting its own contract, not a network condition.
       throw new ContractViolationError({
@@ -388,5 +584,41 @@ export class RunsClient {
       });
     }
     return run;
+  }
+
+  /**
+   * Wait for the run to end, then read its answer (ADR-0143): `text` is the prose and `output` the
+   * structured value. With `schema`, `output` is that schema's parse of the value and a mismatch
+   * is a {@link ContractViolationError}: the run asked for this shape and the platform handed
+   * back another. A run that did not `completed` — failed, cancelled — has no answer: `text` and
+   * `output` are `null`, and the reason is `run.error`, read with {@link runFailure}.
+   */
+  public async result<Schema extends z.ZodType>(
+    runId: string,
+    options: RunResultOptions<Schema> & { readonly schema: Schema },
+  ): Promise<RunResult<z.output<Schema>>>;
+  public async result(
+    runId: string,
+    options?: RunResultOptions<undefined>,
+  ): Promise<RunResult<unknown>>;
+  public async result(
+    runId: string,
+    options: RunResultOptions<z.ZodType | undefined> = {},
+  ): Promise<RunResult<unknown>> {
+    const run = await this.waitForOutcome(runId, options);
+    const answer = run.output;
+    if (answer === null) return { run, text: null, output: null };
+    if (options.schema === undefined || answer.structured === null) {
+      return { run, text: answer.text, output: answer.structured };
+    }
+    const parsed = options.schema.safeParse(answer.structured);
+    if (!parsed.success) {
+      throw new ContractViolationError({
+        operation: 'runs.result',
+        status: 200,
+        issues: parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`),
+      });
+    }
+    return { run, text: answer.text, output: parsed.data };
   }
 }

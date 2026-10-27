@@ -66,6 +66,7 @@
 import { z } from 'zod';
 
 import { CLI_TOKEN_TTL_SECONDS } from '@indx-workspace/contracts/cli-auth';
+import type { MembershipRoleName } from '@indx-workspace/contracts/team';
 import {
   LOCAL_RUNTIME_API_KEY_NAME_PREFIX,
   type DatabaseDirectoryRoot,
@@ -93,7 +94,7 @@ const NAME_ATTEMPTS = 2;
 const LOCAL_RUNTIME_API_KEY_ROLE = 'admin';
 
 /** Spec §21's four roles, as `memberships.role` stores them. */
-type MemberRole = 'owner' | 'admin' | 'builder' | 'viewer';
+type MemberRole = MembershipRoleName;
 
 /**
  * Whether a member holding `role` may hold the local runtime's `admin` key: the callers

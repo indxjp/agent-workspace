@@ -190,6 +190,42 @@
     "refColumns": ["id", "workspace_id"],
     "onDelete": "restrict",
     "columns": ["credential_secret_id", "workspace_id"],
+    "class": "tenant-paired"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptConfiguration.storage_connections_workspace_id_workspaces_id_fk_preserves_tenant",
+    "AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.cluster_foreign_keys_are_paired",
+    "AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.cluster_foreign_keys_are_complete"],
+   "input": {"table": "storage_connections", "name": "storage_connections_workspace_id_workspaces_id_fk"},
+   "id": "fk/storage_connections_workspace_id_workspaces_id_fk",
+   "expected":
+   {"refTable": "workspaces",
+    "refColumns": ["id"],
+    "onDelete": "cascade",
+    "columns": ["workspace_id"],
+    "class": "root-reference"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptConfiguration.agent_storage_grants_connection_workspace_fk_preserves_tenant",
+    "AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.cluster_foreign_keys_are_paired",
+    "AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.cluster_foreign_keys_are_complete"],
+   "input": {"table": "agent_storage_grants", "name": "agent_storage_grants_connection_workspace_fk"},
+   "id": "fk/agent_storage_grants_connection_workspace_fk",
+   "expected":
+   {"refTable": "storage_connections",
+    "refColumns": ["id", "workspace_id"],
+    "onDelete": "no action",
+    "columns": ["connection_id", "workspace_id"],
+    "class": "tenant-paired"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptConfiguration.agent_version_storage_grants_connection_workspace_fk_preserves_tenant",
+    "AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.cluster_foreign_keys_are_paired",
+    "AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.cluster_foreign_keys_are_complete"],
+   "input": {"table": "agent_version_storage_grants", "name": "agent_version_storage_grants_connection_workspace_fk"},
+   "id": "fk/agent_version_storage_grants_connection_workspace_fk",
+   "expected":
+   {"refTable": "storage_connections",
+    "refColumns": ["id", "workspace_id"],
+    "onDelete": "cascade",
+    "columns": ["connection_id", "workspace_id"],
     "class": "tenant-paired"}}],
  "family": "concept-configuration",
  "description": "Every foreign key that starts or ends in the cluster, with its tenancy class"}

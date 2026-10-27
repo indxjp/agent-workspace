@@ -37,6 +37,7 @@ export interface VersionsStrings {
   readonly viaUi: string;
   readonly viaAwPush: string;
   readonly viaApi: string;
+  readonly viaBuilder: string;
   readonly diffHeading: (older: number, newer: number) => string;
   readonly diffHint: string;
   readonly diffInstructions: string;
@@ -98,6 +99,7 @@ const EN: VersionsStrings = {
   viaUi: 'Console',
   viaAwPush: 'aw push',
   viaApi: 'API',
+  viaBuilder: 'Builder',
   diffHeading: (older, newer) => `Version ${String(older)} to version ${String(newer)}`,
   diffHint: 'Select two versions to see what changed between them.',
   diffInstructions: 'Instructions',
@@ -139,8 +141,10 @@ const EN: VersionsStrings = {
     agent_not_found: 'This agent no longer exists.',
     agent_policy_not_configured: 'This deployment has no policy configured for agents.',
     agent_version_not_found: 'That version does not exist.',
+    agent_version_number_taken: 'Another save took that version number first. Try again.',
     no_pointer: 'local points at no version, so there is nothing to promote.',
     nothing_to_roll_back: 'production has no earlier version to go back to.',
+    pointer_moved: 'Another change moved this environment first. Reload and try again.',
     promotion_not_evaluated: 'The version has no evaluation, which the promotion bar requires.',
     promotion_gate_failed: 'The version scored below the promotion bar.',
     code_tool_needs_host:
@@ -159,9 +163,17 @@ const EN: VersionsStrings = {
     policy_cannot_widen: "The version asks for more than the deployment's policy allows.",
     surface_name_taken: 'Another surface in this workspace already has that name.',
     agent_name_conflict: 'Another agent in this workspace already has that name.',
+    unknown_file: 'An assigned file is not in this workspace.',
+    unknown_skill: 'An assigned skill is not in this workspace.',
+    skill_deleting: 'An assigned skill is being deleted.',
+    unknown_connector: 'An assigned connector is not in this workspace.',
     tool_bundle_unknown:
       'The version pins tool bundles this workspace has not received. Run aw push --yes to upload them.',
     tool_bundles_not_configured: 'This deployment has no store for tool bundles.',
+    storage_connection_prefix_not_allowed:
+      "A storage grant reaches a folder the connection's allowed folders do not cover.",
+    storage_connection_write_not_allowed:
+      'A storage grant asks for read-write on a connection that is read-only.',
   },
   unavailable: 'The request could not be completed. Try again.',
   moved: (plan) => `Done: ${plan}`,
@@ -190,6 +202,7 @@ const JA: VersionsStrings = {
   viaUi: 'コンソール',
   viaAwPush: 'aw push',
   viaApi: 'API',
+  viaBuilder: 'Builder',
   diffHeading: (older, newer) => `バージョン ${String(older)} からバージョン ${String(newer)} へ`,
   diffHint: '2 つのバージョンを選ぶと、その間の変更を表示します。',
   diffInstructions: '指示文',
@@ -231,8 +244,12 @@ const JA: VersionsStrings = {
     agent_not_found: 'このエージェントは存在しません。',
     agent_policy_not_configured: 'この環境にはエージェントのポリシーが設定されていません。',
     agent_version_not_found: '指定されたバージョンは存在しません。',
+    agent_version_number_taken:
+      '別の保存が先にそのバージョン番号を使いました。もう一度お試しください。',
     no_pointer: 'local がどのバージョンも指していないため、昇格するものがありません。',
     nothing_to_roll_back: 'production には戻せる以前のバージョンがありません。',
+    pointer_moved:
+      '別の変更が先にこの環境を移動しました。再読み込みしてからもう一度お試しください。',
     promotion_not_evaluated: '昇格の基準で必要な評価が、このバージョンにはありません。',
     promotion_gate_failed: 'このバージョンのスコアは昇格の基準に届きません。',
     code_tool_needs_host:
@@ -253,9 +270,17 @@ const JA: VersionsStrings = {
     policy_cannot_widen: 'このバージョンは、環境のポリシーが許す範囲を超えています。',
     surface_name_taken: 'このワークスペースの別のサーフェスが、すでにその名前を使っています。',
     agent_name_conflict: 'このワークスペースの別のエージェントが、すでにその名前を使っています。',
+    unknown_file: '割り当てたファイルがこのワークスペースにありません。',
+    unknown_skill: '割り当てたスキルがこのワークスペースにありません。',
+    skill_deleting: '割り当てたスキルは削除中です。',
+    unknown_connector: '割り当てたコネクタがこのワークスペースにありません。',
     tool_bundle_unknown:
       'このバージョンが指定するツールバンドルが、このワークスペースにまだありません。aw push --yes でアップロードしてください。',
     tool_bundles_not_configured: 'この環境にはツールバンドルの保存先がありません。',
+    storage_connection_prefix_not_allowed:
+      'ストレージの許可が、接続の許可フォルダの外を指しています。',
+    storage_connection_write_not_allowed:
+      '読み取り専用の接続に、読み書きのストレージ許可が求められています。',
   },
   unavailable: '処理を完了できませんでした。もう一度お試しください。',
   moved: (plan) => `完了しました: ${plan}`,

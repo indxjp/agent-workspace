@@ -15,6 +15,10 @@ Declared routes that are not part of the programmatic surface, and why. Two kind
   `apps/runner` calls, with the signed per-run token rather than a workspace credential
   (`apps/web/server/sessions/state-api.ts`; 04 §5.11: runtime-only, not exposed by the SDK).
 
+The platform's own callers sit beside them: the cron jobs (`CRON_SECRET` bearer, ADR-0120) and
+the readiness probe a kubelet calls with no credential (issue #1562). The `aw-control` MCP door a
+running agent reaches through the gateway (issue #1846) accepts only a run token, as a `run-caller`.
+
 - `{ method: 'POST', path: '/api/setup', because: 'first-run setup (04 §1)' }`
 - `{ method: 'GET', path: '/api/auth/login', because: 'OIDC sign-in (04 §1)' }`
 - `{ method: 'POST', path: '/api/auth/callback', because: 'OIDC sign-in (04 §1)' }`
@@ -22,6 +26,10 @@ Declared routes that are not part of the programmatic surface, and why. Two kind
 - ``{ method: 'GET', path: '/api/auth/cli-verify', because: "the HTML page approving `aw login`'s code, a browser sign-in step (04 §1)", }``
 - ``{ method: 'POST', path: '/api/auth/cli-verify', because: "the form post approving `aw login`'s code, a browser sign-in step (04 §1)", }``
 - `{ method: 'GET', path: '/api/cron/retention', because: 'platform cron job (CRON_SECRET bearer)', }`
+- `{ method: 'GET', path: '/api/cron/triggers', because: 'platform cron job (CRON_SECRET bearer)', }`
+- `{ method: 'GET', path: '/api/cron/storage-cleanup', because: 'platform cron job (CRON_SECRET bearer)', }`
+- `{ method: 'GET', path: '/api/readyz', because: 'platform readiness probe (no credential)' }`
+- `{ method: 'POST', path: '/api/builder/mcp', because: 'run-caller route (per-run token, aw-control tools)', }`
 - `{ method: 'GET', path: '/p/:token', because: 'a public share page (04 §1)' }`
 - `{ method: 'POST', path: '/p/:token/messages', because: 'a public share page (04 §1)' }`
 - `{ method: 'GET', path: '/p/s/:name', because: 'a hosted surface page (04 §1)' }`
@@ -34,11 +42,13 @@ Declared routes that are not part of the programmatic surface, and why. Two kind
 - `{ method: 'POST', path: '/api/sessions/:engineSessionId/state-entries', because: 'private runner route (per-run token)', }`
 - `{ method: 'PUT', path: '/api/sessions/:engineSessionId/state-entries', because: 'private runner route (per-run token)', }`
 - `{ method: 'DELETE', path: '/api/sessions/:engineSessionId/state-entries', because: 'private runner route (per-run token)', }`
+- `{ method: 'GET', path: '/api/sessions/:engineSessionId/file-search', because: 'private runner route (per-run token)', }`
 - `{ method: 'GET', path: '/api/sessions/:engineSessionId/state-streams', because: 'private runner route (per-run token)', }`
 - `{ method: 'GET', path: '/api/sessions/:engineSessionId/state-blobs', because: 'private runner route (per-run token)', }`
 - `{ method: 'PUT', path: '/api/sessions/:engineSessionId/state-blobs', because: 'private runner route (per-run token)', }`
 - `{ method: 'GET', path: '/.well-known/oauth-authorization-server', because: 'OAuth 2.0 authorization server metadata (RFC 8414), a public discovery document', }`
 - `{ method: 'GET', path: '/.well-known/oauth-protected-resource/mcp/projects/:name', because: 'OAuth protected resource metadata (RFC 9728), a public discovery document', }`
+- `{ method: 'GET', path: '/.well-known/oauth-protected-resource/mcp/builder', because: 'OAuth protected resource metadata (RFC 9728), a public discovery document', }`
 - `{ method: 'GET', path: '/.well-known/oauth-protected-resource/api/a2a/agents/:agentName', because: 'OAuth protected resource metadata (RFC 9728), a public discovery document', }`
 - `{ method: 'GET', path: '/oauth/authorize', because: 'the HTML consent page of the OAuth authorization code grant, a browser sign-in step (04 §1)', }`
 - `{ method: 'POST', path: '/oauth/authorize', because: 'the consent form post of the OAuth authorization code grant, a browser sign-in step (04 §1)', }`
@@ -83,6 +93,13 @@ The catalogue, grouped by family in the order of spec 04 §5.
 - `{ method: 'DELETE', path: '/api/endpoint-clients/:id', operationId: 'endpointClients.revoke', tag: 'endpointClients', summary: 'Revoke an endpoint client and every key bound to it', success: ok(json('EndpointClientResponseSchema')), }`
 - `{ method: 'POST', path: '/api/endpoint-clients/:id/keys', operationId: 'endpointClients.mintKey', tag: 'endpointClients', summary: 'Mint an endpoint-scoped API key; the secret is returned once', request: json('MintEndpointKeyRequestSchema'), success: created(json('MintedApiKeyResponseSchema')), }`
 - `{ method: 'POST', path: '/api/endpoint-clients/:id/secret', operationId: 'endpointClients.rotateSecret', tag: 'endpointClients', summary: "Rotate an endpoint client's OAuth client secret; the secret is returned once", success: created(json('RotateEndpointClientSecretResponseSchema')), }`
+- `{ method: 'GET', path: '/api/triggers', operationId: 'triggers.list', tag: 'triggers', summary: 'List triggers', success: ok(json('TriggerListResponseSchema')), }`
+- `{ method: 'POST', path: '/api/triggers', operationId: 'triggers.create', tag: 'triggers', summary: 'Create a webhook or schedule trigger; a webhook URL secret is returned once', request: json('CreateTriggerRequestSchema'), success: created(json('CreateTriggerResponseSchema')), }`
+- `{ method: 'GET', path: '/api/triggers/:id', operationId: 'triggers.get', tag: 'triggers', summary: 'Read one trigger', success: ok(json('TriggerResponseSchema')), }`
+- `{ method: 'PATCH', path: '/api/triggers/:id', operationId: 'triggers.update', tag: 'triggers', summary: "Change a trigger's name, prompt template, enabled flag or Zoom secret token", request: json('UpdateTriggerRequestSchema'), success: ok(json('TriggerResponseSchema')), }`
+- `{ method: 'DELETE', path: '/api/triggers/:id', operationId: 'triggers.remove', tag: 'triggers', summary: 'Delete a trigger and its delivery records', success: ok(json('TriggerResponseSchema')), }`
+- `{ method: 'POST', path: '/api/triggers/:id/secret', operationId: 'triggers.rotateSecret', tag: 'triggers', summary: "Rotate a webhook trigger's URL secret; the new secret is returned once", success: created(json('TriggerSecretResponseSchema')), }`
+- `{ method: 'POST', path: '/api/triggers/:id/fire/:secret', operationId: 'triggers.fire', tag: 'triggers', summary: 'Fire a webhook trigger: the body is the {{body}} of its prompt and a run starts as the ' + 'trigger owner in a new session (202). The URL secret is the authentication and travels in ' + 'the path, so it can appear in access logs of a proxy or CDN: rotate it if one may have ' + 'leaked. Every miss answers one 404 trigger_not_found. A Microsoft Graph validationToken ' + 'query parameter is echoed as text/plain, and Zoom endpoint.url_validation is answered with ' + 'the token and its HMAC (200); neither starts a run.', request: { kind: 'binary' }, success: [ { status: 202, body: json('RunResponseSchema') }, { status: 200, body: json('ZoomUrlValidationResponseSchema') }, ], security: 'none', }`
 - `{ method: 'GET', path: '/api/model-connections', operationId: 'models.connections.list', tag: 'models', summary: 'List model connections', success: ok(json('ModelConnectionListResponseSchema')), }`
 - `{ method: 'POST', path: '/api/model-connections', operationId: 'models.connections.create', tag: 'models', summary: 'Create a model connection', request: UNDESCRIBED, success: created(json('ModelConnectionResourceSchema')), }`
 - `{ method: 'GET', path: '/api/model-connections/:id', operationId: 'models.connections.get', tag: 'models', summary: 'Read one model connection', success: ok(json('ModelConnectionResourceSchema')), }`
@@ -100,19 +117,32 @@ The catalogue, grouped by family in the order of spec 04 §5.
 - `{ method: 'POST', path: '/api/runtime-connections', operationId: 'runtimes.connections.create', tag: 'runtimes', summary: 'Create a runtime connection', request: UNDESCRIBED, success: created(json('RuntimeConnectionResourceSchema')), }`
 - ``{ method: 'POST', path: '/api/runtimes/:id', operationId: 'runtimes.test', tag: 'runtimes', summary: 'Test a runtime driver (the id is the literal `test`)', request: UNDESCRIBED, success: ok(UNDESCRIBED), }``
 - `{ method: 'GET', path: '/api/setup/runtime-detect', operationId: 'runtimes.detect', tag: 'runtimes', summary: 'Detect which runtime drivers the host can run', success: ok(UNDESCRIBED), security: 'none', }`
+- `{ method: 'GET', path: '/api/storage-connections', operationId: 'storage.connections.list', tag: 'storage-connections', summary: 'List the storage connections of the workspace', success: ok(json('StorageConnectionListResponseSchema')), }`
+- `{ method: 'POST', path: '/api/storage-connections', operationId: 'storage.connections.create', tag: 'storage-connections', summary: 'Connect an S3 bucket or an operator folder, read-only by default', request: json('CreateStorageConnectionInputSchema'), success: created(json('StorageConnectionResourceSchema')), }`
+- `{ method: 'GET', path: '/api/storage-connections/:id', operationId: 'storage.connections.get', tag: 'storage-connections', summary: 'Read one storage connection', success: ok(json('StorageConnectionResourceSchema')), }`
+- `{ method: 'PATCH', path: '/api/storage-connections/:id', operationId: 'storage.connections.update', tag: 'storage-connections', summary: 'Rename a storage connection or change its URL, allowed prefixes or write access', request: json('UpdateStorageConnectionPatchSchema'), success: ok(json('StorageConnectionResourceSchema')), }`
+- `{ method: 'PUT', path: '/api/storage-connections/:id/credential', operationId: 'storage.connections.rotate', tag: 'storage-connections', summary: 'Replace the credential of a storage connection (the old value is never returned)', request: json('StorageConnectionCredentialSchema'), success: ok(json('StorageConnectionResourceSchema')), }`
+- `{ method: 'POST', path: '/api/storage-connections/:id/test', operationId: 'storage.connections.test', tag: 'storage-connections', summary: 'Open a storage connection and list one page of an allowed folder', success: ok(json('StorageConnectionTestOutcomeSchema')), }`
+- `{ method: 'GET', path: '/api/storage-connections/:id/browse', operationId: 'storage.connections.browse', tag: 'storage-connections', summary: 'List a folder of a storage connection inside its allowed prefixes (?prefix=&cursor=)', success: ok(json('StorageConnectionBrowseResponseSchema')), }`
+- `{ method: 'DELETE', path: '/api/storage-connections/:id', operationId: 'storage.connections.delete', tag: 'storage-connections', summary: 'Delete a storage connection and its credential', success: NO_CONTENT, }`
 - `{ method: 'GET', path: '/api/secrets', operationId: 'secrets.list', tag: 'secrets', summary: 'List secrets (names only)', success: ok(json('SecretListResponseSchema')), }`
 - `{ method: 'POST', path: '/api/secrets', operationId: 'secrets.create', tag: 'secrets', summary: 'Store a secret', request: UNDESCRIBED, success: created(json('SecretResourceSchema')), }`
 - `{ method: 'PUT', path: '/api/secrets/:id', operationId: 'secrets.replace', tag: 'secrets', summary: "Replace a secret's value", request: UNDESCRIBED, success: ok(json('SecretResourceSchema')), }`
 - ``{ method: 'DELETE', path: '/api/secrets/:id', operationId: 'secrets.remove', tag: 'secrets', summary: 'Delete a secret nothing references (`409 secret_in_use` names the referrers)', success: NO_CONTENT, }``
 - `{ method: 'GET', path: '/api/files', operationId: 'files.list', tag: 'files', summary: 'List files and folders', success: ok(json('FileListResponseSchema')), }`
 - ``{ method: 'POST', path: '/api/files', operationId: 'files.upload', tag: 'files', summary: 'Upload a file (bytes, path in `x-file-path`) or create a folder (`x-folder-path`)', request: BINARY, success: [ { status: 200, body: json('FileResponseSchema') }, { status: 201, body: json('FileResponseSchema') }, ], }``
+- ``{ method: 'GET', path: '/api/files/search', operationId: 'files.search', tag: 'files', summary: 'Search the text of workspace files (`q`, `limit`): path, page and snippet per hit; `pending` counts files not yet searchable', success: ok(json('FileSearchResponseSchema')), }``
 - `{ method: 'GET', path: '/api/files/:id', operationId: 'files.download', tag: 'files', summary: "Download a file's bytes (the id is the base64url path)", success: ok(BINARY), }`
-- `{ method: 'PATCH', path: '/api/files/:id', operationId: 'files.move', tag: 'files', summary: 'Move or rename a file or folder', request: UNDESCRIBED, success: ok(json('MoveFileResponseSchema')), }`
+- `{ method: 'PATCH', path: '/api/files/:id', operationId: 'files.move', tag: 'files', summary: 'Move or rename a file or folder', request: json('MoveFileRequestSchema'), success: ok(json('MoveFileResponseSchema')), }`
 - `{ method: 'DELETE', path: '/api/files/:id', operationId: 'files.remove', tag: 'files', summary: 'Delete a file or a folder subtree', success: [ { status: 200, body: json('RemoveFileResponseSchema') }, { status: 204, body: NONE }, ], }`
+- `{ method: 'POST', path: '/api/files/:id/upload-urls', operationId: 'files.createUploadUrl', tag: 'files', summary: 'Mint a short-lived PUT URL on the object store, so the holder uploads without a relay', request: json('CreateUploadUrlRequestSchema'), success: created(json('PresignedUrlSchema')), }`
+- `{ method: 'POST', path: '/api/files/:id/upload-complete', operationId: 'files.completeUpload', tag: 'files', summary: 'Verify the object a signed PUT wrote and mark the file ready', success: ok(json('FileResponseSchema')), }`
+- `{ method: 'POST', path: '/api/files/:id/download-urls', operationId: 'files.createDownloadUrl', tag: 'files', summary: 'Mint a short-lived GET URL on the object store, so the holder downloads without a relay', request: json('CreateDownloadUrlRequestSchema'), success: created(json('PresignedUrlSchema')), }`
 - `{ method: 'GET', path: '/api/skills', operationId: 'skills.list', tag: 'skills', summary: 'List skills', success: ok(json('SkillListResponseSchema')), }`
 - `{ method: 'POST', path: '/api/skills', operationId: 'skills.import', tag: 'skills', summary: 'Import a skill', request: UNDESCRIBED, success: created(json('SkillResponseSchema')), }`
 - `{ method: 'GET', path: '/api/skills/:name', operationId: 'skills.get', tag: 'skills', summary: 'Read one skill, or export it with its files', success: ok(json('SkillResponseSchema', 'SkillExportResponseSchema')), }`
 - `{ method: 'PATCH', path: '/api/skills/:name', operationId: 'skills.update', tag: 'skills', summary: 'Update a skill', request: UNDESCRIBED, success: ok(json('SkillResponseSchema')), }`
+- `{ method: 'POST', path: '/api/skills/:name/revisions', operationId: 'skills.publish', tag: 'skills', summary: 'Publish the skill as the next immutable revision an agent can pin', request: json('PublishSkillRevisionRequestSchema'), success: created(json('SkillRevisionResponseSchema')), }`
 - ``{ method: 'DELETE', path: '/api/skills/:name', operationId: 'skills.remove', tag: 'skills', summary: 'Delete a skill no agent is assigned (`409 skill_in_use` names the referrers)', success: NO_CONTENT, }``
 - ``{ method: 'POST', path: '/api/tool-bundles', operationId: 'toolBundles.upload', tag: 'tool-bundles', summary: 'Store a code-tool bundle by its SHA-256 (`200` when the workspace already held it)', request: json('UploadToolBundleRequestSchema'), success: [ ...created(json('UploadToolBundleResponseSchema')), ...ok(json('UploadToolBundleResponseSchema')), ], }``
 - `{ method: 'GET', path: '/api/tool-bundles/:digest', operationId: 'toolBundles.get', tag: 'tool-bundles', summary: 'Read the address and size of a stored code-tool bundle', success: ok(json('ToolBundleResponseSchema')), }`
@@ -155,12 +185,14 @@ The catalogue, grouped by family in the order of spec 04 §5.
 - `{ method: 'PATCH', path: '/api/sessions/:engineSessionId', operationId: 'sessions.update', tag: 'sessions', summary: 'Rename or archive a session', request: UNDESCRIBED, success: ok(json('SessionResponseSchema')), }`
 - `{ method: 'GET', path: '/api/sessions/:engineSessionId/transcript', operationId: 'sessions.transcript.read', tag: 'sessions', summary: "Read a session's transcript", success: ok(json('TranscriptResponseSchema')), }`
 - `{ method: 'GET', path: '/api/sessions/:engineSessionId/subkeys', operationId: 'sessions.transcript.subkeys', tag: 'sessions', summary: "List a transcript's subkeys", success: ok(json('TranscriptSubkeysResponseSchema')), }`
+- ``{ method: 'POST', path: '/api/sessions/:engineSessionId/attachments', operationId: 'sessions.attachments.upload', tag: 'sessions', summary: "Upload one file (bytes, name in `name`) into a visitor's session, for `runs.start` `attachments`", request: BINARY, success: created(json('SurfaceAttachmentResponseSchema')), }``
 - `{ method: 'POST', path: '/api/agents/:id/runs', operationId: 'runs.start', tag: 'runs', summary: 'Start a run of an agent', request: json('StartRunRequestSchema'), success: [{ status: 202, body: json('StartRunResponseSchema') }], }`
 - `{ method: 'GET', path: '/api/runs', operationId: 'runs.list', tag: 'runs', summary: 'List runs', success: ok(json('RunListResponseSchema')), }`
 - `{ method: 'GET', path: '/api/runs/:id', operationId: 'runs.get', tag: 'runs', summary: 'Read one run', success: ok(json('RunResponseSchema')), }`
 - `{ method: 'POST', path: '/api/runs/:id', operationId: 'runs.revokeTokensDeprecated', tag: 'runs', summary: 'Revoke gateway tokens (deprecated alias of the revoke-tokens route)', request: UNDESCRIBED, success: ok(json('RevokeRunTokensResponseSchema')), deprecated: true, }`
-- ``{ method: 'GET', path: '/api/runs/:id/events', operationId: 'runs.events', tag: 'runs', summary: "Follow a run's events (resume with `Last-Event-ID`)", success: ok({ kind: 'event-stream', frames: [ 'RunStatusEventDataSchema', 'AgentFrameSchema', 'RunFailedFrameDataSchema', 'StreamResetFrameDataSchema', ], }), }``
+- ``{ method: 'GET', path: '/api/runs/:id/events', operationId: 'runs.events', tag: 'runs', summary: "Follow a run's events (resume with `Last-Event-ID`)", success: ok({ kind: 'event-stream', frames: [ 'RunStatusEventDataSchema', 'RunWarningEventDataSchema', 'AgentFrameSchema', 'RunFailedFrameDataSchema', 'StreamResetFrameDataSchema', ], }), }``
 - `{ method: 'POST', path: '/api/runs/:id/interrupt', operationId: 'runs.interrupt', tag: 'runs', summary: 'Interrupt a run', success: ok(json('InterruptRunResponseSchema')), }`
+- ``{ method: 'POST', path: '/api/runs/:id/approval', operationId: 'runs.approval', tag: 'runs', summary: 'Approve or reject the tool call a paused run is waiting on (starts a continuation run; `409` once decided)', request: json('RunApprovalRequestSchema'), success: [{ status: 202, body: json('RunApprovalResponseSchema') }], }``
 - `{ method: 'POST', path: '/api/runs/:id/feedback', operationId: 'runs.feedback', tag: 'runs', summary: 'Rate a run (thumbs up or down)', request: json('RunFeedbackRequestSchema'), success: NO_CONTENT, }`
 - `{ method: 'POST', path: '/api/runs/:id/revoke-tokens', operationId: 'runs.revokeTokens', tag: 'runs', summary: "Revoke a run's gateway tokens", request: UNDESCRIBED, success: ok(json('RevokeRunTokensResponseSchema')), }`
 - `{ method: 'GET', path: '/api/shares', operationId: 'shares.list', tag: 'shares', summary: 'List shares', success: ok(json('ShareListResponseSchema')), }`
@@ -175,6 +207,7 @@ The catalogue, grouped by family in the order of spec 04 §5.
 - ``{ method: 'POST', path: '/api/a2a/agents/:agentName', operationId: 'a2a.rpc', tag: 'a2a', summary: 'A2A v0.3 JSON-RPC to a published agent (message/send, message/stream, tasks/get, tasks/cancel)', request: json('A2aJsonRpcRequestSchema'), // message/stream answers `text/event-stream`, each `data:` one A2aJsonRpcResponseSchema; one // status carries one body kind in this catalogue, so the stream is described in ADR-0135. success: ok(json('A2aJsonRpcResponseSchema')), security: 'endpoint-credential', }``
 - `{ method: 'GET', path: '/api/a2a/agents/:agentName/.well-known/agent-card.json', operationId: 'a2a.agentCard', tag: 'a2a', summary: "Read a published agent's A2A v0.3 agent card", success: ok(json('A2aAgentCardSchema')), security: 'endpoint-credential', }`
 - ``{ method: 'POST', path: '/mcp/projects/:name', operationId: 'mcp.projectRpc', tag: 'mcp', summary: "MCP JSON-RPC to an endpoint client's production code tools (initialize, ping, tools/list, tools/call)", request: json('A2aJsonRpcRequestSchema'), // The JSON-RPC 2.0 envelope is protocol-neutral; a notification (no `id`) is answered 202. success: ok(json('A2aJsonRpcResponseSchema')), security: 'endpoint-credential', }``
+- `{ method: 'POST', path: '/mcp/builder', operationId: 'mcp.builderRpc', tag: 'mcp', summary: "MCP JSON-RPC to the Builder's read tools (initialize, ping, tools/list, tools/call) for an outside client", request: json('A2aJsonRpcRequestSchema'), success: ok(json('A2aJsonRpcResponseSchema')), security: 'endpoint-credential', }`
 
 ## API_SCHEMAS
 
@@ -268,6 +301,8 @@ The name of a schema in `API_SCHEMAS`.
 - `"CreateEndpointClientRequestSchema"`
 - `"CreateEvaluationRequestSchema"`
 - `"CreateEvaluationRunRequestSchema"`
+- `"CreateTriggerRequestSchema"`
+- `"CreateTriggerResponseSchema"`
 - `"CreatedUserResponseSchema"`
 - `"DeleteModelConnectionResponseSchema"`
 - `"DiscoveredModelsResponseSchema"`
@@ -280,8 +315,11 @@ The name of a schema in `API_SCHEMAS`.
 - `"EvaluationResourceSchema"`
 - `"EvaluationRunResourceSchema"`
 - `"DeviceAuthorizationResponseSchema"`
+- `"CreateDownloadUrlRequestSchema"`
+- `"CreateUploadUrlRequestSchema"`
 - `"FileListResponseSchema"`
 - `"FileResponseSchema"`
+- `"FileSearchResponseSchema"`
 - `"InterruptRunResponseSchema"`
 - `"InvitationListResponseSchema"`
 - `"InvitationResponseSchema"`
@@ -296,7 +334,9 @@ The name of a schema in `API_SCHEMAS`.
 - `"ModelConnectionListResponseSchema"`
 - `"ModelConnectionResourceSchema"`
 - `"ModelConnectionTestOutcomeSchema"`
+- `"MoveFileRequestSchema"`
 - `"MoveFileResponseSchema"`
+- `"PresignedUrlSchema"`
 - `"ProjectListResponseSchema"`
 - `"ProjectResourceSchema"`
 - `"ProjectSessionMoveResponseSchema"`
@@ -313,30 +353,47 @@ The name of a schema in `API_SCHEMAS`.
 - `"RunResponseSchema"`
 - `"RunStatusEventDataSchema"`
 - `"RunTelemetryListResponseSchema"`
+- `"RunWarningEventDataSchema"`
 - `"RuntimeConnectionListResponseSchema"`
 - `"RuntimeConnectionResourceSchema"`
 - `"RuntimeProfileListResponseSchema"`
 - `"RuntimeProfileResourceSchema"`
 - `"SecretListResponseSchema"`
 - `"SecretResourceSchema"`
+- `"StorageConnectionListResponseSchema"`
+- `"StorageConnectionResourceSchema"`
+- `"CreateStorageConnectionInputSchema"`
+- `"StorageConnectionCredentialSchema"`
+- `"UpdateStorageConnectionPatchSchema"`
+- `"StorageConnectionTestOutcomeSchema"`
+- `"StorageConnectionBrowseResponseSchema"`
 - `"SessionListResponseSchema"`
+- `"RunApprovalRequestSchema"`
+- `"RunApprovalResponseSchema"`
 - `"SessionResponseSchema"`
 - `"SetAgentPointerRequestSchema"`
 - `"SetAgentPointerResponseSchema"`
 - `"ShareListResponseSchema"`
 - `"ShareResourceSchema"`
 - `"SharingPolicySchema"`
+- `"PublishSkillRevisionRequestSchema"`
 - `"SkillExportResponseSchema"`
 - `"SkillListResponseSchema"`
 - `"SkillResponseSchema"`
+- `"SkillRevisionResponseSchema"`
 - `"StartRunRequestSchema"`
 - `"StartRunResponseSchema"`
 - `"StreamResetFrameDataSchema"`
+- `"SurfaceAttachmentResponseSchema"`
 - `"TestConnectionOutcomeSchema"`
 - `"ToolBundleResponseSchema"`
 - `"TranscriptResponseSchema"`
 - `"TranscriptSubkeysResponseSchema"`
+- `"TriggerListResponseSchema"`
+- `"TriggerResponseSchema"`
+- `"TriggerSecretResponseSchema"`
 - `"UpdateEndpointClientRequestSchema"`
+- `"UpdateTriggerRequestSchema"`
 - `"UploadToolBundleRequestSchema"`
 - `"UploadToolBundleResponseSchema"`
 - `"UserListResponseSchema"`
@@ -345,6 +402,7 @@ The name of a schema in `API_SCHEMAS`.
 - `"WorkspaceResponseSchema"`
 - `"WorkspaceSwitchRequestSchema"`
 - `"WorkspaceSwitchResponseSchema"`
+- `"ZoomUrlValidationResponseSchema"`
 
 ## ApiSuccess
 

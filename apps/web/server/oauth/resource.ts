@@ -1,5 +1,5 @@
 /**
- * The two protected resources an OAuth access token is valid for (ADR-0134 part 3), as paths, and
+ * The protected resources an OAuth access token is valid for (ADR-0134 part 3), as paths, and
  * what a `401` from either of them tells a client about where to authorise. A pure function of the
  * path and `AW_PUBLIC_URL`; nothing here reads the database.
  */
@@ -7,6 +7,8 @@ import { readPublicUrl } from '../endpoints/public-url';
 
 export const MCP_RESOURCE_PREFIX = '/mcp/projects/';
 export const A2A_RESOURCE_PREFIX = '/api/a2a/agents/';
+/** The Builder's MCP door: one fixed resource, with no name segment (issue #1846). */
+export const BUILDER_RESOURCE_PATH = '/mcp/builder';
 export const PROTECTED_RESOURCE_METADATA_PREFIX = '/.well-known/oauth-protected-resource';
 
 export const mcpResourcePath = (name: string): string =>

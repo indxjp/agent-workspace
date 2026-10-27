@@ -27,6 +27,7 @@
  * returns or throws, not that the real function's HTTP exchange with a provider is correct (that
  * claim belongs to `apps/web/server/auth/oidc.ts`, which this task did not change).
  */
+import { log } from '../../../../server/telemetry/logger';
 import { NextResponse } from 'next/server';
 
 import {
@@ -47,7 +48,7 @@ import {
 } from '../../../../server/auth';
 import { cookieValue } from '../../../../server/auth/cookies';
 import { resolveOidcSignIn } from '../../../../server/auth/login';
-import { currentRbacRuntime } from '../../../../server/rbac/runtime';
+import { applicationContext } from '../../../../server/application-context';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -109,7 +110,7 @@ export async function handleCallback(
     forwardedHost: request.headers.get('x-forwarded-host'),
   });
   if (!origin.ok) {
-    console.warn(`[auth] cross-origin OIDC callback refused: ${origin.reason}`);
+    log.warn(`[auth] cross-origin OIDC callback refused`, { reason: origin.reason });
     return NextResponse.json({ error: 'cross_origin' }, { status: 403 });
   }
 
@@ -145,15 +146,13 @@ export async function handleCallback(
       decodeURIComponent(transaction),
     );
   } catch (error) {
-    console.error(
-      `[auth] OIDC callback rejected: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    log.error('[auth] OIDC callback rejected', { error });
     const response = NextResponse.json({ error: 'oidc_callback_rejected' }, { status: 401 });
     response.cookies.set(clearTransactionCookie(request));
     return response;
   }
 
-  const runtime = currentRbacRuntime();
+  const runtime = applicationContext()?.rbac ?? null;
   if (runtime === null) {
     return NextResponse.json({ error: 'rbac_runtime_not_configured' }, { status: 503 });
   }

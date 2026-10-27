@@ -16,8 +16,14 @@ export type CappedBody =
   | { readonly kind: 'too_large' }
   | { readonly kind: 'unreadable' };
 
-/** Read at most `max` bytes, counting the bytes seen rather than trusting `Content-Length`. */
-export async function readCappedBody(request: Request, max: number): Promise<CappedBody> {
+/**
+ * Read at most `max` bytes, counting the bytes seen rather than trusting `Content-Length`. Takes a
+ * request or a response: only the body stream is read.
+ */
+export async function readCappedBody(
+  request: Pick<Request, 'body'>,
+  max: number,
+): Promise<CappedBody> {
   if (request.body === null) return { kind: 'ok', text: '' };
   const reader = request.body.getReader();
   const decoder = new TextDecoder('utf-8');

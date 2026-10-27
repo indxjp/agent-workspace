@@ -7,7 +7,45 @@ what the policy covers are on the developer site's
 [Public surface and stability](../../docs/sdk/site/concepts/public-surface.mdx#versions-and-deprecation)
 page. Released in lock-step with `@indx-workspace/sdk`, with the same version.
 
-## Unreleased
+## 0.6.11 — unreleased
+
+### Added
+
+- `aw agents new --from-prompt "<text>" [--out <dir>]` builds an agent with the Builder in a chat on your terminal. Every save, trial and check shows what it will do (the diff against the base version, the trial input and budget cap, or the case names and budget cap), names the agent, and waits for `y`. A saved agent is written as `agents/<name>.ts` and `.md`. It needs a terminal on stdin and stdout and has no `--yes`. It answers "the Builder is not enabled for this workspace" until the Builder is enabled for the workspace.
+- `aw audit list` prints a `builderRunId` column, and `--json` carries the field.
+- `aw endpoint-clients create --kind builder --name <name>` creates the client of the Builder's MCP door. It takes no `--agent`, and it authorizes through OAuth consent only, so it cannot mint keys.
+
+### Deprecated
+
+- The JSON + base64 skill import is deprecated and is removed in the next major release.
+  `aw push` and `aw dev` no longer use the deprecated JSON form internally, so they never trigger
+  the SDK's deprecation warning.
+
+## 0.6.10 — unreleased
+
+### Added
+
+- `aw triggers list|get|create|update|remove` and `aw triggers secret rotate`; the Zoom secret
+  token is read with `--value-stdin`.
+- `aw runs` and `aw chat` print a `run.warning` frame as a warning line (as itself with
+  `--json`/`--jsonl`/`--raw`) instead of failing on it.
+- `aw runs outputs <id> [--download <dir>]` lists the files a completed run wrote to its
+  `outputs/` directory and saves them under a local directory.
+- `aw runs start --output-schema <path>` asks for a structured answer from a JSON Schema file,
+  checked against the contract's limits before anything is sent; `aw runs get` shows the run's
+  `output`.
+- Streamed runs print `handed to a person: <reason>` for the new `agent.handoff` event, and the run trace reads a run that ends in one.
+- `aw agents export <id> --format ts [--agent-version <n>] [--out <dir>] [--force]` writes a saved version as `agents/<name>.ts` and `.md`, ready for `aw check && aw push`. It refuses to overwrite without `--force` and names the path of anything it cannot write as code. The default `--format json` is unchanged.
+- `aw runs start --attach <file>` (repeatable) starts the run with workspace files attached read-only; `<file>` is a file id or a workspace path. Uploading a local file is not part of it yet.
+- `aw storage connections list|get|create|update|remove|test`, `aw storage connections credential <name>` and `aw storage ls <name>[/<prefix>]` manage and browse storage connections. A credential is read from `--credential-file <path>` or stdin (`--credential-file -`), never from a flag, and is never printed.
+- `aw deploy` carries the tool `identity` setting from the project file to the platform.
+- `aw runs get` prints the `version` of the agent the run executed.
+- `aw runs start --file-scope <path>` (repeatable) narrows the run to part of the agent's file grants.
+- `aw triggers create --file` and `aw triggers update --file` accept an `outputSchema`, which makes
+  the runs the trigger starts answer in that JSON Schema.
+- `aw triggers create --subject <caller>` and `aw triggers update --subject <caller>` set the caller
+  the trigger's runs assert; `aw triggers list` shows it. Clear it with `--file` and
+  `{"subject": null}`.
 
 ### Changed
 
@@ -16,6 +54,7 @@ page. Released in lock-step with `@indx-workspace/sdk`, with the same version.
   `AGENT_WORKSPACE_API_KEY`. When a stored sign-in is used instead, `aw` says so on stderr.
 - `aw` warns on stderr before sending a credential over plain `http://` to a host other than this
   machine.
+- `aw files upload` switches to a signed link above 64 MiB, and `--direct` now completes the upload and prints the ready file (it used to print `{ path, sizeBytes, transfer }`).
 
 ### Fixed
 

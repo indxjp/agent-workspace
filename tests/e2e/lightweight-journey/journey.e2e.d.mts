@@ -1,4 +1,11 @@
 export const JOURNEY_DEPLOYMENT_POLICY: string;
+export function storageEntries(
+  laneKey: string,
+  env: Readonly<Record<string, string | undefined>>,
+): Record<
+  'OBJECT_STORAGE_ACCESS_KEY_ID' | 'OBJECT_STORAGE_SECRET_ACCESS_KEY' | 'AW_STORAGE_URL',
+  string
+>;
 export function setDotEnv(text: string, entries: Readonly<Record<string, string>>): string;
 export function frontendFiles(): Record<'package.json' | 'build.mjs', string>;
 export function awaitSetup(

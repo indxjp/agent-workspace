@@ -25,6 +25,7 @@ const run = (status: string) => ({
   projectId: null,
   initiatingUserId: null,
   sessionId: session,
+  agentVersion: null,
   status,
   createdAt: '2026-09-21T10:00:00.000Z',
   startedAt: null,
@@ -45,6 +46,8 @@ const run = (status: string) => ({
   },
   cost: { amount: '0.000000', currency: 'USD', priceTableVersion: null },
   error: null,
+  output: null,
+  pendingApproval: null,
   accountingState: 'pending',
   accountingError: null,
 });

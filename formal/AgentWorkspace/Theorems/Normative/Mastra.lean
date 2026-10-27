@@ -85,7 +85,7 @@ example :
       (match compile { base with grants := [(false, "contract.pdf", true)] } with
         | .ok c => c.tools
         | .refused _ => []) = [.readFile, .listFiles, .grep, .fileStat] := by
-  decide
+  decide +kernel
 
 /-! ## Memory features that would call a model outside the run's connection are off -/
 
@@ -206,6 +206,6 @@ example :
         match compile { base with gateway := some ("http://gw", "tok", w) } with
         | .ok _ => true
         | .refused _ => false) = true := by
-  decide
+  decide +kernel
 
 end AgentWorkspace.Theorems.Normative.Mastra

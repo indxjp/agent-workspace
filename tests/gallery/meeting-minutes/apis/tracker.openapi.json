@@ -1,0 +1,89 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "タスクトラッカー API",
+    "version": "1.0.0",
+    "description": "議事録のアクション項目をタスクとして登録する。担当者・部署・期限の検査はトラッカー自身が行う。"
+  },
+  "servers": [{ "url": "https://tracker.example.co.jp/api/v1" }],
+  "security": [{ "bearer": [] }],
+  "components": {
+    "securitySchemes": { "bearer": { "type": "http", "scheme": "bearer" } },
+    "schemas": {
+      "NewTask": {
+        "type": "object",
+        "required": ["title", "assignee", "due", "sourceMeeting"],
+        "properties": {
+          "title": { "type": "string", "maxLength": 120 },
+          "assignee": { "type": "string", "description": "list_members の氏名（敬称なし）" },
+          "due": { "type": "string", "description": "YYYY-MM-DD" },
+          "sourceMeeting": { "type": "string", "description": "議事録の会議名と日付" }
+        }
+      },
+      "Task": {
+        "type": "object",
+        "required": ["id", "title", "assignee", "due", "sourceMeeting", "status"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "assignee": { "type": "string" },
+          "department": { "type": "string" },
+          "due": { "type": "string", "format": "date" },
+          "sourceMeeting": { "type": "string" },
+          "createdBy": { "type": "string" },
+          "status": { "type": "string" }
+        }
+      },
+      "Created": {
+        "type": "object",
+        "required": ["created", "task"],
+        "properties": {
+          "created": {
+            "type": "boolean",
+            "description": "同じ会議・件名・担当の登録済みタスクがあれば false"
+          },
+          "task": { "$ref": "#/components/schemas/Task" }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["error"],
+        "properties": { "error": { "type": "string" } }
+      }
+    }
+  },
+  "paths": {
+    "/tasks": {
+      "post": {
+        "operationId": "createTask",
+        "summary": "承認済みのアクション項目を1件タスク登録する（担当者が承認した呼び出しだけが実行される）",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/NewTask" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "すでに登録済み",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Created" } }
+            }
+          },
+          "201": {
+            "description": "登録した",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Created" } }
+            }
+          },
+          "422": {
+            "description": "担当者が名簿にない、または期限が実在の日付でない",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Error" } }
+            }
+          }
+        }
+      }
+    }
+  }
+}

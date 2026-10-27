@@ -1,21 +1,35 @@
 /**
- * The sales system's backend call: ask the quotation agent for a draft quote, and accept it only
- * when its numbers are the cost model's.
+ * The sales system's backend call: ask the quotation agent to draft a quote and book it in the ERP,
+ * and let a person approve the booking only when its numbers are the cost model's.
  *
- * The agent is told to run `skills/cost-model/scripts/estimate.mjs` and paste its output, but a
- * model can still edit a number on the way (a "friendly" discount, a typo, a rate it remembered
- * rather than read). So the backend takes the spec it sent and the rate the ERP returned during
- * this run, runs the same script itself, and refuses the draft when any amount differs. The
- * similar orders the agent cites count only when `getOrder` returned them in this run, and the
- * confidence is decided here by fixed rules, not by the model's own word.
+ * Sales attaches the customer's drawing (a PDF or an image) and types only what a drawing does not
+ * carry: the customer and the quantity. The agent reads the part's spec from the drawing, runs
+ * `skills/cost-model/scripts/estimate.mjs` and calls the ERP's `createQuote`. That call is a write,
+ * so the run pauses on it (ADR-0145) and nothing reaches the ERP until a person decides. A model can
+ * still misread a dimension or edit a number on the way (a "friendly" discount, a typo, a rate it
+ * remembered rather than read), so `draftQuote` checks the paused call before anyone is asked: the
+ * spec and the cited orders come from the cost-model script call in this run, the rate is the one
+ * the ERP returned in this run, and the backend runs the same script itself and refuses the call
+ * when its customer, quantity, unit price or total differ. The approver sees the spec that was read
+ * beside the price. The similar orders the agent cites count only when `getOrder` returned them in
+ * this run, and the confidence is decided here by fixed rules, not by the model's own word.
  *
- * A draft that passes is `pending` approval: a run cannot pause for a person (probe
- * `run-approval`), and the agent cannot write to the ERP (probe `openapi-write`), so the approval
- * queue and the booking after it are this backend's.
+ * `decideQuote` carries the decision: `runs.approve` starts a continuation that books the approved
+ * call for the same salesperson (the platform keeps the paused run's `subject`, ADR-0157) and
+ * answers the ERP's quote number; `runs.reject` with a comment sends it back to the agent, and a
+ * revised call pauses again.
  */
 import type { AgentWorkspaceClient } from '@indx-workspace/sdk';
+import { z } from 'zod';
 
-import { runAndRead, type ToolCall } from '../../shared/run-answer.ts';
+import {
+  pendingCall,
+  readRun,
+  runAndRead,
+  RunAwaitingApproval,
+  type AwaitingApproval,
+  type ToolCall,
+} from '../../shared/run-answer.ts';
 import {
   estimate,
   EstimateError,
@@ -24,7 +38,14 @@ import {
   type PartSpec,
 } from '../skills/cost-model/scripts/estimate.mjs';
 
-/** What sales enters from the customer's drawing. */
+/** What sales sends: the drawing as an uploaded file, and what the drawing does not say. */
+export interface QuoteRequest {
+  readonly drawing: { readonly fileId: string };
+  readonly customer: string;
+  readonly quantity: number;
+}
+
+/** The part as the agent read it from the drawing, plus the request's customer and quantity. */
 export interface QuoteSpec extends PartSpec {
   readonly customer: string;
   readonly drawingNo: string;
@@ -43,12 +64,26 @@ export interface PastOrder {
 
 export type Confidence = 'high' | 'medium' | 'low';
 
-export interface DraftQuote {
-  readonly status: 'draft';
-  /** Always `pending`: a person approves before the quote is sent or booked. */
-  readonly approval: 'pending';
+/** The call the ERP books, as `createQuote` takes it (`apis/erp.openapi.json`, `NewQuote`). */
+const NewQuoteSchema = z
+  .object({
+    customer: z.string(),
+    drawingNo: z.string(),
+    partName: z.string(),
+    material: z.string(),
+    quantity: z.number(),
+    unitPrice: z.number(),
+    total: z.number(),
+  })
+  .strict();
+export type NewQuote = z.infer<typeof NewQuoteSchema>;
+
+/** What a person is asked to approve: the call to book, with the checks the backend made. */
+export interface ProposedQuote {
+  /** The `createQuote` body the run paused on, validated here; nothing is booked until it is approved. */
+  readonly quote: NewQuote;
   readonly spec: QuoteSpec;
-  /** The cost model's breakdown, computed here; the agent's block matched it. */
+  /** The cost model's breakdown, computed here; the call's amounts matched it. */
   readonly breakdown: Estimate;
   /** Cited orders `getOrder` returned in this run, of the spec's material. */
   readonly similarOrders: readonly PastOrder[];
@@ -56,13 +91,28 @@ export interface DraftQuote {
   readonly droppedOrders: readonly string[];
   readonly confidence: Confidence;
   readonly confidenceReasons: readonly string[];
+}
+
+/** The run paused on `createQuote`; decide it with {@link decideQuote}. */
+export type QuoteAwaitingApproval = AwaitingApproval & { readonly proposed: ProposedQuote };
+
+export interface BookedQuote {
+  readonly status: 'booked';
+  /** The ERP's number for the quote, read from the approved call's result. */
+  readonly quoteNo: string;
+  readonly quote: NewQuote;
   readonly answer: string;
   readonly runId: string;
   readonly sessionId: string;
 }
 
 export type RefusalCode =
-  'invalid_spec' | 'no_breakdown' | 'rate_not_read' | 'not_priceable' | 'numbers_differ';
+  | 'invalid_spec'
+  | 'rate_not_read'
+  | 'not_priceable'
+  | 'numbers_differ'
+  | 'not_proposed'
+  | 'not_booked';
 
 export interface RefusedQuote {
   readonly status: 'refused';
@@ -74,53 +124,62 @@ export interface RefusedQuote {
   readonly sessionId: string | null;
 }
 
-export type QuoteOutcome = DraftQuote | RefusedQuote;
+export type QuoteOutcome = QuoteAwaitingApproval | RefusedQuote;
 
 /** The thresholds behind {@link confidenceOf}, as the cost-model skill states them. */
 export const CONFIDENCE_RULES = { highOrders: 2, highDeviation: 0.15, mediumDeviation: 0.3 };
 
-/** The amounts compared between the agent's block and the backend's own estimate. */
-const COMPARED = [
-  ['material'],
-  ['quantity'],
-  ['perPiece', 'material'],
-  ['perPiece', 'cutting'],
-  ['perPiece', 'bending'],
-  ['perPiece', 'setup'],
-  ['perPiece', 'cost'],
-  ['unitPrice'],
-  ['total'],
-] as const;
-
 const toolIs = (name: string, tool: string): boolean => name === tool || name.endsWith(`__${tool}`);
-
-function parseJson(text: string): unknown {
-  try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    return undefined;
-  }
-}
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-/** The prompt the backend sends: an instruction and the spec as a fenced JSON block. */
-export function quotePrompt(spec: QuoteSpec): string {
-  return `以下の部品仕様で見積の下書きを作ってください。\n\`\`\`json\n${JSON.stringify(spec)}\n\`\`\``;
-}
+/** The agent's closing answer, once the booking ran; the run asks for it, and the platform types it. */
+export const QuoteAnswerSchema = z.object({
+  spec: z
+    .object({
+      drawingNo: z.string().describe('図番（図面の表題欄）'),
+      partName: z.string().describe('品名（図面の表題欄）'),
+      material: z.string().describe('材質（SS400・SUS304・A5052）'),
+      lengthMm: z.number().describe('外形の長さ（mm）'),
+      widthMm: z.number().describe('外形の幅（mm）'),
+      thicknessMm: z.number().describe('板厚（mm）'),
+      holeCount: z.number().describe('穴の数。穴がなければ 0'),
+      holeDiameterMm: z.number().describe('穴径（mm）。穴がなければ 0'),
+      bendCount: z.number().describe('曲げの数。曲げがなければ 0'),
+    })
+    .describe('図面から読み取った部品仕様。読み取れない値を推測で埋めない'),
+  breakdown: z
+    .object({
+      material: z.string().describe('材質（仕様の material）'),
+      quantity: z.number().describe('数量'),
+      perPiece: z.object({
+        material: z.number().describe('1個あたりの材料費（円）'),
+        cutting: z.number().describe('1個あたりの切断費（円）'),
+        bending: z.number().describe('1個あたりの曲げ費（円）'),
+        setup: z.number().describe('1個あたりの段取費（円）'),
+        cost: z.number().describe('1個あたりの原価（円）'),
+      }),
+      unitPrice: z.number().describe('見積単価（円、税抜）'),
+      total: z.number().describe('合計金額（円、税抜）'),
+    })
+    .describe('原価計算スクリプトの出力そのまま。数値を書き換えない'),
+  similarOrders: z
+    .array(z.string())
+    .describe('参考にした類似実績の受注番号。getOrder で読んだものだけ'),
+});
 
-/** The last fenced ```json block in `text`, parsed, or `undefined` when there is none. */
-export function lastJsonBlock(text: string): unknown {
-  const blocks = [...text.matchAll(/```json[^\S\n]*\n([\s\S]*?)\n```/gu)];
-  const last = blocks.at(-1)?.[1];
-  return last === undefined ? undefined : parseJson(last);
-}
-
+/** The results of the successful calls to `tool`: the ERP's JSON, which the backend reads as evidence. */
 function succeeded(calls: readonly ToolCall[], tool: string): unknown[] {
   return calls
     .filter((call) => toolIs(call.name, tool) && !call.isError && call.output !== null)
-    .map((call) => parseJson(call.output ?? ''));
+    .map((call) => {
+      try {
+        return JSON.parse(call.output ?? '') as unknown;
+      } catch {
+        return undefined;
+      }
+    });
 }
 
 function readOrder(value: unknown): PastOrder | null {
@@ -143,12 +202,6 @@ function readOrder(value: unknown): PastOrder | null {
     unitPrice,
     orderedOn: typeof orderedOn === 'string' ? orderedOn : '',
   };
-}
-
-function valueAt(record: unknown, keys: readonly string[]): unknown {
-  let current = record;
-  for (const key of keys) current = isRecord(current) ? current[key] : undefined;
-  return current;
 }
 
 function median(values: readonly number[]): number {
@@ -190,118 +243,268 @@ export function confidenceOf(
 }
 
 /**
- * Ask `agentId` for a draft quote of `spec` and check it against the cost model.
- *
- * Never throws for what the agent wrote: a draft whose numbers cannot be confirmed comes back
- * `refused` with a code, so the sales system can show why and ask again. It throws only when the
- * run itself fails (`RunDidNotComplete`) or the API does.
+ * What the run's `run_skill_script` call fed the cost model: the spec and the cited orders. A run
+ * with an attachment has no shell, so this call is the only way the script runs. The input is read,
+ * not the output: the backend runs the script's function itself, and a refused call still shows
+ * what the agent read.
  */
-export async function draftQuote(
-  aw: AgentWorkspaceClient,
-  agentId: string,
-  spec: QuoteSpec,
-  sessionId?: string,
-): Promise<QuoteOutcome> {
+function scriptInputs(calls: readonly ToolCall[]): { spec: unknown; cited: string[] } | null {
+  const call = calls.filter((candidate) => toolIs(candidate.name, 'run_skill_script')).at(-1);
+  if (call === undefined || !isRecord(call.input)) return null;
+  const parsed = z.array(z.string()).safeParse(call.input['args']);
+  if (!parsed.success) return null;
+  const args = parsed.data;
+  const option = (name: string): string | undefined => {
+    const at = args.indexOf(`--${name}`);
+    return at === -1 ? undefined : args[at + 1];
+  };
   try {
-    readSpec(spec);
+    return {
+      spec: JSON.parse(option('spec') ?? '') as unknown,
+      cited: (option('orders') ?? '')
+        .split(',')
+        .map((order) => order.trim())
+        .filter((order) => order !== ''),
+    };
+  } catch {
+    return null;
+  }
+}
+
+type Costed = Omit<ProposedQuote, 'quote' | 'spec'> & { readonly part: PartSpec };
+interface Problem {
+  readonly code: RefusalCode;
+  readonly detail: string;
+}
+
+/**
+ * Price the part the run read, from this run's evidence: the spec the cost-model script was given,
+ * and the rate and orders the ERP returned. The backend runs the script's function itself.
+ */
+function costed(calls: readonly ToolCall[], quantity: number): Costed | Problem {
+  const inputs = scriptInputs(calls);
+  if (inputs === null) {
+    return { code: 'not_priceable', detail: 'the run called no cost-model script with a spec' };
+  }
+  let part: PartSpec;
+  try {
+    part = readSpec({ ...(isRecord(inputs.spec) ? inputs.spec : {}), quantity });
   } catch (error) {
     if (!(error instanceof EstimateError)) throw error;
-    return {
-      status: 'refused',
-      code: 'invalid_spec',
-      detail: error.message,
-      answer: '',
-      runId: null,
-      sessionId: sessionId ?? null,
-    };
-  }
-
-  const reading = await runAndRead(aw, agentId, {
-    prompt: quotePrompt(spec),
-    sessionId: sessionId ?? null,
-  });
-  const runId = reading.run.id;
-  const refuse = (code: RefusalCode, detail: string): RefusedQuote => ({
-    status: 'refused',
-    code,
-    detail,
-    answer: reading.answer,
-    runId,
-    sessionId: reading.run.sessionId,
-  });
-
-  const block = lastJsonBlock(reading.answer);
-  const claimed = isRecord(block) ? block['breakdown'] : undefined;
-  const listed: unknown = isRecord(block) ? block['similarOrders'] : undefined;
-  const cited = Array.isArray(listed)
-    ? listed.filter((entry): entry is string => typeof entry === 'string')
-    : [];
-  if (!isRecord(claimed) || !Array.isArray(listed) || cited.length !== listed.length) {
-    return refuse(
-      'no_breakdown',
-      'the answer has no ```json block with breakdown and similarOrders',
-    );
+    return { code: 'invalid_spec', detail: error.message };
   }
 
   // The rate is the one the ERP returned in this run, never one the model wrote down.
-  const rate = succeeded(reading.toolCalls, 'getRate')
-    .filter((value) => isRecord(value) && value['material'] === spec.material)
+  const rate = succeeded(calls, 'getRate')
+    .filter((value) => isRecord(value) && value['material'] === part.material)
     .at(-1);
   if (rate === undefined) {
-    return refuse('rate_not_read', `getRate returned no ${spec.material} rate in this run`);
+    return {
+      code: 'rate_not_read',
+      detail: `getRate returned no ${part.material} rate in this run`,
+    };
   }
-
   let breakdown: Estimate;
   try {
-    breakdown = estimate(spec, rate);
+    breakdown = estimate(part, rate);
   } catch (error) {
     if (!(error instanceof EstimateError)) throw error;
-    return refuse('not_priceable', error.message);
-  }
-
-  const differences = COMPARED.flatMap((keys) => {
-    const expected = valueAt(breakdown, keys);
-    const actual = valueAt(claimed, keys);
-    return actual === expected
-      ? []
-      : [`${keys.join('.')}: ${JSON.stringify(actual) ?? 'missing'} ≠ ${JSON.stringify(expected)}`];
-  });
-  if (differences.length > 0) {
-    return refuse(
-      'numbers_differ',
-      `the cost model gives other numbers: ${differences.join('; ')}`,
-    );
+    return { code: 'not_priceable', detail: error.message };
   }
 
   const read = new Map(
-    succeeded(reading.toolCalls, 'getOrder')
+    succeeded(calls, 'getOrder')
       .map(readOrder)
       .filter((order): order is PastOrder => order !== null)
       .map((order) => [order.orderNo, order]),
   );
   const similarOrders: PastOrder[] = [];
   const droppedOrders: string[] = [];
-  for (const orderNo of new Set(cited)) {
+  for (const orderNo of new Set(inputs.cited)) {
     const order = read.get(orderNo);
-    if (order?.material === spec.material) similarOrders.push(order);
+    if (order?.material === part.material) similarOrders.push(order);
     else droppedOrders.push(orderNo);
   }
   const { confidence, reasons } = confidenceOf(breakdown.unitPrice, similarOrders);
   if (droppedOrders.length > 0) {
     reasons.push(`根拠にならない受注番号を除外: ${droppedOrders.join(', ')}`);
   }
+  return { part, breakdown, similarOrders, droppedOrders, confidence, confidenceReasons: reasons };
+}
 
+/**
+ * The paused `createQuote` call as a proposal. The canonical text is the platform's, but what the
+ * model put in the body is untrusted until it parses and its customer, quantity and amounts are the
+ * request's and the cost model's. A revision (`previous`) is checked against the numbers already
+ * established for this quote, since its run read nothing new.
+ */
+function propose(
+  pending: AwaitingApproval,
+  request: Pick<QuoteRequest, 'customer' | 'quantity'>,
+  previous: ProposedQuote | null,
+): QuoteAwaitingApproval | RefusedQuote {
+  const refuse = (code: RefusalCode, detail: string): RefusedQuote => ({
+    status: 'refused',
+    code,
+    detail,
+    answer: '',
+    runId: pending.runId,
+    sessionId: pending.sessionId,
+  });
+  if (!toolIs(pending.call.toolName, 'createQuote')) {
+    return refuse('not_proposed', `the run paused on ${pending.call.toolName}, not createQuote`);
+  }
+  const body = z.object({ body: NewQuoteSchema }).safeParse(pendingCall(pending.call).input);
+  if (!body.success) {
+    return refuse('not_proposed', body.error.issues.map((issue) => issue.message).join('; '));
+  }
+  const quote = body.data.body;
+
+  const basis = previous === null ? costed(pending.toolCalls, request.quantity) : previous;
+  if ('code' in basis) return refuse(basis.code, basis.detail);
+  const { breakdown } = basis;
+
+  const differences = [
+    ['customer', quote.customer, request.customer],
+    ['material', quote.material, breakdown.material],
+    ['quantity', quote.quantity, breakdown.quantity],
+    ['unitPrice', quote.unitPrice, breakdown.unitPrice],
+    ['total', quote.total, breakdown.total],
+  ].flatMap(([field, actual, expected]) =>
+    actual === expected
+      ? []
+      : [`${String(field)}: ${JSON.stringify(actual)} ≠ ${JSON.stringify(expected)}`],
+  );
+  if (differences.length > 0) {
+    return refuse(
+      'numbers_differ',
+      `the call differs from the request and the cost model: ${differences.join('; ')}`,
+    );
+  }
+
+  const part = 'part' in basis ? basis.part : basis.spec;
   return {
-    status: 'draft',
-    approval: 'pending',
-    spec,
-    breakdown,
-    similarOrders,
-    droppedOrders,
-    confidence,
-    confidenceReasons: reasons,
-    answer: reading.answer,
-    runId,
-    sessionId: reading.run.sessionId,
+    ...pending,
+    proposed: {
+      quote,
+      spec: {
+        ...part,
+        customer: quote.customer,
+        drawingNo: quote.drawingNo,
+        partName: quote.partName,
+      },
+      breakdown,
+      similarOrders: basis.similarOrders,
+      droppedOrders: basis.droppedOrders,
+      confidence: basis.confidence,
+      confidenceReasons: basis.confidenceReasons,
+    },
   };
+}
+
+/**
+ * Ask `agentId` to draft and book a quote of the attached drawing. The booking is a write, so the
+ * run pauses on it and nothing is written: the answer is the pause with the {@link ProposedQuote}
+ * a person approves, to be decided with {@link decideQuote}.
+ *
+ * Never throws for what the agent wrote: a call whose spec cannot be priced or whose numbers
+ * cannot be confirmed comes back `refused` with a code, so the sales system can show why and ask
+ * again. It throws only when the run itself fails (`RunDidNotComplete`, which includes a run that
+ * cannot satisfy the output schema) or the API does.
+ */
+export async function draftQuote(
+  aw: AgentWorkspaceClient,
+  agentId: string,
+  request: QuoteRequest,
+  /** The signed-in salesperson, from the quote desk's own session; the ERP shows only their customers. */
+  subject: string,
+  sessionId?: string,
+): Promise<QuoteOutcome> {
+  // What sales typed is checked before a paid run starts, with the bounds `readSpec` applies.
+  const typed =
+    !Number.isSafeInteger(request.quantity) || request.quantity < 1 || request.quantity > 100000
+      ? 'quantity must be an integer from 1 to 100000'
+      : request.customer.trim() === ''
+        ? 'customer must not be blank'
+        : null;
+  if (typed !== null) {
+    return {
+      status: 'refused',
+      code: 'invalid_spec',
+      detail: typed,
+      answer: '',
+      runId: null,
+      sessionId: sessionId ?? null,
+    };
+  }
+
+  try {
+    const reading = await runAndRead(
+      aw,
+      agentId,
+      {
+        prompt: `顧客: ${request.customer}\n数量: ${String(request.quantity)}個\n添付の図面を読み、見積を作って ERP に登録してください。`,
+        subject,
+        attachments: [{ fileId: request.drawing.fileId }],
+        sessionId: sessionId ?? null,
+      },
+      QuoteAnswerSchema,
+    );
+    return {
+      status: 'refused',
+      code: 'not_proposed',
+      detail: 'the run finished without asking to book the quote',
+      answer: reading.answer,
+      runId: reading.run.id,
+      sessionId: reading.run.sessionId,
+    };
+  } catch (error) {
+    if (!(error instanceof RunAwaitingApproval)) throw error;
+    return propose(error.pending, request, null);
+  }
+}
+
+/**
+ * A person decided the paused booking. Approving starts the continuation that makes the approved
+ * call, and the result is the ERP's quote number read from that call's result, never assumed;
+ * rejecting (with a comment saying what to change) starts one that revises the call, so the answer
+ * is the next pause, checked again against the numbers already established.
+ */
+export async function decideQuote(
+  aw: AgentWorkspaceClient,
+  awaiting: QuoteAwaitingApproval,
+  decision: { readonly approve: boolean; readonly comment?: string },
+): Promise<BookedQuote | QuoteOutcome> {
+  const input = decision.comment === undefined ? {} : { comment: decision.comment };
+  const { run } = decision.approve
+    ? await aw.runs.approve(awaiting.runId, input)
+    : await aw.runs.reject(awaiting.runId, input);
+  const { quote } = awaiting.proposed;
+  try {
+    const reading = await readRun(aw, run.id, QuoteAnswerSchema);
+    const refuse = (code: RefusalCode, detail: string): RefusedQuote => ({
+      status: 'refused',
+      code,
+      detail,
+      answer: reading.answer,
+      runId: reading.run.id,
+      sessionId: reading.run.sessionId,
+    });
+    if (!decision.approve) return refuse('not_proposed', 'the agent proposed no revised booking');
+    const quoteNo = succeeded(reading.toolCalls, 'createQuote')
+      .map((result) => (isRecord(result) ? result['quoteNo'] : undefined))
+      .find((value): value is string => typeof value === 'string');
+    if (quoteNo === undefined) return refuse('not_booked', 'createQuote returned no quote number');
+    return {
+      status: 'booked',
+      quoteNo,
+      quote,
+      answer: reading.answer,
+      runId: reading.run.id,
+      sessionId: reading.run.sessionId,
+    };
+  } catch (error) {
+    if (!(error instanceof RunAwaitingApproval)) throw error;
+    return propose(error.pending, quote, awaiting.proposed);
+  }
 }

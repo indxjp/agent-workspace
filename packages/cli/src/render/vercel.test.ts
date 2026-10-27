@@ -13,10 +13,12 @@ import {
   VERCEL_FUNCTION_STATIC_FILE,
   VERCEL_PARTS,
   VERCEL_RETENTION_CRON_PATH,
+  VERCEL_STORAGE_CLEANUP_CRON_PATH,
+  VERCEL_TRIGGERS_CRON_PATH,
 } from './vercel.js';
 
 describe('the Vercel project settings', () => {
-  it('declares the Next.js preset, a scoped install and build of its dependencies, and one daily retention cron', () => {
+  it('declares the Next.js preset, a scoped install and build of its dependencies, a daily retention and schedule-trigger cron and a daily storage cleanup cron', () => {
     const artefact = renderVercelProject(defaultProfile({ cloud: 'vercel', projectName: 'a' }));
     expect(artefact?.directory).toBe('vercel');
     expect(artefact?.fileName).toBe('vercel.json');
@@ -24,9 +26,15 @@ describe('the Vercel project settings', () => {
       framework: 'nextjs',
       installCommand: 'pnpm install --frozen-lockfile --filter "{.}..."',
       buildCommand: 'pnpm --filter "{.}^..." run build && pnpm run build',
-      crons: [{ path: VERCEL_RETENTION_CRON_PATH, schedule: '0 3 * * *' }],
+      crons: [
+        { path: VERCEL_RETENTION_CRON_PATH, schedule: '0 3 * * *' },
+        { path: VERCEL_TRIGGERS_CRON_PATH, schedule: '0 4 * * *' },
+        { path: VERCEL_STORAGE_CLEANUP_CRON_PATH, schedule: '0 5 * * *' },
+      ],
     });
     expect(VERCEL_RETENTION_CRON_PATH).toBe('/api/cron/retention');
+    expect(VERCEL_TRIGGERS_CRON_PATH).toBe('/api/cron/triggers');
+    expect(VERCEL_STORAGE_CLEANUP_CRON_PATH).toBe('/api/cron/storage-cleanup');
   });
 
   it.each(['aws', 'gcp', 'azure', 'local'] as const)('renders nothing for %s', (cloud) => {

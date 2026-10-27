@@ -1,20 +1,25 @@
-import { createHash } from 'node:crypto';
-
-import { ownerPrincipalIdOf } from '../rbac/owner-principal';
-import { isTerminalRunStatus, type DatabaseRoot } from '@agent-workspace/core/db';
+import { log } from '../telemetry/logger';
+import { verifyActiveRunToken } from '../gateway/run-token-verifier';
+import { mayAccessSession } from '../rbac/owner-principal';
+import type { ActiveOAuthAccessToken, DatabaseRoot } from '@agent-workspace/core/db';
+import { isStoppedRunStatus } from '@indx-workspace/contracts/runs';
 import { createRunTokenCodec } from '@agent-workspace/gateway/tokens';
 
 import { verifySessionToken } from '../auth/session';
-import { configureCliAuthRuntime } from '../cli-auth/runtime';
+import type { CliAuthRuntime } from '../cli-auth/runtime';
+import type { InvitationsRuntime } from '../invitations/runtime';
 import { isCliTokenRoutePath } from '../cli-auth/token-routes';
-import { installSessionApi } from '../sessions/environment';
+import type { SessionApiEnvironment, SessionApiPrincipal } from '../sessions/environment';
 import type { SessionRetentionResult } from '../sessions/retention';
-import { configureWorkspacesRuntime } from '../workspaces/runtime';
+import type { StorageService } from '../storage/service';
+import type { WorkspacesRuntime } from '../workspaces/runtime';
 import { configuredPath } from './config';
 import { isAgentEndpointRoute } from '../auth/agent-endpoint-routes';
 import { readBearerOAuthAccessAttempt } from '../oauth/tokens';
 import { sessionCookieValue } from './identity';
 import type { Principal } from '../rbac/principal';
+import type { RbacRuntime } from '../rbac/runtime';
+import type { TokenScope } from '../rbac/token-scope';
 
 export type PrincipalResolution =
   | { readonly kind: 'workspace'; readonly principal: Principal }
@@ -24,61 +29,54 @@ export type PrincipalResolution =
 export interface InstalledRbacApi {
   identify(request: Request): Promise<Principal | null>;
   resolveActor(request: Request): Promise<PrincipalResolution>;
+  /** Identity and directory, for the root to install as `ApplicationContext.rbac`. */
+  readonly rbac: RbacRuntime;
+  /** `/api/auth/cli-*`, for the root to install as `ApplicationContext.cliAuth`. */
+  readonly cliAuth: CliAuthRuntime;
+  /** `/api/invitations`, for the root to install as `ApplicationContext.invitations`. */
+  readonly invitations: InvitationsRuntime;
+  /** `/api/workspaces/**`, for the root to install as `ApplicationContext.workspaces`. */
+  readonly workspaces: WorkspacesRuntime;
 }
 
+/**
+ * Build the session API's environment — authenticator, transcript and state stores, session rows
+ * and the retention driver — for the composition root to install as `ApplicationContext.sessions`.
+ */
 export async function installSessionTranscripts(
   authenticateUser: (request: Request) => Promise<Principal | null>,
   database: DatabaseRoot,
-): Promise<void> {
+  stopOnClose: (stop: () => void) => void,
+  storage?: StorageService,
+): Promise<SessionApiEnvironment> {
   const tokenSecret = configuredPath('GATEWAY_TOKEN_SECRET');
   const tokens = tokenSecret === null ? null : createRunTokenCodec({ secret: tokenSecret });
   const authenticateSessionRequest = async (
     request: Request,
-  ): Promise<import('../sessions/environment').SessionPrincipal | null> => {
-    const authorization = /^Bearer\s+([^\s]+)$/iu.exec(
-      request.headers.get('authorization') ?? '',
-    )?.[1];
-    if (tokens !== null && authorization !== undefined) {
-      const verified = await tokens.verify(authorization);
-      if (verified.ok) {
-        const claims = verified.claims;
-        const scope = await database.scopes.forWorkspaceId(claims.workspaceId);
-        if (scope !== null) {
-          const [active, run] = await Promise.all([
-            database.runTokens
-              .forScope(scope)
-              .isActive(
-                claims.tokenId,
-                claims.runId,
-                createHash('sha256').update(authorization).digest('hex'),
-              ),
-            database.runs.forScope(scope).get(claims.runId),
-          ]);
-          if (
-            active &&
-            run !== null &&
-            run.sessionId === claims.sessionId &&
-            run.workspaceId === claims.workspaceId &&
-            run.agentId === claims.agentId
-          ) {
-            return {
-              kind: 'runner',
-              workspaceId: claims.workspaceId,
-              runId: claims.runId,
-              sessionId: claims.sessionId,
-            };
-          }
-        }
+  ): Promise<SessionApiPrincipal | null> => {
+    if (tokens !== null) {
+      const active = await verifyActiveRunToken(
+        request.headers.get('authorization'),
+        tokens,
+        database,
+      );
+      if (active !== null) {
+        return {
+          kind: 'runner',
+          workspaceId: active.claims.workspaceId,
+          runId: active.claims.runId,
+          sessionId: active.claims.sessionId,
+        };
       }
     }
     const actor = await authenticateUser(request);
     // Issue #236 (SDK-04, S-1): no `/api/sessions/**` route is inside any scope's §3.1 grammar,
     // and this family's only gate is `canAccessSession` below — it never calls `decide()`, so the
-    // scope grammar that would deny these paths is never consulted. `SessionPrincipal` has no
+    // scope grammar that would deny these paths is never consulted. `SessionApiPrincipal` has no
     // field to carry an attenuation either, so projecting a browser-token actor into one would
     // hand it the minter's full role over every transcript in the workspace. Fail closed: a
     // scoped credential is not a session credential. (Admitting a session-scoped token here would
-    // take `SessionPrincipal` carrying the scope and `canAccessSession` comparing it — a widening
+    // take `SessionApiPrincipal` carrying the scope and `canAccessSession` comparing it — a widening
     // of §3.1's grammar, and a separate change.)
     //
     // Issue #242 (SDK-10, S-22) review round 1: the same holds for the token `aw login` holds. The
@@ -96,20 +94,24 @@ export async function installSessionTranscripts(
       role: actor.role,
     };
   };
-  const { DatabaseTranscriptStore } = await import('../sessions/database-store');
+  const {
+    DatabaseSessionStateStore,
+    DatabaseTranscriptStore,
+    createRepositorySessionsStoreProvider,
+  } = await import('../sessions/store');
   const transcriptStore = new DatabaseTranscriptStore(database.sessionTranscripts, database.scopes);
   // ENG-06 (#305): the engine-scoped store, installed beside the Claude-shaped one rather than
   // instead of it. Migration 0027 copied every existing transcript across and left the old tables
   // in place, so both halves serve until the contract step of the expand/contract lands (ADR-0071).
-  const { DatabaseSessionStateStore } = await import('../sessions/state-store');
   const { sessionStateBlobStore } = await import('./storage');
   const blobs = await sessionStateBlobStore();
   const stateStore = new DatabaseSessionStateStore({
     repositories: database.sessionState,
     scopes: database.scopes,
+    ...(storage === undefined ? {} : { storage }),
     ...(blobs === null ? {} : { blobs }),
   });
-  installSessionApi({
+  const environment: Omit<SessionApiEnvironment, 'retention'> = {
     authenticate: authenticateSessionRequest,
     canAccessSession: async (principal, sessionId) => {
       if (principal.kind === 'runner') return principal.sessionId === sessionId;
@@ -118,34 +120,39 @@ export async function installSessionTranscripts(
       const repository = database.sessions.forScope(scope);
       const session =
         (await repository.get(sessionId)) ?? (await repository.getByEngineSessionId(sessionId));
-      return (
-        session !== null &&
-        (session.ownerPrincipalId === ownerPrincipalIdOf(principal) ||
-          principal.role === 'owner' ||
-          principal.role === 'admin')
-      );
+      return session !== null && mayAccessSession(principal, session);
+    },
+    runFileGrants: async (workspaceId, runId) => {
+      const scope = await database.scopes.forWorkspaceId(workspaceId);
+      if (scope === null) return [];
+      return (await database.runs.forScope(scope).get(runId))?.fileGrants ?? [];
     },
     store: transcriptStore,
     stateStore,
-    sessions: database.sessions,
-    scopes: database.scopes,
-  });
+    sessions: createRepositorySessionsStoreProvider({
+      repositories: database.sessions,
+      scopes: database.scopes,
+    }),
+  };
   const { readSessionRetentionPolicy, runSessionRetentionPass, startSessionRetentionScheduler } =
     await import('../sessions/retention');
+  const { purgeSessionAttachments } = await import('../surfaces/public/attachments');
   const retentionPolicy = readSessionRetentionPolicy(process.env);
   const retention = {
     listWorkspaceIds: () => database.listWorkspaceIds(),
     store: transcriptStore,
     // ENG-06: the same policy covers the engine-scoped store, where every new conversation lives.
     stateStore,
+    // ADR-0146 D6: a purged session's visitor uploads go with it.
+    attachments: { purgeSessions: purgeSessionAttachments },
     lease: {
       tryAcquire: (name: string, ttlMs: number) => database.tryAcquireMaintenanceLease(name, ttlMs),
     },
     policy: retentionPolicy,
     onResult: (workspaceId: string, result: SessionRetentionResult) => {
       if (result.kind !== 'purged') return;
-      console.log(
-        `[compose] session retention purged workspace ${workspaceId}: ${String(result.transcripts)} legacy transcripts, ${String(result.stateEntries)} state entries, ${String(result.stateBlobs)} state blobs`,
+      log.info(
+        `[compose] session retention purged workspace ${workspaceId}: ${String(result.transcripts)} legacy transcripts, ${String(result.stateEntries)} state entries, ${String(result.stateBlobs)} state blobs, ${String(result.attachments)} attachments`,
       );
     },
   };
@@ -156,22 +163,21 @@ export async function installSessionTranscripts(
     env: process.env,
     runPass: () => runSessionRetentionPass(retention),
     startScheduler: () => {
-      startSessionRetentionScheduler({
+      const scheduler = startSessionRetentionScheduler({
         ...retention,
         intervalMs: 24 * 60 * 60 * 1_000,
-        onError: (error) =>
-          console.error(
-            `[compose] session retention failed: ${error instanceof Error ? error.message : String(error)}`,
-          ),
+        onError: (error) => log.error('[compose] session retention failed', { error }),
       });
+      stopOnClose(() => scheduler.stop());
     },
   });
-  console.log(
-    `[compose] session retention ${driver === 'cron' ? 'runs from the cron route' : 'scheduled'}: ${String(retentionPolicy.transcriptDays)} days, ${retentionPolicy.dryRun ? 'dry run' : 'purge enabled'}`,
+  log.info(
+    `[compose] session retention ${driver.kind === 'cron' ? 'runs from the cron route' : 'scheduled'}: ${String(retentionPolicy.transcriptDays)} days, ${retentionPolicy.dryRun ? 'dry run' : 'purge enabled'}`,
   );
-  console.log(
-    '[compose] session API installed: owner/admin RBAC and per-run signed mirror claims → PostgreSQL',
+  log.info(
+    '[compose] session API wired: owner/admin RBAC and per-run signed mirror claims → PostgreSQL',
   );
+  return { ...environment, retention: driver };
 }
 
 /**
@@ -197,7 +203,7 @@ export async function installSessionTranscripts(
  * `docs/adr/W2-INT-01-the-rbac-routes-cannot-leave-503-without-a-durable-directory.md`.
  */
 /**
- * Wire issue #121's audit sink and `sendInvitation` seam.
+ * Build issue #121's audit sink and `sendInvitation` seam; the root installs it.
  *
  * Installed only once {@link installRbacApi} has proven the directory itself is durable — an
  * invitation with no `users`/`memberships` behind it is not a capability this deployment has, the
@@ -206,24 +212,42 @@ export async function installSessionTranscripts(
  * `installConnectorsApi` (`apps/web/server/composition/services.ts`) already use — no second audit
  * pathway, no second `AuditEventRepositoryProvider` lookup.
  */
-async function installInvitationsApi(root: DatabaseRoot): Promise<void> {
-  const [{ configureInvitationsRuntime }, { createManualLinkInvitationSender }] = await Promise.all(
-    [import('../invitations/runtime'), import('../invitations/send-invitation')],
-  );
-  configureInvitationsRuntime({
+/**
+ * The scope an OAuth access token carries, by its client's kind. A kind this switch does not name
+ * fails the build, and an `a2a-agent` client with no agent fails closed rather than widening.
+ */
+function oauthTokenScope(
+  row: Pick<ActiveOAuthAccessToken, 'clientKind' | 'clientId' | 'agentId'>,
+): TokenScope | null {
+  switch (row.clientKind) {
+    case 'a2a-agent':
+      return row.agentId === null ? null : { kind: 'a2a-agent', id: row.agentId };
+    case 'mcp-project':
+      return { kind: 'mcp-project', id: row.clientId };
+    case 'builder':
+      return { kind: 'builder', id: row.clientId };
+    default: {
+      const unreachable: never = row.clientKind;
+      throw new Error(`unhandled endpoint client kind ${String(unreachable)}`);
+    }
+  }
+}
+
+async function installInvitationsApi(root: DatabaseRoot): Promise<InvitationsRuntime> {
+  const { createManualLinkInvitationSender } = await import('../invitations/send-invitation');
+  return {
     recordAuditEvent: (event) => root.recordAuditEvent(event),
     sendInvitation: createManualLinkInvitationSender(),
-  });
+  };
 }
 
 export async function installRbacApi(
   root: DatabaseRoot,
   sessionSecret: string,
 ): Promise<InstalledRbacApi> {
-  const [adapter, runtime, keyModule, principalModule, browserTokenModule, cliTokenModule] =
+  const [adapter, keyModule, principalModule, browserTokenModule, cliTokenModule] =
     await Promise.all([
       import('../rbac/postgres-directory'),
-      import('../rbac/runtime'),
       import('../rbac/api-key'),
       import('../rbac/principal'),
       import('../rbac/browser-token'),
@@ -253,7 +277,7 @@ export async function installRbacApi(
     if (row.scopeKind === 'run') {
       if (row.runId === null) throw new Error('a run-scoped browser token row has no run_id');
       const run = await root.runs.forScope(scope).get(row.runId);
-      if (run === null || isTerminalRunStatus(run.status)) return invalid;
+      if (run === null || isStoppedRunStatus(run.status)) return invalid;
       tokenScope = { kind: 'run', id: row.runId };
     } else {
       if (row.sessionId === null) {
@@ -343,10 +367,8 @@ export async function installRbacApi(
       apiKeyId: subject.apiKeyId,
       actsForPrincipalId: subject.actsForPrincipalId,
     });
-    const tokenScope: import('../rbac/token-scope').TokenScope =
-      row.clientKind === 'a2a-agent' && row.agentId !== null
-        ? { kind: 'a2a-agent', id: row.agentId }
-        : { kind: 'mcp-project', id: row.clientId };
+    const tokenScope = oauthTokenScope(row);
+    if (tokenScope === null) return invalid;
     return {
       kind: 'workspace',
       principal: principalModule.Principal.fromOAuthToken(member, tokenScope, {
@@ -441,17 +463,17 @@ export async function installRbacApi(
     const resolution = await resolveActor(request);
     return resolution.kind === 'workspace' ? resolution.principal : null;
   };
-  runtime.configureRbacRuntime({
-    directory,
+  log.info('[compose] RBAC API installed: PostgreSQL users, memberships, and hashed API keys');
+  log.info('[compose] workspaces API installed: PostgreSQL workspaces and memberships');
+  return {
     identify,
-  });
-  // Issue #119: `/api/workspaces/**` needs a repository that reaches ANY workspace by id, not the
-  // `.forWorkspace(principal.workspaceId)` slice `RbacRuntime.directory` hands the routes above —
-  // see `apps/web/server/workspaces/runtime.ts`'s header for why this is a registry of its own.
-  configureWorkspacesRuntime({ repository: root.workspaces });
-  configureCliAuthRuntime({ sessions: root.cliSessions, secret: sessionSecret });
-  console.log('[compose] RBAC API installed: PostgreSQL users, memberships, and hashed API keys');
-  console.log('[compose] workspaces API installed: PostgreSQL workspaces and memberships');
-  await installInvitationsApi(root);
-  return { identify, resolveActor };
+    resolveActor,
+    rbac: { directory, identify },
+    cliAuth: { sessions: root.cliSessions, secret: sessionSecret },
+    invitations: await installInvitationsApi(root),
+    // Issue #119: `/api/workspaces/**` needs a repository that reaches ANY workspace by id, not the
+    // `.forWorkspace(principal.workspaceId)` slice `RbacRuntime.directory` hands the routes above —
+    // see `apps/web/server/workspaces/runtime.ts`'s header for why this is a domain of its own.
+    workspaces: { repository: root.workspaces },
+  };
 }

@@ -8,7 +8,11 @@ import { randomUUID } from 'node:crypto';
 
 import { describe, expect, it } from 'vitest';
 
-import { defineObjectStoreContract, type ObjectStoreContractFixture } from './contract.js';
+import {
+  defineObjectStoreContract,
+  defineObjectStoreV2Contract,
+  type ObjectStoreV2ContractFixture,
+} from './contract.js';
 import { createS3ObjectStoreProvider } from './s3-store.js';
 
 const bucket = process.env['TEST_AWS_S3_BUCKET'];
@@ -28,7 +32,7 @@ if (bucket === undefined || bucket.trim() === '') {
   const client = new S3Client({ region: process.env['TEST_AWS_REGION'] ?? 'us-east-1' });
 
   function fixture(topLevelPrefix: 'files' | 'skills') {
-    return async (): Promise<ObjectStoreContractFixture> => {
+    return async (): Promise<ObjectStoreV2ContractFixture> => {
       const keyPrefix = `${topLevelPrefix}/unit16-proof/${randomUUID()}`;
       await client.send(new HeadBucketCommand({ Bucket: liveBucket }));
       return {
@@ -63,4 +67,6 @@ if (bucket === undefined || bucket.trim() === '') {
 
   defineObjectStoreContract('native AWS S3 — files/ prefix', fixture('files'));
   defineObjectStoreContract('native AWS S3 — skills/ prefix', fixture('skills'));
+  defineObjectStoreV2Contract('native AWS S3 — files/ prefix', fixture('files'));
+  defineObjectStoreV2Contract('native AWS S3 — skills/ prefix', fixture('skills'));
 }

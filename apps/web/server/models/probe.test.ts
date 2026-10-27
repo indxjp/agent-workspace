@@ -1,3 +1,4 @@
+import { log as webLogger } from '../telemetry/logger';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
@@ -149,7 +150,7 @@ describe('probeModelConnection — a refusal names the host that answered', () =
 
 describe('probeModelConnection — bounded (issue #415)', () => {
   it('abandons a provider that never answers as unreachable', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     const silent = await fixtureServer(() => undefined);
     const started = Date.now();
     const result = await probeModelConnection(

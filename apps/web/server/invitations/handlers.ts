@@ -26,7 +26,8 @@
 import type { DirectoryRoot, WorkspaceDirectory } from '../rbac/directory';
 import type { InvitationIdentityClaims } from '../auth/invitation-identity';
 import { asObject, readConferredRole, readEmail, readString } from '../rbac/handlers';
-import { problem, type ApiResult } from '../rbac/http';
+import type { ApiResult } from '../http/result';
+import { problemWithDetail as problem } from '../http/result';
 import { resolveSessionActorUserId } from '../rbac/ownership';
 import type { Principal } from '../rbac/principal';
 import type { InvitationsRuntime } from './runtime';

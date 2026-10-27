@@ -6,15 +6,6 @@
  * resulting {@link WorkspaceSecretsStore} has no method that takes a workspace id, so there is no
  * call site at which spec §25's tenant filter can be forgotten.
  *
- * ## Every reference to core here is a type, and that is deliberate
- *
- * `apps/web/instrumentation.ts` is compiled for the edge runtime as well as for Node, and a
- * top-level *value* import of `@agent-workspace/core/secrets` pulls in `pg` and `node:crypto`'s
- * heavier surface transitively — the exact failure `apps/web/server/agents/store.ts`'s header
- * documents happening with `@agent-workspace/core/db`. So this file, like that one, imports only
- * `import type` from core, and the one value this adapter needs — {@link UnknownWorkspaceError} —
- * is declared locally rather than imported.
- *
  * ## `resolveByName` is not on {@link WorkspaceSecretsStore}, and that is the point
  *
  * `CoreSecretsService` (the type this adapter wraps) also carries `resolveByName`, which decrypts
@@ -45,9 +36,11 @@ import type {
   SecretMetadata as CoreSecretMetadata,
   SecretsService as CoreSecretsService,
 } from '@agent-workspace/core/secrets';
-import type {
-  WorkspaceScope as CoreWorkspaceScope,
-  WorkspaceScopeResolver as CoreWorkspaceScopeResolver,
+import {
+  UnknownWorkspaceError,
+  type StorageConnectionRepositoryProvider,
+  type WorkspaceScope as CoreWorkspaceScope,
+  type WorkspaceScopeResolver as CoreWorkspaceScopeResolver,
 } from '@agent-workspace/core/db';
 
 /** One secret's metadata, as this adapter's callers see it. Mirrors `CoreSecretMetadata` exactly. */
@@ -62,7 +55,9 @@ export interface SecretRecord {
 }
 
 export type CreateSecretOutcome = CoreCreateSecretOutcome;
-export type ReplaceSecretOutcome = CoreReplaceSecretOutcome;
+/** `in-use` is this port's own: rotating a connection's credential goes through its own route. */
+export type ReplaceSecretOutcome =
+  CoreReplaceSecretOutcome | { readonly kind: 'in-use'; readonly referrers: CoreSecretReferrers };
 export type DeleteSecretOutcome = CoreDeleteSecretOutcome;
 export type SecretReferrers = CoreSecretReferrers;
 
@@ -79,6 +74,7 @@ export interface CreateSecretInput {
 export interface WorkspaceSecretsStore {
   list(): Promise<readonly SecretRecord[]>;
   create(input: CreateSecretInput): Promise<CreateSecretOutcome>;
+  /** Replace a value; the credential of a storage connection is `in-use`, its route rotates it. */
   replace(id: string, value: Buffer): Promise<ReplaceSecretOutcome>;
   /** Delete an unreferenced secret; a referenced one is `in-use` with its referrers. */
   remove(id: string): Promise<DeleteSecretOutcome>;
@@ -89,31 +85,23 @@ export interface SecretsStoreProvider {
   forWorkspace(workspaceId: string): WorkspaceSecretsStore;
 }
 
-/**
- * Thrown when a store is asked for a workspace no `workspaces` row names.
- *
- * See `apps/web/server/agents/store.ts`'s `UnknownWorkspaceError` for the full reasoning; it is
- * transcribed rather than imported for the same edge-safety reason given there.
- */
-export class UnknownWorkspaceError extends Error {
-  public readonly workspaceId: string;
-
-  public constructor(workspaceId: string) {
-    super(
-      `no workspace has id ${workspaceId}; a secrets store cannot be scoped to a workspace that ` +
-        'does not exist',
-    );
-    this.name = 'UnknownWorkspaceError';
-    this.workspaceId = workspaceId;
-  }
-}
-
-/** What {@link createRepositorySecretsStoreProvider} needs. Both are type-only references to core. */
+/** What {@link createRepositorySecretsStoreProvider} needs. */
 export interface RepositorySecretsStoreDependencies {
   /** The whole secrets subsystem, including the decrypting method this adapter does not expose. */
   readonly service: CoreSecretsService;
   /** Turns a workspace id into a scope, or answers `null`. */
   readonly scopes: CoreWorkspaceScopeResolver;
+  /** Tells a storage connection's credential from any other secret. */
+  readonly storageConnections: StorageConnectionRepositoryProvider;
+}
+
+const STORAGE_CONNECTION_SECRET =
+  /^STORAGE_CONNECTION_([0-9A-F]{8})([0-9A-F]{4})([0-9A-F]{4})([0-9A-F]{4})([0-9A-F]{12})$/u;
+
+/** The connection id a secret name stands for, or `null` for any other name. */
+function storageConnectionIdOf(secretName: string): string | null {
+  const parts = STORAGE_CONNECTION_SECRET.exec(secretName)?.slice(1);
+  return parts === undefined ? null : parts.join('-').toLowerCase();
 }
 
 /**
@@ -158,8 +146,26 @@ export function createRepositorySecretsStoreProvider(
             dependencies.service.create(resolved, { name: input.name, value: input.value }),
           );
         },
-        replace(id: string, value: Buffer): Promise<ReplaceSecretOutcome> {
-          return scope().then((resolved) => dependencies.service.replace(resolved, id, value));
+        async replace(id: string, value: Buffer): Promise<ReplaceSecretOutcome> {
+          const resolved = await scope();
+          const secret = (await dependencies.service.list(resolved)).find((row) => row.id === id);
+          const connectionId = secret === undefined ? null : storageConnectionIdOf(secret.name);
+          if (connectionId !== null) {
+            const connection = await dependencies.storageConnections
+              .forScope(resolved)
+              .get(connectionId);
+            if (connection !== null) {
+              return {
+                kind: 'in-use',
+                referrers: {
+                  connectorIds: [],
+                  modelConnectionIds: [],
+                  storageConnectionIds: [connectionId],
+                },
+              };
+            }
+          }
+          return dependencies.service.replace(resolved, id, value);
         },
         remove(id: string): Promise<DeleteSecretOutcome> {
           return scope().then((resolved) => dependencies.service.delete(resolved, id));

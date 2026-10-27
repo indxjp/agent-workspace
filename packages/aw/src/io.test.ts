@@ -2,7 +2,14 @@ import { PassThrough } from 'node:stream';
 
 import { describe, expect, it } from 'vitest';
 
-import { readStreamWithIdleTimeout, stdinOnce, UsageError, type CliIo } from './io.js';
+import {
+  InterruptedError,
+  promptLine,
+  readStreamWithIdleTimeout,
+  stdinOnce,
+  UsageError,
+  type CliIo,
+} from './io.js';
 
 function ioWith(overrides: Partial<CliIo>): CliIo {
   return {
@@ -67,5 +74,26 @@ describe('stdinOnce (#879)', () => {
     const read = stdinOnce(ioWith({}));
     await expect(read()).resolves.toBe('piped');
     await expect(read()).rejects.toBeInstanceOf(UsageError);
+  });
+});
+
+describe('promptLine', () => {
+  // readline's question() never settles once its input has ended; the command must not hang there.
+  it.each([
+    ['has already ended', (input: PassThrough) => input.end()],
+    ['ends while it waits', (input: PassThrough) => setTimeout(() => input.end(), 10)],
+  ])('rejects as an interrupt when the input %s', async (_name, end) => {
+    const input = new PassThrough();
+    end(input);
+    const answer = promptLine(input, new PassThrough(), 'Save this draft? [y/N] ');
+    const timeout = new Promise((resolve) => setTimeout(() => resolve('unsettled'), 1000));
+    await expect(Promise.race([answer, timeout])).rejects.toBeInstanceOf(InterruptedError);
+  });
+
+  it('answers the line typed', async () => {
+    const input = new PassThrough();
+    const answer = promptLine(input, new PassThrough(), 'q? ');
+    input.write('y\n');
+    await expect(answer).resolves.toBe('y');
   });
 });

@@ -14,11 +14,16 @@
  * key, tool set and the run that started it, and closing a session kills every sandbox tagged with
  * it, so a stateless manager (ADR-0126) closes what another invocation started (ADR-0132).
  */
+import { withCompensation } from '@agent-workspace/core';
 import {
   ToolSandboxRequestSchema,
   type ToolSandboxRequest,
 } from '@indx-workspace/contracts/agent-versions';
-import type { RuntimeConfig, RuntimeDriverId, RuntimeHandle } from '@agent-workspace/runtime';
+import type {
+  RuntimeConfig,
+  RuntimeDriverId,
+  RuntimeHandle,
+} from '@agent-workspace/runtime/driver';
 
 /** The engine key the tool driver's image map carries; nothing else is ever started from it. */
 export const TOOL_SANDBOX_ENGINE = 'tool-host';
@@ -114,10 +119,20 @@ export type ToolSandboxes = Readonly<{
 
 /** The sandbox could not be started, or did not become ready. The message never carries a value. */
 export class ToolSandboxUnavailableError extends Error {
-  public constructor(message: string) {
-    super(message);
+  public constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
     this.name = 'ToolSandboxUnavailableError';
   }
+}
+
+/** `error` as an unavailable tool sandbox: its message after `what`, and it as the cause. */
+function unavailable(what: string, error: unknown): ToolSandboxUnavailableError {
+  return error instanceof ToolSandboxUnavailableError
+    ? error
+    : new ToolSandboxUnavailableError(
+        `${what}: ${error instanceof Error ? error.message : 'unknown error'}`,
+        { cause: error },
+      );
 }
 
 /** The request body's `toolSandbox`, parsed with a message that names paths and never values. */
@@ -263,32 +278,30 @@ export function createToolSandboxes(
         awRun: request.run.runId,
       })
       .catch((error: unknown) => {
-        throw new ToolSandboxUnavailableError(
-          `the tool sandbox could not be started: ${error instanceof Error ? error.message : 'unknown error'}`,
-        );
+        throw unavailable('the tool sandbox could not be started', error);
       });
-    try {
-      await options.driver.writeFile(
-        handle,
-        MANIFEST_FILE,
-        JSON.stringify(request.manifest),
-        credential,
-      );
-      await waitUntilServing(
-        handle,
-        session.publicBase ?? '',
-        request.manifest.stdioServers.length > 0
-          ? Math.max(readyTimeoutMs, STDIO_READY_TIMEOUT_MS)
-          : readyTimeoutMs,
-      );
-    } catch (error) {
-      await options.driver.destroy(handle, credential).catch(() => undefined);
-      throw error instanceof ToolSandboxUnavailableError
-        ? error
-        : new ToolSandboxUnavailableError(
-            `the tool sandbox could not be prepared: ${error instanceof Error ? error.message : 'unknown error'}`,
+    await withCompensation(
+      async () => {
+        try {
+          await options.driver.writeFile(
+            handle,
+            MANIFEST_FILE,
+            JSON.stringify(request.manifest),
+            credential,
           );
-    }
+          await waitUntilServing(
+            handle,
+            session.publicBase ?? '',
+            request.manifest.stdioServers.length > 0
+              ? Math.max(readyTimeoutMs, STDIO_READY_TIMEOUT_MS)
+              : readyTimeoutMs,
+          );
+        } catch (error) {
+          throw unavailable('the tool sandbox could not be prepared', error);
+        }
+      },
+      () => options.driver.destroy(handle, credential),
+    );
     return handle;
   }
 
@@ -306,16 +319,22 @@ export function createToolSandboxes(
       // Refuse what the provider cannot place (a declared domain on E2B) before it is called.
       options.driver.assertCreatable?.(configFor(session, request), credential);
     } catch (error) {
-      throw new ToolSandboxUnavailableError(
-        `the tool sandbox could not be started: ${error instanceof Error ? error.message : 'unknown error'}`,
-      );
+      throw unavailable('the tool sandbox could not be started', error);
     }
+    /** The session's previous sandbox holds old secrets: no new one starts while it may live on. */
+    const removePrevious = (handle: RuntimeHandle) =>
+      options.driver.destroy(handle, credential).catch((error: unknown) => {
+        throw new ToolSandboxUnavailableError(
+          "the session's previous tool sandbox could not be removed",
+          { cause: error },
+        );
+      });
     // A driver that can find the sandbox asks the provider, which every invocation shares.
     let current = options.driver.find === undefined ? sandboxes.get(session.key) : undefined;
     if (current !== undefined && current.key !== request.key) {
       // The session's tool set changed (a new version): the old sandbox holds the old secrets.
       sandboxes.delete(session.key);
-      await options.driver.destroy(current.handle, credential).catch(() => undefined);
+      await removePrevious(current.handle);
       current = undefined;
     }
     if (current === undefined && options.driver.find !== undefined) {
@@ -327,7 +346,7 @@ export function createToolSandboxes(
     }
     if (current !== undefined && !(await options.driver.isLive(current.handle))) {
       sandboxes.delete(session.key);
-      await options.driver.destroy(current.handle, credential).catch(() => undefined);
+      await removePrevious(current.handle);
       current = undefined;
     }
     let started = false;
@@ -336,9 +355,10 @@ export function createToolSandboxes(
       // another invocation lost): it holds the old secrets, so it goes before the new one starts.
       await options.driver
         .destroyTagged?.({ ...sessionTags(session), awSessionKey: session.key }, credential)
-        .catch(() => {
+        .catch((error: unknown) => {
           throw new ToolSandboxUnavailableError(
             "the session's previous tool sandbox could not be removed",
+            { cause: error },
           );
         });
       current = {
@@ -350,25 +370,23 @@ export function createToolSandboxes(
     }
     // Recorded, so a `close` on this invocation destroys it.
     sandboxes.set(session.key, current);
-    try {
-      await options.driver.writeFile(
-        current.handle,
-        TOKENS_FILE,
-        JSON.stringify([request.run.token]),
-        credential,
-      );
-    } catch (error) {
-      if (started) {
+    const { handle } = current;
+    await withCompensation(
+      () =>
+        options.driver
+          .writeFile(handle, TOKENS_FILE, JSON.stringify([request.run.token]), credential)
+          .catch((error: unknown) => {
+            throw unavailable('the run token could not be registered', error);
+          }),
+      async () => {
+        if (!started) return;
         // Nothing records or reaches this sandbox yet: killing it now, not at its timeout, is the
         // only way its provider slot is freed.
         sandboxes.delete(session.key);
-        await options.driver.destroy(current.handle, credential).catch(() => undefined);
-      }
-      throw new ToolSandboxUnavailableError(
-        `the run token could not be registered: ${error instanceof Error ? error.message : 'unknown error'}`,
-      );
-    }
-    return options.origin(current.handle, session.publicBase ?? '');
+        await options.driver.destroy(handle, credential);
+      },
+    );
+    return options.origin(handle, session.publicBase ?? '');
   }
 
   return {
@@ -391,21 +409,21 @@ export function createToolSandboxes(
       queue.delete(key);
       const current = sandboxes.get(key);
       sandboxes.delete(key);
-      try {
-        if (options.driver.destroyTagged !== undefined) {
-          await options.driver.destroyTagged(sessionTags(session), providerCredential);
-        } else if (current !== undefined) {
-          await options.driver.destroy(current.handle, providerCredential);
-        }
-      } catch (error) {
-        // The sandbox outlives the close: at least the run token it holds stops working.
-        if (current !== undefined) {
-          await options.driver
-            .writeFile(current.handle, TOKENS_FILE, '[]', providerCredential)
-            .catch(() => undefined);
-        }
-        throw error;
-      }
+      await withCompensation(
+        async () => {
+          if (options.driver.destroyTagged !== undefined) {
+            await options.driver.destroyTagged(sessionTags(session), providerCredential);
+          } else if (current !== undefined) {
+            await options.driver.destroy(current.handle, providerCredential);
+          }
+        },
+        async () => {
+          // The sandbox outlives the close: at least the run token it holds stops working.
+          if (current !== undefined) {
+            await options.driver.writeFile(current.handle, TOKENS_FILE, '[]', providerCredential);
+          }
+        },
+      );
     },
     async release(run, providerCredential) {
       const startedBy = `${run.workspaceId}/${run.runId}`;

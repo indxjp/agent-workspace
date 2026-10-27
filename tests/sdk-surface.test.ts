@@ -49,7 +49,7 @@ import { describe, expect, it } from 'vitest';
 
 import { AGENT_TOOL_PERMISSION_MODES } from '@indx-workspace/contracts/agents';
 
-import { compiledSdkOptionKeys } from '@agent-workspace/engine-claude-agent-sdk';
+import { compiledSdkOptionKeys } from '@agent-workspace/engine-claude-agent-sdk/testing';
 import {
   sdkEventCarriesUsage,
   sdkEventTypes,
@@ -58,7 +58,7 @@ import {
   sdkSettingSources,
   sdkSystemSubtypes,
   validateTenantSessionScope,
-} from '@agent-workspace/core';
+} from '@agent-workspace/run-protocol';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -503,10 +503,14 @@ describe('the CLAUDE_CODE_PROJECT_DIR_NAME resolver still fails silently in both
   it('short-circuits on CLAUDE_CONFIG_DIR, so an unset config dir silently ignores the name', () => {
     const validatorName = validatorMatch?.[5];
     expect(validatorName).toBeTruthy();
-    // `()=>CFG()?VALIDATE(NAME()):void 0` — the ternary IS failure mode 1. Minified identifiers
-    // may contain `$`, which `\w` does not match, so the character class is spelled out.
+    // `()=>CFG()||DISKLESS()?VALIDATE(NAME()):void 0` — the ternary IS failure mode 1. Since SDK
+    // 0.3.304 the gate also opens in the SDK's diskless mode (`isDiskless()`, no config directory
+    // on disk at all); with a disk, an unset CLAUDE_CONFIG_DIR still ignores the name. The
+    // compiled run always sets CLAUDE_CONFIG_DIR, so the tenant key applies either way. Minified
+    // identifiers may contain `$`, which `\w` does not match, so the character class is spelled
+    // out.
     const resolver = new RegExp(
-      `\\(\\)=>([\\w$]+)\\(\\)\\?${validatorName ?? ''}\\(([\\w$]+)\\(\\)\\):void 0`,
+      `\\(\\)=>([\\w$]+)\\(\\)(?:\\|\\|[\\w$]+\\(\\))?\\?${validatorName ?? ''}\\(([\\w$]+)\\(\\)\\):void 0`,
     );
     const resolverMatch = resolver.exec(sdkMjs);
     expect(

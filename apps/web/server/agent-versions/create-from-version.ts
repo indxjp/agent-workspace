@@ -33,6 +33,7 @@
  * `unknown-principal` throws: the caller is an authenticated principal of this workspace, so the
  * store refusing it is a broken invariant (`500 internal_error`).
  */
+import type { AgentCreatedByAgent, BuiltinAgentKey } from '@indx-workspace/contracts/agents';
 import {
   CreateAgentFromVersionRequestSchema,
   type AgentVersionCheckResponse,
@@ -41,18 +42,22 @@ import {
 
 import { toAgentResource } from '../agents/contract';
 import type { WorkspaceAgentStore } from '../agents/store';
-import type { ApiResult } from '../agents/handlers';
+import type { ApiResult } from '../http/result';
 import { toAgentVersionResource } from './contract';
+import type { VersionOrigin } from './handlers';
 import { bodyToStore, materialise } from './materialise';
 import { definitionReferences, parseVersionRequest, validateAgentVersion } from './pipeline';
 import {
   agentNameConflict,
+  creatorAgentGone,
+  quotaExceeded,
   subagentNestingRefusal,
   surfaceNameTaken,
   withReferenceRetry,
 } from './problems';
 import type { RequestCeiling } from '../policy-ceiling/ceiling';
 import type { ToolBundleLookup } from '../tool-bundles/handlers';
+import type { StorageConnectionLookup } from './storage-grants';
 import type { WorkspaceAgentVersionStore } from './store';
 
 /** The environment a created agent's first version is pointed at (slice 1 has only `local`). */
@@ -69,6 +74,12 @@ export interface CreateFromVersionOwner {
   readonly principalId: string;
   readonly ownerPrincipalId: string;
   readonly userId: string | null;
+  /** The actor's audit label, for the `storage-grant-changed` row of the first version. */
+  readonly actorLabel: string;
+  /** Marks the new agent as this built-in, in the insert that creates it (#1848). */
+  readonly builtin?: BuiltinAgentKey;
+  /** The agent that makes this one, with the run and version it acted in (#1851); absent for a person. */
+  readonly createdByAgent?: AgentCreatedByAgent & { readonly agentId: string };
 }
 
 export interface CreateAgentFromVersionDependencies {
@@ -81,6 +92,8 @@ export interface CreateAgentFromVersionDependencies {
   readonly ceiling?: RequestCeiling | null;
   /** The caller's tool bundles (pipeline step 4, issue #790). */
   readonly toolBundles?: ToolBundleLookup | null;
+  /** The caller's storage connections (pipeline step 4a). */
+  readonly storageConnections?: StorageConnectionLookup | null;
   /** Whether the deployment has a tool sandbox; `false` refuses a version that pins code tools. */
   readonly toolHost?: boolean;
   /** Why the tool sandbox cannot enforce a code tool's `allowedDomains` (#1018), or `null`. */
@@ -104,11 +117,16 @@ async function firstPointedSurface(
   return null;
 }
 
-/** Create an agent from `raw`'s first version, or — with `dryRun: true` — check that it would. */
+/**
+ * Create an agent from `raw`'s first version, or — with `dryRun: true` — check that it would.
+ * `origin`, passed only by an in-process caller (never read from a request), stores its `via`
+ * instead of the request's, as it does for `createAgentVersion`.
+ */
 export async function createAgentFromVersion(
   raw: unknown,
   owner: CreateFromVersionOwner,
   dependencies: CreateAgentFromVersionDependencies,
+  origin?: VersionOrigin,
 ): Promise<ApiResult> {
   const parsed = parseVersionRequest(
     CreateAgentFromVersionRequestSchema,
@@ -141,6 +159,7 @@ export async function createAgentFromVersion(
   }
 
   const body = bodyToStore(draft.body, policyToStore);
+  const via = origin?.via ?? draft.via;
   const outcome = await withReferenceRetry(
     validated.references,
     () => store.resolveDefinition(definitionReferences(definition)),
@@ -150,14 +169,38 @@ export async function createAgentFromVersion(
           ...materialise(definition, references, policyToStore),
           ownerPrincipalId: owner.ownerPrincipalId,
           createdBy: owner.userId,
+          ...(owner.builtin === undefined ? {} : { builtin: owner.builtin }),
+          ...(owner.createdByAgent === undefined ? {} : { createdByAgent: owner.createdByAgent }),
         },
         version: {
           summary: draft.summary,
-          via: draft.via,
+          via,
           body,
           createdByPrincipalId: owner.principalId,
         },
         environment: FIRST_ENVIRONMENT,
+        ...(origin?.quota === undefined ? {} : { quota: origin.quota }),
+        audit: {
+          subjectLabel: definition.agent.name,
+          actorPrincipalId: owner.principalId,
+          actorUserId: owner.userId,
+          actorLabel: owner.actorLabel,
+        },
+        ...(origin?.builderRunId === undefined
+          ? {}
+          : {
+              agentCreatedAudit: {
+                actorPrincipalId: owner.principalId,
+                actorUserId: owner.userId,
+                actorLabel: owner.actorLabel,
+                details: {
+                  builderRunId: origin.builderRunId,
+                  ...(owner.createdByAgent === undefined
+                    ? {}
+                    : { createdByAgentId: owner.createdByAgent.agentId }),
+                },
+              },
+            }),
       }),
   );
   switch (outcome.kind) {
@@ -171,6 +214,10 @@ export async function createAgentFromVersion(
       );
     case 'subagent-nesting':
       return subagentNestingRefusal(outcome.unusable, outcome.parents);
+    case 'unknown-creator-agent':
+      return creatorAgentGone();
+    case 'quota-exceeded':
+      return quotaExceeded();
     case 'reference-gone':
       throw new Error('withReferenceRetry answered reference-gone, which it never returns.');
     case 'unknown-principal':

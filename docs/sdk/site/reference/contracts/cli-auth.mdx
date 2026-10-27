@@ -93,7 +93,7 @@ The body of `POST /api/auth/cli-token`: the device code, in the body and never i
 | --- | --- | --- | --- |
 | `token` | `string` | Yes |  |
 | `expiresAt` | `string` | Yes |  |
-| `workspace` | `Readonly<{ role: "owner" \| "admin" \| "builder" \| "viewer"; id: string; slug: string; name: string; publicSharingEnabled: boolean; archivedAt: string \| null; createdAt: string; updatedAt: string; }>` | Yes |  |
+| `workspace` | `Readonly<{ role: "builder" \| "owner" \| "admin" \| "viewer"; id: string; slug: string; name: string; publicSharingEnabled: boolean; archivedAt: string \| null; createdAt: string; updatedAt: string; }>` | Yes |  |
 
 ## CliTokenResponseSchema
 
@@ -105,7 +105,7 @@ that carries a bearer credential's plaintext.
 | --- | --- | --- | --- |
 | `token` | `string` | Yes |  |
 | `expiresAt` | `string` | Yes |  |
-| `workspace` | `Readonly<{ role: "owner" \| "admin" \| "builder" \| "viewer"; id: string; slug: string; name: string; publicSharingEnabled: boolean; archivedAt: string \| null; createdAt: string; updatedAt: string; }>` | Yes |  |
+| `workspace` | `Readonly<{ role: "builder" \| "owner" \| "admin" \| "viewer"; id: string; slug: string; name: string; publicSharingEnabled: boolean; archivedAt: string \| null; createdAt: string; updatedAt: string; }>` | Yes |  |
 
 ## DeviceAuthorizationResponse
 

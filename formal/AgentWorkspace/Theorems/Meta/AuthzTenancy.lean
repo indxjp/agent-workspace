@@ -19,7 +19,7 @@ open AgentWorkspace AgentWorkspace.Er.Core AgentWorkspace.Authz.Tenancy
   (ts := "packages/core/src/db/schema/tenancy.test.ts#TENANT_COLUMN")]
 theorem tenancy_rules_agree_on_the_catalogue (t : TableName) :
     tenancyWellFormed catalogue t = true ∧ testRule1 catalogue leadingIndexedColumns t = true := by
-  cases t <;> decide
+  cases t <;> decide +kernel
 
 /-- The two tenancy rules are different predicates: a `text` `workspace_id` passes the test's rule
 and fails the model's (the model also requires `uuid`), and a `workspace_id` that leads no index
@@ -31,7 +31,7 @@ theorem tenancy_rules_differ_off_the_catalogue :
      tenancyWellFormed S .auditEvents = false ∧ testRule1 S leadingIndexedColumns .auditEvents = true) ∧
     (let leaders := fun t => if t = .auditEvents then ["actor_user_id"] else leadingIndexedColumns t
      tenancyWellFormed catalogue .auditEvents = true ∧ testRule1 catalogue leaders .auditEvents = false) := by
-  decide
+  decide +kernel
 
 /-- `Principal.fromSession`'s workspace-correspondence check can never refuse at its production
 call site: `resolveActor` passes `{ id: member.workspaceId, slug: verified.claims.ws }`, so the slug

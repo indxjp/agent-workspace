@@ -168,3 +168,19 @@ right after `sdk`, so the list is seven — contracts, sdk, react, aw, cli, embe
 D1–D5 unchanged: the D2 manifest shape, lock-step at `CONTRACTS_VERSION` (D3), dependencies
 contracts, sdk and zod only (`react-depends-only-on-sdk-and-contracts`), and `react` a peer
 dependency; its first version is an Owner-published placeholder, as D5 requires for a new name.
+
+## Amendment — publish from the public repository, with provenance (2026-10-26)
+
+Owner decision, 2026-10-26: the releases run in the public repository `indxjp/agent-workspace`,
+on free GitHub-hosted runners, not in the development repository. Every job of
+`publish-packages.yml` starts with `if: github.repository == 'indxjp/agent-workspace'` and runs on
+`ubuntu-latest`; `scripts/check-workflows.mjs` requires the guard. The `packages-v<version>` tag is
+pushed to the public repository on the snapshot commit of the release (docs/release/README.md,
+"Where releases run").
+
+D5's provenance switch is now `'true'`: npm accepts a provenance bundle from a public repository,
+so each tarball records the public repository, the workflow and the commit. The trusted publisher
+of every package names `indxjp/agent-workspace`, `publish-packages.yml` and `npm-publish`; the
+Owner moves each one on npmjs.com and creates the `npm-publish` environment in the public
+repository before the first release from there. Until then the publish job is refused by npm and
+publishes nothing, which is the intended failure.

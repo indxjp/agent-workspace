@@ -3,13 +3,12 @@
  * PKCE `S256`, `client_credentials` for a confidential client, and `refresh_token` with rotation.
  * A code or refresh token presented twice is theft: the whole family is revoked.
  */
-import type { OAuthTokenRepository } from '@agent-workspace/core/db';
-
 import { closeEndpointToolSandbox } from '../tool-endpoint/close';
 import { authenticateClient } from './client-auth';
 import { oauthError, oauthJson, type OAuthErrorCode } from './http';
 import { resourceUrl } from './resource';
 import type { OAuthClient, OAuthRuntime } from './runtime';
+import type { OAuthTokenRows } from './store';
 import {
   mintOAuthToken,
   OAUTH_TOKEN_TTL_MS,
@@ -32,7 +31,7 @@ const invalidGrant = (): Response =>
   refusal('invalid_grant', 'The grant is invalid, expired or spent.');
 
 async function issue(
-  tokens: OAuthTokenRepository,
+  tokens: OAuthTokenRows,
   client: OAuthClient,
   grant: Grant,
   kind: Exclude<OAuthTokenKind, 'code'>,
@@ -157,6 +156,10 @@ export async function token(request: Request): Promise<Response> {
       );
     }
     case 'client_credentials': {
+      // The token's subject would be the member who created the client, with nobody consenting.
+      if (client.kind === 'builder') {
+        return refusal('unauthorized_client', 'A builder client is authorized by a member.');
+      }
       if (client.clientSecretHash === null) {
         return refusal('unauthorized_client', 'client_credentials needs a confidential client.');
       }

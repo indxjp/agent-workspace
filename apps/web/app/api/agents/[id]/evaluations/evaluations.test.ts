@@ -5,25 +5,21 @@ import { EvaluationResourceSchema } from '@indx-workspace/contracts/evaluations'
 
 import { POST } from './route';
 import { createInMemoryAgentStoreProvider } from '../../../../../server/agents/memory-store';
-import {
-  clearAgentsRuntime,
-  configureAgentsRuntime,
-  type WorkspaceResolution,
-} from '../../../../../server/agents/runtime';
+import { type WorkspaceResolution } from '../../../../../server/agents/runtime';
 import { FIXTURE_PERMISSIONS, versionRequest } from '../../../../../server/agent-versions/fixtures';
 import { createAgentVersion } from '../../../../../server/agent-versions/handlers';
 import { createInMemoryAgentVersionStoreProvider } from '../../../../../server/agent-versions/memory-store';
 import { setAgentPointer } from '../../../../../server/agent-versions/pointers';
+import { clearApplicationContext } from '../../../../../server/application-context';
 import {
-  clearAgentVersionsRuntime,
-  configureAgentVersionsRuntime,
-} from '../../../../../server/agent-versions/runtime';
+  installTestDomains,
+  installTestRunApi,
+  resetTestRunApi,
+} from '../../../../../server/application-context-fixtures';
 import { assistantSays } from '../../../../../server/evaluations/fixtures';
 import { createMemoryDirectory } from '../../../../../server/rbac/memory-directory';
 import { Principal } from '../../../../../server/rbac/principal';
-import { clearRbacRuntime, configureRbacRuntime } from '../../../../../server/rbac/runtime';
-import { installRunApi, resetRunApi } from '../../../../../server/runs/environment';
-import { InMemoryRunStore } from '../../../../../server/runs/store';
+import { InMemoryRunStore } from '../../../../../server/runs/memory-store';
 
 /**
  * `POST /api/agents/:id/evaluations` (issue #618) through `serveAgentVersionRoute`, driven with
@@ -50,6 +46,8 @@ const BODY = {
 let agentOfBuilderA: string;
 let runs: InMemoryRunStore;
 let recorded: unknown[];
+/** The `limits` each launched case run carried (`undefined` when it carried none). */
+let launchedLimits: unknown[];
 
 function isActor(value: string): value is Actor {
   return Object.hasOwn(ACTORS, value);
@@ -57,6 +55,7 @@ function isActor(value: string): value is Actor {
 
 beforeEach(async () => {
   recorded = [];
+  launchedLimits = [];
   const agents = createInMemoryAgentStoreProvider();
   const created = await agents.forWorkspace(WORKSPACE).create(
     {
@@ -88,37 +87,41 @@ beforeEach(async () => {
   );
   expect(pointed.status).toBe(200);
 
-  configureAgentsRuntime({
-    agents,
-    resolveWorkspace(request: Request): Promise<WorkspaceResolution> {
-      const workspaceId = request.headers.get(WORKSPACE_HEADER);
-      return Promise.resolve(
-        workspaceId === null
-          ? { kind: 'unauthenticated', reason: 'no test workspace header' }
-          : { kind: 'workspace', workspaceId },
-      );
+  installTestDomains({
+    agents: {
+      agents,
+      resolveWorkspace(request: Request): Promise<WorkspaceResolution> {
+        const workspaceId = request.headers.get(WORKSPACE_HEADER);
+        return Promise.resolve(
+          workspaceId === null
+            ? { kind: 'unauthenticated', reason: 'no test workspace header' }
+            : { kind: 'workspace', workspaceId },
+        );
+      },
     },
   });
-  configureAgentVersionsRuntime({ versions });
-  configureRbacRuntime({
-    directory: createMemoryDirectory({ users: [] }),
-    identify: (request) => {
-      const workspaceId = request.headers.get(WORKSPACE_HEADER);
-      const actor = request.headers.get(ACTOR_HEADER);
-      if (workspaceId === null || actor === null || !isActor(actor)) return Promise.resolve(null);
-      return Promise.resolve(
-        Principal.fromApiKey({
-          ...ACTORS[actor],
-          apiKeyId: ACTORS[actor].principalId.replace(/^a/u, 'b'),
-          workspaceId,
-          label: `${actor} evaluations key`,
-        }),
-      );
+  installTestDomains({ agentVersions: { versions } });
+  installTestDomains({
+    rbac: {
+      directory: createMemoryDirectory({ users: [] }),
+      identify: (request) => {
+        const workspaceId = request.headers.get(WORKSPACE_HEADER);
+        const actor = request.headers.get(ACTOR_HEADER);
+        if (workspaceId === null || actor === null || !isActor(actor)) return Promise.resolve(null);
+        return Promise.resolve(
+          Principal.fromApiKey({
+            ...ACTORS[actor],
+            apiKeyId: ACTORS[actor].principalId.replace(/^a/u, 'b'),
+            workspaceId,
+            label: `${actor} evaluations key`,
+          }),
+        );
+      },
     },
   });
 
   runs = new InMemoryRunStore();
-  installRunApi({
+  installTestRunApi({
     authenticate: () => Promise.reject(new Error('the evaluation route authenticates via RBAC')),
     findAgent: (_principal, agentId) =>
       Promise.resolve({ id: agentId, workspaceId: WORKSPACE, engine: 'claude-agent-sdk' }),
@@ -126,7 +129,8 @@ beforeEach(async () => {
       Promise.resolve({ id: crypto.randomUUID(), agentId: agent.id, engine: null }),
     ownsRun: () => Promise.resolve(true),
     store: runs,
-    launch: ({ run }) => {
+    launch: ({ run, limits }) => {
+      launchedLimits.push(limits);
       void (async () => {
         const frame = assistantSays('Hi there.');
         await runs.append(run.id, { type: frame.frame, data: frame });
@@ -141,13 +145,11 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
-  clearAgentsRuntime();
-  clearAgentVersionsRuntime();
-  clearRbacRuntime();
-  resetRunApi();
+  clearApplicationContext();
+  resetTestRunApi();
 });
 
-function post(actor: Actor): Promise<Response> {
+function post(actor: Actor, body: unknown = BODY): Promise<Response> {
   const request = new Request(`https://example.invalid/api/agents/${agentOfBuilderA}/evaluations`, {
     method: 'POST',
     headers: new Headers({
@@ -155,7 +157,7 @@ function post(actor: Actor): Promise<Response> {
       [ACTOR_HEADER]: actor,
       'content-type': 'application/json',
     }),
-    body: JSON.stringify(BODY),
+    body: JSON.stringify(body),
   });
   return POST(request, { params: Promise.resolve({ id: agentOfBuilderA }) });
 }
@@ -172,6 +174,15 @@ describe('POST /api/agents/:id/evaluations', () => {
     const evaluation = EvaluationResourceSchema.parse(await response.json());
     expect(evaluation).toMatchObject({ agentId: agentOfBuilderA, version: 1, score: 1 });
     expect(recorded).toHaveLength(1);
+    expect(launchedLimits).toEqual([undefined]);
+  });
+
+  it('cannot be given run limits: a limits key in the body is invalid_body and starts no run', async () => {
+    const response = await post('builderA', { ...BODY, limits: { maxBudgetUsd: 100 } });
+    expect(response.status).toBe(400);
+    expect(await errorOf(response)).toMatchObject({ code: 'invalid_body' });
+    expect(launchedLimits).toEqual([]);
+    expect(recorded).toEqual([]);
   });
 
   it.each(['viewer', 'builderB'] as const)(

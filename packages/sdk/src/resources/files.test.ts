@@ -1,3 +1,4 @@
+import { MAX_UPLOAD_BYTES } from '@indx-workspace/contracts/files';
 import { describe, expect, it } from 'vitest';
 
 import { ApiProblemError, ContractViolationError, TransportError } from '../errors.js';
@@ -47,6 +48,32 @@ async function sentBody(call: RecordedRequest | undefined): Promise<string> {
 function bytesResponse(bytes: Uint8Array, headers: Readonly<Record<string, string>>): Response {
   return new Response(new Blob([new Uint8Array(bytes)]), { status: 200, headers });
 }
+
+describe('FilesClient.search', () => {
+  it('sends a percent-encoded Japanese query and parses the hits', async () => {
+    const body = {
+      hits: [{ path: 'manuals/pump.pdf', page: 3, snippet: '…保守手順…', score: 0.5 }],
+      pending: 1,
+    };
+    const { files, calls } = client(() => json(200, body));
+    expect(await files.search('保守 手順', { limit: 5 })).toEqual(body);
+    expect(calls[0]?.method).toBe('GET');
+    expect(calls[0]?.url.pathname).toBe('/api/files/search');
+    expect(calls[0]?.url.searchParams.get('q')).toBe('保守 手順');
+    expect(calls[0]?.url.searchParams.get('limit')).toBe('5');
+  });
+
+  it('surfaces a refused query by code and a malformed answer as drift', async () => {
+    const refused = client(() =>
+      json(400, { error: { code: 'invalid_search_query', message: 'Pass "q".' } }),
+    );
+    const failure = await refused.files.search('&').catch((e: unknown) => e);
+    expect(failure).toBeInstanceOf(ApiProblemError);
+    expect((failure as ApiProblemError).code).toBe('invalid_search_query');
+    const drift = client(() => json(200, { hits: 'none' }));
+    await expect(drift.files.search('x')).rejects.toBeInstanceOf(ContractViolationError);
+  });
+});
 
 describe('FilesClient.list', () => {
   it('reads the root, then one folder, and unwraps the envelope', async () => {
@@ -295,6 +322,88 @@ describe('FilesClient.remove', () => {
   });
 });
 
+const presigned = {
+  url: 'https://store.example.com/files/a/b%20c.txt?sig=1',
+  method: 'PUT',
+  headers: { 'content-type': 'text/plain' },
+  expiresAt: '2026-09-21T10:05:00.000Z',
+  path: 'a/b c.txt',
+};
+
+describe('FilesClient.createUploadUrl and createDownloadUrl', () => {
+  it('posts the size, type and lifetime to the path’s upload-urls route', async () => {
+    const { files, calls } = client(() => json(201, presigned));
+    const url = await files.createUploadUrl('a/b c.txt', {
+      sizeBytes: 5,
+      contentType: 'text/plain',
+      ttlSeconds: 120,
+    });
+    expect(url).toEqual(presigned);
+    const [call] = calls;
+    expect(call?.method).toBe('POST');
+    expect(call?.url.pathname).toBe('/api/files/YS9iIGMudHh0/upload-urls');
+    expect(JSON.parse(call?.init.body as string)).toEqual({
+      sizeBytes: 5,
+      contentType: 'text/plain',
+      ttlSeconds: 120,
+    });
+  });
+
+  it('omits what the caller left out, and sends an empty object for a download', async () => {
+    const { files, calls } = client(() => json(201, { ...presigned, method: 'GET', headers: {} }));
+    await files.createUploadUrl('a/b c.txt', { sizeBytes: 0 });
+    expect(JSON.parse(calls[0]?.init.body as string)).toEqual({ sizeBytes: 0 });
+    const download = await files.createDownloadUrl('a/b c.txt');
+    expect(download.method).toBe('GET');
+    expect(calls[1]?.url.pathname).toBe('/api/files/YS9iIGMudHh0/download-urls');
+    expect(JSON.parse(calls[1]?.init.body as string)).toEqual({});
+  });
+
+  it('refuses a response that is not a presigned URL as a contract violation', async () => {
+    const { files } = client(() => json(201, { ...presigned, url: 'javascript:alert(1)' }));
+    await expect(files.createUploadUrl('a', { sizeBytes: 1 })).rejects.toBeInstanceOf(
+      ContractViolationError,
+    );
+  });
+
+  it('surfaces a store that cannot sign by its code', async () => {
+    const { files } = client(() =>
+      json(501, { error: { code: 'direct_transfer_unsupported', message: 'No direct transfer.' } }),
+    );
+    const failure = await files.createUploadUrl('a', { sizeBytes: 1 }).catch((e: unknown) => e);
+    expect(failure).toBeInstanceOf(ApiProblemError);
+    expect((failure as ApiProblemError).status).toBe(501);
+    expect((failure as ApiProblemError).code).toBe('direct_transfer_unsupported');
+  });
+
+  it('reports an aborted request as an aborted transport failure', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const { files } = client(() => {
+      throw new DOMException('aborted', 'AbortError');
+    });
+    const failure = await files
+      .createDownloadUrl('a', {}, { signal: controller.signal })
+      .catch((e: unknown) => e);
+    expect(failure).toBeInstanceOf(TransportError);
+    expect((failure as TransportError).aborted).toBe(true);
+  });
+
+  it('authenticates with a browser token as a bearer and sends no cookie', async () => {
+    const api = fetchDouble(() => json(201, presigned));
+    const http = new HttpClient({
+      baseUrl: 'https://aw.example.com',
+      auth: { kind: 'browser-token', token: 'awt_live_x' },
+      fetch: api.fetch,
+    });
+    await new FilesClient(http).createUploadUrl('a', { sizeBytes: 1 });
+    const [call] = api.calls;
+    expect(call?.headers.get('authorization')).toBe('Bearer awt_live_x');
+    expect(call?.headers.get('cookie')).toBeNull();
+    expect(call?.init.credentials).not.toBe('include');
+  });
+});
+
 describe('FilesClient cancellation', () => {
   it('reports a pre-aborted signal as an aborted transport failure', async () => {
     const controller = new AbortController();
@@ -308,5 +417,132 @@ describe('FilesClient cancellation', () => {
       .catch((e: unknown) => e);
     expect(failure).toBeInstanceOf(TransportError);
     expect((failure as TransportError).aborted).toBe(true);
+  });
+});
+
+describe('FilesClient signed uploads', () => {
+  /** A Blob of `size` bytes made of one shared 1 MiB part, so nothing near 64 MiB is allocated. */
+  function largeBlob(size: number): Blob {
+    const mebibyte = new Blob([new Uint8Array(1024 * 1024)]);
+    const whole = Array.from({ length: Math.floor(size / mebibyte.size) }, () => mebibyte);
+    return new Blob([...whole, new Uint8Array(size % mebibyte.size)]);
+  }
+
+  const storeUrl = ['https://store.example.com/files/a/b%20c.txt?sig', 'x'].join('=');
+  const target = { ...presigned, url: storeUrl };
+
+  /** The control plane answers the mint and complete; the store answers the PUT with `put`. */
+  function signedClient(put: () => Response = () => new Response(null, { status: 200 })) {
+    return client((request) => {
+      if (request.url.host === 'store.example.com') return put();
+      if (request.url.pathname.endsWith('/upload-urls')) return json(201, target);
+      if (request.url.pathname.endsWith('/upload-complete')) return json(200, { file });
+      return json(201, { file });
+    });
+  }
+
+  const routes = (calls: readonly RecordedRequest[]): string[] =>
+    calls.map((call) => `${call.method} ${call.url.host}${call.url.pathname}`);
+
+  // @story US-STO-02
+  it('[US-STO-02][api][sdk] upload above 64 MiB uses a signed link and completes', async () => {
+    const big = largeBlob(MAX_UPLOAD_BYTES + 1);
+    const { files, calls } = signedClient();
+    expect(await files.upload('a/b c.txt', big)).toEqual(file);
+    expect(routes(calls)).toEqual([
+      'POST aw.example.com/api/files/YS9iIGMudHh0/upload-urls',
+      'PUT store.example.com/files/a/b%20c.txt',
+      'POST aw.example.com/api/files/YS9iIGMudHh0/upload-complete',
+    ]);
+    expect(calls[0]?.json).toEqual({ sizeBytes: MAX_UPLOAD_BYTES + 1 });
+    expect(calls[1]?.init.body).toBe(big);
+    expect(calls[1]?.headers.has('authorization')).toBe(false);
+    expect(calls[1]?.headers.has('x-agent-workspace-contracts')).toBe(false);
+    expect(calls[2]?.init.body).toBeUndefined();
+  });
+
+  // @story US-STO-02
+  it('[US-STO-02][api][sdk] direct sends small bytes through the signed link as declared', async () => {
+    const { files, calls } = signedClient();
+    const bytes = utf8('hello');
+    await files.upload('a/b c.txt', bytes, { direct: true, contentType: 'text/plain' });
+    expect(routes(calls)).toHaveLength(3);
+    expect(calls[0]?.json).toEqual({ sizeBytes: 5, contentType: 'text/plain' });
+    expect(calls[1]?.init.body).toEqual(bytes);
+    expect(calls[1]?.headers.get('content-type')).toBe('text/plain');
+  });
+
+  // @story US-STO-02
+  it('[US-STO-02][api][sdk] direct buffers a stream body, mints its size and PUTs a Blob', async () => {
+    const { files, calls } = signedClient();
+    const stream = new Blob([utf8('hello')]).stream();
+    await files.upload('a/b c.txt', stream, { direct: true });
+    expect(routes(calls)).toHaveLength(3);
+    expect(calls[0]?.json).toEqual({ sizeBytes: 5 });
+    expect(calls[1]?.init.body).toBeInstanceOf(Blob);
+    expect(calls[1]?.init.credentials).toBe('omit');
+  });
+
+  // @story US-STO-02
+  it('[US-STO-02][api][sdk] a small body without direct stays one relay call', async () => {
+    const { files, calls } = signedClient();
+    await files.upload('a/b c.txt', utf8('hello'));
+    expect(routes(calls)).toEqual(['POST aw.example.com/api/files']);
+  });
+
+  // @story US-STO-02
+  it('[US-STO-02][api][sdk] a refused PUT surfaces the store status and never completes', async () => {
+    const { files, calls } = signedClient(() => new Response('<Error/>', { status: 403 }));
+    const failure = await files.upload('a', utf8('x'), { direct: true }).catch((e: unknown) => e);
+    expect(failure).toBeInstanceOf(ApiProblemError);
+    expect((failure as ApiProblemError).status).toBe(403);
+    expect((failure as ApiProblemError).message).toContain('object store refused the PUT');
+    expect(routes(calls).filter((call) => call.endsWith('/upload-complete'))).toEqual([]);
+    expect(calls).toHaveLength(2);
+  });
+
+  // @story US-STO-02
+  it('[US-STO-02][api][sdk] a store that cannot sign falls back to the relay unless direct', async () => {
+    const unsupported = json(501, {
+      error: { code: 'direct_transfer_unsupported', message: 'No direct transfer.' },
+    });
+    const big = largeBlob(MAX_UPLOAD_BYTES + 1);
+    const fallback = client((request) =>
+      request.url.pathname.endsWith('/upload-urls')
+        ? unsupported.clone()
+        : json(413, { error: { code: 'request_body_too_large', message: 'Too large.' } }),
+    );
+    const refused = await fallback.files.upload('a', big).catch((e: unknown) => e);
+    expect((refused as ApiProblemError).code).toBe('request_body_too_large');
+    expect(routes(fallback.calls)).toEqual([
+      'POST aw.example.com/api/files/YQ/upload-urls',
+      'POST aw.example.com/api/files',
+    ]);
+
+    const forced = client(() => unsupported.clone());
+    const failure = await forced.files
+      .upload('a', utf8('x'), { direct: true })
+      .catch((e: unknown) => e);
+    expect((failure as ApiProblemError).code).toBe('direct_transfer_unsupported');
+    expect(forced.calls).toHaveLength(1);
+  });
+
+  // @story US-STO-02
+  it('[US-STO-02][api][sdk] completeUpload posts no body and surfaces upload_not_verified', async () => {
+    const ok = client(() => json(200, { file }));
+    expect(await ok.files.completeUpload('a/b c.txt')).toEqual(file);
+    expect(ok.calls[0]?.method).toBe('POST');
+    expect(ok.calls[0]?.url.pathname).toBe('/api/files/YS9iIGMudHh0/upload-complete');
+    expect(ok.calls[0]?.init.body).toBeUndefined();
+
+    const drift = client(() => json(200, { file: { id: 1 } }));
+    await expect(drift.files.completeUpload('a')).rejects.toBeInstanceOf(ContractViolationError);
+
+    const unverified = client(() =>
+      json(409, { error: { code: 'upload_not_verified', message: 'Not uploaded.' } }),
+    );
+    const failure = await unverified.files.completeUpload('a').catch((e: unknown) => e);
+    expect((failure as ApiProblemError).status).toBe(409);
+    expect((failure as ApiProblemError).code).toBe('upload_not_verified');
   });
 });

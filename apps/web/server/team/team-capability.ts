@@ -19,7 +19,7 @@
 import { NO_INVITATION_CAPABILITY, type InvitationCapability } from '../../contracts/invitations';
 import { NO_MEMBERSHIP_CAPABILITY, type MembershipCapability } from '../../contracts/team';
 import { getSession } from '../auth';
-import { currentRbacRuntime } from '../rbac/runtime';
+import { applicationContext } from '../application-context';
 import { invitationCapabilityForViewer } from './invitation-capability';
 import { membershipCapabilityForViewer } from './membership-capability';
 import { resolveTeamViewer, type TeamViewerDirectory, type TeamViewerSession } from './team-viewer';
@@ -62,7 +62,7 @@ export async function teamCapabilityFor(
  * having a request to read.
  */
 export async function resolveTeamCapability(): Promise<TeamCapability> {
-  const runtime = currentRbacRuntime();
+  const runtime = applicationContext()?.rbac ?? null;
   if (runtime === null) return NO_TEAM_CAPABILITY;
   const session = await getSession();
   if (session === null) return NO_TEAM_CAPABILITY;

@@ -6,7 +6,7 @@
  * recorded before ENG-03 and a run of the same engine messages today must yield the same frames.
  */
 import { AgentFrameSchema } from '@indx-workspace/contracts/run-events';
-import { classifySdkEvent, toAgentFrames } from '@agent-workspace/core';
+import { classifySdkEvent, toAgentFrames } from '@agent-workspace/run-protocol';
 import { describe, expect, it } from 'vitest';
 
 import {

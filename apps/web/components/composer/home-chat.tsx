@@ -61,16 +61,14 @@
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 
-import {
-  classifyRunEventFrame,
-  toAgentEvent,
-  type AgentEvent,
-  type SseFrame,
-} from '@indx-workspace/sdk/events';
+import { RUN_STATUS_EVENT, RUN_WARNING_EVENT } from '@indx-workspace/contracts/run-events';
+import { isStoppedRunStatus } from '@indx-workspace/contracts/runs';
+import type { AgentWorkspaceClient } from '@indx-workspace/sdk';
+import { toAgentEvent, type AgentEvent, type RunEventFrame } from '@indx-workspace/sdk/events';
 
 import { followRunEvents, startAgentRunForSession } from '../run/live';
+import { browserClient } from '../../lib/browser-client';
 import {
-  RUN_STATUS_EVENT_NAME,
   assistantResponseFromAgentEvent,
   badgeForRunStatus,
   beginRun,
@@ -78,8 +76,6 @@ import {
   failureBadge,
   failureNoticeFrom,
   formatEventTime,
-  parseRunFailedPayload,
-  parseRunStatusPayload,
   screenFor,
   userMessage,
   withAssistantResponse,
@@ -92,14 +88,13 @@ import {
   type RunOpening,
   type Speaker,
 } from '@indx-workspace/react/run-model';
-import { RunView } from '../run/run-view';
+import { RunView, useComposerPrefill, type ComposerPrefill } from '../run/run-view';
 import {
   findAgent,
   initialSession,
   lastAgentStorageKey,
   offeredBy,
   preferredAgent,
-  readComposerProjects,
   projectStartRefusal,
   runTargetIn,
   runTargetLine,
@@ -174,6 +169,25 @@ export interface HomeChatProps {
    * for the separate reason that no agent could be offered.
    */
   readonly user?: Speaker | null;
+
+  /**
+   * Start every session with this agent and hide the agent picker. An id the list does not hold
+   * leaves no session, so **Send** stays off: a locked chat never falls back to another agent.
+   */
+  readonly agent?: { readonly id: string; readonly locked: true };
+  /** Starts the first run of a new session on this numbered version of the agent. */
+  readonly version?: number;
+  /** Sets the composer text, and focuses it, each time `nonce` changes. */
+  readonly prefill?: ComposerPrefill;
+  /** Receives each agent event of the runs this screen follows, already parsed, with that run's id. */
+  readonly onAgentEvent?: (event: AgentEvent, runId?: string) => void;
+  /**
+   * Follows this run into the transcript each time `nonce` changes after mount: the continuation
+   * an approval starts in the session this screen already shows.
+   */
+  readonly follow?: { readonly runId: string; readonly nonce: number };
+  /** Rendered under the transcript, for the caller's own prompt (the Builder's approval card). */
+  readonly approval?: ReactNode;
 }
 
 // ── Transcribed class strings ───────────────────────────────────────────────────────────────
@@ -221,7 +235,7 @@ const BADGE_TONE: Readonly<Record<Badge['tone'], string>> = {
 type OpenPicker = 'agent' | PickerKind | null;
 
 let liveEventSeq = 0;
-/** A React key for a control frame, which `sse.ts` never gives an `id:` (see `../run/live.ts`). */
+/** A React key for a control frame, which `sse.ts` never gives an `id:`. */
 function nextControlFrameId(prefix: string): string {
   liveEventSeq += 1;
   return `${prefix}-${String(liveEventSeq)}`;
@@ -236,21 +250,219 @@ function nextControlFrameId(prefix: string): string {
  * user would be told to reconnect over a frame the server had already delivered. It is caught here
  * and turned into a fact about that one frame.
  */
-export function parseAgentFrame(
-  frame: SseFrame,
+function parseAgentFrame(
+  frame: Extract<RunEventFrame, { readonly kind: 'runtime' }>,
 ):
   | { readonly kind: 'event'; readonly event: AgentEvent }
   | { readonly kind: 'unreadable'; readonly message: string } {
   try {
-    const event = toAgentEvent(classifyRunEventFrame(frame));
+    const event = toAgentEvent(frame);
     if (event !== null) return { kind: 'event', event };
     return {
       kind: 'unreadable',
-      message: `the frame "${frame.event}" is not one this build can read as an agent event`,
+      message: `the frame "${frame.name}" is not one this build can read as an agent event`,
     };
   } catch (error) {
     return { kind: 'unreadable', message: error instanceof Error ? error.message : String(error) };
   }
+}
+
+/**
+ * What one classified frame of a run's stream does to the run on screen, and whether it settles
+ * the run's outcome — a `run-failed` frame, or a `run.status` that is stopped or carries an
+ * error — so that the stream's later `done` is not read as a guessed "Completed".
+ *
+ * Every frame is also logged as itself in the Runtime tab of the technical-details disclosure.
+ */
+function runFrameUpdate(
+  frame: RunEventFrame,
+  assistant: Speaker,
+): {
+  readonly update: (run: Run) => Run;
+  readonly terminal: boolean;
+  /** The agent event this frame carried, when it carried a readable one. */
+  readonly event?: AgentEvent;
+} {
+  const time = formatEventTime(new Date());
+  switch (frame.kind) {
+    case 'run-failed': {
+      const { status, message } = frame.data;
+      return {
+        terminal: true,
+        update: (run) =>
+          withRuntimeEvent(
+            withFailure(
+              withStatus(run, failureBadge(status)),
+              status === 'cancelled' ? null : failureNoticeFrom(message),
+            ),
+            eventLineFrom(nextControlFrameId('run-failed'), time, 'run-failed', message),
+          ),
+      };
+    }
+    case 'stream-reset':
+      return {
+        terminal: false,
+        update: (run) =>
+          withRuntimeEvent(
+            run,
+            eventLineFrom(nextControlFrameId('stream-reset'), time, 'stream-reset', frame.data),
+          ),
+      };
+    case 'run-warning':
+      // A platform notice (ADR-0146), not an agent frame and not an outcome: logged as itself.
+      return {
+        terminal: false,
+        update: (run) =>
+          withRuntimeEvent(
+            run,
+            eventLineFrom(
+              frame.id ?? nextControlFrameId('run-warning'),
+              time,
+              RUN_WARNING_EVENT,
+              frame.data,
+            ),
+          ),
+      };
+    case 'run-status': {
+      const { status, error } = frame.data;
+      const badge = error === null ? badgeForRunStatus(status) : failureBadge(status);
+      return {
+        // A stopped status — terminal, or the `awaiting_approval` pause — is the outcome `done`
+        // must not overwrite with a guessed "Completed".
+        terminal: error !== null || isStoppedRunStatus(status),
+        update: (run) =>
+          withRuntimeEvent(
+            withFailure(
+              withStatus(run, badge),
+              status === 'failed' && error !== null ? failureNoticeFrom(error) : run.failure,
+            ),
+            eventLineFrom(
+              frame.id ?? nextControlFrameId('run-status'),
+              time,
+              RUN_STATUS_EVENT,
+              frame.data,
+            ),
+          ),
+      };
+    }
+    case 'done':
+      // `runs.follow` ends at `done` rather than yielding it; `followRunEvents` reports it.
+      return { terminal: false, update: (run) => run };
+    case 'runtime':
+      break;
+  }
+  // A durable event the runtime produced — since ENG-03 (#302) one engine-neutral `agent.*`
+  // frame, read through the SDK's parser: there is no parse of `frame.data` here, and no
+  // knowledge of any engine's message shape.
+  const parsed = parseAgentFrame(frame);
+  if (parsed.kind === 'unreadable') {
+    // The parser refused the payload: the platform wrote a frame that does not satisfy its own
+    // contract, which is drift and not a broken connection. It is shown as itself in the Runtime
+    // tab — not as a transport error, which would tell the user to reconnect — and the stream
+    // continues, because the frames around it are still readable.
+    return {
+      terminal: false,
+      update: (run) =>
+        withRuntimeEvent(
+          run,
+          eventLineFrom(
+            frame.id ?? nextControlFrameId('agent-frame-unreadable'),
+            time,
+            'frame.unreadable',
+            parsed.message,
+          ),
+        ),
+    };
+  }
+  const response = assistantResponseFromAgentEvent(parsed.event);
+  return {
+    terminal: false,
+    event: parsed.event,
+    update: (run) => {
+      const logged = withSdkEvent(
+        run,
+        eventLineFrom(
+          frame.id ?? nextControlFrameId('agent-frame'),
+          time,
+          frame.name,
+          // The engine-native payload, which is what Technical details is for. The neutral fields
+          // beside it are already rendered as the conversation.
+          parsed.event.raw,
+        ),
+      );
+      return response === null ? logged : withAssistantResponse(logged, assistant, response);
+    },
+  };
+}
+
+/**
+ * Follow run `runId` and fold each frame into the run on screen through `apply`; returns the
+ * abort. `client` is the SDK client to follow with — the page's own by default. `onEvent`
+ * receives each frame's already-parsed agent event, for a caller that reads typed tool input.
+ */
+export function followRunInto(
+  runId: string,
+  assistant: Speaker,
+  apply: (update: (run: Run) => Run) => void,
+  client?: AgentWorkspaceClient,
+  onEvent?: (event: AgentEvent, runId: string) => void,
+): () => void {
+  // Once an outcome is known — a `run-failed` frame, or a `run.status` event carrying a stopped
+  // status (terminal, or the `awaiting_approval` pause) or an error — `done` is a stream ending,
+  // not a run succeeding (`server/runs/sse.ts`'s own distinction). This flag is what keeps
+  // `onDone` from overwriting that outcome with a guessed "Completed".
+  let outcomeKnown = false;
+  return followRunEvents(
+    runId,
+    {
+      onFrame: (frame) => {
+        const { update, terminal, event } = runFrameUpdate(frame, assistant);
+        if (terminal) outcomeKnown = true;
+        if (event !== undefined) onEvent?.(event, runId);
+        apply(update);
+      },
+      onDone: () => {
+        if (!outcomeKnown) {
+          apply((run) => withStatus(run, { label: 'Completed', tone: 'ok', dot: false }));
+        }
+      },
+      onTransportError: (message) => {
+        apply((run) =>
+          withRuntimeEvent(
+            withStatus(run, { label: 'Disconnected', tone: 'danger', dot: false }),
+            eventLineFrom(
+              nextControlFrameId('stream-transport-error'),
+              formatEventTime(new Date()),
+              'transport.error',
+              message,
+            ),
+          ),
+        );
+      },
+    },
+    client,
+  );
+}
+
+function openingSession(
+  list: readonly ComposerAgent[],
+  locked: HomeChatProps['agent'],
+  setupAgentId: string | null,
+): ComposerSession | null {
+  if (locked === undefined) return initialSession(list, null, setupAgentId);
+  const found = findAgent(list, locked.id);
+  return found === null ? null : startSession(found, 0);
+}
+
+/** The storage key that remembers the last agent used; `null` when nothing may be remembered. */
+function rememberedAgentKey(
+  locked: boolean,
+  user: Speaker | null,
+  viewer: { readonly workspaceId: string; readonly userId: string } | null,
+): string | null {
+  return locked || user === null || viewer === null
+    ? null
+    : lastAgentStorageKey(viewer.workspaceId, viewer.userId);
 }
 
 function speakerForAgent(name: string): Speaker {
@@ -290,7 +502,10 @@ function runAgentAndFollow(
   assistant: Speaker,
   apply: (update: (run: Run) => Run) => void,
   signal: AbortSignal,
-  onStarted: (sessionId: string) => void,
+  onStarted: (sessionId: string, runId: string) => void,
+  attachments: readonly string[] = [],
+  onEvent?: (event: AgentEvent, runId: string) => void,
+  version: number | null = null,
 ): void {
   void (async (): Promise<void> => {
     const outcome = await startAgentRunForSession(
@@ -299,6 +514,9 @@ function runAgentAndFollow(
       modelOverride,
       sessionId,
       projectId,
+      browserClient(),
+      attachments,
+      version,
     );
     if (signal.aborted) return;
 
@@ -346,134 +564,9 @@ function runAgentAndFollow(
 
     // `outcome.kind === 'started'`: the server accepted the run and named where its events live.
     apply((run) => withStatus(run, badgeForRunStatus(outcome.status)));
-    if (outcome.sessionId !== null) onStarted(outcome.sessionId);
+    if (outcome.sessionId !== null) onStarted(outcome.sessionId, outcome.runId);
 
-    // Once a terminal outcome is known — a `run-failed` frame, or a `run.status` event carrying a
-    // status this platform treats as terminal — `done` is a stream ending, not a run succeeding
-    // (`server/runs/sse.ts`'s own distinction). This flag is what keeps `onDone` from overwriting
-    // that outcome with a guessed "Completed".
-    let outcomeKnown = false;
-
-    const abort = followRunEvents(outcome.eventsUrl, {
-      onFrame: (frame) => {
-        if (frame.event === 'run-failed') {
-          const payload = parseRunFailedPayload(frame.data);
-          outcomeKnown = true;
-          apply((run) =>
-            withRuntimeEvent(
-              withFailure(
-                withStatus(run, failureBadge(payload.status)),
-                payload.status === 'cancelled' ? null : failureNoticeFrom(payload.message),
-              ),
-              eventLineFrom(
-                frame.id ?? nextControlFrameId('run-failed'),
-                formatEventTime(new Date()),
-                frame.event,
-                payload.message,
-              ),
-            ),
-          );
-          return;
-        }
-        if (frame.event === 'stream-reset') {
-          apply((run) =>
-            withRuntimeEvent(
-              run,
-              eventLineFrom(
-                frame.id ?? nextControlFrameId('stream-reset'),
-                formatEventTime(new Date()),
-                frame.event,
-                frame.data,
-              ),
-            ),
-          );
-          return;
-        }
-        if (frame.event === RUN_STATUS_EVENT_NAME) {
-          const payload = parseRunStatusPayload(frame.data);
-          const badge =
-            payload.error === null
-              ? badgeForRunStatus(payload.status)
-              : failureBadge(String(payload.status));
-          if (payload.error !== null) outcomeKnown = true;
-          apply((run) =>
-            withRuntimeEvent(
-              withFailure(
-                withStatus(run, badge),
-                payload.status === 'failed' && payload.error !== null
-                  ? failureNoticeFrom(payload.error)
-                  : run.failure,
-              ),
-              eventLineFrom(
-                frame.id ?? nextControlFrameId('run-status'),
-                formatEventTime(new Date()),
-                frame.event,
-                frame.data,
-              ),
-            ),
-          );
-          return;
-        }
-        // Anything else reaching this branch is, by the server's own ingestion rule
-        // (`classifyStoredEventName` in `server/runs/sse.ts`), a durable event the runtime
-        // produced — the platform writes no other durable name, and every control name is handled
-        // above. Since ENG-03 (#302) that means one engine-neutral `agent.*` frame, and this screen
-        // reads it through the SDK's parser: there is no parse of `frame.data` here, and no
-        // knowledge of any engine's message shape.
-        const parsed = parseAgentFrame(frame);
-        if (parsed.kind === 'unreadable') {
-          // The parser refused the payload: the platform wrote a frame that does not satisfy its
-          // own contract, which is drift and not a broken connection. It is shown as itself in the
-          // Runtime tab — not as a transport error, which would tell the user to reconnect — and
-          // the stream continues, because the frames around it are still readable.
-          apply((run) =>
-            withRuntimeEvent(
-              run,
-              eventLineFrom(
-                frame.id ?? nextControlFrameId('agent-frame-unreadable'),
-                formatEventTime(new Date()),
-                'frame.unreadable',
-                parsed.message,
-              ),
-            ),
-          );
-          return;
-        }
-        const response = assistantResponseFromAgentEvent(parsed.event);
-        apply((run) => {
-          const logged = withSdkEvent(
-            run,
-            eventLineFrom(
-              frame.id ?? nextControlFrameId('agent-frame'),
-              formatEventTime(new Date()),
-              frame.event,
-              // The engine-native payload, which is what Technical details is for. The neutral
-              // fields beside it are already rendered as the conversation.
-              parsed.event.raw,
-            ),
-          );
-          return response === null ? logged : withAssistantResponse(logged, assistant, response);
-        });
-      },
-      onDone: () => {
-        if (!outcomeKnown) {
-          apply((run) => withStatus(run, { label: 'Completed', tone: 'ok', dot: false }));
-        }
-      },
-      onTransportError: (message) => {
-        apply((run) =>
-          withRuntimeEvent(
-            withStatus(run, { label: 'Disconnected', tone: 'danger', dot: false }),
-            eventLineFrom(
-              nextControlFrameId('stream-transport-error'),
-              formatEventTime(new Date()),
-              'transport.error',
-              message,
-            ),
-          ),
-        );
-      },
-    });
+    const abort = followRunInto(outcome.runId, assistant, apply, undefined, onEvent);
     signal.addEventListener('abort', abort, { once: true });
   })();
 }
@@ -484,20 +577,29 @@ function runAgentAndFollow(
 // task touches does. The prop stays on `HomeChatProps` (and `app/(shell)/page.tsx`, outside this
 // task's `Owns` glob, keeps passing it) so that file needs no edit; this screen simply never binds
 // it, rather than binding and discarding it.
-export function HomeChat({ agents, recent, run = null, user = null }: HomeChatProps) {
+export function HomeChat({
+  agents,
+  recent,
+  run = null,
+  user = null,
+  agent: lockedAgent,
+  version,
+  prefill,
+  onAgentEvent,
+  follow,
+  approval,
+}: HomeChatProps) {
   const list = agents.kind === 'agents' ? agents.agents : [];
   const setupAgentId = agents.kind === 'agents' ? (agents.setupAgentId ?? null) : null;
   const viewer = agents.kind === 'agents' ? (agents.viewer ?? null) : null;
   const [session, setSession] = useState<ComposerSession | null>(() =>
-    initialSession(list, null, setupAgentId),
+    openingSession(list, lockedAgent, setupAgentId),
   );
   // Issue #393: the last agent this user sent a message as is remembered in this browser, and is
   // preferred when it can still run. Read after mount — the server render has no storage — and
-  // applied only while the user has not chosen an agent themselves (`key === 0`).
-  const rememberedKey =
-    user === null || viewer === null
-      ? null
-      : lastAgentStorageKey(viewer.workspaceId, viewer.userId);
+  // applied only while the user has not chosen an agent themselves (`key === 0`). A locked agent
+  // is neither replaced by it nor recorded as it.
+  const rememberedKey = rememberedAgentKey(lockedAgent !== undefined, user, viewer);
   useEffect(() => {
     if (rememberedKey === null) return;
     let remembered: string | null;
@@ -514,6 +616,8 @@ export function HomeChat({ agents, recent, run = null, user = null }: HomeChatPr
     );
   }, [list, rememberedKey, setupAgentId]);
   const [draft, setDraft] = useState('');
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+  useComposerPrefill(prefill, setDraft, composerRef);
   const [open, setOpen] = useState<OpenPicker>(null);
   const [started, setStarted] = useState<Run | null>(run);
   // Issue #130's per-run override — `null` means "no override; the agent's own saved default (and
@@ -535,12 +639,10 @@ export function HomeChat({ agents, recent, run = null, user = null }: HomeChatPr
   // screen has no room to show.
   useEffect(() => {
     let active = true;
-    void fetch('/api/projects', { headers: { accept: 'application/json' } })
-      .then((response) =>
-        response.ok ? (response.json() as Promise<unknown>) : Promise.resolve({ projects: [] }),
-      )
-      .then((body) => {
-        if (active) setProjects(readComposerProjects(body));
+    void browserClient()
+      .projects.list()
+      .then((found) => {
+        if (active) setProjects(found.map(({ id, name }) => ({ id, name })));
       })
       .catch(() => {
         if (active) setProjects([]);
@@ -556,6 +658,8 @@ export function HomeChat({ agents, recent, run = null, user = null }: HomeChatPr
   const runControllerRef = useRef<AbortController | null>(null);
   const activeSessionIdRef = useRef<string | null>(null);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  // The runs this screen started in the active session: what its share publishes (ADR-0158).
+  const [sessionRunIds, setSessionRunIds] = useState<readonly string[]>([]);
   useEffect(() => {
     return () => {
       runControllerRef.current?.abort();
@@ -593,7 +697,7 @@ export function HomeChat({ agents, recent, run = null, user = null }: HomeChatPr
   const agent = session === null ? null : findAgent(list, session.agentId);
 
   const sendFollowUp = useCallback(
-    (text: string) => {
+    (text: string, attachments: readonly string[]) => {
       // A null session id means the previous attempt never reached a started run — the server
       // then opens a fresh session for this message. Refusing here instead would swallow text the
       // composer has already cleared and the transcript has already shown as sent.
@@ -617,14 +721,43 @@ export function HomeChat({ agents, recent, run = null, user = null }: HomeChatPr
         assistant,
         applyToRun,
         restartRunController().signal,
-        (sessionId) => {
+        (sessionId, runId) => {
           activeSessionIdRef.current = sessionId;
           setActiveSessionId(sessionId);
+          setSessionRunIds((current) => [...current, runId]);
         },
+        attachments,
+        onAgentEvent,
+        version ?? null,
       );
     },
-    [agent, applyToRun, modelOverride, projectId, restartRunController, user],
+    [
+      agent,
+      applyToRun,
+      modelOverride,
+      onAgentEvent,
+      projectId,
+      restartRunController,
+      user,
+      version,
+    ],
   );
+
+  const followedNonce = useRef(follow?.nonce);
+  useEffect(() => {
+    if (follow === undefined || agent === null || follow.nonce === followedNonce.current) return;
+    followedNonce.current = follow.nonce;
+    const { signal } = restartRunController();
+    setSessionRunIds((current) => [...current, follow.runId]);
+    const abort = followRunInto(
+      follow.runId,
+      speakerForAgent(agent.name),
+      applyToRun,
+      undefined,
+      onAgentEvent,
+    );
+    signal.addEventListener('abort', abort, { once: true });
+  }, [agent, applyToRun, follow, onAgentEvent, restartRunController]);
 
   const chooseAgent = useCallback(
     (agentId: string) => {
@@ -685,7 +818,16 @@ export function HomeChat({ agents, recent, run = null, user = null }: HomeChatPr
    */
   const screen = screenFor(started);
   if (screen.kind === 'run') {
-    return <RunView run={screen.run} sessionId={activeSessionId} onFollowUp={sendFollowUp} />;
+    return (
+      <RunView
+        run={screen.run}
+        sessionId={activeSessionId}
+        runIds={sessionRunIds}
+        onFollowUp={sendFollowUp}
+        prefill={prefill}
+        approval={approval}
+      />
+    );
   }
 
   /**
@@ -730,6 +872,7 @@ export function HomeChat({ agents, recent, run = null, user = null }: HomeChatPr
     runControllerRef.current?.abort();
     activeSessionIdRef.current = null;
     setActiveSessionId(null);
+    setSessionRunIds([]);
     // A project's session is opened before the run starts; one that cannot run is not opened.
     const refusal = projectStartRefusal(agent, projectId, modelOverride !== null);
     if (refusal !== null) {
@@ -750,10 +893,14 @@ export function HomeChat({ agents, recent, run = null, user = null }: HomeChatPr
       speakerForAgent(agent.name),
       applyToRun,
       restartRunController().signal,
-      (sessionId) => {
+      (sessionId, runId) => {
         activeSessionIdRef.current = sessionId;
         setActiveSessionId(sessionId);
+        setSessionRunIds([runId]);
       },
+      [],
+      onAgentEvent,
+      version ?? null,
     );
   };
 
@@ -771,6 +918,7 @@ export function HomeChat({ agents, recent, run = null, user = null }: HomeChatPr
           {/* The mockup's textarea carries `autofocus`: §19.5 opens the product on a place to
               type, so the caret starts there and not on the first picker. */}
           <textarea
+            ref={composerRef}
             autoFocus
             data-testid="composer-input"
             aria-label="Ask anything"
@@ -838,44 +986,46 @@ export function HomeChat({ agents, recent, run = null, user = null }: HomeChatPr
                 </select>
               </label>
             )}
-            <Picker
-              id="agent"
-              testId="composer-agent-picker"
-              label={`Agent: ${agent === null ? 'none' : agent.name}`}
-              open={open}
-              setOpen={setOpen}
-              disabled={agent === null}
-            >
-              <div className={PHEAD}>Run this message as</div>
-              {list.map((option) => {
-                const target = runTargetIn(option, projectId);
-                return (
-                  <button
-                    key={option.id}
-                    type="button"
-                    data-testid="composer-agent-option"
-                    data-agent-id={option.id}
-                    data-run-target={target.kind}
-                    className={`${OPT} ${option.id === agent?.id ? 'bg-accent-soft' : ''}`}
-                    onClick={() => chooseAgent(option.id)}
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className="block font-semibold">{option.name}</span>
-                      <span className="block text-[12px] text-muted">{option.detail}</span>
-                      {target.kind === 'unrunnable' ? (
-                        <span className="block text-[12px] text-warn">
-                          Cannot run yet · {target.code}
-                        </span>
-                      ) : null}
-                    </span>
-                  </button>
-                );
-              })}
-              <div className={PFOOT}>
-                Switching agent mid-conversation starts a new session.{' '}
-                <Unbuilt>Manage agents</Unbuilt>
-              </div>
-            </Picker>
+            {lockedAgent !== undefined ? null : (
+              <Picker
+                id="agent"
+                testId="composer-agent-picker"
+                label={`Agent: ${agent === null ? 'none' : agent.name}`}
+                open={open}
+                setOpen={setOpen}
+                disabled={agent === null}
+              >
+                <div className={PHEAD}>Run this message as</div>
+                {list.map((option) => {
+                  const target = runTargetIn(option, projectId);
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      data-testid="composer-agent-option"
+                      data-agent-id={option.id}
+                      data-run-target={target.kind}
+                      className={`${OPT} ${option.id === agent?.id ? 'bg-accent-soft' : ''}`}
+                      onClick={() => chooseAgent(option.id)}
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-semibold">{option.name}</span>
+                        <span className="block text-[12px] text-muted">{option.detail}</span>
+                        {target.kind === 'unrunnable' ? (
+                          <span className="block text-[12px] text-warn">
+                            Cannot run yet · {target.code}
+                          </span>
+                        ) : null}
+                      </span>
+                    </button>
+                  );
+                })}
+                <div className={PFOOT}>
+                  Switching agent mid-conversation starts a new session.{' '}
+                  <Unbuilt>Manage agents</Unbuilt>
+                </div>
+              </Picker>
+            )}
 
             <NarrowingPicker
               kind="files"

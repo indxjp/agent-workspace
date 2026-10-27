@@ -4,6 +4,7 @@ import {
   readEvaluationRunBody,
 } from '../../../../../server/evaluations/runs';
 import { getRunApi } from '../../../../../server/runs/environment';
+import { route } from '../../../../../server/http/route';
 
 /**
  * `POST /api/agents/:id/evaluation-advance` (issue #799): run the next cases of an evaluation run
@@ -13,13 +14,20 @@ import { getRunApi } from '../../../../../server/runs/environment';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-export async function POST(
+async function servePost(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  return serveAgentVersionRoute(request, context, async ({ agent, principal }) => {
-    const body = await readEvaluationRunBody(request);
-    if (!body.ok) return body.result;
-    return advanceEvaluationRun(body.value, agent.id, principal, { runs: getRunApi() });
-  });
+  return serveAgentVersionRoute(
+    request,
+    context,
+    'advance-evaluation',
+    async ({ agent, principal }) => {
+      const body = await readEvaluationRunBody(request);
+      if (!body.ok) return body.result;
+      return advanceEvaluationRun(body.value, agent.id, principal, { runs: getRunApi() });
+    },
+  );
 }
+
+export const POST = route({ component: 'evaluations', operation: 'advance-run' }, servePost);

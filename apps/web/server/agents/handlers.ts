@@ -18,45 +18,30 @@
  * There is no search, no bulk and no count operation, and `tests/route-inventory.test.ts` fails the
  * build if one appears as a route.
  */
-import { isUuid, parseCreateAgentInput, parseUpdateAgentPatch, toAgentResource } from './contract';
-import type { AgentResource, CreateAgentInput, UpdateAgentPatch } from '../../contracts/agents';
-import type { WorkspaceAgentStore } from './store';
+import { isUuid, toAgentResource, type AgentRecord } from './contract';
+import {
+  agentRequestIssueMessages,
+  BUILTIN_AGENT_PROBLEM_CODES,
+  CreateAgentInputSchema,
+  UpdateAgentPatchSchema,
+  type AgentResource,
+  type AgentResourceAssignmentsInput,
+  type BuiltinAgentOperation,
+  type CreateAgentInput,
+  type UpdateAgentPatch,
+} from '../../contracts/agents';
+import type {
+  CreateAgentOutcome,
+  CreateAgentWithAssignmentsOutcome,
+  WorkspaceAgentStore,
+} from './store';
+import { problem, type ApiResult } from '../http/result';
 
 /**
  * A check a write runs after its body parses and before the store writes (issue #535: the
  * deployment's policy ceiling). A non-`null` result is answered instead of the write.
  */
 export type WriteJudge<T> = (value: T) => Promise<ApiResult | null>;
-
-/** A status and a body, before either becomes an HTTP response. `body: null` means "no content". */
-export interface ApiResult {
-  readonly status: number;
-  readonly body: unknown;
-}
-
-/** The error envelope every failing route returns. One shape, so a client parses errors once. */
-export interface ApiProblem {
-  readonly error: {
-    readonly code: string;
-    readonly message: string;
-    /** Present only when there is more to say than the message — e.g. per-field parse errors. */
-    readonly details?: readonly string[];
-  };
-}
-
-/** Build a problem result. `details` is omitted rather than set to `undefined` (`exactOptionalPropertyTypes`). */
-export function problem(
-  status: number,
-  code: string,
-  message: string,
-  details?: readonly string[],
-): ApiResult {
-  const error =
-    details === undefined || details.length === 0
-      ? { code, message }
-      : { code, message, details: [...details] };
-  return { status, body: { error } satisfies ApiProblem };
-}
 
 /**
  * Validate a path id before it reaches the store.
@@ -88,22 +73,34 @@ export async function createAgent(
   rawBody: unknown,
   owner: { readonly principalId: string; readonly userId: string | null },
   judge?: WriteJudge<CreateAgentInput>,
+  assignments?: AgentResourceAssignmentsInput,
 ): Promise<ApiResult> {
-  const parsed = parseCreateAgentInput(rawBody);
-  if (!parsed.ok) {
+  const parsed = CreateAgentInputSchema.safeParse(rawBody);
+  if (!parsed.success) {
     return problem(
       400,
       'invalid_body',
       'The agent could not be created from this body.',
-      parsed.errors,
+      agentRequestIssueMessages(parsed.error.issues),
     );
   }
-  const refused = judge === undefined ? null : await judge(parsed.value);
+  const refused = judge === undefined ? null : await judge(parsed.data);
   if (refused !== null) return refused;
-  const outcome = await store.create(parsed.value, owner);
+  // W2-3: with assignments, the row and its assignments are one store write, so a refused
+  // assignment leaves no agent behind and there is nothing to compensate.
+  const outcome: CreateAgentOutcome | CreateAgentWithAssignmentsOutcome =
+    assignments === undefined
+      ? await store.create(parsed.data, owner)
+      : await store.createWithAssignments(parsed.data, owner, assignments);
   switch (outcome.kind) {
     case 'created':
-      return { status: 201, body: toAgentResource(outcome.agent) };
+      return {
+        status: 201,
+        body:
+          'assignments' in outcome
+            ? { agent: toAgentResource(outcome.agent), assignments: outcome.assignments }
+            : toAgentResource(outcome.agent),
+      };
     case 'name-conflict':
       return problem(
         409,
@@ -122,8 +119,31 @@ export async function createAgent(
         'unknown_runtime_profile',
         'runtimeProfileId does not name a runtime profile in this workspace.',
       );
+    // A missing referenced resource is the caller's to correct, as a missing model connection is.
+    case 'unknown-file':
+      return problem(400, 'unknown_file', 'An assigned file is not in this workspace.', [
+        outcome.id,
+      ]);
+    case 'unknown-skill':
+      return problem(400, 'unknown_skill', 'An assigned skill is not in this workspace.', [
+        outcome.id,
+      ]);
+    // The skill exists but is being deleted: a conflict with its state, not a missing reference.
+    case 'skill-deleting':
+      return problem(409, 'skill_deleting', 'An assigned skill is being deleted.', [outcome.id]);
+    case 'unknown-skill-revision':
+      return problem(
+        400,
+        'unknown_skill_revision',
+        'A pinned skill revision is not published in this workspace.',
+        [`${outcome.id}@${String(outcome.revision)}`],
+      );
+    case 'unknown-connector':
+      return problem(400, 'unknown_connector', 'An assigned connector is not in this workspace.', [
+        outcome.id,
+      ]);
     default: {
-      // Total: adding an outcome to CreateAgentOutcome without handling it is a compile error.
+      // Total: adding an outcome without handling it is a compile error.
       const unreachable: never = outcome;
       return problem(
         500,
@@ -134,10 +154,15 @@ export async function createAgent(
   }
 }
 
-/** `GET /api/agents` — 200 with this workspace's agents. Never another workspace's (§25). */
+/**
+ * `GET /api/agents` — 200 with this workspace's agents, built-ins last (the sort is stable, so the
+ * rest keep the store's order). Never another workspace's (§25).
+ */
 export async function listAgents(store: WorkspaceAgentStore): Promise<ApiResult> {
   const agents = await store.list();
-  const items: AgentResource[] = agents.map(toAgentResource);
+  const items: AgentResource[] = agents
+    .map(toAgentResource)
+    .sort((a, b) => Number(a.builtin !== undefined) - Number(b.builtin !== undefined));
   return { status: 200, body: { agents: items } };
 }
 
@@ -166,24 +191,24 @@ export async function updateAgent(
 ): Promise<ApiResult> {
   const id = requireAgentId(rawId);
   if (!id.ok) return id.result;
-  const parsed = parseUpdateAgentPatch(rawBody);
-  if (!parsed.ok) {
+  const parsed = UpdateAgentPatchSchema.safeParse(rawBody);
+  if (!parsed.success) {
     return problem(
       400,
       'invalid_body',
       'The agent could not be updated from this body.',
-      parsed.errors,
+      agentRequestIssueMessages(parsed.error.issues),
     );
   }
-  const refused = judge === undefined ? null : await judge(parsed.value);
+  const refused = judge === undefined ? null : await judge(parsed.data);
   if (refused !== null) return refused;
   if (write !== undefined) {
-    const unwritten = await write(parsed.value);
+    const unwritten = await write(parsed.data);
     if (unwritten !== null) return unwritten;
     const written = await store.get(id.id);
     return written === null ? agentNotFound() : { status: 200, body: toAgentResource(written) };
   }
-  const outcome = await store.update(id.id, parsed.value);
+  const outcome = await store.update(id.id, parsed.data);
   switch (outcome.kind) {
     case 'updated':
       return { status: 200, body: toAgentResource(outcome.agent) };
@@ -255,4 +280,43 @@ export async function deleteAgent(store: WorkspaceAgentStore, rawId: unknown): P
  *  an {@link import('../resources/item-ownership').OwnershipResolver} can reuse it verbatim. */
 export function agentNotFound(): ApiResult {
   return problem(404, 'agent_not_found', 'This workspace has no agent with that id.');
+}
+
+/**
+ * Whether a built-in agent refuses each operation: every change to it is refused, while reading,
+ * evaluating and exporting it stay open so people may inspect and evaluate the Builder.
+ */
+const BUILTIN_AGENT_REFUSES: Readonly<Record<BuiltinAgentOperation, boolean>> = {
+  read: false,
+  update: true,
+  delete: true,
+  'update-policy': true,
+  'replace-resources': true,
+  'replace-grants': true,
+  'create-version': true,
+  'set-pointer': true,
+  promote: true,
+  rollback: true,
+  'advance-evaluation': true,
+  evaluate: false,
+  'start-evaluation-run': false,
+  export: false,
+  'export-archive': false,
+};
+
+/**
+ * The refusal of `operation` on a built-in agent (#1848), or `null` for any other agent or an
+ * operation a built-in allows. Called by the resolvers before `decide()`, so every role, Owner
+ * included, is answered the same. Running the agent is another route and never reaches here.
+ */
+export function refuseBuiltinWrite(
+  agent: Pick<AgentRecord, 'builtin'> | null,
+  operation: BuiltinAgentOperation,
+): ApiResult | null {
+  if (agent?.builtin === undefined || !BUILTIN_AGENT_REFUSES[operation]) return null;
+  return problem(
+    BUILTIN_AGENT_PROBLEM_CODES.builtin_agent_read_only,
+    'builtin_agent_read_only',
+    'This is a built-in agent; the platform manages it and it cannot be changed.',
+  );
 }

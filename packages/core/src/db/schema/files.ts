@@ -18,8 +18,9 @@
  *     from `path` precisely so that renaming a file does not have to rewrite an object — the
  *     two identifiers are allowed to diverge, and only this column knows the mapping.
  *
- * No checksum column: nothing in §16 or in the Wave 2 plan's acceptance for W2-CP-03
- * reads one, and a column nobody reads is a column that goes stale.
+ * The storage design, §04 adds three more columns. `object_id` is the permanent ID the object is
+ * stored under; NULL marks a legacy row whose `storage_key` is still the path. `area` says where
+ * the object lives, and `sha256` is its checksum (NULL until a writer records one).
  */
 import {
   bigint,
@@ -36,6 +37,8 @@ import { sql } from 'drizzle-orm';
 
 import { createdAt, primaryKeyId, updatedAt } from './columns.js';
 import { memberships } from './memberships.js';
+import { SIDE_PATH_ROOT } from '../side-paths.js';
+import { storageAreas } from '../../storage/storage-areas.js';
 import { oneOf } from './one-of.js';
 import { workspaces } from './workspaces.js';
 import { workspacePrincipals } from './workspace-principals.js';
@@ -43,6 +46,23 @@ import { workspacePrincipals } from './workspace-principals.js';
 /** A node in §16's tree is one of exactly two things. There is no third kind. */
 export const fileKinds = ['file', 'folder'] as const;
 export type FileKind = (typeof fileKinds)[number];
+
+/**
+ * Storage design §04 "File states": a signed-link upload reserves a `pending` row before its bytes
+ * exist and becomes `ready` once they do. Only `ready` rows appear in lists, search and grants.
+ * `deleting` marks a row whose object is being removed.
+ */
+export const fileStatuses = ['pending', 'ready', 'deleting'] as const;
+export type FileStatus = (typeof fileStatuses)[number];
+
+/**
+ * How a pending upload is written: `relay` through the server's own `save`, `signed` by the client
+ * to a signed link. A same-owner re-reserve refreshes a pending row of the same mode only, so a
+ * relay save never resets a signed upload's declared size and a mint never signs a save's object.
+ * NULL for a ready row written before the column and for a row no upload owns (a staging row).
+ */
+export const uploadModes = ['relay', 'signed'] as const;
+export type UploadMode = (typeof uploadModes)[number];
 
 export const files = pgTable(
   'files',
@@ -73,6 +93,19 @@ export const files = pgTable(
      * for the backfill this column's migration performs on every existing row.
      */
     createdBy: uuid('created_by'),
+    /** Defaults to `ready`, so every row written by a one-step write is immediately visible. */
+    status: text('status', { enum: fileStatuses }).notNull().default('ready'),
+    /** The permanent ID the object is stored under. NULL for a folder and for a legacy file. */
+    objectId: uuid('object_id'),
+    /**
+     * The real path a side-path row stands for (see `side-paths.ts`): set exactly when `path` is a
+     * side path, so a pending replacement or a removed row never occupies the path of a ready row.
+     */
+    targetPath: text('target_path'),
+    area: text('area', { enum: storageAreas }).notNull().default('files'),
+    /** Lower-case hex SHA-256 of the bytes; NULL until a writer records it. */
+    sha256: text('sha256'),
+    uploadMode: text('upload_mode', { enum: uploadModes }),
     ownerPrincipalId: uuid('owner_principal_id').notNull(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -80,7 +113,15 @@ export const files = pgTable(
   (table) => [
     // One node per path per workspace, and the tenant index: `workspace_id` leads it, so
     // listing a workspace's tree is an index scan (§25).
+    // Only a ready row, or a pending upload to a free path, holds its real path; every other row
+    // waits at a side path. Writers still `ON CONFLICT (workspace_id, path)`, so this key stays.
     uniqueIndex('files_workspace_path_key').on(table.workspaceId, table.path),
+    // One pending row per logical path has no index: every writer takes the path lock first
+    // (`lockForWrite`) and `reserve` refuses a path that already has a pending row.
+    // At most one row per stored object; rows with no object id yet are outside the index.
+    uniqueIndex('files_workspace_object_key')
+      .on(table.workspaceId, table.objectId)
+      .where(sql`${table.objectId} is not null`),
     // The target `agent_files`' tenant-paired reference needs; see agents.ts for why this is a
     // table CONSTRAINT and not a unique INDEX.
     unique('files_id_workspace_key').on(table.id, table.workspaceId),
@@ -96,6 +137,21 @@ export const files = pgTable(
       name: 'files_owner_principal_workspace_fk',
     }),
     oneOf('files_kind_valid', table.kind, fileKinds),
+    oneOf('files_status_valid', table.status, fileStatuses),
+    oneOf('files_area_valid', table.area, storageAreas),
+    check(
+      'files_upload_mode_valid',
+      sql`${table.uploadMode} is null or ${table.uploadMode} in ('relay', 'signed')`,
+    ),
+    // `target_path` is set exactly when the path is a side path, and a side row is never ready, so
+    // it can never be listed, searched or granted.
+    check(
+      'files_side_path_target',
+      sql`(${table.targetPath} is not null) = (split_part(${table.path}, '/', 1) = ${sql.raw(`'${SIDE_PATH_ROOT}'`)}) and (${table.targetPath} is null or ${table.status} <> 'ready')`,
+    ),
+    check('files_sha256_shape', sql`${table.sha256} is null or ${table.sha256} ~ '^[0-9a-f]{64}$'`),
+    // A folder has no bytes to wait for, so it is never reserved.
+    check('files_folder_is_ready', sql`${table.kind} <> 'folder' or ${table.status} = 'ready'`),
     // Segments separated by single slashes, each segment non-empty and free of control
     // characters, with no leading or trailing slash.
     check('files_path_shape', sql`${table.path} ~ '^[^/[:cntrl:]]+(/[^/[:cntrl:]]+)*$'`),

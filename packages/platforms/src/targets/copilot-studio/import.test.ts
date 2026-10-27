@@ -279,3 +279,21 @@ describe('copilot-studio import refusals', () => {
     ).toBe('platform_options_invalid');
   });
 });
+
+describe('copilot-studio multi-line description (#1598)', () => {
+  it('round-trips a description the YAML writer would fold', () => {
+    const description = ['', '---', ' ', '\r', '---\\' + ' '.repeat(8) + '\\' + ' '.repeat(9)].join(
+      '\n',
+    );
+    const sample = PortableProjectSchema.parse(SAMPLE_PORTABLE_PROJECT);
+    const input = PortableProjectSchema.parse({
+      ...sample,
+      agents: sample.agents.map((agent) => ({ ...agent, description })),
+    });
+    const compiled = compileForPlatform(copilotStudioTarget, input, { publisherPrefix: 'acme' });
+    if (!compiled.ok) throw new Error('compile refused');
+    expect(imported(compiled.files).project.agents.map((agent) => agent.description)).toEqual(
+      input.agents.map(() => description),
+    );
+  });
+});

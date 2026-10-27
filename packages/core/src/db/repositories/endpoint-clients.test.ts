@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { agents } from '../schema/agents.js';
@@ -14,6 +14,7 @@ import { createDatabaseDirectoryRoot } from './directory.js';
 import { createDatabaseEndpointClientRepositoryProvider } from './endpoint-clients.js';
 import { createDatabaseWorkspaceScopeResolver } from './scope.js';
 import { createIsolatedTestDatabase, type IsolatedTestDatabase } from './testing.js';
+import { postgresViolations, type PostgresViolation } from './violations.js';
 
 const hasDatabase = Boolean(process.env['TEST_DATABASE_URL']?.trim());
 
@@ -111,6 +112,16 @@ describe.skipIf(!hasDatabase)('EndpointClientRepository (ADR-0134)', () => {
 
   const base = { actsForPrincipalId: principalId, createdByPrincipalId: principalId };
 
+  /** The violations a refused write raised. */
+  async function violationsOf(write: Promise<unknown>): Promise<readonly PostgresViolation[]> {
+    try {
+      await write;
+    } catch (error) {
+      return [...postgresViolations(error)];
+    }
+    throw new Error('the write was expected to be refused');
+  }
+
   it('creates a client with its agents and refuses a duplicate name per kind', async () => {
     const clients = await clientsFor(workspaceId);
     const created = await clients.create({
@@ -154,6 +165,50 @@ describe.skipIf(!hasDatabase)('EndpointClientRepository (ADR-0134)', () => {
         toolNames: ['x'],
       }),
     ).rejects.toThrow();
+  });
+
+  it('creates a builder client with no agent and refuses one with an agent or toolNames', async () => {
+    const clients = await clientsFor(workspaceId);
+    const created = await clients.create({ ...base, name: 'door', kind: 'builder', agentIds: [] });
+    if (created.kind !== 'created') throw new Error('expected created');
+    expect(created.client).toMatchObject({ kind: 'builder', agentIds: [], toolNames: null });
+    expect((await clients.get(created.client.id))?.kind).toBe('builder');
+    const kept = await clients.update(created.client.id, { agentIds: [] });
+    expect(kept).toMatchObject({ client: { kind: 'builder', agentIds: [] } });
+    await expect(clients.update(created.client.id, { agentIds: [agentA] })).rejects.toThrow();
+
+    await expect(
+      clients.create({ ...base, name: 'with-agent', kind: 'builder', agentIds: [agentA] }),
+    ).rejects.toThrow();
+    await expect(
+      clients.create({
+        ...base,
+        name: 'with-tools',
+        kind: 'builder',
+        agentIds: [],
+        toolNames: ['x'],
+      }),
+    ).rejects.toThrow();
+    expect(await clients.findByName('builder', 'with-agent')).toBeNull();
+    expect(await clients.findByName('builder', 'with-tools')).toBeNull();
+  });
+
+  it('the database refuses builder toolNames and an unknown kind by constraint', async () => {
+    const insert = (kind: string, toolNames: string | null) =>
+      violationsOf(
+        isolated.db.execute(
+          sql`insert into endpoint_clients
+                (workspace_id, name, kind, tool_names, acts_for_principal_id, created_by_principal_id)
+              values (${workspaceId}, ${`raw-${kind}`}, ${kind}, ${toolNames}::text[],
+                      ${principalId}, ${principalId})`,
+        ),
+      );
+    expect(await insert('builder', '{x}')).toEqual([
+      { code: '23514', constraint: 'endpoint_clients_tool_names_mcp_only' },
+    ]);
+    expect(await insert('surface', null)).toEqual([
+      { code: '23514', constraint: 'endpoint_clients_kind_valid' },
+    ]);
   });
 
   it('refuses another workspace agent and writes nothing', async () => {

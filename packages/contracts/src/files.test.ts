@@ -1,13 +1,23 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  CreateDownloadUrlRequestSchema,
+  CreateUploadUrlRequestSchema,
+  DEFAULT_SEARCH_LIMIT,
   FILES_PROBLEM_CODES,
   FILE_KINDS,
+  PresignedUrlSchema,
   FileListResponseSchema,
   FileResourceSchema,
   FileResponseSchema,
+  FileSearchHitSchema,
+  FileSearchQuerySchema,
+  FileSearchResponseSchema,
+  MAX_SEARCH_LIMIT,
+  MAX_SEARCH_QUERY_CHARS,
   MAX_SUBTREE_OBJECTS,
   MAX_UPLOAD_BYTES,
+  SIGNED_UPLOAD_HARD_MAX_BYTES,
   MoveFileResponseSchema,
   RESOURCE_PATH_ENCODING_HEADER,
   RESOURCE_PATH_ENCODING_PERCENT_UTF8,
@@ -164,5 +174,91 @@ describe('response envelopes', () => {
       false,
     );
     expect(RemoveFileResponseSchema.safeParse({ status: 'ok' }).success).toBe(false);
+  });
+});
+
+describe('presigned URL schemas', () => {
+  it('accepts a bounded upload request and refuses the rest', () => {
+    const ok = { contentType: 'text/plain', sizeBytes: 5, ttlSeconds: 300 };
+    expect(CreateUploadUrlRequestSchema.safeParse(ok).success).toBe(true);
+    expect(CreateUploadUrlRequestSchema.safeParse({ sizeBytes: 0 }).success).toBe(true);
+    for (const large of [MAX_UPLOAD_BYTES + 1, SIGNED_UPLOAD_HARD_MAX_BYTES]) {
+      expect(CreateUploadUrlRequestSchema.safeParse({ ...ok, sizeBytes: large }).success).toBe(
+        true,
+      );
+    }
+    for (const bad of [
+      { ...ok, extra: 1 },
+      { ...ok, sizeBytes: SIGNED_UPLOAD_HARD_MAX_BYTES + 1 },
+      { ...ok, sizeBytes: -1 },
+      { ...ok, ttlSeconds: 59 },
+      { ...ok, ttlSeconds: 901 },
+      { contentType: 'text/plain' },
+    ]) {
+      expect(CreateUploadUrlRequestSchema.safeParse(bad).success).toBe(false);
+    }
+  });
+
+  it('bounds the download ttl and refuses unknown keys', () => {
+    expect(CreateDownloadUrlRequestSchema.safeParse({}).success).toBe(true);
+    expect(CreateDownloadUrlRequestSchema.safeParse({ ttlSeconds: 900 }).success).toBe(true);
+    expect(CreateDownloadUrlRequestSchema.safeParse({ ttlSeconds: 901 }).success).toBe(false);
+    expect(CreateDownloadUrlRequestSchema.safeParse({ sizeBytes: 1 }).success).toBe(false);
+  });
+
+  it('requires an absolute http(s) url and a closed shape in the response', () => {
+    const ok = {
+      url: 'https://bucket.example/o?sig=1',
+      method: 'PUT',
+      headers: { 'content-type': 'text/plain' },
+      expiresAt: '2026-10-18T12:05:00.000Z',
+      path: 'a.txt',
+    };
+    expect(PresignedUrlSchema.safeParse(ok).success).toBe(true);
+    expect(PresignedUrlSchema.safeParse({ ...ok, url: 'not a url' }).success).toBe(false);
+    expect(PresignedUrlSchema.safeParse({ ...ok, url: 'file:///etc/passwd' }).success).toBe(false);
+    expect(PresignedUrlSchema.safeParse({ ...ok, method: 'DELETE' }).success).toBe(false);
+    expect(PresignedUrlSchema.safeParse({ ...ok, extra: 1 }).success).toBe(false);
+    expect(FILES_PROBLEM_CODES.direct_transfer_unsupported).toBe(501);
+  });
+});
+
+describe('file search schemas', () => {
+  it('trims q, defaults and coerces limit, and keeps the bounds the route enforces', () => {
+    expect(FileSearchQuerySchema.parse({ q: '  保守手順 ' })).toEqual({
+      q: '保守手順',
+      limit: DEFAULT_SEARCH_LIMIT,
+    });
+    expect(FileSearchQuerySchema.parse({ q: 'a', limit: '50' }).limit).toBe(MAX_SEARCH_LIMIT);
+    expect(FileSearchQuerySchema.safeParse({ q: 'x'.repeat(MAX_SEARCH_QUERY_CHARS) }).success).toBe(
+      true,
+    );
+    expect(FILES_PROBLEM_CODES.invalid_search_query).toBe(400);
+  });
+
+  it('refuses a missing, blank or oversized q, a bad limit, and an unknown parameter', () => {
+    for (const bad of [
+      {},
+      { q: '   ' },
+      { q: 'x'.repeat(MAX_SEARCH_QUERY_CHARS + 1) },
+      { q: 'a', limit: '0' },
+      { q: 'a', limit: String(MAX_SEARCH_LIMIT + 1) },
+      { q: 'a', limit: '1.5' },
+      { q: 'a', path: 'manuals' },
+    ]) {
+      expect(FileSearchQuerySchema.safeParse(bad).success).toBe(false);
+    }
+  });
+
+  it('reads a hit with or without a page, and refuses page 0, a negative score and extra keys', () => {
+    const hit = { path: 'manuals/a.pdf', page: 3, snippet: '…保守手順…', score: 0.5 };
+    expect(FileSearchHitSchema.safeParse(hit).success).toBe(true);
+    expect(FileSearchHitSchema.safeParse({ ...hit, page: null }).success).toBe(true);
+    expect(FileSearchHitSchema.safeParse({ ...hit, page: 0 }).success).toBe(false);
+    expect(FileSearchHitSchema.safeParse({ ...hit, score: -1 }).success).toBe(false);
+    expect(FileSearchHitSchema.safeParse({ ...hit, fileId: 'x' }).success).toBe(false);
+    expect(FileSearchResponseSchema.safeParse({ hits: [hit], pending: 0 }).success).toBe(true);
+    expect(FileSearchResponseSchema.safeParse({ hits: [hit] }).success).toBe(false);
+    expect(FileSearchResponseSchema.safeParse({ hits: [], pending: -1 }).success).toBe(false);
   });
 });

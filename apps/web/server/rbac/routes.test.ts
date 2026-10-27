@@ -70,11 +70,11 @@ import {
   listUsers,
   revokeApiKey,
 } from './handlers';
-import type { ApiResult } from './http';
+import type { ApiResult } from '../http/result';
 import { createMemoryDirectory } from './memory-directory';
 import { ROLES, type Role } from './roles';
-import { clearRbacRuntime } from './runtime';
 import { installRbacHarness, TEST_WORKSPACE_ID, type RbacHarness } from './testing';
+import { clearApplicationContext } from '../application-context';
 
 type Handler = (
   request: Request,
@@ -626,7 +626,7 @@ describe('a caller cannot change or remove a member who outranks it', () => {
 
 describe('the gate is reached before anything else the handler does', () => {
   it('answers 503 when no runtime is configured, on every route', async () => {
-    clearRbacRuntime();
+    clearApplicationContext();
     for (const route of WIRED) {
       const request = new Request(`https://control-plane.test${route.concrete}`, {
         method: route.method,

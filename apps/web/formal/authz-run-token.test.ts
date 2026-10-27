@@ -21,7 +21,7 @@ import { mintBrowserToken } from '../server/rbac/browser-token';
 import { decide } from '../server/rbac/decide';
 import { installRbacApi } from '../server/composition/session-rbac';
 import { requireSessionScopeMatch } from '../server/runs/api';
-import type { Principal } from '../server/runs/environment';
+import type { RunPrincipal } from '../server/runs/environment';
 import { mayOpenSession } from '../server/surfaces/public/conditions';
 import { asRecord, asString, loadVectors } from '../../../tests/formal/vectors';
 
@@ -152,7 +152,7 @@ describe.skipIf(!hasDatabase)(
 
 /** The session-scope half a run route applies after the row (or the turn's body) is in hand. */
 function sessionScopeOutcome(
-  principal: Principal,
+  principal: RunPrincipal,
   target: string | null,
 ): { decision: string; status: number | null } {
   const refused = requireSessionScopeMatch(principal, target);
@@ -173,7 +173,7 @@ describe('authz-run-token: a visitor token against decide() and requireSessionSc
     const answer = asRecord(expected, id);
     const scope = { kind: 'session' as const, id: asString(args['scopeSessionId'], 'scope') };
     const target = args['sessionId'] === null ? null : asString(args['sessionId'], 'sessionId');
-    const principal: Principal = {
+    const principal: RunPrincipal = {
       principalId: 'visitor',
       ownerPrincipalId: 'visitor',
       userId: null,

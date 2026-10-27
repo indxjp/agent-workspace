@@ -104,6 +104,50 @@ export function narrowFileGrants(
   }));
 }
 
+/** One folder of a storage connection an agent may reach, by the connection's id. */
+export interface StorageGrantRef {
+  readonly connectionId: string;
+  readonly prefix: string;
+  readonly access: FileAccessMode;
+}
+
+/**
+ * The same ceiling for storage grants: `'read-write'` is stored only while the agent's own
+ * `writeFiles` permission is on, otherwise it is narrowed to `'read'`. A folder listed twice keeps
+ * one grant, the wider of the two before the ceiling is applied.
+ */
+export function narrowStorageGrants(
+  grants: readonly StorageGrantRef[],
+  permissions: AgentPermissions,
+): readonly StorageGrantRef[] {
+  const byFolder = new Map<string, StorageGrantRef>();
+  for (const grant of grants) {
+    const key = `${grant.connectionId}\n${grant.prefix}`;
+    const previous = byFolder.get(key);
+    byFolder.set(key, previous?.access === 'read-write' ? previous : grant);
+  }
+  return [...byFolder.values()].map((grant) => ({
+    ...grant,
+    access: permissions.writeFiles || grant.access === 'read' ? grant.access : 'read',
+  }));
+}
+
+/**
+ * What a `storage-grant-changed` audit row says about the grants an agent now holds: each one's
+ * connection id, access and prefix (never a credential), or `null` when they equal `before`.
+ */
+export function storageGrantChange(
+  before: readonly StorageGrantRef[],
+  after: readonly StorageGrantRef[],
+): string | null {
+  const keys = (list: readonly StorageGrantRef[]): string[] =>
+    list.map((grant) => `${grant.connectionId} ${grant.access} ${grant.prefix}`).sort();
+  const was = keys(before);
+  const now = keys(after);
+  if (was.join('\n') === now.join('\n')) return null;
+  return now.length === 0 ? 'no storage grants' : now.join('; ');
+}
+
 /** The by-name references a definition makes (a file by path). */
 export interface DefinitionReferences {
   /** `null` or `'default'` follows C7; see {@link resolveModelConnection}. */
@@ -114,6 +158,8 @@ export interface DefinitionReferences {
    */
   readonly runtimeProfileName: string | null;
   readonly skills: readonly string[];
+  /** The published revision each listed skill is pinned to, by skill name; others follow `latest`. */
+  readonly skillRevisions?: Readonly<Record<string, number>> | undefined;
   readonly connectors: readonly string[];
   readonly files: readonly { readonly path: string; readonly access: FileGrant['access'] }[];
 }
@@ -127,8 +173,12 @@ export interface ResolvedReferences {
    */
   readonly runtimeProfileId: string | null;
   readonly skillIds: readonly string[];
+  /** The same pins, by skill id. Their existence is checked by `checkSkillRevisionPins`. */
+  readonly skillRevisions?: Readonly<Record<string, number>> | undefined;
   readonly connectorIds: readonly string[];
   readonly files: readonly FileGrant[];
+  /** Resolved by the deploy pipeline (the connection lookup is not the repository's); absent means none. */
+  readonly storageGrants?: readonly StorageGrantRef[] | undefined;
 }
 
 export type ResolveDefinitionOutcome =
@@ -137,10 +187,17 @@ export type ResolveDefinitionOutcome =
       readonly kind: 'unresolved';
       readonly missing: readonly DefinitionReference[];
       readonly ambiguous: readonly DefinitionReference[];
+      /** Skills that exist but are being deleted: a conflict (409), not a missing name. Set when non-empty. */
+      readonly deleting?: readonly DefinitionReference[];
     };
 
-/** The candidate rows of each kind; an absent kind has none. */
-type ReferenceRows = Partial<Record<AgentDefinitionReferenceKind, readonly NamedRow[]>>;
+/**
+ * The candidate rows of each kind; an absent kind has none. `deletingSkill` holds the skills whose
+ * delete is under way: they do not resolve, and are reported as `deleting` rather than missing.
+ */
+type ReferenceRows = Partial<Record<AgentDefinitionReferenceKind, readonly NamedRow[]>> & {
+  readonly deletingSkill?: readonly NamedRow[];
+};
 
 /**
  * C7: `null` and `'default'` mean "the connection named `default`, else the deployment default".
@@ -208,11 +265,25 @@ export function resolveFromRows(
     ...(connection.kind === 'unresolved' ? [connection.matches] : []),
     profileMatches,
   ];
-  const missing = all.flatMap((matches) => matches.missing);
+  const deletingNames = new Set((rows.deletingSkill ?? []).map((row) => row.name));
+  const isDeleting = (reference: DefinitionReference): boolean =>
+    reference.kind === 'skill' && deletingNames.has(reference.name);
+  const allMissing = all.flatMap((matches) => matches.missing);
+  const missing = allMissing.filter((reference) => !isDeleting(reference));
+  const deleting = allMissing.filter(isDeleting);
   const ambiguous = all.flatMap((matches) => matches.ambiguous);
-  if (connection.kind === 'unresolved' || missing.length > 0 || ambiguous.length > 0) {
-    return { kind: 'unresolved', missing, ambiguous };
+  if (
+    connection.kind === 'unresolved' ||
+    missing.length > 0 ||
+    deleting.length > 0 ||
+    ambiguous.length > 0
+  ) {
+    return { kind: 'unresolved', missing, ambiguous, ...(deleting.length > 0 ? { deleting } : {}) };
   }
+  const pins = Object.entries(references.skillRevisions ?? {}).flatMap(([name, revision]) => {
+    const id = skillMatches.ids.get(name);
+    return id === undefined ? [] : [[id, revision] as const];
+  });
   return {
     kind: 'resolved',
     references: {
@@ -222,6 +293,7 @@ export function resolveFromRows(
           ? defaultRuntimeProfileId
           : (profileMatches.ids.get(references.runtimeProfileName) ?? null),
       skillIds: idsOf(references.skills, skillMatches.ids),
+      ...(pins.length > 0 ? { skillRevisions: Object.fromEntries(pins) } : {}),
       connectorIds: idsOf(references.connectors, connectorMatches.ids),
       files: references.files.flatMap((grant) => {
         const fileId = fileMatches.ids.get(grant.path);

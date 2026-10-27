@@ -1,0 +1,56 @@
+---
+title: "Storage connections"
+description: "Connect a bucket or folder, rotate its credential and list it from the terminal with aw storage."
+---
+
+<Info>
+
+- **Read this when:** you connect an S3, GCS, Azure Blob or `file://` location to a workspace, or
+  want to see what an agent will be able to browse in it.
+- **You will learn:** the `aw storage` commands, how a credential reaches `aw` without ever being a
+  flag, and how `aw storage ls` reads its argument.
+
+</Info>
+
+`aw storage` manages the workspace's storage connections (the storage design, §05) and lists the folders they allow. Every command takes a connection **name or id**.
+
+| Command                                                  | Does                                                     |
+| -------------------------------------------------------- | -------------------------------------------------------- |
+| `aw storage connections list`                            | Every connection                                         |
+| `aw storage connections get <name\|id>`                  | One connection                                           |
+| `aw storage connections create --name … --storage-url …` | Connect a bucket or folder                               |
+| `aw storage connections update <name\|id> [--name …]`    | Rename it, move it, or change its allowed folders        |
+| `aw storage connections credential <name\|id>`           | Replace the stored credential                            |
+| `aw storage connections test <name\|id>`                 | Open it and list one entry; exits 1 when the probe fails |
+| `aw storage connections remove <name\|id>`               | Delete it; refused while an agent holds a grant on it    |
+| `aw storage ls <name>[/<prefix>]`                        | List a folder, every page                                |
+
+`--url` is the control-plane URL on every `aw` command, so the bucket location is `--storage-url`.
+
+## The credential is a file, never a flag
+
+A credential is read from `--credential-file <path>`, or from stdin with `--credential-file -`. There is no flag that takes the secret itself, so it never lands in your shell history or the process list. The file is JSON shaped by provider:
+
+```json title="credential.json (illustrative placeholders)" claim="illustrative"
+{ "provider": "s3", "accessKeyId": "<access key id>", "secretAccessKey": "<secret access key>" }
+```
+
+An S3 credential may add `"sessionToken"` for temporary (STS) credentials; they expire, so the connection then needs a new credential with `aw storage connections credential`. The other shapes are `{ "provider": "gcs", "serviceAccountJson": "<json>" }` (a service-account key; or `{ "provider": "gcs", "accessToken": "<token>" }`, a short-lived token that needs `?project=` in the storage URL and expires in about an hour; rotate it with `aw storage connections credential <name> --credential-file <path>`), `{ "provider": "azblob", "accountKey": "<key>" }` (or `"sasToken"`) and `{ "provider": "file" }`.
+
+```bash title="Connect and list (illustrative)" claim="illustrative"
+aw storage connections create --name acme --storage-url s3://acme-bucket \
+  --allow reports --credential-file credential.json
+aw storage ls acme/reports/
+```
+
+`aw` never prints a credential: not in a result, not with `--json`, not in an error. A file that cannot be read or is not a credential is refused with a fixed message that does not repeat its contents.
+
+## Listing a folder
+
+`aw storage ls <name>/<prefix>` splits at the **first** `/`; everything after it is the prefix, passed on unchanged, so `aw storage ls "acme/Q3 reports/"` works. Without a prefix it lists the connection's allowed folders. It follows every page; `--json` prints one array of `{ path, kind, size? }`.
+
+## Exit codes and permissions
+
+Exit codes are those of [Output and exit codes](/cli/output-and-exit-codes): a refusal such as `storage_connection_prefix_not_allowed`, `storage_connection_not_found`, `storage_connection_in_use` or `storage_connection_credential_required` prints one `error: <code>: <message>` line and exits 1; a bad flag or credential file exits 2.
+
+Owners and admins manage connections. Builders and members can list, get, test and browse them.

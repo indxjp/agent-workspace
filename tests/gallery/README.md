@@ -16,8 +16,8 @@ GALLERY_WRITE=1 pnpm vitest run --project tests tests/gallery/benchmark.test.ts 
 | Path | What it is |
 | --- | --- |
 | `<use case>/` | One project as a developer would write it: `agent-workspace.yaml`, `agents/`, `surfaces/`, `skills/`, `evals/`, its own MCP servers (`mcp/`) or tools (`tools/`, `apis/`), Japanese fixture data (`data/`), the backend code around the agent (`backend/`), its `benchmark.ts` and its tests. |
-| `shared/` | Code several use cases share: the MCP server kit, the Japanese bigram index, `runAndRead`, the citation parser, and the `office-reader` skill (xlsx and docx with Node alone). |
-| `harness/` | Test machinery only: the project loader, the MCP client, the scripted workspace, the gap probes, the benchmark model and the registry. |
+| `shared/` | Code several use cases share: the MCP server kit, the Japanese bigram index, `runAndRead`, the citation parser. The `office-reader` skill (PDF, xlsx, docx and DXF with Node alone) is a built-in: it lives in `packages/skills-office`. |
+| `harness/` | Test machinery only: the project loader, the MCP client, the scripted workspace, the doubles for the platform's `search_files` tool and its `openapiTool()` gateway, the gap probes, the benchmark model and the registry. |
 | `benchmark.test.ts` | Every verdict has evidence that exists; every tutorial's status table matches its benchmark. |
 | `probes.test.ts` | Every gap the gallery reports is still a gap. |
 

@@ -553,7 +553,7 @@ describe('segment (issue #488)', () => {
 
 const draft: AgentVersionDraftInput = (() => {
   const version = fixtures.agentVersion();
-  return { summary: version.summary, via: version.via, body: version.body };
+  return { summary: version.summary, via: 'api', body: version.body };
 })();
 
 const policy: AgentPolicy = {
@@ -649,6 +649,8 @@ const SEGMENT_OPERATIONS: readonly SegmentOperation[] = [
   { name: 'runs.start', call: (aw, id) => aw.runs.start(id, { prompt: 'hello' }) },
   { name: 'runs.get', call: (aw, id) => aw.runs.get(id) },
   { name: 'runs.interrupt', call: (aw, id) => aw.runs.interrupt(id) },
+  { name: 'runs.approve', call: (aw, id) => aw.runs.approve(id) },
+  { name: 'runs.reject', call: (aw, id) => aw.runs.reject(id) },
   { name: 'runs.revokeTokens', call: (aw, id) => aw.runs.revokeTokens(id) },
   { name: 'runs.rate', call: (aw, id) => aw.runs.rate(id, { rating: 'down' }) },
   { name: 'runs.events', call: (aw, id) => aw.runs.events(id).next() },
@@ -678,7 +680,20 @@ const SEGMENT_OPERATIONS: readonly SegmentOperation[] = [
   { name: 'skills.get', call: (aw, id) => aw.skills.get(id) },
   { name: 'skills.export', call: (aw, id) => aw.skills.export(id) },
   { name: 'skills.update', call: (aw, id) => aw.skills.update(id, {}) },
+  { name: 'skills.publish', call: (aw, id) => aw.skills.publish(id, { files: [] }) },
   { name: 'skills.remove', call: (aw, id) => aw.skills.remove(id) },
+  // storage.ts (`get` takes the segment path only for a UUID, so it refuses nothing)
+  { name: 'storage.connections.update', call: (aw, id) => aw.storage.connections.update(id, {}) },
+  { name: 'storage.connections.remove', call: (aw, id) => aw.storage.connections.remove(id) },
+  {
+    name: 'storage.connections.rotateCredential',
+    call: (aw, id) => aw.storage.connections.rotateCredential(id, { provider: 'file' }),
+  },
+  { name: 'storage.connections.test', call: (aw, id) => aw.storage.connections.test(id) },
+  {
+    name: 'storage.connections.browse',
+    call: (aw, id) => aw.storage.connections.browse(id).next(),
+  },
   // team.ts
   { name: 'team.members.setRole', call: (aw, id) => aw.team.members.setRole(id, 'viewer') },
   { name: 'team.members.remove', call: (aw, id) => aw.team.members.remove(id) },

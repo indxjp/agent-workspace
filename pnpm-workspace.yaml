@@ -48,13 +48,46 @@ allowBuilds:
 
 # Version overrides, decided explicitly for the same reason the build-script answers above are.
 #
-# undici: nx@23.3.0 pins 7.29.0, inside GHSA-rfgv-xxqx-mfg5 and GHSA-w293-vg96-wgc3 (high, patched in
-# >=7.29.1), which fail `pnpm audit --audit-level high`. nx is build-time only and never enters a
-# runtime image; the selector keeps the major. Remove it once `pnpm why undici` shows nx resolving
-# >=7.29.1 on its own.
+# undici 7: 7.30.0 is inside GHSA-4qv8-2p9j-2685, GHSA-f72v-6w45-q472 and GHSA-xjj6-f33q-929c
+# (high, patched in >=7.30.1), which fail `pnpm audit --audit-level high`. Two dependents still allow
+# it: nx@23.3.0 (build-time only) pins 7.29.0 exactly, and `@ai-sdk/provider-utils` (5.0.54, 5.0.58)
+# declares ^7.29.0 and is in the runtime tree through `@mastra/core` and `@ai-sdk/anthropic`/`openai`.
+# So the override applies to runtime images too, and is generated into new projects (below). The
+# selector keeps the major. Remove it, and its `RUNTIME_OVERRIDES` entry in the same change, once
+# `pnpm why undici` shows nx and every `@ai-sdk/provider-utils` resolving >=7.30.1 without it.
+#
+# undici 8: the same three advisories are patched in >=8.12.2; `@earendil-works/pi-ai` 1.1.0 (the
+# Pi engine, runtime tree) resolves 8.10.2. Remove it once `pnpm why undici` shows >=8.12.2 without it.
+#
+# body-parser: 2.3.0 is inside GHSA-27r3-jxmh-p828 (high, patched in >=2.4.0); express@5.2.1 under
+# `@modelcontextprotocol/sdk` (runtime tree) locks it. Remove it once express resolves >=2.4.0.
+#
+# @azure/msal-node: 6.x is inside GHSA-xcx6-jx8p-x3h5 (high, patched only in >=7.1.0) and
+# `@azure/identity` 4.14.0, the latest, still declares ^6.0.0. Identity only uses the
+# ConfidentialClientApplication/PublicClientApplication API that 7.x keeps. Remove it once
+# `@azure/identity` declares ^7.1.0.
+#
+# @esbuild-kit/core-utils>esbuild: drizzle-kit@0.31.11 (latest stable) still depends on the
+# deprecated @esbuild-kit/esm-loader, whose core-utils pins esbuild ~0.18.20, inside
+# GHSA-67mh-4wv8-2f99 (fixed in >=0.25.0). drizzle-kit itself uses esbuild ^0.25.4, so the override
+# moves the loader onto the same esbuild. Dev-only (drizzle-kit is a devDependency); remove it once
+# drizzle-kit drops @esbuild-kit/esm-loader.
+#
+# @modelcontextprotocol/{server,client,core}: @mastra/mcp (2.3.0 through 2.5.0, the latest) pins
+# server, client and core 2.2.0 exactly; server 2.2.0 is inside CVE-2026-111768 and CVE-2026-111770
+# (high, fixed in 2.3.0), which fail the release trivy gate on the runner image. The three are
+# released together and server/client depend on core at the same exact version, so all three move.
+# Remove these once `pnpm why @modelcontextprotocol/server` shows >=2.3.0 without them.
 #
 # Every override here that reaches the runtime tree is also generated into a new project, since
 # only the installing project's root can override (`RUNTIME_OVERRIDES` in
 # packages/sdk/src/project/render.ts; install-scripts.test.ts fails when one is missing).
 overrides:
-  'undici@>=7.0.0 <7.29.1': '^7.29.1'
+  'undici@>=7.0.0 <7.30.1': '^7.30.1'
+  'undici@>=8.0.0 <8.12.2': '^8.12.2'
+  'body-parser@>=2.0.0 <2.4.0': '^2.4.0'
+  '@azure/msal-node@>=5.0.0-beta.0 <7.1.0': '^7.1.0'
+  '@esbuild-kit/core-utils>esbuild': '0.25.12'
+  '@modelcontextprotocol/server@>=2.0.0 <2.3.0': '^2.3.0'
+  '@modelcontextprotocol/client@>=2.0.0 <2.3.0': '^2.3.0'
+  '@modelcontextprotocol/core@>=2.0.0 <2.3.0': '^2.3.0'

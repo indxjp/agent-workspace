@@ -27,6 +27,8 @@ The order is the wire order and is not re-sorted:
 - `'agent.result'`
 - `'agent.native'`
 - `'agent.malformed'`
+- `'agent.approval.requested'`
+- `'agent.handoff'`
 
 ## AGENT_FRAME_RAW_MAX_BYTES
 
@@ -85,6 +87,35 @@ adapter cannot name — never a default that hides an unmapped `execute`.
 - `'mcp'`
 - `'other'`
 
+## AgentApprovalRequestedFrame
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `toolCallId` | `string` | Yes |  |
+| `toolName` | `string` | Yes |  |
+| `canonicalCall` | `string` | Yes |  |
+| `engine` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
+| `raw` | `unknown` | Yes | The engine-native message, verbatim, capped by `capAgentFrameRaw`. Typed `unknown` deliberately: it is another vendor's shape and this contract makes no promise about it. |
+| `frame` | `"agent.approval.requested"` | Yes |  |
+
+## AgentApprovalRequestedFrameSchema
+
+`agent.approval.requested` — the engine stopped before a tool call the agent requires approval
+for (ADR-0145). It is the last frame of the paused run, followed by `run.status`
+`awaiting_approval`.
+
+`toolName` and `canonicalCall` are what `RunResource.pendingApproval` carries; `toolCallId` is
+the engine's id for the call it declined to run.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `toolCallId` | `string` | Yes |  |
+| `toolName` | `string` | Yes |  |
+| `canonicalCall` | `string` | Yes |  |
+| `engine` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
+| `raw` | `unknown` | Yes | The engine-native message, verbatim, capped by `capAgentFrameRaw`. Typed `unknown` deliberately: it is another vendor's shape and this contract makes no promise about it. |
+| `frame` | `"agent.approval.requested"` | Yes |  |
+
 ## AgentFrame
 
 - `AgentSessionFrame`
@@ -96,6 +127,8 @@ adapter cannot name — never a default that hides an unmapped `execute`.
 - `AgentResultFrame`
 - `AgentNativeFrame`
 - `AgentMalformedFrame`
+- `AgentApprovalRequestedFrame`
+- `AgentHandoffFrame`
 
 ## AgentFrameName
 
@@ -108,6 +141,8 @@ adapter cannot name — never a default that hides an unmapped `execute`.
 - `"agent.result"`
 - `"agent.native"`
 - `"agent.malformed"`
+- `"agent.approval.requested"`
+- `"agent.handoff"`
 
 ## AgentFrameRawTruncation
 
@@ -150,6 +185,33 @@ Every neutral frame, discriminated by the `frame` field that repeats its `event:
 - `AgentResultFrame`
 - `AgentNativeFrame`
 - `AgentMalformedFrame`
+- `AgentApprovalRequestedFrame`
+- `AgentHandoffFrame`
+
+## AgentHandoffFrame
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `engine` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
+| `raw` | `unknown` | Yes | The engine-native message, verbatim, capped by `capAgentFrameRaw`. Typed `unknown` deliberately: it is another vendor's shape and this contract makes no promise about it. |
+| `frame` | `"agent.handoff"` | Yes |  |
+| `reason` | `undefined \| string` | No |  |
+
+## AgentHandoffFrameSchema
+
+`agent.handoff` — the agent handed the conversation to a person by calling its
+`handoff_to_person` tool (ADR-0145 D4). It is the last agent frame of a run that still ends
+`completed`; the session continues with an ordinary next prompt.
+
+`reason` is the model's own words and is for the operator, not for the visitor: an operator's
+stream carries it, and a visitor's (a session-scoped browser token's) omits it.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `engine` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
+| `raw` | `unknown` | Yes | The engine-native message, verbatim, capped by `capAgentFrameRaw`. Typed `unknown` deliberately: it is another vendor's shape and this contract makes no promise about it. |
+| `frame` | `"agent.handoff"` | Yes |  |
+| `reason` | `undefined \| string` | No |  |
 
 ## AgentMalformedFrame
 
@@ -282,6 +344,7 @@ frame" invariant holds without the neutral set having to grow to cover one engin
 | `engine` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
 | `raw` | `unknown` | Yes | The engine-native message, verbatim, capped by `capAgentFrameRaw`. Typed `unknown` deliberately: it is another vendor's shape and this contract makes no promise about it. |
 | `frame` | `"agent.result"` | Yes |  |
+| `output` | `undefined \| Readonly<{ text: string; structured: unknown; }>` | No | What the engine produced for its turn (ADR-0143), present when it returned a final answer. Authoritative only once the run is `completed`; `RunResource.output` is the record. |
 
 ## AgentResultFrameSchema
 
@@ -302,6 +365,7 @@ its own — `packages/core`'s `classifyRunCost` is the gate that decides whether
 | `engine` | `"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes |  |
 | `raw` | `unknown` | Yes | The engine-native message, verbatim, capped by `capAgentFrameRaw`. Typed `unknown` deliberately: it is another vendor's shape and this contract makes no promise about it. |
 | `frame` | `"agent.result"` | Yes |  |
+| `output` | `undefined \| Readonly<{ text: string; structured: unknown; }>` | No | What the engine produced for its turn (ADR-0143), present when it returned a final answer. Authoritative only once the run is `completed`; `RunResource.output` is the record. |
 
 ## AgentSessionFrame
 
@@ -517,6 +581,18 @@ event-read path must upgrade before serving it.
 isLegacyRelayedEventName(name: string): name is RelayedEventName
 ```
 
+## PLATFORM_EVENT_NAMES
+
+The durable event names only the platform writes, in wire order.
+
+- `RUN_STATUS_EVENT`
+- `RUN_WARNING_EVENT`
+
+## PlatformEventName
+
+- `"run.status"`
+- `"run.warning"`
+
 ## RELAYED_EVENT_NAMES
 
 The `event:` names the runner relayed **before ENG-03 (#302)**: its *classification* of one
@@ -569,11 +645,19 @@ The durable event the platform appends on every run status change.
 
 Value: `'run.status'`
 
+## RUN_WARNING_EVENT
+
+The durable event the platform appends when a run start has something to tell the caller
+(ADR-0146 Decision 3), written before the run's first agent frame. It is not an agent frame and
+says nothing about the run's outcome: a client shows it as a notice and keeps reading.
+
+Value: `'run.warning'`
+
 ## RunFailedFrameData
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
-| `status` | `"unknown" \| "completed" \| "failed" \| "running" \| "queued" \| "cancelled"` | Yes |  |
+| `status` | `"unknown" \| "completed" \| "failed" \| "queued" \| "running" \| "awaiting_approval" \| "cancelled"` | Yes |  |
 | `message` | `string` | Yes |  |
 
 ## RunFailedFrameDataSchema
@@ -584,14 +668,14 @@ with `Last-Event-ID` is then the right thing to do.
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
-| `status` | `"unknown" \| "completed" \| "failed" \| "running" \| "queued" \| "cancelled"` | Yes |  |
+| `status` | `"unknown" \| "completed" \| "failed" \| "queued" \| "running" \| "awaiting_approval" \| "cancelled"` | Yes |  |
 | `message` | `string` | Yes |  |
 
 ## RunStatusEventData
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
-| `status` | `"completed" \| "failed" \| "running" \| "queued" \| "cancelled"` | Yes |  |
+| `status` | `"completed" \| "failed" \| "queued" \| "running" \| "awaiting_approval" \| "cancelled"` | Yes |  |
 | `error` | `null \| string` | Yes | The safe public failure text, or `null`. |
 
 ## RunStatusEventDataSchema
@@ -600,8 +684,27 @@ with `Last-Event-ID` is then the right thing to do.
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
-| `status` | `"completed" \| "failed" \| "running" \| "queued" \| "cancelled"` | Yes |  |
+| `status` | `"completed" \| "failed" \| "queued" \| "running" \| "awaiting_approval" \| "cancelled"` | Yes |  |
 | `error` | `null \| string` | Yes | The safe public failure text, or `null`. |
+
+## RunWarningEventData
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `code` | `string` | Yes |  |
+| `message` | `undefined \| string` | No |  |
+
+## RunWarningEventDataSchema
+
+`data` of a `RUN_WARNING_EVENT` frame. `code` is stable and machine-readable
+(`attachments_removed_shell`: the run's attachments are read-only grants, so it cannot run
+commands); `message` is optional human text. A client that does not know a `code` still shows
+the notice.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `code` | `string` | Yes |  |
+| `message` | `undefined \| string` | No |  |
 
 ## StreamResetFrameData
 

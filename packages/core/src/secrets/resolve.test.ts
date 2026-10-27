@@ -21,7 +21,7 @@ import { workspaces } from '../db/schema/workspaces.js';
 import { sealSecret } from './envelope.js';
 import { loadMasterKey, MASTER_KEY_ENV_VAR, type MasterKey } from './master-key.js';
 import { createDatabaseSecretsRepositoryProvider } from './repository.js';
-import { resolveSecretByName } from './resolve.js';
+import { resolveSecretById, resolveSecretByName } from './resolve.js';
 
 const rawUrl = process.env['TEST_DATABASE_URL'];
 const hasDatabase = rawUrl !== undefined && rawUrl.trim() !== '';
@@ -130,5 +130,81 @@ describe.skipIf(!hasDatabase)('resolveSecretByName — PostgreSQL', () => {
     await expect(
       resolveSecretByName(isolated.db, scope, masterKey, 'ROTATED_AWAY'),
     ).rejects.toThrow(/master key/);
+  });
+});
+
+describe.skipIf(!hasDatabase)('resolveSecretById — PostgreSQL', () => {
+  let isolated: IsolatedTestDatabase;
+  const masterKey: MasterKey = loadMasterKey({
+    [MASTER_KEY_ENV_VAR]: crypto.randomBytes(32).toString('hex'),
+  });
+
+  beforeAll(async () => {
+    isolated = await createIsolatedTestDatabase('aw_rfc7_resolve_by_id');
+  }, 180_000);
+
+  afterAll(async () => {
+    await isolated.close();
+  });
+
+  async function workspaceScope(id: string) {
+    await isolated.db.insert(workspaces).values({ id, slug: `ws-${id}`, name: 'W' });
+    const scope = await createDatabaseWorkspaceScopeResolver(isolated.db).forWorkspaceId(id);
+    if (scope === null) throw new Error('fixture workspace does not resolve');
+    return scope;
+  }
+
+  async function createSecret(
+    scope: Awaited<ReturnType<typeof workspaceScope>>,
+    name: string,
+    value: string,
+    key: MasterKey = masterKey,
+  ): Promise<string> {
+    const outcome = await createDatabaseSecretsRepositoryProvider(isolated.db)
+      .forScope(scope)
+      .create({ name, envelope: sealSecret(key, Buffer.from(value)) });
+    if (outcome.kind !== 'created') throw new Error(`expected created, got ${outcome.kind}`);
+    return outcome.secret.id;
+  }
+
+  it('decrypts the plaintext of the secret with that id', async () => {
+    const scope = await workspaceScope(crypto.randomUUID());
+    await createSecret(scope, 'DECOY', 'decoy-value');
+    const id = await createSecret(scope, 'BY_ID', 'value-by-id');
+
+    const resolved = await resolveSecretById(isolated.db, scope, masterKey, id);
+    expect(resolved?.value.toString('utf8')).toBe('value-by-id');
+    expect(resolved?.name).toBe('BY_ID');
+  });
+
+  it('answers null — never the value — for an id that exists only in another workspace', async () => {
+    const scopeA = await workspaceScope(crypto.randomUUID());
+    const scopeB = await workspaceScope(crypto.randomUUID());
+    const id = await createSecret(scopeA, 'CROSS_TENANT_BY_ID', 'workspace-a-only');
+
+    await expect(resolveSecretById(isolated.db, scopeB, masterKey, id)).resolves.toBeNull();
+  });
+
+  it('answers null for an unknown id and for an id that is not a UUID, without a database error', async () => {
+    const scope = await workspaceScope(crypto.randomUUID());
+
+    await expect(
+      resolveSecretById(isolated.db, scope, masterKey, crypto.randomUUID()),
+    ).resolves.toBeNull();
+    await expect(
+      resolveSecretById(isolated.db, scope, masterKey, 'mem-secret-1'),
+    ).resolves.toBeNull();
+  });
+
+  it('refuses to resolve a value wrapped under a different master key', async () => {
+    const scope = await workspaceScope(crypto.randomUUID());
+    const otherMasterKey = loadMasterKey({
+      [MASTER_KEY_ENV_VAR]: crypto.randomBytes(32).toString('hex'),
+    });
+    const id = await createSecret(scope, 'ROTATED_AWAY_BY_ID', 'other-key', otherMasterKey);
+
+    await expect(resolveSecretById(isolated.db, scope, masterKey, id)).rejects.toThrow(
+      /master key/,
+    );
   });
 });

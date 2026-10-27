@@ -81,6 +81,8 @@
  * `**\/*.{test,spec}.*` include never matches, so `pnpm test` does not collect it — and therefore
  * does not report it as *skipped*, which CI fails the job on. See `vitest.config.mjs` beside it.
  */
+import { clearApplicationContext } from '../../application-context';
+import { installTestDomains } from '../../application-context-fixtures';
 import { spawn, type ChildProcessByStdio } from 'node:child_process';
 import type { Readable } from 'node:stream';
 import { randomBytes } from 'node:crypto';
@@ -91,15 +93,10 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import {
-  createInMemoryWorkspaceScopeResolver,
-  type SessionRecord,
-  type SessionRepositoryProvider,
-} from '@agent-workspace/core/db';
-
 import { listSessions, listTranscriptSubkeys, loadTranscript } from '../api';
-import { installSessionApi, resetSessionApi, type SessionPrincipal } from '../environment';
+import type { SessionApiPrincipal } from '../environment';
 import { InMemoryTranscriptStore } from '../memory-store';
+import type { SessionRecord, SessionsStoreProvider } from '../store';
 import {
   appendSessionState,
   deleteSessionState,
@@ -147,7 +144,7 @@ const PROJECT_KEY = `${PROJECT_KEY_PREFIX}${randomBytes(6).toString('hex')}`;
 const WORKSPACE_ID = PROJECT_KEY;
 const USER_ID = 'c8b1f0de-6a2e-4a1f-9d3b-000000000009';
 const PRINCIPAL_ID = '44d596f5-511f-4bbd-8d56-8971e744f143';
-const PRINCIPAL: SessionPrincipal = {
+const PRINCIPAL: SessionApiPrincipal = {
   kind: 'user',
   principalId: PRINCIPAL_ID,
   ownerPrincipalId: PRINCIPAL_ID,
@@ -397,20 +394,24 @@ const SESSION_ROW: SessionRecord = {
   updatedAt: new Date(),
 };
 
-const SESSION_ROWS: SessionRepositoryProvider = {
-  forScope: () => ({
-    ensure: () => Promise.resolve({ kind: 'existing', session: SESSION_ROW }),
-    get: (id) => Promise.resolve(id === SESSION_ROW.id ? SESSION_ROW : null),
-    getByEngineSessionId: (id) =>
-      Promise.resolve(id === SESSION_ROW.engineSessionId ? SESSION_ROW : null),
-    list: () => Promise.resolve({ items: [SESSION_ROW], nextCursor: null }),
-    update: () => Promise.resolve({ kind: 'no-op', session: SESSION_ROW }),
-    archive: () => Promise.resolve({ kind: 'no-op', session: SESSION_ROW }),
-    restore: () => Promise.resolve({ kind: 'no-op', session: SESSION_ROW }),
-  }),
+const SESSION_ROWS: SessionsStoreProvider = {
+  forWorkspaceId: (workspaceId) =>
+    Promise.resolve(
+      workspaceId !== WORKSPACE_ID
+        ? null
+        : {
+            get: (id) => Promise.resolve(id === SESSION_ROW.id ? SESSION_ROW : null),
+            getByEngineSessionId: (id) =>
+              Promise.resolve(id === SESSION_ROW.engineSessionId ? SESSION_ROW : null),
+            list: () => Promise.resolve({ items: [SESSION_ROW], nextCursor: null }),
+            update: () => Promise.resolve({ kind: 'no-op', session: SESSION_ROW }),
+            archive: () => Promise.resolve({ kind: 'no-op', session: SESSION_ROW }),
+            restore: () => Promise.resolve({ kind: 'no-op', session: SESSION_ROW }),
+          },
+    ),
 };
 
-const RUNNER_PRINCIPAL: SessionPrincipal = {
+const RUNNER_PRINCIPAL: SessionApiPrincipal = {
   kind: 'runner',
   workspaceId: WORKSPACE_ID,
   runId: crypto.randomUUID(),
@@ -432,25 +433,26 @@ describe('W2-CP-07 · resume across a real process kill', () => {
       );
     }
 
-    installSessionApi({
-      // A real check, not a stub that authenticates everybody: the cookie and the bearer must be
-      // the ones this run minted. `apps/web/server/runs/acceptance` records why that matters.
-      authenticate: (request: Request): Promise<SessionPrincipal | null> => {
-        if (request.headers.get('authorization') === `Bearer ${RUN_TOKEN}`) {
-          return Promise.resolve(RUNNER_PRINCIPAL);
-        }
-        return Promise.resolve(request.headers.get('cookie') === COOKIE_VALUE ? PRINCIPAL : null);
+    installTestDomains({
+      sessions: {
+        // A real check, not a stub that authenticates everybody: the cookie and the bearer must be
+        // the ones this run minted. `apps/web/server/runs/acceptance` records why that matters.
+        authenticate: (request: Request): Promise<SessionApiPrincipal | null> => {
+          if (request.headers.get('authorization') === `Bearer ${RUN_TOKEN}`) {
+            return Promise.resolve(RUNNER_PRINCIPAL);
+          }
+          return Promise.resolve(request.headers.get('cookie') === COOKIE_VALUE ? PRINCIPAL : null);
+        },
+        // The production rule: a runner reaches only the session in its claim; the owner reaches it.
+        canAccessSession: (caller, id) =>
+          Promise.resolve(
+            caller.kind === 'runner' ? caller.sessionId === id : id === ENGINE_SESSION_ID,
+          ),
+        // The legacy store stays empty: nothing on the production path writes it any more.
+        store: new InMemoryTranscriptStore(),
+        stateStore: new InMemorySessionStateStore(),
+        sessions: SESSION_ROWS,
       },
-      // The production rule: a runner reaches only the session in its claim; the owner reaches it.
-      canAccessSession: (caller, id) =>
-        Promise.resolve(
-          caller.kind === 'runner' ? caller.sessionId === id : id === ENGINE_SESSION_ID,
-        ),
-      // The legacy store stays empty: nothing on the production path writes it any more.
-      store: new InMemoryTranscriptStore(),
-      stateStore: new InMemorySessionStateStore(),
-      sessions: SESSION_ROWS,
-      scopes: createInMemoryWorkspaceScopeResolver([{ id: WORKSPACE_ID, slug: WORKSPACE_ID }]),
     });
 
     server = createServer((incoming, outgoing) => {
@@ -517,7 +519,7 @@ describe('W2-CP-07 · resume across a real process kill', () => {
   }, 60_000);
 
   afterAll(async () => {
-    resetSessionApi();
+    clearApplicationContext();
     await new Promise<void>((resolve) => {
       server.close(() => resolve());
     });

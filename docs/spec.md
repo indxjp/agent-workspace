@@ -112,6 +112,10 @@ Specifically avoid adding things such as:
 
 unless they become absolutely necessary for the Claude Agent SDK runtime itself.
 
+One narrow exception (ADR-0147): on-demand text extraction from workspace files, and lexical
+PostgreSQL full-text search over that extracted text, are in scope. Vector databases, embeddings
+and RAG pipelines remain excluded, and extraction is never an ingestion pipeline.
+
 ---
 
 # 4. Architectural Principle
@@ -763,10 +767,6 @@ interface RuntimeDriver {
   ): Promise<AgentConnection>;
 
   destroy(runtime: RuntimeHandle): Promise<void>;
-
-  /** Optional. Only implemented when the driver cannot mount a volume. */
-  putFiles?(runtime: RuntimeHandle, archive: ReadableStream): Promise<void>;
-  getFiles?(runtime: RuntimeHandle, paths: string[]): Promise<ReadableStream>;
 }
 
 interface AgentConnection {
@@ -898,6 +898,7 @@ type RuntimeCapabilities = {
   gpu: boolean;
   managedByProvider: boolean;
   typicalStartMs: number | null;
+  fileTransfer: "push-archive" | "local-disk";
 };
 ```
 
@@ -1107,7 +1108,7 @@ Workspaces are ephemeral by default. Object storage is the source of truth (sect
 object storage → hydrate → /workspace → run → collect persistPaths → object storage
 ```
 
-Drivers that can mount a volume do so. Drivers that cannot (`aca-sessions`, `aws-agentcore`, `external`) implement `putFiles`/`getFiles` over the runtime HTTP contract instead. That is the entire reason those two optional methods exist.
+Every driver declares how files reach it in `RuntimeCapabilities.fileTransfer`: `push-archive` streams one tar archive to the runtime's `POST /files` and collects with `GET /files` (every sandbox), and `local-disk` extracts it on the control-plane host's own disk (`local`).
 
 ## 15.4 Advanced isolation
 
@@ -1128,6 +1129,13 @@ Do not automatically create embeddings.
 Do not create an indexing pipeline.
 
 Files are simply workspace files accessible by the Claude Agent SDK's file tools.
+
+One narrow exception (ADR-0147): a file's text may be extracted **on demand**, when an agent tool or
+an API request asks for it, never on upload and never by a background job over every file. The
+extracted text may be stored in PostgreSQL and searched lexically (`tsvector` / `tsquery`),
+scoped by the same tenant, workspace and RBAC rules as the file itself. There are still no
+embeddings, no vector column or store, no external search or extraction service, and no automatic
+retrieval injected into prompts.
 
 The UI should provide:
 
@@ -1150,8 +1158,25 @@ Allow:
 * rename
 * folders
 * preview metadata
+* read a file's extracted text, and search file text lexically (ADR-0147)
 * assign folders/files to an agent
 * read-only or read-write access
+
+A run's caller may also attach files to one run (ADR-0146). The request names catalogue file ids;
+each is authorised exactly as `GET /api/files/:id` would authorise it, and the run receives it as a
+`read` grant, so a run with attachments cannot run commands. Every refusal (no such id, another
+workspace's file, a file the caller's role may not read, a session-scoped token) is the same
+`404 file_not_found`, so a caller cannot tell a file that is not theirs from one that is not there.
+The `.attachments/` prefix is reserved for a session's own uploads. A workspace member cannot write
+under it or delete a file or folder in it (`400 reserved_path`), read it (`404 file_not_found`; it
+is also absent from a root listing) or assign a file in it to an agent or a project (`400
+unknown_file`); moving a file out of it by rename promotes it into the ordinary workspace. A session
+token may attach only a file under its own `.attachments/<sessionId>/` prefix, which it fills
+through `POST /api/sessions/:id/attachments` on a surface with `parts.attachments`: one file a
+request (10 MiB, name in the `name` query parameter), at most 20 files or 50 MiB a session, and 10
+uploads a minute a session. Any other id stays the same concealed `404`. The session retention pass
+(`AW_SESSION_TRANSCRIPT_RETENTION_DAYS`) deletes `.attachments/<sessionId>/` of each session whose
+stored conversation it purges; a promoted file is kept.
 
 Storage should use an abstraction like:
 
@@ -1665,6 +1690,10 @@ Create/edit/run agents, skills, files, connectors where permitted.
 ### Viewer
 
 Run permitted agents and view their own sessions.
+
+Roles are monotonic: a higher role always has at least the access of a lower role, in the order
+Owner, Admin, Builder, Viewer. Where a literal reading of the clauses above would give a lower role
+something a higher one lacks, the higher role gets it (ADR-0116, ADR-0152).
 
 Sharing rights follow the same four roles and add nothing new:
 
@@ -2320,6 +2349,7 @@ POST   /api/runs/:id/feedback
 
 GET    /api/sessions
 POST   /api/sessions/:id/messages
+POST   /api/sessions/:id/attachments   upload one file for a visitor session (ADR-0146; surface with parts.attachments)
 
 GET    /api/models
 POST   /api/model-connections
@@ -2376,6 +2406,14 @@ The one other prefix is `/mcp/`, where a project's public tool endpoint (ADR-013
 
 The OAuth 2.1 authorization server for endpoint clients (ADR-0134 part 3) lives under `/oauth/`, and its discovery documents under `/.well-known/`, because the OAuth and MCP specifications fix those paths. The discovery documents and the token and revocation endpoints are public by protocol: the last two authenticate the endpoint client, never a member. The consent page requires a browser session. An access token they issue is accepted only by the endpoint it names (`/mcp/projects/:name` or an agent's A2A endpoint, whose protected-resource metadata is declared with a mandate beside the A2A routes, ADR-0135).
 `/api/a2a/` is a protocol prefix, not a resource: A2A v0.3 fixes where a client finds an agent and its card (ADR-0135), so the two routes above are the only ones under it, they authorise as `POST /api/agents/:id/runs`, and `a2a` has no row in the §21 permission table.
+
+`POST /api/agents/:id/runs` takes an optional `attachments`: one to ten `{ "fileId" }` objects,
+without repeats, naming workspace files the run receives read-only (ADR-0146, §16). A file the
+caller cannot read is `404 file_not_found`; an agent whose permissions do not include `readFiles`
+is `422 run_attachments_unreadable`. An attachment over 10 MiB, more than 20 attachments, or attachments over 50 MiB in
+total (a session's earlier uploads count), are `422 run_attachments_too_large`, and an agent whose runtime profile uses the `local`
+driver, which is never handed session files, is `422 run_attachments_unsupported_runtime`. None
+of these creates a run.
 
 Do not invent RPC frameworks if ordinary HTTP is enough.
 
@@ -2510,6 +2548,9 @@ Explicitly treat the following as non-goals for the initial project:
 * observability platform
 * secret-manager replacement
 * identity-provider replacement
+
+RAG, embeddings and vector search stay non-goals. On-demand text extraction and lexical PostgreSQL
+full-text search over extracted text are not RAG and are in scope (ADR-0147).
 
 Sharing (section 20.6) is deliberately link-shaped and stops there. A share is a URL with a visibility
 setting. Explicitly not in scope: a public directory of agents, install counts, ratings, comments,
@@ -2718,12 +2759,16 @@ Runs
 
 Administration
   Models
+  Storage
   Users
   API Keys
   Runtimes
   Shared links
   Settings
 ```
+
+Storage is listed for workspace Owners and Admins only; other roles do not see the entry, and the
+pages behind it refuse them.
 
 Recent chats are listed directly under "New chat" in the sidebar, newest first, capped at about ten with
 a "See all" link into Runs. That list is navigation, not a feature area, and it must not grow filters,

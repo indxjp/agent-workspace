@@ -16,9 +16,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { createMemoryDirectory } from '../../../../../server/rbac/memory-directory';
 import { Principal } from '../../../../../server/rbac/principal';
-import { clearRbacRuntime, configureRbacRuntime } from '../../../../../server/rbac/runtime';
-import { configureProjectsRuntime } from '../../../../../server/projects/runtime';
 import { POST } from './route';
+import { installTestDomains } from '../../../../../server/application-context-fixtures';
+import { clearApplicationContext } from '../../../../../server/application-context';
 
 const WORKSPACE = '55555555-5555-4555-8555-555555555555';
 const WORKSPACE_HEADER = 'x-test-workspace';
@@ -121,6 +121,7 @@ function useMemoryRuntime(): Fixture {
     list: () => Promise.reject(new Error('unused')),
     get: (id) => Promise.resolve(fixture.agents.get(id) ?? null),
     create: () => Promise.reject(new Error('unused')),
+    createWithAssignments: () => Promise.reject(new Error('unused')),
     update: () => Promise.reject(new Error('unused')),
     delete: () => Promise.reject(new Error('unused')),
     replacePolicy: () => Promise.reject(new Error('unused')),
@@ -156,56 +157,61 @@ function useMemoryRuntime(): Fixture {
     update: () => Promise.reject(new Error('unused')),
     archive: () => Promise.reject(new Error('unused')),
     restore: () => Promise.reject(new Error('unused')),
+    discardIfUnused: () => Promise.resolve(false),
   };
 
-  configureProjectsRuntime({
-    resolveActor: (request) => {
-      const workspaceId = request.headers.get(WORKSPACE_HEADER);
-      const actor = request.headers.get(ACTOR_HEADER);
-      return Promise.resolve(
-        workspaceId === null || actor === null
-          ? { kind: 'unauthenticated', reason: 'no test workspace header' }
-          : {
-              kind: 'workspace',
-              workspaceId,
-              principalId: principalIdFor(actor),
-              ownerPrincipalId: principalIdFor(actor),
-              userId: actor,
-              userLabel: actor,
-            },
-      );
+  installTestDomains({
+    projects: {
+      resolveActor: (request) => {
+        const workspaceId = request.headers.get(WORKSPACE_HEADER);
+        const actor = request.headers.get(ACTOR_HEADER);
+        return Promise.resolve(
+          workspaceId === null || actor === null
+            ? { kind: 'unauthenticated', reason: 'no test workspace header' }
+            : {
+                kind: 'workspace',
+                workspaceId,
+                principalId: principalIdFor(actor),
+                ownerPrincipalId: principalIdFor(actor),
+                userId: actor,
+                userLabel: actor,
+              },
+        );
+      },
+      forWorkspace: () =>
+        Promise.resolve({ projects, files, mcpServers, audit, agents, sessions, agentVersions }),
     },
-    forWorkspace: () =>
-      Promise.resolve({ projects, files, mcpServers, audit, agents, sessions, agentVersions }),
   });
 
-  configureRbacRuntime({
-    directory: createMemoryDirectory({
-      users: [
-        { email: 'builder-a@example.test', name: 'A', workspaceId: WORKSPACE, role: 'builder' },
-        { email: 'builder-b@example.test', name: 'B', workspaceId: WORKSPACE, role: 'builder' },
-      ],
-    }),
-    identify: (request) => {
-      const workspaceId = request.headers.get(WORKSPACE_HEADER);
-      const actor = request.headers.get(ACTOR_HEADER);
-      return Promise.resolve(
-        workspaceId === null || actor === null
-          ? null
-          : Principal.fromApiKey({
-              principalId: principalIdFor(actor),
-              apiKeyId:
-                actor === 'builder-a@example.test'
-                  ? '9a5f38dd-dc4f-4b8d-8ccb-7e4578489b01'
-                  : 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-              workspaceId,
-              role: 'builder',
-              label:
-                actor === 'builder-a@example.test'
-                  ? 'Builder A session key'
-                  : 'Builder B session key',
-            }),
-      );
+  installTestDomains({
+    rbac: {
+      directory: createMemoryDirectory({
+        users: [
+          { email: 'builder-a@example.test', name: 'A', workspaceId: WORKSPACE, role: 'builder' },
+          { email: 'builder-b@example.test', name: 'B', workspaceId: WORKSPACE, role: 'builder' },
+        ],
+      }),
+      identify: (request) => {
+        const workspaceId = request.headers.get(WORKSPACE_HEADER);
+        const actor = request.headers.get(ACTOR_HEADER);
+        return Promise.resolve(
+          workspaceId === null || actor === null
+            ? null
+            : Principal.fromApiKey({
+                principalId: principalIdFor(actor),
+                apiKeyId:
+                  actor === 'builder-a@example.test'
+                    ? '9a5f38dd-dc4f-4b8d-8ccb-7e4578489b01'
+                    : 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+                workspaceId,
+                role: 'builder',
+                label:
+                  actor === 'builder-a@example.test'
+                    ? 'Builder A session key'
+                    : 'Builder B session key',
+              }),
+        );
+      },
     },
   });
 
@@ -230,7 +236,7 @@ function idContext(id: string): { params: Promise<{ id: string }> } {
 
 describe('POST /api/projects/:id/sessions (issue #125)', () => {
   afterEach(() => {
-    clearRbacRuntime();
+    clearApplicationContext();
   });
 
   it("starts a session, resolving and persisting the project's default agent in the same write", async () => {

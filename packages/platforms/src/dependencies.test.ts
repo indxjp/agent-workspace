@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 // line (it excludes `node_modules` and `dist`, which is where every npm entry point resolves), so
 // the allowlist is a test over the manifest and over every import specifier in `src`.
 const ALLOWED_DEPENDENCIES = ['@indx-workspace/contracts', 'yaml', 'zod'];
-const TEST_ONLY_SPECIFIERS = ['vitest'];
+const TEST_ONLY_SPECIFIERS = ['fast-check', 'vitest'];
 
 const SPECIFIER = /(?:\bfrom|\bimport|\brequire)\s*\(?\s*['"]([^'"]+)['"]/gu;
 
@@ -71,6 +71,8 @@ describe('the npm dependency allowlist', () => {
     ]);
     expect(forbiddenImports(`import 'vitest';`, false)).toEqual(['vitest']);
     expect(forbiddenImports(`import 'vitest';`, true)).toEqual([]);
+    expect(forbiddenImports(`import fc from 'fast-check';`, false)).toEqual(['fast-check']);
+    expect(forbiddenImports(`import fc from 'fast-check';`, true)).toEqual([]);
   });
 
   it('allows contracts subpaths, zod, yaml, relative paths and node built-ins', () => {

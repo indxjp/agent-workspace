@@ -21,7 +21,7 @@ import crypto from 'node:crypto';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import type { AgentPermissions } from '@agent-workspace/core';
+import type { AgentPermissions } from '@agent-workspace/run-protocol';
 import { openDatabaseRoot, type DatabaseRoot } from '@agent-workspace/core/db';
 import {
   closeIsolatedTestResources,
@@ -202,11 +202,11 @@ describe.skipIf(!hasDatabase)(
     });
 
     it(
-      'the projects runtime’s session provider (configureProjectsRuntime) refuses new sessions ' +
+      'the projects runtime’s session provider (wireProjects) refuses new sessions ' +
         'once the workspace is archived (finding 3)',
       async () => {
-        const { currentProjectsRuntime } = await import('../projects/runtime');
-        const projectsRuntime = currentProjectsRuntime();
+        const { applicationContext } = await import('../application-context');
+        const projectsRuntime = applicationContext()?.projects ?? null;
         expect(projectsRuntime).not.toBeNull();
         if (projectsRuntime === null) return;
 
@@ -258,8 +258,8 @@ describe.skipIf(!hasDatabase)(
       'the shares runtime’s runPublic refuses to create a session or run once the workspace ' +
         'is archived (verification round 2, finding 1)',
       async () => {
-        const { currentSharesRuntime } = await import('../shares/core/runtime');
-        const sharesRuntime = currentSharesRuntime();
+        const { applicationContext } = await import('../application-context');
+        const sharesRuntime = applicationContext()?.shares ?? null;
         expect(sharesRuntime).not.toBeNull();
         if (sharesRuntime === null) return;
 

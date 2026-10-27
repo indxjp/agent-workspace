@@ -39,16 +39,10 @@ import {
   createRepositoryAgentStoreProvider,
   type AgentStoreProvider,
 } from '../../../../../server/agents/store';
-import {
-  clearAgentsRuntime,
-  configureAgentsRuntime,
-  type WorkspaceResolution,
-} from '../../../../../server/agents/runtime';
+import { type WorkspaceResolution } from '../../../../../server/agents/runtime';
 import { versionRequest } from '../../../../../server/agent-versions/fixtures';
-import {
-  clearAgentVersionsRuntime,
-  configureAgentVersionsRuntime,
-} from '../../../../../server/agent-versions/runtime';
+import { clearApplicationContext } from '../../../../../server/application-context';
+import { installTestDomains } from '../../../../../server/application-context-fixtures';
 import { promoteAgent, rollbackAgent } from '../../../../../server/agent-versions/pointers';
 import {
   createRepositoryAgentVersionStoreProvider,
@@ -57,7 +51,6 @@ import {
 import type { RequestCeiling } from '../../../../../server/policy-ceiling/ceiling';
 import { createMemoryDirectory } from '../../../../../server/rbac/memory-directory';
 import { Principal } from '../../../../../server/rbac/principal';
-import { clearRbacRuntime, configureRbacRuntime } from '../../../../../server/rbac/runtime';
 
 const rawUrl = process.env['TEST_DATABASE_URL'];
 const hasDatabase = rawUrl !== undefined && rawUrl.trim() !== '';
@@ -128,31 +121,33 @@ describe.skipIf(!hasDatabase)('promote and rollback on PostgreSQL (#615)', () =>
     });
     const workspaceOf = (request: Request): string =>
       request.headers.get(WORKSPACE_HEADER) ?? workspaceId;
-    configureAgentsRuntime({
-      agents: agentStores,
-      resolveWorkspace: (request): Promise<WorkspaceResolution> =>
-        Promise.resolve({ kind: 'workspace', workspaceId: workspaceOf(request) }),
+    installTestDomains({
+      agents: {
+        agents: agentStores,
+        resolveWorkspace: (request): Promise<WorkspaceResolution> =>
+          Promise.resolve({ kind: 'workspace', workspaceId: workspaceOf(request) }),
+      },
     });
-    configureAgentVersionsRuntime({ versions: versionStores });
-    configureRbacRuntime({
-      directory: createMemoryDirectory({ users: [] }),
-      identify: (request) =>
-        Promise.resolve(
-          Principal.fromApiKey({
-            principalId: ownerPrincipalId,
-            apiKeyId: crypto.randomUUID(),
-            workspaceId: workspaceOf(request),
-            role: 'owner',
-            label: 'promote owner key',
-          }),
-        ),
+    installTestDomains({ agentVersions: { versions: versionStores } });
+    installTestDomains({
+      rbac: {
+        directory: createMemoryDirectory({ users: [] }),
+        identify: (request) =>
+          Promise.resolve(
+            Principal.fromApiKey({
+              principalId: ownerPrincipalId,
+              apiKeyId: crypto.randomUUID(),
+              workspaceId: workspaceOf(request),
+              role: 'owner',
+              label: 'promote owner key',
+            }),
+          ),
+      },
     });
   }, 180_000);
 
   afterAll(async () => {
-    clearAgentsRuntime();
-    clearAgentVersionsRuntime();
-    clearRbacRuntime();
+    clearApplicationContext();
     await isolated.close();
   });
 

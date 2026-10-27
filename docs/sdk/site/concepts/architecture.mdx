@@ -13,10 +13,16 @@ description: "The three packages a consumer writes code against, the dependency 
 
 </Info>
 
-This page is about the **Consume** surface as it exists today — the packages, not the platform.
-How the platform itself is put together (the five services, the sandboxes, the gateway) is on
-[Self-host Agent Workspace](/building/self-hosting); what it is all meant to become is on
-[Target architecture](/concepts/target-architecture).
+This page is about the packages you write code against, not the platform they talk to. The
+platform is the picture below: your code reaches the control plane through these packages, and
+the control plane launches each run in a sandbox and sends model calls through the gateway.
+[Self-host Agent Workspace](/building/self-hosting) covers how the platform's five services are
+deployed, and [Target architecture](/concepts/target-architecture) what it is meant to become.
+
+<Frame caption="The platform the SDK packages talk to: the control plane, the sandboxes and the model gateway on your servers.">
+  <img className="block dark:hidden" src="/images/diagrams/architecture-light.svg" alt="Architecture: your repository is pushed with aw dev or aw push to the control plane on your servers, which stores state in PostgreSQL and object storage and launches each run in a sandbox running an engine; the engine reaches the model only through the model gateway, and your site or app talks to the control plane" />
+  <img className="hidden dark:block" src="/images/diagrams/architecture-dark.svg" alt="Architecture: your repository is pushed with aw dev or aw push to the control plane on your servers, which stores state in PostgreSQL and object storage and launches each run in a sandbox running an engine; the engine reaches the model only through the model gateway, and your site or app talks to the control plane" />
+</Frame>
 
 The Agent Workspace SDK is three packages, not one library. `@indx-workspace/contracts` publishes
 the control plane's wire schemas, `@indx-workspace/sdk` is a typed client built on them, and

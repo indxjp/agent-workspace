@@ -1,5 +1,5 @@
 /**
- * The HTTP edge of this task: the problem shape, the bounded body reader, and `authorise` — the
+ * The HTTP edge of this task: the problem shape and `authorise` — the
  * one call every route handler of this task makes before it does anything else.
  *
  * ## `authorise` derives the route from the request, and transcribes nothing
@@ -23,119 +23,25 @@
  * ADR-0015 and ADR-0031 both land on the same line here — a check that cannot run must fail, and
  * it must fail as itself.
  */
+import { problemWithDetail as problem, type ApiResult } from '../http/result';
 import { decide, type Decision, type Ownership } from './decide';
 import type { WorkspaceDirectory } from './directory';
 import type { Principal } from './principal';
-import { currentRbacRuntime } from './runtime';
+import { applicationContext, type ApplicationContext } from '../application-context';
 
-/** A handler's answer, before it becomes a `Response`. */
-export interface ApiResult {
-  readonly status: number;
-  readonly body: unknown;
-  /** Extra response headers, e.g. `retry-after` on a `429`. */
-  readonly headers?: Readonly<Record<string, string>>;
-}
-
-/**
- * Bytes of request body these routes read. A user, a membership and an API key are each a handful
- * of short strings; anything larger is not one of them and does not need to be buffered to find
- * out.
- */
-export const MAX_REQUEST_BODY_BYTES = 16 * 1024;
-
-const JSON_MEDIA_TYPE = 'application/json';
-
-/**
- * The standard error envelope. `code` is stable; the prose is `message`. `detail` repeats the same
- * string until the next major release (ADR-0078 D7) so a reader written against the earlier `{ code, detail }` spelling keeps
- * working; it is removed in the next major release, no earlier than one minor after (ADR-0078 D7).
- */
-export function problem(status: number, code: string, detail: string): ApiResult {
-  return { status, body: { error: { code, message: detail, detail } } };
-}
-
-/**
- * Turn a result into a `Response`.
- *
- * A handler that answers "done, and there is nothing to say" writes `{ status: 204, body: null }`
- * — `deleteMembership` does. `JSON.stringify(null)` is the four-byte string
- * `"null"`, and the `Response` constructor rejects a body on a 204 outright (`TypeError: Invalid
- * response status code 204`), so serialising it turned every successful removal into a `500`. The
- * empty arm is therefore a body-less `Response`, with no `content-type` to describe a body that is
- * not there — the same decision `apiResultResponse` in `server/http/json-transport.ts` makes.
- */
-export function toResponse(result: ApiResult): Response {
-  // These bodies are per-caller and authorisation-dependent. A shared cache holding one would
-  // serve one member's answer to another — which is as true of a 204 as of a body.
-  const cacheControl = { ...result.headers, 'cache-control': 'no-store' };
-  if (result.status === 204 || result.body === null) {
-    return new Response(null, { status: result.status, headers: cacheControl });
-  }
-  return new Response(JSON.stringify(result.body), {
-    status: result.status,
-    headers: { ...cacheControl, 'content-type': 'application/json; charset=utf-8' },
-  });
-}
-
-/** Read a JSON body, bounded, or the problem that stopped it. */
-export async function readJsonBody(
-  request: Request,
-): Promise<{ ok: true; value: unknown } | { ok: false; result: ApiResult }> {
-  const contentType = request.headers.get('content-type');
-  const mediaType =
-    contentType === null ? '' : (contentType.split(';')[0] ?? '').trim().toLowerCase();
-  if (mediaType !== JSON_MEDIA_TYPE) {
-    return {
-      ok: false,
-      result: problem(
-        415,
-        'unsupported_media_type',
-        `This route accepts ${JSON_MEDIA_TYPE}; the request declared ` +
-          `${mediaType === '' ? 'no Content-Type' : JSON.stringify(mediaType)}.`,
-      ),
-    };
-  }
-  let text: string;
-  try {
-    const buffer = await request.arrayBuffer();
-    if (buffer.byteLength > MAX_REQUEST_BODY_BYTES) {
-      return {
-        ok: false,
-        result: problem(
-          413,
-          'request_body_too_large',
-          `This route reads at most ${String(MAX_REQUEST_BODY_BYTES)} bytes of request body.`,
-        ),
-      };
-    }
-    text = new TextDecoder('utf-8', { fatal: true }).decode(buffer);
-  } catch {
-    return {
-      ok: false,
-      result: problem(400, 'malformed_body', 'The request body could not be read as UTF-8.'),
-    };
-  }
-  if (text.trim() === '') {
-    return {
-      ok: false,
-      result: problem(400, 'malformed_body', 'This route requires a JSON object body.'),
-    };
-  }
-  try {
-    return { ok: true, value: JSON.parse(text) as unknown };
-  } catch {
-    return {
-      ok: false,
-      result: problem(400, 'malformed_body', 'The request body is not valid JSON.'),
-    };
-  }
-}
+// ADR-0078 D7: `problem` repeats `message` as `detail` until the next major release.
+export { noStoreResultResponse as toResponse, problemWithDetail as problem } from '../http/result';
 
 /** What `authorise` hands a handler once every gate above it has answered yes. */
 export interface AuthorisedRequest {
   readonly principal: Principal;
   readonly directory: import('./directory').WorkspaceDirectory;
   readonly decision: Decision;
+  /**
+   * The application context `authorise` read the RBAC runtime from: the same snapshot, so a handler
+   * reads its own domain from it with no second "is anything installed" check.
+   */
+  readonly application: ApplicationContext;
 }
 
 /**
@@ -184,8 +90,8 @@ export async function authorise(
   ownership: Ownership | OwnershipResolver,
   run: (context: AuthorisedRequest) => Promise<ApiResult>,
 ): Promise<ApiResult> {
-  const runtime = currentRbacRuntime();
-  if (runtime === null) {
+  const application = applicationContext();
+  if (application === null) {
     return problem(
       503,
       'rbac_runtime_not_configured',
@@ -194,6 +100,7 @@ export async function authorise(
     );
   }
 
+  const runtime = application.rbac;
   const principal = await runtime.identify(request);
   if (principal === null) {
     return problem(
@@ -239,7 +146,7 @@ export async function authorise(
 
   switch (decision.effect) {
     case 'allow':
-      return run({ principal, directory, decision });
+      return run({ principal, directory, decision, application });
     case 'deny':
       return problem(403, decision.code ?? 'forbidden', decision.because);
     case 'refuse':

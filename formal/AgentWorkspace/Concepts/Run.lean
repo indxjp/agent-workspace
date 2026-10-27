@@ -86,14 +86,29 @@ structure Run where
   accountingError : Option String
   createdAt : Nat
   updatedAt : Nat
+  /-- The canonical tool call a paused run waits on (ADR-0145); `none` unless one was stored. -/
+  pendingApproval : Option String := none
+  /-- When a paused run stops waiting for a decision (ADR-0145 D2.4); `none` unless it paused. -/
+  approvalDeadlineAt : Option Nat := none
   deriving DecidableEq, Repr, Inhabited
 
 namespace Run
 
 /-- `runs_ended_at_iff_terminal`: "A finished run has an end time and an unfinished one does
-not." (a schema comment; no document states it, finding F-9). -/
+not." (a schema comment; no document states it, finding F-9). A run paused at
+`awaiting_approval` counts as finished here: nothing executes (ADR-0145 D1). -/
 @[aw_spec (ts := "packages/core/src/db/schema/runs.ts#runs_ended_at_iff_terminal")]
-def endedAtIffTerminal (r : Run) : Bool := r.status.isTerminal == r.endedAt.isSome
+def endedAtIffTerminal (r : Run) : Bool := r.status.isStopped == r.endedAt.isSome
+
+/-- `runs_awaiting_approval_has_pending`: a paused run stores the call it waits on. -/
+@[aw_spec (ts := "packages/core/src/db/schema/runs.ts#runs_awaiting_approval_has_pending")]
+def pendingWhenAwaiting (r : Run) : Bool :=
+  r.status != .awaitingApproval || r.pendingApproval.isSome
+
+/-- `runs_awaiting_approval_has_deadline`: a paused run stores when it stops waiting. -/
+@[aw_spec (ts := "packages/core/src/db/schema/runs.ts#runs_awaiting_approval_has_deadline")]
+def deadlineWhenAwaiting (r : Run) : Bool :=
+  r.status != .awaitingApproval || r.approvalDeadlineAt.isSome
 
 /-- `runs_ended_after_started`. -/
 @[aw_spec (ts := "packages/core/src/db/schema/runs.ts#runs_ended_after_started")]
@@ -125,7 +140,7 @@ def unpricedCostZero (r : Run) : Bool := r.accountingState.isPriced || isZeroDec
 /-- Every check of `runs`. -/
 def wellFormed (r : Run) : Bool :=
   r.endedAtIffTerminal && r.endedAfterStarted && r.costNonNegative && r.currencyUsd &&
-    r.priceVersionMatches && r.unpricedCostZero
+    r.priceVersionMatches && r.unpricedCostZero && r.pendingWhenAwaiting && r.deadlineWhenAwaiting
 
 /-- `durationMs`: "`null` until both `startedAt` and `endedAt` exist", and never stored. -/
 @[aw_spec (ts := "packages/contracts/src/runs.ts#RunResourceSchema")
@@ -138,7 +153,7 @@ def durationMs (r : Run) : Option Nat :=
 
 /-- A new run as both stores create it: `queued`, no timestamps but `createdAt`, zero usage,
 zero cost in USD, no price, accounting `pending`. -/
-@[aw_spec (ts := "apps/web/server/runs/store.ts#InMemoryRunStore")
+@[aw_spec (ts := "apps/web/server/runs/memory-store.ts#InMemoryRunStore")
   (ts := "packages/core/src/db/schema/runs.ts#runs")]
 def create (id : RunId) (workspace : WorkspaceId) (session : SessionId) (now : Nat) : Run :=
   { id, workspace, session, status := .queued, model := none, provider := none,
@@ -151,7 +166,7 @@ def create (id : RunId) (workspace : WorkspaceId) (session : SessionId) (now : N
 terminal status stamps `endedAt`, and a `startedAt` if the run never had one ("a run that is
 finished without ever having been marked running still gets a start"). -/
 @[aw_spec (ts := "apps/web/server/runs/store.ts#RunStore")
-  (ts := "apps/web/server/runs/store.ts#InMemoryRunStore")
+  (ts := "apps/web/server/runs/memory-store.ts#InMemoryRunStore")
   (ts := "packages/core/src/db/repositories/runs.ts#finish")
   (ts := "packages/core/src/db/repositories/runs.ts#markRunning")]
 def stamp (r : Run) (next : RunStatus) (now : Nat) : Run :=

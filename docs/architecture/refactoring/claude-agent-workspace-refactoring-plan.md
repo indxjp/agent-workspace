@@ -120,7 +120,7 @@ No flag-day rewrite. Each dangerous change follows: add model/field -> backfill 
 | Retention period and legal hold for Runs/transcripts/audit? | Product + compliance | RF-201, purge design | Retain indefinitely; archive only, no automatic purge. |
 | Ship runnable public links? | Product + security | No existing RF owner; Product + security must define a scoped unit before the release gate can change. | Keep permanent false release gate. |
 | Add email delivery for invitations? | Product/operations | RF-203 | Keep manual link as a supported adapter; complete acceptance regardless. |
-| Is optional Run `waiting/suspended` needed now? | Product/runtime | RF-301 schema state list | Do not persist it until a runtime feature requires it. The target diagram shows it as optional. |
+| Is optional Run `waiting/suspended` needed now? | Product/runtime | RF-301 schema state list | Decided (ADR-0151, option A): no live `waiting`/`suspended` is persisted. `awaiting_approval` is a lease-free stopped state under ADR-0145; RF-301 designs pending, live and stopped classes. |
 
 ## Priority, severity, and effort
 
@@ -537,9 +537,9 @@ Implementation steps:
 | Why now | Durable allocation/worker work needs a database authority for who may act on a Run. |
 | Current problem | Run status has queued/running/terminal states but no lease, transition version, retry owner or attempt history. |
 | Evidence | `schema/runs.ts`; `repositories/runs.ts`; `runs/api.ts`; `launcher.ts`. |
-| Target architecture | Requested/queued/starting/running/(optional waiting)/terminal state machine with compare-and-swap version, request idempotency, lease and RunAttempt. |
+| Target architecture | Requested/queued/starting/running/stopped (`awaiting_approval`, and the terminal statuses as the final subset) state machine, with the lease valid only while live (ADR-0151) with compare-and-swap version, request idempotency, lease and RunAttempt. |
 | Affected modules | Run schema/repository/store/contracts/API/SSE/UI; gateway token issuance/revocation; operations docs. |
-| Dependencies | RF-201 ExecutionSpec; RF-001 product decision on waiting/suspended. |
+| Dependencies | RF-201 ExecutionSpec; ADR-0151 (decision-ledger item 6, accepted 2026-10-18). |
 
 Implementation steps:
 

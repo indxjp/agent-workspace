@@ -167,7 +167,7 @@ private theorem rowOf_get :
 
 private theorem share_cells_nodup (s : Share) : (s.cells.map Prod.fst).Nodup := by
   rw [show s.cells.map Prod.fst = (catalogue .shares).columnNames from rfl]
-  decide
+  decide +kernel
 
 private theorem share_get {s : Share} {c : String} {v : Option String} (hm : (c, v) ∈ s.cells) :
     s.toRow.get c = v :=
@@ -177,7 +177,7 @@ private theorem charge_get {x : ShareRunCharge} {c : String} {v : Option String}
     (hm : (c, v) ∈ x.cells) : x.toRow.get c = v := by
   refine rowOf_get ?_ hm
   rw [show x.cells.map Prod.fst = (catalogue .shareRunCharges).columnNames from rfl]
-  decide
+  decide +kernel
 
 /-- A share's row stores each field in its own column: the subject type, the mode (absent when
 the share has none), the budget, the spend, the subject id, the visibility, the token and the
@@ -237,7 +237,7 @@ theorem well_published_share_passes_the_checks (s : Share) (h : s.wellPublished 
 theorem share_and_publisher_share_a_workspace (st : State) {r r' : Row}
     (href : References catalogue st .shares sharesPublisherKey r r') :
     tenantOf catalogue .shares r = tenantOf catalogue .workspacePrincipals r' :=
-  paired_reference_preserves_tenant catalogue st (by decide) href
+  paired_reference_preserves_tenant catalogue st (by decide +kernel) href
 
 /-- A share and the membership of the user who created it always belong to the same workspace. -/
 @[aw_spec (tier := T2) (ts := "packages/core/src/db/schema/shares.ts#shares_creator_workspace_fk")
@@ -245,7 +245,7 @@ theorem share_and_publisher_share_a_workspace (st : State) {r r' : Row}
 theorem share_and_creator_membership_share_a_workspace (st : State) {r r' : Row}
     (href : References catalogue st .shares sharesCreatorKey r r') :
     tenantOf catalogue .shares r = tenantOf catalogue .memberships r' :=
-  paired_reference_preserves_tenant catalogue st (by decide) href
+  paired_reference_preserves_tenant catalogue st (by decide +kernel) href
 
 /-- A share view and the share it records always belong to the same workspace. -/
 @[aw_spec (tier := T2)
@@ -254,7 +254,7 @@ theorem share_and_creator_membership_share_a_workspace (st : State) {r r' : Row}
 theorem view_and_share_share_a_workspace (st : State) {r r' : Row}
     (href : References catalogue st .shareViews viewsShareKey r r') :
     tenantOf catalogue .shareViews r = tenantOf catalogue .shares r' :=
-  paired_reference_preserves_tenant catalogue st (by decide) href
+  paired_reference_preserves_tenant catalogue st (by decide +kernel) href
 
 /-- A run charge and the share whose budget it draws on always belong to the same workspace. -/
 @[aw_spec (tier := T2)
@@ -263,7 +263,7 @@ theorem view_and_share_share_a_workspace (st : State) {r r' : Row}
 theorem charge_and_share_share_a_workspace (st : State) {r r' : Row}
     (href : References catalogue st .shareRunCharges chargesShareKey r r') :
     tenantOf catalogue .shareRunCharges r = tenantOf catalogue .shares r' :=
-  paired_reference_preserves_tenant catalogue st (by decide) href
+  paired_reference_preserves_tenant catalogue st (by decide +kernel) href
 
 /-- A run charge and the run it funds always belong to the same workspace. -/
 @[aw_spec (tier := T2)
@@ -272,7 +272,7 @@ theorem charge_and_share_share_a_workspace (st : State) {r r' : Row}
 theorem charge_and_run_share_a_workspace (st : State) {r r' : Row}
     (href : References catalogue st .shareRunCharges chargesRunKey r r') :
     tenantOf catalogue .shareRunCharges r = tenantOf catalogue .runs r' :=
-  paired_reference_preserves_tenant catalogue st (by decide) href
+  paired_reference_preserves_tenant catalogue st (by decide +kernel) href
 
 /-- A share's budget only ever funds runs of the share's own workspace: the run and the share a
 charge joins are in one workspace. -/
@@ -295,8 +295,8 @@ theorem share_has_exactly_one_workspace (st : State)
     (hc : Er.Core.consistent catalogue st = true) {r : Row} (hr : r ∈ st .shares) :
     ∃ w ∈ st .workspaces, w.get "id" = r.get "workspace_id" ∧
       ∀ w' ∈ st .workspaces, w'.get "id" = r.get "workspace_id" → w' = w := by
-  have hw : (r.get "workspace_id").isSome = true := not_null hc (by decide) hr
-  obtain ⟨w, hwm, hproj⟩ := fk_parent hc (fk := sharesWorkspaceKey) (by decide) hr
+  have hw : (r.get "workspace_id").isSome = true := not_null hc (by decide +kernel) hr
+  obtain ⟨w, hwm, hproj⟩ := fk_parent hc (fk := sharesWorkspaceKey) (by decide +kernel) hr
     (by simp [Row.present, sharesWorkspaceKey, hw])
   simp only [sharesWorkspaceKey, Row.project, List.map_cons, List.map_nil,
     List.cons.injEq, and_true] at hproj
@@ -314,9 +314,9 @@ theorem share_has_exactly_one_publisher (st : State)
     ∃ p ∈ st .workspacePrincipals, p.get "workspace_id" = r.get "workspace_id" ∧
       p.get "id" = r.get "publisher_principal_id" ∧
       ∀ p' ∈ st .workspacePrincipals, p'.get "id" = r.get "publisher_principal_id" → p' = p := by
-  have hw : (r.get "workspace_id").isSome = true := not_null hc (by decide) hr
-  have hp : (r.get "publisher_principal_id").isSome = true := not_null hc (by decide) hr
-  obtain ⟨p, hpm, hproj⟩ := fk_parent hc (fk := sharesPublisherKey) (by decide) hr
+  have hw : (r.get "workspace_id").isSome = true := not_null hc (by decide +kernel) hr
+  have hp : (r.get "publisher_principal_id").isSome = true := not_null hc (by decide +kernel) hr
+  obtain ⟨p, hpm, hproj⟩ := fk_parent hc (fk := sharesPublisherKey) (by decide +kernel) hr
     (by simp [Row.present, sharesPublisherKey, hw, hp])
   simp only [sharesPublisherKey, Row.project, List.map_cons, List.map_nil,
     List.cons.injEq, and_true] at hproj
@@ -332,9 +332,9 @@ theorem view_has_exactly_one_share (st : State) (hc : Er.Core.consistent catalog
     {v : Row} (hv : v ∈ st .shareViews) :
     ∃ s ∈ st .shares, s.get "id" = v.get "share_id" ∧ s.get "workspace_id" = v.get "workspace_id" ∧
       ∀ s' ∈ st .shares, s'.get "id" = v.get "share_id" → s' = s := by
-  have hw : (v.get "workspace_id").isSome = true := not_null hc (by decide) hv
-  have hs : (v.get "share_id").isSome = true := not_null hc (by decide) hv
-  obtain ⟨s, hsm, hproj⟩ := fk_parent hc (fk := viewsShareKey) (by decide) hv
+  have hw : (v.get "workspace_id").isSome = true := not_null hc (by decide +kernel) hv
+  have hs : (v.get "share_id").isSome = true := not_null hc (by decide +kernel) hv
+  obtain ⟨s, hsm, hproj⟩ := fk_parent hc (fk := viewsShareKey) (by decide +kernel) hv
     (by simp [Row.present, viewsShareKey, hw, hs])
   simp only [viewsShareKey, Row.project, List.map_cons, List.map_nil,
     List.cons.injEq, and_true] at hproj
@@ -350,9 +350,9 @@ theorem charge_has_exactly_one_share (st : State) (hc : Er.Core.consistent catal
     {c : Row} (hcm : c ∈ st .shareRunCharges) :
     ∃ s ∈ st .shares, s.get "id" = c.get "share_id" ∧ s.get "workspace_id" = c.get "workspace_id" ∧
       ∀ s' ∈ st .shares, s'.get "id" = c.get "share_id" → s' = s := by
-  have hw : (c.get "workspace_id").isSome = true := not_null hc (by decide) hcm
-  have hs : (c.get "share_id").isSome = true := not_null hc (by decide) hcm
-  obtain ⟨s, hsm, hproj⟩ := fk_parent hc (fk := chargesShareKey) (by decide) hcm
+  have hw : (c.get "workspace_id").isSome = true := not_null hc (by decide +kernel) hcm
+  have hs : (c.get "share_id").isSome = true := not_null hc (by decide +kernel) hcm
+  obtain ⟨s, hsm, hproj⟩ := fk_parent hc (fk := chargesShareKey) (by decide +kernel) hcm
     (by simp [Row.present, chargesShareKey, hw, hs])
   simp only [chargesShareKey, Row.project, List.map_cons, List.map_nil,
     List.cons.injEq, and_true] at hproj
@@ -368,9 +368,9 @@ theorem charge_has_exactly_one_run (st : State) (hc : Er.Core.consistent catalog
     {c : Row} (hcm : c ∈ st .shareRunCharges) :
     ∃ u ∈ st .runs, u.get "id" = c.get "run_id" ∧ u.get "workspace_id" = c.get "workspace_id" ∧
       ∀ u' ∈ st .runs, u'.get "id" = c.get "run_id" → u' = u := by
-  have hw : (c.get "workspace_id").isSome = true := not_null hc (by decide) hcm
-  have hu : (c.get "run_id").isSome = true := not_null hc (by decide) hcm
-  obtain ⟨u, hum, hproj⟩ := fk_parent hc (fk := chargesRunKey) (by decide) hcm
+  have hw : (c.get "workspace_id").isSome = true := not_null hc (by decide +kernel) hcm
+  have hu : (c.get "run_id").isSome = true := not_null hc (by decide +kernel) hcm
+  obtain ⟨u, hum, hproj⟩ := fk_parent hc (fk := chargesRunKey) (by decide +kernel) hcm
     (by simp [Row.present, chargesRunKey, hw, hu])
   simp only [chargesRunKey, Row.project, List.map_cons, List.map_nil,
     List.cons.injEq, and_true] at hproj
@@ -386,7 +386,7 @@ theorem run_is_funded_by_at_most_one_share (st : State)
     (hc : Er.Core.consistent catalogue st = true) {c1 c2 : Row} (h1 : c1 ∈ st .shareRunCharges)
     (h2 : c2 ∈ st .shareRunCharges) (hrun : c1.get "run_id" = c2.get "run_id") :
     c1 = c2 ∧ c1.get "share_id" = c2.get "share_id" := by
-  have hs : (c1.get "run_id").isSome = true := not_null hc (by decide) h1
+  have hs : (c1.get "run_id").isSome = true := not_null hc (by decide +kernel) h1
   have := pk_unique hc (t := .shareRunCharges) rfl h1 h2 hs hrun
   exact ⟨this, by rw [this]⟩
 
@@ -398,10 +398,10 @@ theorem token_names_at_most_one_share (st : State)
     (hc : Er.Core.consistent catalogue st = true) {r1 r2 : Row} (h1 : r1 ∈ st .shares)
     (h2 : r2 ∈ st .shares) (htok : r1.get "token" = r2.get "token") :
     r1 = r2 ∧ r1.get "workspace_id" = r2.get "workspace_id" := by
-  have hs : (r1.get "token").isSome = true := not_null hc (by decide) h1
+  have hs : (r1.get "token").isSome = true := not_null hc (by decide +kernel) h1
   have := unique_single hc (t := .shares)
     (u := { name := "shares_token_key", columns := ["token"], kind := .constraint,
-            partialNullColumns := [] }) (by decide) rfl rfl h1 h2 hs htok
+            partialNullColumns := [] }) (by decide +kernel) rfl rfl h1 h2 hs htok
   exact ⟨this, by rw [this]⟩
 
 /-- In a consistent state, when a share records the user who created it, that user is a member
@@ -412,8 +412,8 @@ theorem share_creator_is_a_member (st : State) (hc : Er.Core.consistent catalogu
     {r : Row} (hr : r ∈ st .shares) {u : String} (hu : r.get "created_by" = some u) :
     ∃ m ∈ st .memberships, m.get "workspace_id" = r.get "workspace_id" ∧
       m.get "user_id" = some u := by
-  have hw : (r.get "workspace_id").isSome = true := not_null hc (by decide) hr
-  obtain ⟨m, hmm, hproj⟩ := fk_parent hc (fk := sharesCreatorKey) (by decide) hr
+  have hw : (r.get "workspace_id").isSome = true := not_null hc (by decide +kernel) hr
+  obtain ⟨m, hmm, hproj⟩ := fk_parent hc (fk := sharesCreatorKey) (by decide +kernel) hr
     (by simp [Row.present, sharesCreatorKey, hw, hu])
   simp only [sharesCreatorKey, Row.project, List.map_cons, List.map_nil,
     List.cons.injEq, and_true] at hproj
@@ -426,9 +426,9 @@ theorem share_creator_is_a_member (st : State) (hc : Er.Core.consistent catalogu
   (doc := "docs/spec.md#2061-three-visibilities-for-every-shareable-object")]
 theorem share_subject_type_decodes (st : State) (hc : Er.Core.consistent catalogue st = true)
     {r : Row} (hr : r ∈ st .shares) : ∃ ty : SubjectType, r.get "subject_type" = some ty.toWire := by
-  have hs : (r.get "subject_type").isSome = true := not_null hc (by decide) hr
+  have hs : (r.get "subject_type").isSome = true := not_null hc (by decide +kernel) hr
   have h := one_of_value hc (t := .shares) (n := "shares_subject_type_valid")
-    (c := "subject_type") (vs := ["agent", "session", "project", "skill"]) (by decide) hr
+    (c := "subject_type") (vs := ["agent", "session", "project", "skill"]) (by decide +kernel) hr
   cases hv : r.get "subject_type" with
   | none => rw [hv] at hs; cases hs
   | some x =>
@@ -446,9 +446,9 @@ theorem share_subject_type_decodes (st : State) (hc : Er.Core.consistent catalog
   (doc := "docs/spec.md#2061-three-visibilities-for-every-shareable-object")]
 theorem share_visibility_decodes (st : State) (hc : Er.Core.consistent catalogue st = true)
     {r : Row} (hr : r ∈ st .shares) : ∃ v : Visibility, r.get "visibility" = some v.toWire := by
-  have hs : (r.get "visibility").isSome = true := not_null hc (by decide) hr
+  have hs : (r.get "visibility").isSome = true := not_null hc (by decide +kernel) hr
   have h := one_of_value hc (t := .shares) (n := "shares_visibility_valid")
-    (c := "visibility") (vs := ["private", "workspace", "public"]) (by decide) hr
+    (c := "visibility") (vs := ["private", "workspace", "public"]) (by decide +kernel) hr
   cases hv : r.get "visibility" with
   | none => rw [hv] at hs; cases hs
   | some x =>
@@ -467,7 +467,7 @@ theorem share_mode_decodes (st : State) (hc : Er.Core.consistent catalogue st = 
     {r : Row} (hr : r ∈ st .shares) :
     r.get "mode" = none ∨ ∃ m : Mode, r.get "mode" = some m.toWire := by
   have h := one_of_value hc (t := .shares) (n := "shares_mode_valid")
-    (c := "mode") (vs := ["definition", "runnable"]) (by decide) hr
+    (c := "mode") (vs := ["definition", "runnable"]) (by decide +kernel) hr
   cases hv : r.get "mode" with
   | none => exact Or.inl rfl
   | some x =>
@@ -486,9 +486,9 @@ theorem share_mode_decodes (st : State) (hc : Er.Core.consistent catalogue st = 
 theorem share_with_mode_is_an_agent_share (st : State) (hc : Publication.consistent st = true)
     {r : Row} (hr : r ∈ st .shares) (hm : (r.get "mode").isSome = true) :
     r.get "subject_type" = some "agent" := by
-  have h := refined_check hc (t := .shares) (by decide) (n := "shares_agent_mode_only")
-    (by decide) hr
-  have hs : (r.get "subject_type").isSome = true := not_null (core_of hc) (by decide) hr
+  have h := refined_check hc (t := .shares) (by decide +kernel) (n := "shares_agent_mode_only")
+    (by decide +kernel) hr
+  have hs : (r.get "subject_type").isSome = true := not_null (core_of hc) (by decide +kernel) hr
   simp only [refinedCheckHolds, checkSemantics?, beq_self_eq_true, ite_true,
     Option.getD_some] at h
   cases hmode : r.get "mode" with
@@ -508,11 +508,11 @@ theorem share_amounts_are_non_negative (st : State) (hc : Publication.consistent
     {r : Row} (hr : r ∈ st .shares) :
     (r.get "spent_usd").all nonNegativeAmount = true ∧
       (r.get "budget_cap_usd").all nonNegativeAmount = true := by
-  have hsp := refined_check hc (t := .shares) (by decide) (n := "shares_spend_nonnegative")
-    (by decide) hr
-  have hb := refined_check hc (t := .shares) (by decide) (n := "shares_budget_nonnegative")
-    (by decide) hr
-  have hs : (r.get "spent_usd").isSome = true := not_null (core_of hc) (by decide) hr
+  have hsp := refined_check hc (t := .shares) (by decide +kernel) (n := "shares_spend_nonnegative")
+    (by decide +kernel) hr
+  have hb := refined_check hc (t := .shares) (by decide +kernel) (n := "shares_budget_nonnegative")
+    (by decide +kernel) hr
+  have hs : (r.get "spent_usd").isSome = true := not_null (core_of hc) (by decide +kernel) hr
   simp only [refinedCheckHolds, checkSemantics?] at hsp hb
   simp at hsp hb
   constructor
@@ -527,9 +527,9 @@ theorem share_amounts_are_non_negative (st : State) (hc : Publication.consistent
 @[aw_spec (tier := T2) (ts := "packages/core/src/db/schema/shares.ts#shares")]
 theorem share_subject_id_is_not_blank (st : State) (hc : Publication.consistent st = true)
     {r : Row} (hr : r ∈ st .shares) : ∃ sid, r.get "subject_id" = some sid ∧ notBlankSql sid := by
-  have h := refined_check hc (t := .shares) (by decide) (n := "shares_subject_id_not_blank")
-    (by decide) hr
-  have hs : (r.get "subject_id").isSome = true := not_null (core_of hc) (by decide) hr
+  have h := refined_check hc (t := .shares) (by decide +kernel) (n := "shares_subject_id_not_blank")
+    (by decide +kernel) hr
+  have hs : (r.get "subject_id").isSome = true := not_null (core_of hc) (by decide +kernel) hr
   simp only [refinedCheckHolds, checkSemantics?] at h
   simp at h
   cases hv : r.get "subject_id" with
@@ -540,8 +540,8 @@ theorem share_subject_id_is_not_blank (st : State) (hc : Publication.consistent 
 @[aw_spec (tier := T2) (ts := "packages/core/src/db/schema/share-run-charges.ts#shareRunCharges")]
 theorem charge_is_non_negative (st : State) (hc : Publication.consistent st = true)
     {c : Row} (hcm : c ∈ st .shareRunCharges) : (c.get "charged_usd").all nonNegativeAmount = true := by
-  have h := refined_check hc (t := .shareRunCharges) (by decide)
-    (n := "share_run_charges_nonnegative") (by decide) hcm
+  have h := refined_check hc (t := .shareRunCharges) (by decide +kernel)
+    (n := "share_run_charges_nonnegative") (by decide +kernel) hcm
   simp only [refinedCheckHolds, checkSemantics?] at h
   simp at h
   cases hv : c.get "charged_usd" with
@@ -729,7 +729,7 @@ def stateWith (rows : List Row) : State
     [⟨[("id", "r1"), ("workspace_id", "w1"), ("session_id", "s1"), ("status", "queued"),
        ("input_tokens", "0"), ("output_tokens", "0"), ("cache_read_input_tokens", "0"),
        ("cache_creation_input_tokens", "0"), ("cost_usd", "0"), ("cost_currency", "USD"),
-       ("tool_calls", "0"), ("accounting_state", "pending"), ("tool_connector_ids", "{}"),
+       ("tool_calls", "0"), ("accounting_state", "pending"), ("tool_connector_ids", "{}"), ("file_grants", "{}"), ("approved_tool_calls", "[]"), ("consumed_tool_calls", "[]"),
        ("created_at", "0"), ("updated_at", "0")]⟩]
   | .shares => rows
   | .shareViews => [view.toRow]
@@ -744,9 +744,9 @@ private theorem state_is_consistent : Publication.consistent state = true := by 
 
 end Witness
 
-example : Witness.share.wellPublished = true := by decide
-example : Witness.share.dbValid = true := by decide
-example : Witness.charge.dbValid = true := by decide
+example : Witness.share.wellPublished = true := by decide +kernel
+example : Witness.share.dbValid = true := by decide +kernel
+example : Witness.charge.dbValid = true := by decide +kernel
 
 example : ∃ w ∈ Witness.state .workspaces, w.get "id" = Witness.share.toRow.get "workspace_id" ∧
     ∀ w' ∈ Witness.state .workspaces, w'.get "id" = Witness.share.toRow.get "workspace_id" →
@@ -792,7 +792,7 @@ example : Witness.share.toRow = Witness.share.toRow ∧
 example : ∃ m ∈ Witness.state .memberships,
     m.get "workspace_id" = Witness.share.toRow.get "workspace_id" ∧ m.get "user_id" = some "u1" :=
   share_creator_is_a_member _ (core_of Witness.state_is_consistent)
-    (by simp [Witness.state, Witness.stateWith]) (by decide)
+    (by simp [Witness.state, Witness.stateWith]) (by decide +kernel)
 
 example : ∃ ty : SubjectType, Witness.share.toRow.get "subject_type" = some ty.toWire :=
   share_subject_type_decodes _ (core_of Witness.state_is_consistent)
@@ -809,7 +809,7 @@ example : Witness.share.toRow.get "mode" = none ∨
 
 example : Witness.share.toRow.get "subject_type" = some "agent" :=
   share_with_mode_is_an_agent_share _ Witness.state_is_consistent
-    (by simp [Witness.state, Witness.stateWith]) (by decide)
+    (by simp [Witness.state, Witness.stateWith]) (by decide +kernel)
 
 example : (Witness.share.toRow.get "spent_usd").all nonNegativeAmount = true ∧
     (Witness.share.toRow.get "budget_cap_usd").all nonNegativeAmount = true :=
@@ -851,11 +851,11 @@ example : tenantOf catalogue .shares Witness.share.toRow =
     (by unfold References; decide +kernel) (by unfold References; decide +kernel)
 
 example : Witness.share.publiclyOpen 100 = false :=
-  closed_link_stays_closed Witness.share (t1 := 100) (Nat.le_refl _) (by decide)
+  closed_link_stays_closed Witness.share (t1 := 100) (Nat.le_refl _) (by decide +kernel)
 
 example : Witness.share.stateAt 150 = .expired :=
-  expired_state_is_permanent Witness.share (t1 := 100) (by decide) (by decide)
+  expired_state_is_permanent Witness.share (t1 := 100) (by decide +kernel) (by decide +kernel)
 
-example : Witness.share.publiclyOpen 99 = true := by decide
+example : Witness.share.publiclyOpen 99 = true := by decide +kernel
 
 end AgentWorkspace.Theorems.Invariants.ConceptPublication

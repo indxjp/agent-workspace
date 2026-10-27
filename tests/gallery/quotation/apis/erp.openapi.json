@@ -3,7 +3,7 @@
   "info": {
     "title": "販売管理 ERP 参照 API",
     "version": "1.0.0",
-    "description": "見積エージェントが読む、過去品番・受注実績・材料別レート。参照専用。"
+    "description": "見積エージェントが読む過去品番・受注実績・材料別レートと、承認された見積の登録。"
   },
   "servers": [{ "url": "https://erp.example.co.jp/api/v1" }],
   "security": [{ "bearer": [] }],
@@ -42,6 +42,19 @@
           "unitPrice": { "type": "integer", "description": "税抜単価（円）" },
           "amount": { "type": "integer", "description": "税抜金額（円）" },
           "note": { "type": "string" }
+        }
+      },
+      "NewQuote": {
+        "type": "object",
+        "required": ["customer", "drawingNo", "partName", "material", "quantity", "unitPrice"],
+        "properties": {
+          "customer": { "type": "string" },
+          "drawingNo": { "type": "string" },
+          "partName": { "type": "string" },
+          "material": { "$ref": "#/components/schemas/Material" },
+          "quantity": { "type": "integer" },
+          "unitPrice": { "type": "integer", "description": "税抜単価（円）" },
+          "total": { "type": "integer", "description": "税抜金額（円）" }
         }
       },
       "Rate": {
@@ -172,12 +185,33 @@
     "/quotes": {
       "post": {
         "operationId": "createQuote",
-        "summary": "見積を登録する（エージェントには許可しない）",
+        "summary": "見積を ERP に登録する（担当者が承認した呼び出しだけが実行される）",
         "requestBody": {
           "required": true,
-          "content": { "application/json": { "schema": { "type": "object" } } }
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/NewQuote" } }
+          }
         },
-        "responses": { "201": { "description": "登録した" } }
+        "responses": {
+          "201": {
+            "description": "登録した",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["quoteNo"],
+                  "properties": { "quoteNo": { "type": "string" } }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "その顧客は呼び出し元の担当ではない",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Error" } }
+            }
+          }
+        }
       }
     }
   }

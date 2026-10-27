@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { z } from 'zod';
 
-import { parseAgentToolRule } from './agents/tool-rules.js';
+import { needsApproval, parseAgentToolRule } from './agents/tool-rules.js';
 import {
+  AW_CONTROL_CONNECTOR,
   CONNECTOR_SERVER_KEY_MAX_LENGTH,
   CreateOpenApiConnectorRequestSchema,
   CreatePostgresConnectorRequestSchema,
@@ -36,14 +37,17 @@ import {
   TOOL_OPERATION_NAME_PATTERN,
   TOOL_SANDBOX_CONNECTOR_URL,
   TOOL_SERVER_KEY_MAX_LENGTH,
+  TOOL_WRITE_METHODS,
   ToolOperationNameSchema,
   ToolOperationSchema,
   connectorServerKey,
   describeToolRule,
   gatewayToolPath,
+  isReservedConnectorName,
   parseGatewayToolPath,
   problemCodeOfIssue,
   selectAllowedOperations,
+  toolApprovalRules,
   toolRuleConnectorServer,
   toolServerKey,
   toolServerKeys,
@@ -93,7 +97,8 @@ describe('vocabulary and bounds', () => {
     expect(POSTGRES_MAX_ROWS_LIMIT).toBe(1000);
     expect(POSTGRES_DEFAULT_MAX_ROWS).toBe(100);
     expect(POSTGRES_TOOL_OPERATION_NAMES).toEqual(['list_tables', 'describe', 'select']);
-    expect(TOOL_OPERATION_METHODS).toEqual(['GET', 'HEAD']);
+    expect(TOOL_OPERATION_METHODS).toEqual(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE']);
+    expect(TOOL_WRITE_METHODS).toEqual(['POST', 'PUT', 'PATCH', 'DELETE']);
   });
 
   it('derives the 41-character operation cap from the 64-character tool name (SD13)', () => {
@@ -110,15 +115,17 @@ describe('vocabulary and bounds', () => {
   it('publishes the problem codes and their statuses', () => {
     expect(TOOL_CONNECTOR_PROBLEM_CODES).toEqual({
       connector_spec_invalid: 422,
-      connector_write_unsupported: 422,
       connector_tool_name_collision: 422,
       connector_kind_unsupported: 400,
     });
     expect(TOOL_GATEWAY_PROBLEM_CODES).toEqual({
       tool_run_not_active: 401,
       tool_not_in_run: 403,
+      approval_required: 403,
+      approval_already_used: 403,
       tool_upstream_failed: 502,
       tool_upstream_timeout: 504,
+      tool_control_plane_unconfigured: 503,
     });
   });
 });
@@ -249,13 +256,26 @@ describe('connectorServerKey (SD13, #1109)', () => {
     }
   });
 
+  it('never gives a stored connector named aw-control the aw-control key (#1846)', () => {
+    expect(RESERVED_MCP_SERVER_KEYS).toContain(AW_CONTROL_CONNECTOR);
+    expect(connectorServerKey('aw-control', CONNECTOR_ID, none)).toBe(fallback);
+  });
+
   it('falls back when a tool connector of the run already holds the key', () => {
     expect(connectorServerKey('orders', CONNECTOR_ID, new Set(['orders']))).toBe(fallback);
     expect(connectorServerKey('orders', CONNECTOR_ID, new Set(['customers']))).toBe('orders');
   });
 
   it('never returns a key the MCP rule grammar refuses or that takes a reserved key', () => {
-    const names = ['file-finder', 'Orders', 'x'.repeat(60), 'agent-workspace', 'a--b', '9-lives'];
+    const names = [
+      'file-finder',
+      'Orders',
+      'x'.repeat(60),
+      'agent-workspace',
+      'aw-control',
+      'a--b',
+      '9-lives',
+    ];
     for (const name of names) {
       const key = connectorServerKey(name, CONNECTOR_ID, none);
       expect(parseAgentToolRule(`mcp__${key}__tool`).kind, key).toBe('bare');
@@ -305,12 +325,13 @@ describe('operation names and operations (C17)', () => {
     }
   });
 
-  it('holds an operation to GET or HEAD and a clean path template', () => {
+  it('holds an operation to a supported method and a clean path template', () => {
     const operation = { name: 'getOrder', method: 'GET', path: '/orders/{orderId}' };
-    expect(ToolOperationSchema.safeParse(operation).success).toBe(true);
-    expect(ToolOperationSchema.safeParse({ ...operation, method: 'HEAD' }).success).toBe(true);
+    for (const method of TOOL_OPERATION_METHODS) {
+      expect(ToolOperationSchema.safeParse({ ...operation, method }).success, method).toBe(true);
+    }
     for (const bad of [
-      { ...operation, method: 'POST' },
+      { ...operation, method: 'OPTIONS' },
       { ...operation, method: 'get' },
       { ...operation, path: 'orders' },
       { ...operation, path: '/orders/ {id}' },
@@ -325,8 +346,12 @@ describe('operation names and operations (C17)', () => {
 });
 
 describe('OpenApiAllowRuleSchema and OpenApiAllowSchema (SD4, SD14)', () => {
-  it('accepts GET and HEAD globs and operationId rules', () => {
+  it('accepts a glob of every supported method and operationId rules', () => {
     for (const rule of [
+      'POST /refunds',
+      'PUT /orders/*',
+      'PATCH /orders/{orderId}',
+      'DELETE /orders/**',
       'GET /orders/*',
       'HEAD /orders',
       'GET /orders/**',
@@ -339,21 +364,12 @@ describe('OpenApiAllowRuleSchema and OpenApiAllowSchema (SD4, SD14)', () => {
     }
   });
 
-  it('refuses POST /refunds as connector_write_unsupported', () => {
-    const issues = issuesOf(OpenApiAllowSchema.safeParse(['POST /refunds']));
-    expect(issues.map(problemCodeOfIssue)).toEqual(['connector_write_unsupported']);
-    expect(issues[0]?.path).toEqual([0]);
-    for (const method of ['PUT', 'PATCH', 'DELETE']) {
-      const [issue] = issuesOf(OpenApiAllowRuleSchema.safeParse(`${method} /refunds`));
-      expect(issue === undefined ? null : problemCodeOfIssue(issue)).toBe(
-        'connector_write_unsupported',
-      );
-    }
-  });
-
   it('refuses a malformed rule without a problem code', () => {
     for (const rule of [
       'get /orders',
+      'post /refunds',
+      'OPTIONS /orders',
+      'TRACE /orders',
       'GET orders',
       'GET /orders/**/items',
       'GET /orders//items',
@@ -398,7 +414,8 @@ describe('OpenApiAuthSchema', () => {
       expect(OpenApiAuthSchema.safeParse({ header: name }).success, name).toBe(false);
       expect(OpenApiAuthSchema.safeParse({ header: name.toUpperCase() }).success, name).toBe(false);
     }
-    expect(OPENAPI_AUTH_HEADER_REFUSED_NAMES).toHaveLength(10);
+    expect(OPENAPI_AUTH_HEADER_REFUSED_NAMES).toContain('x-aw-identity');
+    expect(OPENAPI_AUTH_HEADER_REFUSED_NAMES).toHaveLength(11);
     expect(Object.isFrozen(OPENAPI_AUTH_HEADER_REFUSED_NAMES)).toBe(true);
     for (const header of ['', 'X Api', 'X:Api', 'X-Api\r\n', 'é', 'x'.repeat(129)]) {
       expect(OpenApiAuthSchema.safeParse({ header }).success, header).toBe(false);
@@ -435,12 +452,19 @@ describe('CreateOpenApiConnectorRequestSchema (C15)', () => {
     ).toEqual(['allow']);
   });
 
-  it('refuses a write rule at its index with connector_write_unsupported', () => {
+  it('accepts a write rule and refuses an unsupported method at its index', () => {
+    expect(
+      CreateOpenApiConnectorRequestSchema.safeParse({ ...openapiBody, allow: ['POST /refunds'] })
+        .success,
+    ).toBe(true);
     const issues = issuesOf(
-      CreateOpenApiConnectorRequestSchema.safeParse({ ...openapiBody, allow: ['POST /refunds'] }),
+      CreateOpenApiConnectorRequestSchema.safeParse({
+        ...openapiBody,
+        allow: ['OPTIONS /refunds'],
+      }),
     );
     expect(issues.map((issue) => issue.path)).toEqual([['allow', 0]]);
-    expect(issues.map(problemCodeOfIssue)).toEqual(['connector_write_unsupported']);
+    expect(issues.map(problemCodeOfIssue)).toEqual([null]);
   });
 
   it('accepts a document of exactly 1 MiB and refuses 1 MiB + 1 with connector_spec_invalid', () => {
@@ -803,29 +827,55 @@ describe('selectAllowedOperations (SD14)', () => {
     ]);
   });
 
-  it('refuses operationId:createRefund naming a POST as connector_write_unsupported', () => {
-    const result = selectAllowedOperations(['GET /orders', 'operationId:createRefund'], operations);
-    expect(result.refusals).toEqual([
-      {
-        path: ['allow', 1],
-        code: 'connector_write_unsupported',
-        message: 'only GET and HEAD operations are supported',
-      },
+  it('admits operationId:createRefund naming a POST and a POST path rule', () => {
+    expect(ids(['GET /orders', 'operationId:createRefund'])).toEqual([
+      'listOrders',
+      'createRefund',
     ]);
-    expect(result.admitted.map((operation) => operation.operationId)).toEqual(['listOrders']);
+    expect(ids(['POST /refunds'])).toEqual(['createRefund']);
+    expect(ids(['POST /orders'])).toEqual([]);
   });
 
-  it('refuses an operationId naming no operation, a write rule and a malformed rule', () => {
+  it('refuses an operationId naming an unsupported method, none, and a malformed rule', () => {
     const result = selectAllowedOperations(
-      ['operationId:missing', 'POST /refunds', 'GET orders', 'operationId:getOrder'],
-      operations,
+      ['operationId:missing', 'operationId:traceOrders', 'GET orders', 'operationId:getOrder'],
+      [...operations, { method: 'trace', path: '/orders', operationId: 'traceOrders' }],
     );
     expect(result.refusals.map((refusal) => [refusal.path, refusal.code])).toEqual([
       [['allow', 0], 'connector_spec_invalid'],
-      [['allow', 1], 'connector_write_unsupported'],
+      [['allow', 1], 'connector_spec_invalid'],
       [['allow', 2], 'connector_spec_invalid'],
     ]);
+    expect(result.refusals[1]?.message).toBe('names an operation whose method is not supported');
     expect(result.admitted.map((operation) => operation.operationId)).toEqual(['getOrder']);
+  });
+});
+
+describe('toolApprovalRules (SD4, #1304)', () => {
+  const operations = [
+    { name: 'getQuote', method: 'GET' },
+    { name: 'checkQuote', method: 'HEAD' },
+    { name: 'createQuote', method: 'POST' },
+    { name: 'replaceQuote', method: 'PUT' },
+    { name: 'amendQuote', method: 'PATCH' },
+    { name: 'deleteQuote', method: 'DELETE' },
+  ] as const;
+
+  it('names only the write operations, under the connector server key', () => {
+    expect(toolApprovalRules('erp', operations)).toEqual([
+      'mcp__erp__createQuote',
+      'mcp__erp__replaceQuote',
+      'mcp__erp__amendQuote',
+      'mcp__erp__deleteQuote',
+    ]);
+    expect(toolApprovalRules('erp', operations.slice(0, 2))).toEqual([]);
+  });
+
+  it('is what needsApproval reads: a write needs approval, a read and another server do not', () => {
+    const rules = toolApprovalRules('erp', operations);
+    expect(needsApproval(rules, 'mcp__erp__createQuote')).toBe(true);
+    expect(needsApproval(rules, 'mcp__erp__getQuote')).toBe(false);
+    expect(needsApproval(rules, 'mcp__crm__createQuote')).toBe(false);
   });
 });
 
@@ -930,12 +980,13 @@ describe('review regressions (S2-02a)', () => {
     }
   });
 
-  it('refuses readOnly false as connector_write_unsupported and a non-boolean as plain', () => {
+  it('refuses readOnly false and a non-boolean as plain issues with no problem code', () => {
     const [writeIssue] = issuesOf(
       CreatePostgresConnectorRequestSchema.safeParse({ ...postgresBody, readOnly: false }),
     );
     expect(writeIssue?.path).toEqual(['readOnly']);
-    expect(codeOf(writeIssue)).toBe('connector_write_unsupported');
+    expect(writeIssue?.message).toBe('only reads are supported; set true');
+    expect(codeOf(writeIssue)).toBeNull();
     const [typeIssue] = issuesOf(
       CreatePostgresConnectorRequestSchema.safeParse({ ...postgresBody, readOnly: 'yes' }),
     );
@@ -957,13 +1008,12 @@ describe('review regressions (S2-02a)', () => {
     expect(ids(['operationId:noSlash', 'operationId:withSpace'])).toEqual([]);
   });
 
-  it('refuses a write method in any case as connector_write_unsupported', () => {
-    for (const rule of ['post /refunds', 'Post /refunds', 'delete /orders/*']) {
+  it('refuses a method that is not in upper case without a problem code', () => {
+    for (const rule of ['post /refunds', 'Post /refunds', 'delete /orders/*', 'get /orders']) {
       const [issue] = issuesOf(OpenApiAllowRuleSchema.safeParse(rule));
-      expect(codeOf(issue), rule).toBe('connector_write_unsupported');
+      expect(issue, rule).toBeDefined();
+      expect(codeOf(issue), rule).toBeNull();
     }
-    const [lowerGet] = issuesOf(OpenApiAllowRuleSchema.safeParse('get /orders'));
-    expect(codeOf(lowerGet)).toBeNull();
   });
 
   it('refuses a header credential a header value cannot carry as sent', () => {
@@ -1010,5 +1060,21 @@ describe('review regressions (S2-02a)', () => {
       expect(PostgresTableNameSchema.safeParse(table).success, table).toBe(false);
     }
     expect(PostgresTableNameSchema.safeParse('pgdata.events').success).toBe(true);
+  });
+});
+
+describe('the reserved connector name', () => {
+  it('reserves aw-control and nothing near it', () => {
+    expect(AW_CONTROL_CONNECTOR).toBe('aw-control');
+    expect(isReservedConnectorName('aw-control')).toBe(true);
+    for (const name of ['aw-dev-tools', 'aw-control-2', 'aw_control', '']) {
+      expect(isReservedConnectorName(name), name).toBe(false);
+    }
+  });
+
+  it('reserves it however it is cased or padded', () => {
+    for (const name of ['AW-Control', ' aw-control ', '\taw-control\n']) {
+      expect(isReservedConnectorName(name), name).toBe(true);
+    }
   });
 });

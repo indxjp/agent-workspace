@@ -35,6 +35,7 @@
  */
 'use server';
 
+import { log } from '../../server/telemetry/logger';
 import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 
@@ -87,7 +88,7 @@ function screenErrorFor(code: SignInFailure): SignInScreenError {
       return 'unconfigured';
     default: {
       const unhandled: never = code;
-      console.error(`[signin] unclassified sign-in failure ${JSON.stringify(unhandled)}`);
+      log.error(`[signin] unclassified sign-in failure`, { code: unhandled });
       return 'unconfigured';
     }
   }
@@ -111,7 +112,7 @@ export async function signInAction(form: FormData): Promise<void> {
     forwardedHost: headerBag.get('x-forwarded-host'),
   });
   if (!origin.ok) {
-    console.warn(`[signin] cross-origin sign-in refused: ${origin.reason}`);
+    log.warn(`[signin] cross-origin sign-in refused`, { reason: origin.reason });
     backToTheForm('cross_origin', next);
   }
   if (!admitSignInAttempt(headerBag).admitted) backToTheForm('rate_limited', next);
@@ -124,7 +125,7 @@ export async function signInAction(form: FormData): Promise<void> {
   if (!result.ok) {
     // The reason names the variable when the deployment is misconfigured, which is the only
     // place an operator can read it. It never reaches the browser.
-    console.warn(`[signin] refused: ${result.code}: ${result.reason}`);
+    log.warn(`[signin] refused`, { code: result.code, reason: result.reason });
     backToTheForm(screenErrorFor(result.code), next);
   }
 
@@ -139,6 +140,6 @@ export async function signInAction(form: FormData): Promise<void> {
     path: cookie.path,
     maxAge: cookie.maxAge,
   });
-  console.log('[signin] session issued for the bootstrap administrator');
+  log.info('[signin] session issued for the bootstrap administrator');
   redirect(next ?? '/');
 }

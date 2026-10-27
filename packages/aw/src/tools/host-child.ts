@@ -29,7 +29,6 @@ import { pathToFileURL } from 'node:url';
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -376,9 +375,7 @@ async function main(): Promise<void> {
           ),
         );
         const transport = new StreamableHTTPServerTransport({ enableJsonResponse: true });
-        // The SDK's own transport is its `Transport`; the declarations differ only under
-        // `exactOptionalPropertyTypes`.
-        await server.connect(transport as Transport);
+        await server.connect(transport);
         res.on('close', () => void server.close());
         const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
         await transport.handleRequest(req, res, body);

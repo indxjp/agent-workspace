@@ -227,7 +227,7 @@ document.documentElement.className += location.hash ? " js no-reveal" : " js";
 
       <div class="stage-panel on" id="sp1" role="tabpanel" aria-labelledby="sg1">
         <div class="overlap">
-          <div class="mock" role="img" aria-label="Design mockup: the manual-search agent's configuration with its model, files, skill and connector">
+          <div class="mock" role="img" aria-label="Design mockup: the manual-search agent's configuration with its model, files, skills and built-in search">
             <div class="mock-bar"><i></i><i></i><i></i><span>Agents → manual-search</span></div>
             <div class="mock-page">
               <div class="mock-h"><h4>manual-search</h4><span class="sp"></span><span class="badge badge-ok">production · v3</span><span class="mock-btn pri">Run</span></div>
@@ -235,25 +235,31 @@ document.documentElement.className += location.hash ? " js no-reveal" : " js";
               <dl class="mock-dl">
                 <dt>Model</dt><dd>default · claude-sonnet-4-5</dd>
                 <dt>Engine</dt><dd>claude-agent-sdk</dd>
-                <dt>Permissions</dt><dd>read files</dd>
+                <dt>Permissions</dt><dd>read files · run skill scripts</dd>
                 <dt>Files</dt><dd>manuals · read-only</dd>
-                <dt>Skills</dt><dd>cite-answer</dd>
-                <dt>Connectors</dt><dd>manual-index (http)</dd>
+                <dt>Skills</dt><dd>office-reader · cite-answer</dd>
+                <dt>Tools</dt><dd>search_files (built in)</dd>
                 <dt>Limits</dt><dd>12 turns · $0.50</dd>
               </dl>
             </div>
           </div>
-          <div class="codecard"><span class="fn-tab">agents/manual-search.ts</span><pre data-file="tests/gallery/manual-search/agents/manual-search.ts"><span class="kw">import</span> { defineAgent, files, mcp, skill } <span class="kw">from</span> <span class="str">'@indx-workspace/sdk/define'</span>;
+          <div class="codecard"><span class="fn-tab">agents/manual-search.ts</span><pre data-file="tests/gallery/manual-search/agents/manual-search.ts"><span class="kw">import</span> { builtinSkill, defineAgent, files, skill } <span class="kw">from</span> <span class="str">'@indx-workspace/sdk/define'</span>;
 
 <span class="kw">export</span> <span class="kw">default</span> <span class="fn">defineAgent</span>({
   name: <span class="str">'manual-search'</span>,
   instructions: { file: <span class="str">'./manual-search.md'</span> },
   model: <span class="str">'default'</span>,
-  engine: <span class="str">'claude-agent-sdk'</span>,
-  <span class="cm">// Read-only by construction: it can read the manuals and call the index, nothing else.</span>
-  permissions: { readFiles: <span class="kw">true</span> },
-  tools: [<span class="fn">mcp</span>(<span class="str">'manual-index'</span>)],
-  skills: [<span class="fn">skill</span>(<span class="str">'cite-answer'</span>)],
+  <span class="cm">// A run is unattended: without autoApprove the SDK stops the tools' calls on an approval prompt.</span>
+  engine: {
+    id: <span class="str">'claude-agent-sdk'</span>,
+    autoApprove: [<span class="str">'mcp__agent-workspace__run_skill_script'</span>, <span class="str">'mcp__agent-workspace__search_files'</span>],
+  },
+  <span class="cm">// Read-only by construction: it searches the manuals with the platform's `search_files` and</span>
+  <span class="cm">// reads the PDF through office-reader, nothing else. The portal narrows each run to the manuals</span>
+  <span class="cm">// the signed-in person may read (`runs.start({ fileScope })`). `runCommands` is what offers</span>
+  <span class="cm">// `run_skill_script`; no write, no network.</span>
+  permissions: { readFiles: <span class="kw">true</span>, runCommands: <span class="kw">true</span> },
+  skills: [<span class="fn">builtinSkill</span>(<span class="str">'office-reader'</span>), <span class="fn">skill</span>(<span class="str">'cite-answer'</span>)],
   files: [<span class="fn">files</span>(<span class="str">'manuals'</span>, <span class="str">'read'</span>)],
   limits: { maxTurns: 12, maxBudgetUsd: 0.5 },
 });</pre></div>
@@ -283,8 +289,8 @@ document.documentElement.className += location.hash ? " js no-reveal" : " js";
 <span class="fn">description</span>: 社内マニュアルに基づく回答の書き方。出典の書式と「該当なし」の基準を定める。
 ---
 - 回答は結論を1〜2文で先に書き、続けて根拠を箇条書きにする。
-- 各根拠の末尾に出典を〔文書名 p.ページ §節〕で書く。
-  - ページと節は `read_section` が返す `citation` をそのまま使う。言い換えない。
+- 各根拠の末尾に出典を〔文書名 p.ページ §節〕で書く。例: 〔油圧ユニット保守マニュアル p.12 §3.2〕
+  - 文書名・節・ページは、開いた PDF のページ先頭の文書名と節、末尾の `p.N` をそのまま使う。言い換えない。
 - 根拠が見つからないときは次の文で答える:
   「該当する記載が見つかりませんでした。設備保全課（内線 4410）にお問い合わせください。」</pre></div>
         </div>
@@ -296,26 +302,31 @@ document.documentElement.className += location.hash ? " js no-reveal" : " js";
           <div class="mock" role="img" aria-label="Design mockup: adding an HTTP MCP connector with bearer authentication">
             <div class="mock-bar"><i></i><i></i><i></i><span>Connectors → Add connector</span></div>
             <div class="mock-page">
-              <div class="f-row"><span class="f-lbl">Name</span><div class="f-in">manual-index</div></div>
+              <div class="f-row"><span class="f-lbl">Name</span><div class="f-in">authority</div></div>
               <div class="f-row"><span class="f-lbl">Transport</span>
                 <div class="f-opt on"><span class="rd"></span>HTTP (streamable)</div>
                 <div class="f-opt"><span class="rd"></span>SSE</div>
                 <div class="f-opt dim"><span class="rd"></span>Local command (stdio)<span class="note">stored, cannot run today</span></div>
               </div>
-              <div class="f-row"><span class="f-lbl">URL</span><div class="f-in">http://127.0.0.1:8787/mcp</div></div>
+              <div class="f-row"><span class="f-lbl">URL</span><div class="f-in">http://127.0.0.1:8790/mcp</div></div>
               <div class="mock-h" style="margin:0"><span class="mock-btn">Test connection</span><span class="mock-btn pri">Save</span></div>
             </div>
           </div>
-          <div class="codecard"><span class="fn-tab">agent-workspace.yaml</span><pre data-claim="illustrative"><span class="fn">connectors</span>:
-<span class="fn">  manual-index</span>:
-<span class="fn">    url</span>: http://127.0.0.1:8787/mcp
+          <div class="codecard"><span class="fn-tab">agent-workspace.yaml</span><pre data-file="tests/gallery/ringi-review/agent-workspace.yaml#excerpt"><span class="fn">connectors</span>:
+<span class="fn">  authority</span>:
+<span class="fn">    url</span>: http://127.0.0.1:8790/mcp
 <span class="fn">    transport</span>: http
 <span class="fn">policy</span>:
-<span class="fn">  permissions</span>: { writeFiles: false, runCommands: false, unrestrictedNetwork: false }
-<span class="fn">  limits</span>: { maxBudgetUsd: 1 }
-<span class="fn">  promotion</span>: { minEvalScore: 0.9 }</pre></div>
+<span class="fn">  permissions</span>:
+<span class="fn">    writeFiles</span>: false
+<span class="fn">    runCommands</span>: false
+<span class="fn">    unrestrictedNetwork</span>: false
+<span class="fn">  limits</span>:
+<span class="fn">    maxBudgetUsd</span>: 1
+<span class="fn">  promotion</span>:
+<span class="fn">    minEvalScore</span>: 0.9</pre></div>
         </div>
-        <div class="stage-cap"><b>Connectors and a policy ceiling, per project</b><span>MCP servers you host, over HTTP or SSE. The policy caps what any agent in the project may do.</span></div>
+        <div class="stage-cap"><b>Connectors and a policy ceiling, per project</b><span>Your own MCP servers, over HTTP or SSE, for what search cannot do (the ringi authority table). The policy caps what any agent in the project may do.</span></div>
       </div>
 
       <div class="stage-panel" id="sp4" role="tabpanel" aria-labelledby="sg4">
@@ -334,7 +345,7 @@ document.documentElement.className += location.hash ? " js no-reveal" : " js";
           <div class="codecard"><span class="fn-tab">compiled for every run</span><pre data-claim="illustrative"><span class="kw">const</span> options = {
   cwd: <span class="str">"/workspace"</span>,          <span class="cm">// hydrated per session</span>
   disallowedTools: [<span class="str">"Bash"</span>, <span class="str">"WebFetch"</span>, …],
-  allowedTools: [<span class="str">"mcp__&lt;connector-name&gt;__*"</span>], <span class="cm">// manual-index</span>
+  allowedTools: [<span class="str">"mcp__&lt;connector-name&gt;__*"</span>], <span class="cm">// e.g. authority</span>
   settingSources: ["project"],        <span class="cm">// the session's own project only, never host user state</span>
   strictMcpConfig: <span class="kw">true</span>,
   env,                       <span class="cm">// a run token, never a key</span>
@@ -360,17 +371,19 @@ document.documentElement.className += location.hash ? " js no-reveal" : " js";
               <p class="small" style="margin-top:12px">Illustrative values.</p>
             </div>
           </div>
-          <div class="codecard"><span class="fn-tab">backend/ask.ts</span><pre data-claim="illustrative"><span class="cm">// runAndRead and parseCitations are the manual-search tutorial's own helpers, not SDK exports</span>
-<span class="kw">export</span> <span class="kw">async</span> <span class="kw">function</span> <span class="fn">askManual</span>(aw, agentId, question, sessionId?) {
-  <span class="kw">const</span> reading = <span class="kw">await</span> <span class="fn">runAndRead</span>(aw, agentId, { prompt: question, sessionId: sessionId ?? <span class="kw">null</span> });
-  <span class="kw">const</span> read = <span class="kw">new</span> <span class="fn">Set</span>(
+          <div class="codecard"><span class="fn-tab">backend/ask.ts</span><pre data-claim="illustrative"><span class="cm">// runAndRead is the manual-search tutorial's own helper, not an SDK export</span>
+<span class="kw">export</span> <span class="kw">async</span> <span class="kw">function</span> <span class="fn">askManual</span>(aw, agentId, question, subject, sessionId?) {
+  <span class="kw">const</span> fileScope = <span class="fn">fileScopeFor</span>(subject);                      <span class="cm">// the manuals data/access.json lets them read</span>
+  <span class="kw">if</span> (fileScope.length === 0) throw <span class="kw">new</span> <span class="fn">NoManualAccess</span>(subject); <span class="cm">// no run at all</span>
+  <span class="kw">const</span> reading = <span class="kw">await</span> <span class="fn">runAndRead</span>(aw, agentId, { prompt: question, subject, fileScope, sessionId: sessionId ?? <span class="kw">null</span> }, ManualAnswerSchema);
+  <span class="kw">const</span> found = <span class="kw">new</span> <span class="fn">Set</span>(
     reading.toolCalls
-      .<span class="fn">filter</span>((call) =&gt; <span class="fn">toolIs</span>(call.name, <span class="str">'read_section'</span>) &amp;&amp; !call.isError)
-      .<span class="fn">flatMap</span>((call) =&gt; <span class="fn">parseCitations</span>(call.output ?? <span class="str">''</span>).<span class="fn">map</span>((citation) =&gt; citation.raw)),
+      .<span class="fn">filter</span>((call) =&gt; <span class="fn">toolIs</span>(call.name, <span class="str">'search_files'</span>) &amp;&amp; !call.isError)
+      .<span class="fn">flatMap</span>((call) =&gt; <span class="fn">foundIn</span>(call.output ?? <span class="str">''</span>)),
   );
-  <span class="kw">const</span> citations = <span class="fn">parseCitations</span>(reading.answer);
-  <span class="kw">const</span> unverified = citations.<span class="fn">filter</span>((citation) =&gt; !read.<span class="fn">has</span>(citation.raw));
-  <span class="kw">return</span> { answer: reading.answer, citations, unverified,
+  <span class="kw">const</span> { answer, citations } = reading.output;                  <span class="cm">// typed, not parsed</span>
+  <span class="kw">const</span> unverified = citations.<span class="fn">filter</span>((citation) =&gt; !found.<span class="fn">has</span>(<span class="fn">keyOf</span>(citation.source, citation.page)));
+  <span class="kw">return</span> { answer, citations, unverified,
            grounded: citations.length &gt; 0 &amp;&amp; unverified.length === 0, … };
 }</pre></div>
         </div>
@@ -384,7 +397,7 @@ document.documentElement.className += location.hash ? " js no-reveal" : " js";
             <div class="stream">
               <div class="msg"><span class="who">User</span><div class="body">油圧ユニットの定期点検の周期は？</div></div>
               <div class="msg"><span class="who">Agent</span><div class="body">定期点検は 6か月 ごとです。〔油圧ユニット保守マニュアル p.12 §3.2〕
-                <ul class="steps"><li><span class="tick">✓</span><span class="tool">search_manual</span></li><li><span class="tick">✓</span><span class="tool">read_section</span></li></ul></div></div>
+                <ul class="steps"><li><span class="tick">✓</span><span class="tool">search_files</span></li><li><span class="tick">✓</span><span class="tool">run_skill_script</span></li></ul></div></div>
             </div>
           </div>
           <div class="codecard"><span class="fn-tab">surfaces/manual-desk.ts</span><pre data-file="tests/gallery/manual-search/surfaces/manual-desk.ts#excerpt"><span class="kw">export</span> <span class="kw">default</span> <span class="fn">defineSurface</span>({
@@ -399,6 +412,8 @@ document.documentElement.className += location.hash ? " js no-reveal" : " js";
     toolTrace: <span class="str">'collapsed'</span>,
     feedback: <span class="kw">true</span>,
   },
+  <span class="cm">// Search hits render as cards. The key is the tool's bare name: a run's engine prefix is ignored.</span>
+  toolResults: { search_files: <span class="str">'card'</span> },
 });</pre></div>
         </div>
         <div class="stage-cap"><b>One tag, or a React component</b><span>A surface is served at <code>/p/s/&lt;name&gt;</code> with a <code>widget.js</code>, limited to the origins you allow. <a href="https://docs.agentworkspace.indx.jp/features/embed-in-your-product">Learn more: embed in your product</a></span></div>
@@ -530,11 +545,11 @@ document.documentElement.className += location.hash ? " js no-reveal" : " js";
   <span class="k">model</span>: <span class="str">"claude-sonnet-4-5"</span>,
   <span class="k">cwd</span>: <span class="str">"/workspace"</span>,
   <span class="k">tools</span>: { type: <span class="str">"preset"</span>, preset: <span class="str">"claude_code"</span> },
-  <span class="k">allowedTools</span>: [<span class="str">"mcp__file-finder__*"</span>],
+  <span class="k">allowedTools</span>: [<span class="str">"mcp__authority__*"</span>],
   <span class="k">disallowedTools</span>: [<span class="str">"Bash"</span>, <span class="str">"BashOutput"</span>, <span class="str">"KillShell"</span>, <span class="str">"WebFetch"</span>, <span class="str">"WebSearch"</span>],
   <span class="k">skills</span>: [<span class="str">"contract-review"</span>],
   <span class="k">mcpServers</span>: {
-    <span class="str">"file-finder"</span>: { type: <span class="str">"http"</span>, url: <span class="str">"https://intranet.acme.example/mcp"</span> },
+    <span class="str">"authority"</span>: { type: <span class="str">"http"</span>, url: <span class="str">"https://intranet.acme.example/mcp"</span> },
   },
   <span class="k">settingSources</span>: [<span class="str">"project"</span>],      <span class="cm">// session project only, never host user state</span>
   <span class="k">strictMcpConfig</span>: <span class="kw">true</span>,
@@ -563,36 +578,55 @@ document.documentElement.className += location.hash ? " js no-reveal" : " js";
       <div class="ucards">
         <a class="ucard reveal" data-d="0" href="use-cases.html#code-manual-search">
           <div class="top"><span class="who">Maintenance</span><h3>Manual search agent</h3><p>A field engineer asks 「油圧ユニットの定期点検の周期は？」 in the portal&#x27;s side panel.</p></div>
-          <pre data-file="tests/gallery/manual-search/agents/manual-search.ts" aria-label="agents/manual-search.ts"><span class="kw">import</span> { defineAgent, files, mcp, skill } <span class="kw">from</span> <span class="str">'@indx-workspace/sdk/define'</span>;
+          <pre data-file="tests/gallery/manual-search/agents/manual-search.ts" aria-label="agents/manual-search.ts"><span class="kw">import</span> { builtinSkill, defineAgent, files, skill } <span class="kw">from</span> <span class="str">'@indx-workspace/sdk/define'</span>;
 
 <span class="kw">export</span> <span class="kw">default</span> <span class="fn">defineAgent</span>({
   name: <span class="str">'manual-search'</span>,
   instructions: { file: <span class="str">'./manual-search.md'</span> },
   model: <span class="str">'default'</span>,
-  engine: <span class="str">'claude-agent-sdk'</span>,
-  <span class="cm">// Read-only by construction: it can read the manuals and call the index, nothing else.</span>
-  permissions: { readFiles: <span class="kw">true</span> },
-  tools: [<span class="fn">mcp</span>(<span class="str">'manual-index'</span>)],
-  skills: [<span class="fn">skill</span>(<span class="str">'cite-answer'</span>)],
+  <span class="cm">// A run is unattended: without autoApprove the SDK stops the tools' calls on an approval prompt.</span>
+  engine: {
+    id: <span class="str">'claude-agent-sdk'</span>,
+    autoApprove: [<span class="str">'mcp__agent-workspace__run_skill_script'</span>, <span class="str">'mcp__agent-workspace__search_files'</span>],
+  },
+  <span class="cm">// Read-only by construction: it searches the manuals with the platform's `search_files` and</span>
+  <span class="cm">// reads the PDF through office-reader, nothing else. The portal narrows each run to the manuals</span>
+  <span class="cm">// the signed-in person may read (`runs.start({ fileScope })`). `runCommands` is what offers</span>
+  <span class="cm">// `run_skill_script`; no write, no network.</span>
+  permissions: { readFiles: <span class="kw">true</span>, runCommands: <span class="kw">true</span> },
+  skills: [<span class="fn">builtinSkill</span>(<span class="str">'office-reader'</span>), <span class="fn">skill</span>(<span class="str">'cite-answer'</span>)],
   files: [<span class="fn">files</span>(<span class="str">'manuals'</span>, <span class="str">'read'</span>)],
   limits: { maxTurns: 12, maxBudgetUsd: 0.5 },
 });</pre>
         </a>
         <a class="ucard reveal" data-d="1" href="use-cases.html#code-contract-review">
           <div class="top"><span class="who">Legal</span><h3>Contract review agent</h3><p>Legal uploads a counterparty&#x27;s Word draft; the agent splits it into 第N条 clauses, compares each with the playbook and standard clauses, and…</p></div>
-          <pre data-file="tests/gallery/contract-review/agents/contract-review.ts" aria-label="agents/contract-review.ts"><span class="kw">import</span> { defineAgent, files, skill } <span class="kw">from</span> <span class="str">'@indx-workspace/sdk/define'</span>;
+          <pre data-file="tests/gallery/contract-review/agents/contract-review.ts" aria-label="agents/contract-review.ts"><span class="kw">import</span> { builtinSkill, defineAgent, files, skill } <span class="kw">from</span> <span class="str">'@indx-workspace/sdk/define'</span>;
 
 <span class="kw">export</span> <span class="kw">default</span> <span class="fn">defineAgent</span>({
   name: <span class="str">'contract-review'</span>,
   instructions: { file: <span class="str">'./contract-review.md'</span> },
   model: <span class="str">'default'</span>,
   <span class="cm">// A run is unattended: without autoApprove the SDK stops the skill script's call on an approval prompt.</span>
-  engine: { id: <span class="str">'claude-agent-sdk'</span>, autoApprove: [<span class="str">'mcp__agent-workspace__run_skill_script'</span>] },
-  <span class="cm">// It reads the playbook and runs the skill script, which reads the draft itself; it writes</span>
-  <span class="cm">// nothing and reaches no network. `runCommands` is what offers `run_skill_script`, which runs `clauses.mjs`.</span>
-  permissions: { readFiles: <span class="kw">true</span>, runCommands: <span class="kw">true</span> },
-  skills: [<span class="fn">skill</span>(<span class="str">'contract-playbook'</span>)],
-  files: [<span class="fn">files</span>(<span class="str">'contracts'</span>, <span class="str">'read'</span>), <span class="fn">files</span>(<span class="str">'playbook'</span>, <span class="str">'read'</span>)],
+  <span class="cm">// The one thing legal decides is the redline: the agent saves it with `Write`, and the run waits</span>
+  <span class="cm">// there for an approval (ADR-0145) before the Word file is made. Every other file is written by a</span>
+  <span class="cm">// script, so that `Write` is the run's only gated call.</span>
+  engine: {
+    id: <span class="str">'claude-agent-sdk'</span>,
+    autoApprove: [<span class="str">'mcp__agent-workspace__run_skill_script'</span>, <span class="str">'mcp__agent-workspace__search_files'</span>],
+    requireApproval: [<span class="str">'Write'</span>],
+  },
+  <span class="cm">// office-reader turns the draft into paragraphs JSON in `drafts` (the one read-write scratch</span>
+  <span class="cm">// grant); contract-playbook checks that JSON, and once legal approves the redline, office-reader</span>
+  <span class="cm">// writes the redlined copy to `outputs/` (the folder the run collects; the backend reads it back</span>
+  <span class="cm">// with `runs.outputs`). It reaches no network. `runCommands` is what offers `run_skill_script`.</span>
+  <span class="cm">// A question about a playbook rule is answered with the platform's `search_files` over the granted</span>
+  <span class="cm">// `playbook` folder: no index and no connector of ours.</span>
+  permissions: { readFiles: <span class="kw">true</span>, writeFiles: <span class="kw">true</span>, runCommands: <span class="kw">true</span> },
+  <span class="cm">// Pinned to revision 1 of the playbook (`aw skills publish`): each review's run names this</span>
+  <span class="cm">// version, and the version names the rules that applied, so a later edit cannot change the answer.</span>
+  skills: [<span class="fn">builtinSkill</span>(<span class="str">'office-reader'</span>), <span class="fn">skill</span>(<span class="str">'contract-playbook'</span>, { revision: 1 })],
+  files: [<span class="fn">files</span>(<span class="str">'contracts'</span>, <span class="str">'read'</span>), <span class="fn">files</span>(<span class="str">'playbook'</span>, <span class="str">'read'</span>), <span class="fn">files</span>(<span class="str">'drafts'</span>, <span class="str">'read-write'</span>)],
   limits: { maxTurns: 20, maxBudgetUsd: 1 },
 });</pre>
         </a>
@@ -602,11 +636,19 @@ document.documentElement.className += location.hash ? " js no-reveal" : " js";
   name: <span class="str">'customer-inquiry'</span>,
   instructions: { file: <span class="str">'./customer-inquiry.md'</span> },
   model: <span class="str">'default'</span>,
-  engine: <span class="str">'claude-agent-sdk'</span>,
-  <span class="cm">// Nothing but the CRM server: no files, no commands, no network.</span>
-  permissions: {},
-  tools: [<span class="fn">mcp</span>(<span class="str">'crm-history'</span>)],
+  <span class="cm">// A run is unattended: without autoApprove the SDK stops the FAQ search on an approval prompt.</span>
+  <span class="cm">// `handoff` offers `handoff_to_person`: the agent passes the customer to an operator with it.</span>
+  engine: {
+    id: <span class="str">'claude-agent-sdk'</span>,
+    autoApprove: [<span class="str">'mcp__agent-workspace__search_files'</span>],
+    handoff: <span class="kw">true</span>,
+  },
+  <span class="cm">// It reads the FAQ (the one granted folder) with the built-in `search_files` and the customer's</span>
+  <span class="cm">// history through the read-only CRM tool; no write, no command, no network, no server of ours.</span>
+  permissions: { readFiles: <span class="kw">true</span> },
+  tools: [crm],
   skills: [<span class="fn">skill</span>(<span class="str">'keigo-reply'</span>)],
+  files: [<span class="fn">files</span>(<span class="str">'faq'</span>, <span class="str">'read'</span>)],
   limits: { maxTurns: 10, maxBudgetUsd: 0.3 },
 });</pre>
         </a>
@@ -614,16 +656,24 @@ document.documentElement.className += location.hash ? " js no-reveal" : " js";
           <div class="top"><span class="who">Requesting departments; approvers in planning</span><h3>Ringi review agent</h3><p>When a department files a ringi in the existing workflow system, your backend starts the agent, which checks it against the authority…</p></div>
           <pre data-file="tests/gallery/ringi-review/agents/ringi-review.ts#excerpt" aria-label="agents/ringi-review.ts"><span class="kw">import</span> { defineAgent, files, mcp, skill } <span class="kw">from</span> <span class="str">'@indx-workspace/sdk/define'</span>;
 
+<span class="kw">import</span> { workflow } <span class="kw">from</span> <span class="str">'../tools/workflow.ts'</span>;
+
 <span class="kw">export</span> <span class="kw">default</span> <span class="fn">defineAgent</span>({
   name: <span class="str">'ringi-review'</span>,
   instructions: { file: <span class="str">'./ringi-review.md'</span> },
   model: <span class="str">'default'</span>,
-  engine: <span class="str">'claude-agent-sdk'</span>,
-  <span class="cm">// Read-only by construction: it reads the rules and the archive and writes nothing.</span>
+  <span class="cm">// A run is unattended: without autoApprove the SDK stops the file search on an approval prompt.</span>
+  engine: { id: <span class="str">'claude-agent-sdk'</span>, autoApprove: [<span class="str">'mcp__agent-workspace__search_files'</span>] },
+  <span class="cm">// It reads the rules and the archive, and its one write is a comment on the ringi (postComment,</span>
+  <span class="cm">// which waits for approval). It cannot approve or reject a ringi because no tool it holds can,</span>
+  <span class="cm">// and the project's policy ceiling forbids writing files, running commands and open network</span>
+  <span class="cm">// access for every agent in the project. The rules and the past ringi are found with the</span>
+  <span class="cm">// built-in `search_files`; the backend narrows a run to the departments' folders the filer may</span>
+  <span class="cm">// read (`runs.start({ fileScope })`).</span>
   permissions: { readFiles: <span class="kw">true</span> },
-  tools: [<span class="fn">mcp</span>(<span class="str">'ringi-archive'</span>)],
+  tools: [<span class="fn">mcp</span>(<span class="str">'authority'</span>), workflow],
   skills: [<span class="fn">skill</span>(<span class="str">'ringi-checklist'</span>)],
-  files: [<span class="fn">files</span>(<span class="str">'rules'</span>, <span class="str">'read'</span>)],
+  files: [<span class="fn">files</span>(<span class="str">'rules'</span>, <span class="str">'read'</span>), <span class="fn">files</span>(<span class="str">'ringi'</span>, <span class="str">'read'</span>)],
   limits: { maxTurns: 16, maxBudgetUsd: 0.5 },
 });</pre>
         </a>
@@ -633,13 +683,21 @@ document.documentElement.className += location.hash ? " js no-reveal" : " js";
   name: <span class="str">'quality-defect'</span>,
   instructions: { file: <span class="str">'./quality-defect.md'</span> },
   model: <span class="str">'default'</span>,
-  <span class="cm">// A run is unattended: without autoApprove the SDK stops the skill script's call on an approval prompt.</span>
-  engine: { id: <span class="str">'claude-agent-sdk'</span>, autoApprove: [<span class="str">'mcp__agent-workspace__run_skill_script'</span>] },
-  <span class="cm">// Reads the FMEA and runs the eight-d check script; no writes, no network (the project</span>
-  <span class="cm">// ceiling forbids both whatever this file says).</span>
+  <span class="cm">// A run is unattended: the agent runs office-reader on the FMEA workbook without a prompt. It</span>
+  <span class="cm">// does not run the eight-d check script itself; that is the backend's, and a manual check only.</span>
+  <span class="cm">// The 8D ends (D8) by registering the case as a 過去トラ, and the DR decides that: `createCase` is</span>
+  <span class="cm">// the QMS tool's one write, so it is implicitly gated (ADR-0145) and the run waits there for an</span>
+  <span class="cm">// approval; nothing is registered before. Every other tool is a read.</span>
+  engine: {
+    id: <span class="str">'claude-agent-sdk'</span>,
+    autoApprove: [<span class="str">'mcp__agent-workspace__run_skill_script'</span>],
+  },
+  <span class="cm">// Reads the FMEA workbook (.xlsx) with office-reader; runCommands offers run_skill_script for</span>
+  <span class="cm">// that. No file writes, no network (the project ceiling forbids both whatever this file says);</span>
+  <span class="cm">// `createCase` is a QMS write, not a file write.</span>
   permissions: { readFiles: <span class="kw">true</span>, runCommands: <span class="kw">true</span>, unrestrictedNetwork: <span class="kw">false</span> },
-  tools: [<span class="fn">mcp</span>(<span class="str">'defect-db'</span>)],
-  skills: [<span class="fn">skill</span>(<span class="str">'eight-d'</span>)],
+  tools: [qms],
+  skills: [<span class="fn">builtinSkill</span>(<span class="str">'office-reader'</span>), <span class="fn">skill</span>(<span class="str">'eight-d'</span>)],
   files: [<span class="fn">files</span>(<span class="str">'fmea'</span>, <span class="str">'read'</span>)],
   limits: { maxTurns: 16, maxBudgetUsd: 1 },
 });</pre>
@@ -660,7 +718,7 @@ document.documentElement.className += location.hash ? " js no-reveal" : " js";
     id: <span class="str">'claude-agent-sdk'</span>,
     autoApprove: [<span class="str">'Bash'</span>, <span class="str">'mcp__agent-workspace__run_skill_script'</span>],
   },
-  <span class="cm">// runCommands runs the cost-model script; nothing is written, and the ERP is read-only.</span>
+  <span class="cm">// runCommands runs the cost-model script; the one write is the ERP's createQuote, which waits for approval.</span>
   permissions: { readFiles: <span class="kw">true</span>, runCommands: <span class="kw">true</span> },
   tools: [erp],
   skills: [<span class="fn">skill</span>(<span class="str">'cost-model'</span>)],

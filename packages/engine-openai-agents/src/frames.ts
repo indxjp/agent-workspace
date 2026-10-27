@@ -63,6 +63,8 @@ export type OpenAiAgentsEvent =
       readonly stopReason: AgentStopReason;
       readonly turns: number | null;
       readonly usage: OpenAiAgentsUsage | null;
+      /** The answer and its parsed form, when the stop was `end_turn` (ADR-0143). */
+      readonly output?: { readonly text: string; readonly structured: unknown };
     };
 
 /** What the mapper needs to know about the compiled run. */
@@ -326,6 +328,7 @@ export function createOpenAiAgentsFrameMapper(
                 stopReason: event.stopReason,
                 turns: event.turns,
                 engineCostUsd: null,
+                ...(event.output === undefined ? {} : { output: event.output }),
               },
               event,
             ),

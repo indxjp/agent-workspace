@@ -29,7 +29,7 @@ every other caller — this task does not touch `pricing.ts`'s public contract.
 
 1. `run_usage_records.price_table_version` becomes nullable. A response captured with no
    catalogue price is still inserted, at `cost_usd = '0'` and `price_table_version = NULL`,
-   instead of being dropped. `packages/gateway/src/index.ts`'s `createDatabaseUsageRecorder`
+   instead of being dropped. `packages/gateway/src/database.ts`'s `createDatabaseUsageRecorder`
    catches `priceFor`'s throw locally and passes `null` through — `priceFor` itself is unchanged.
 
 2. `RunRepository.recordUsage` keys a ledger write by `(runId, providerResponseId)`, the existing

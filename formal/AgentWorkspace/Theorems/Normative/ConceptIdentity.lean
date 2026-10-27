@@ -27,7 +27,7 @@ theorem every_membership_and_api_key_carries_one_of_four_roles :
       (catalogue .memberships).oneOfCheck? "memberships_role_valid" =
         some ("role", ["owner", "admin", "builder", "viewer"]) ∧
       (catalogue .apiKeys).oneOfCheck? "api_keys_role_valid" =
-        some ("role", ["owner", "admin", "builder", "viewer"]) := by decide
+        some ("role", ["owner", "admin", "builder", "viewer"]) := by decide +kernel
 
 /-- "A principal is … a membership … or an API key … Never a bare user": a principal row has no
 `user_id` column, its kind is one of the two sources, and every source is one of the two kinds. -/
@@ -38,7 +38,7 @@ theorem principal_is_a_membership_or_an_api_key_never_a_bare_user :
       (catalogue .workspacePrincipals).oneOfCheck? "workspace_principals_kind_valid" =
         some ("kind", ["membership", "api_key"]) ∧
       ∀ s : Source, s.kind = .membership ∨ s.kind = .apiKey := by
-  refine ⟨by decide, by decide, fun s => ?_⟩
+  refine ⟨by decide +kernel, by decide +kernel, fun s => ?_⟩
   cases s <;> simp [Source.kind]
 
 /-- "An API key has no user behind it and no membership row; it *is* the principal": `api_keys`
@@ -52,7 +52,7 @@ theorem api_key_has_no_user_and_no_membership :
     (catalogue .apiKeys).hasColumn "user_id" = false ∧
       (catalogue .apiKeys).hasColumn "membership_id" = false ∧
       ∀ i : ApiKeyIdentity, (fromApiKey i).userId = none ∧ (fromApiKey i).kind = .apiKey :=
-  ⟨by decide, by decide, fun _ => ⟨rfl, rfl⟩⟩
+  ⟨by decide +kernel, by decide +kernel, fun _ => ⟨rfl, rfl⟩⟩
 
 /-- "It holds one role fixed at mint time": the key's role is one column of its row, not a scope
 list, and the principal it authenticates as has exactly that role. -/
@@ -64,7 +64,7 @@ theorem api_key_acts_with_one_role :
       (catalogue .apiKeys).hasColumn "permissions" = false ∧
       (catalogue .apiKeys).hasColumn "scopes" = false ∧
       ∀ i : ApiKeyIdentity, (fromApiKey i).role = i.role :=
-  ⟨by decide, by decide, by decide, fun _ => rfl⟩
+  ⟨by decide +kernel, by decide +kernel, by decide +kernel, fun _ => rfl⟩
 
 /-- "`userId` is `null` for exactly an API-key principal": the `GET /api/me` view of any
 well-formed authenticated principal has a user id exactly when it is a membership. -/
@@ -87,7 +87,7 @@ both. -/
 theorem the_role_is_on_the_membership_not_the_user :
     (catalogue .users).hasColumn "workspace_id" = false ∧ (catalogue .users).hasColumn "role" = false ∧
       (catalogue .memberships).isNotNull "workspace_id" = true ∧
-      (catalogue .memberships).isNotNull "role" = true := by decide
+      (catalogue .memberships).isNotNull "role" = true := by decide +kernel
 
 /-- "Every resource below belongs to exactly one [workspace]": each tenant-scoped identity table
 has exactly one reference to `workspaces`, over a `NOT NULL` `workspace_id`. -/
@@ -99,21 +99,21 @@ theorem identity_rows_belong_to_exactly_one_workspace :
       .oauthTokens].all
       (fun t => (catalogue t).isNotNull "workspace_id" &&
         ((catalogue t).foreignKeys.filter fun fk => classify catalogue t fk == .rootReference).length
-          == 1) = true := by decide
+          == 1) = true := by decide +kernel
 
 /-- A slug selects at most one workspace: `workspaces_slug_key` is a unique index on the
 `NOT NULL` column `slug`. -/
 @[aw_spec (tier := T1) (ts := "packages/core/src/db/schema/workspaces.ts#workspaces_slug_key")]
 theorem a_slug_selects_at_most_one_workspace :
-    (catalogue .workspaces).uniqueSignature? "workspaces_slug_key" = some (["slug"], .index, []) ∧
-      (catalogue .workspaces).isNotNull "slug" = true := by decide
+    (catalogue .workspaces).uniqueSignature? "workspaces_slug_key" = some (["slug"], .index, [], []) ∧
+      (catalogue .workspaces).isNotNull "slug" = true := by decide +kernel
 
 /-- "A person holds at most one role per workspace": `(workspace_id, user_id)` is a unique
 constraint of `memberships`. -/
 @[aw_spec (tier := T1) (ts := "packages/core/src/db/schema/memberships.ts#memberships_workspace_user_key")]
 theorem a_person_holds_at_most_one_role_per_workspace :
     (catalogue .memberships).uniqueSignature? "memberships_workspace_user_key" =
-      some (["workspace_id", "user_id"], .constraint, []) := by decide
+      some (["workspace_id", "user_id"], .constraint, [], []) := by decide +kernel
 
 /-- "One (issuer, subject) binds to exactly one user, forever": the pair is a unique constraint,
 and its `user_id` is `NOT NULL` and references `users`. -/
@@ -121,10 +121,10 @@ and its `user_id` is `NOT NULL` and references `users`. -/
   (ts := "packages/core/src/db/schema/user-identities.ts#user_identities_issuer_subject_key")]
 theorem an_oidc_subject_binds_exactly_one_user :
     (catalogue .userIdentities).uniqueSignature? "user_identities_issuer_subject_key" =
-        some (["issuer", "subject"], .constraint, []) ∧
+        some (["issuer", "subject"], .constraint, [], []) ∧
       (catalogue .userIdentities).isNotNull "user_id" = true ∧
       (catalogue .userIdentities).foreignKeySignature? "user_identities_user_id_users_id_fk" =
-        some (["user_id"], .users, ["id"], .cascade) := by decide
+        some (["user_id"], .users, ["id"], .cascade) := by decide +kernel
 
 /-- "The source pair is tenant-paired … Deleting a membership cascades its principal row away":
 both source keys of `workspace_principals` are `ON DELETE CASCADE` (a removed membership's
@@ -138,7 +138,7 @@ theorem principal_sources_cascade :
       (catalogue .workspacePrincipals).foreignKeySignature?
         "workspace_principals_api_key_workspace_fk" =
         some (["workspace_id", "api_key_id"], .apiKeys, ["workspace_id", "id"], .cascade) := by
-  decide
+  decide +kernel
 
 /-- The first two membership rows of the witness state: Ada in two workspaces with two roles. -/
 private theorem ada_rows :
@@ -177,16 +177,16 @@ theorem identity_determines_neither_tenant_nor_role :
       r ∈ Invariants.ConceptIdentity.Witness.state .memberships := fun _ h => List.mem_of_mem_take h
   rw [ada_rows] at mem
   refine ⟨fun ⟨f, hf⟩ => ?_, fun ⟨f, hf⟩ => ?_, fun st hc m1 h1 m2 h2 hws hu => ?_⟩
-  · exact not_one_value_for_two (a := "w1") (b := "w2") (by decide)
+  · exact not_one_value_for_two (a := "w1") (b := "w2") (by decide +kernel)
       (hf _ hw _ (mem _ List.mem_cons_self))
       (hf _ hw _ (mem _ (List.mem_cons_of_mem _ List.mem_cons_self)))
-  · exact not_one_value_for_two (a := "owner") (b := "viewer") (by decide)
+  · exact not_one_value_for_two (a := "owner") (b := "viewer") (by decide +kernel)
       (hf _ hw _ (mem _ List.mem_cons_self))
       (hf _ hw _ (mem _ (List.mem_cons_of_mem _ List.mem_cons_self)))
   · have hp : m1.present ["workspace_id", "user_id"] = true :=
-      not_null_present (t := .memberships) hc (by decide) h1
+      not_null_present (t := .memberships) hc (by decide +kernel) h1
     have := unique_of_covers (t := .memberships) (cols := ["workspace_id", "user_id"]) hc
-      (by decide) h1 h2 hp (by simp [Row.project, hws, hu])
+      (by decide +kernel) h1 h2 hp (by simp [Row.project, hws, hu])
     rw [this]
 
 example : ∀ m1 ∈ Invariants.ConceptIdentity.Witness.state .memberships,
@@ -203,9 +203,9 @@ browser-token hashes: neither unique key includes `workspace_id`. -/
   (ts := "packages/core/src/db/schema/browser-tokens.ts#browser_tokens_hash_key")
   (doc := "docs/sdk/04-api-specification.md#31-credentials")]
 theorem credential_hashes_are_globally_unique :
-    (catalogue .apiKeys).uniqueSignature? "api_keys_key_hash_key" = some (["key_hash"], .index, []) ∧
+    (catalogue .apiKeys).uniqueSignature? "api_keys_key_hash_key" = some (["key_hash"], .index, [], []) ∧
       (catalogue .browserTokens).uniqueSignature? "browser_tokens_hash_key" =
-        some (["token_hash"], .index, []) := by decide
+        some (["token_hash"], .index, [], []) := by decide +kernel
 
 /-- "Shown once": neither the API-key resource nor the invitation resource has a field for the
 secret or its hash. -/
@@ -218,7 +218,7 @@ theorem credentials_never_appear_in_resources :
         true ∧
       Concepts.Invitation.resourceFields.all
         (fun f => !Concepts.Invitation.credentialFields.contains f) = true := by
-  decide
+  decide +kernel
 
 /-- "The minting principal's role is re-read from the directory on every request, never carried in
 the token": a browser-token row has no role column, and names its minter by a `NOT NULL`
@@ -227,7 +227,7 @@ principal id. -/
   (ts := "packages/core/src/db/schema/browser-tokens.ts#mintedByPrincipalId")]
 theorem browser_token_carries_no_role :
     (catalogue .browserTokens).hasColumn "role" = false ∧
-      (catalogue .browserTokens).isNotNull "minted_by_principal_id" = true := by decide
+      (catalogue .browserTokens).isNotNull "minted_by_principal_id" = true := by decide +kernel
 
 /-- "Attenuation, not a fourth identity": a browser-token principal is its minter's identity —
 the same principal, kind, workspace, user and key — with `via = browser-token` and the scope
@@ -258,7 +258,7 @@ closed interval, and the default is inside it. -/
 theorem token_ttl_is_bounded (ttl : Nat) :
     (ttlAccepted ttl = true ↔ 60 ≤ ttl ∧ ttl ≤ 3600) ∧ ttlAccepted defaultTtlSeconds = true ∧
       defaultTtlSeconds = 300 := by
-  refine ⟨?_, by decide, rfl⟩
+  refine ⟨?_, by decide +kernel, rfl⟩
   simp only [ttlAccepted, minTtlSeconds, maxTtlSeconds, Bool.and_eq_true]
   exact ⟨fun ⟨a, b⟩ => ⟨of_decide_eq_true a, of_decide_eq_true b⟩,
     fun ⟨a, b⟩ => ⟨decide_eq_true a, decide_eq_true b⟩⟩
@@ -299,7 +299,7 @@ theorem invitation_is_never_both_accepted_and_revoked (i : Invitation) (h : i.va
 
 example : ¬((some 20 : Option Instant).isSome = true ∧ (none : Option Instant).isSome = true) :=
   invitation_is_never_both_accepted_and_revoked
-    ⟨⟨"i"⟩, ⟨"w"⟩, "a@b.co", .viewer, none, "h", 50, some 20, none, 10, 10⟩ (by decide)
+    ⟨⟨"i"⟩, ⟨"w"⟩, "a@b.co", .viewer, none, "h", 50, some 20, none, 10, 10⟩ (by decide +kernel)
 
 /-- "An expired row is still pending until it is resent or revoked, so it continues to block a
 duplicate": an invitation that `invitationStateOf` calls expired is still unresolved, and the
@@ -313,7 +313,7 @@ theorem expired_invitation_still_blocks_a_duplicate :
       none, 100, 100⟩
     old.stateAt 100 = .expired ∧ old.unresolved = true ∧
       keyHolds [old.toRow, new.toRow] ["workspace_id", "email"] ["accepted_at", "revoked_at"] =
-        false := by decide
+        false := by decide +kernel
 
 /-- "`invited_by` references `users`, not `memberships` … `ON DELETE SET NULL`": the inviter is a
 nullable user id that outlives the inviter's account, not a membership or a principal. -/
@@ -322,7 +322,7 @@ theorem invited_by_is_a_user_that_may_be_deleted :
     (catalogue .invitations).foreignKeySignature? "invitations_invited_by_users_id_fk" =
         some (["invited_by"], .users, ["id"], .setNull) ∧
       (catalogue .invitations).isNotNull "invited_by" = false ∧
-      (catalogue .invitations).hasColumn "invited_by_principal_id" = false := by decide
+      (catalogue .invitations).hasColumn "invited_by_principal_id" = false := by decide +kernel
 
 /-! ## Workspaces -/
 
@@ -366,7 +366,7 @@ theorem presented_bearers_follow_the_credential_table :
       Concepts.BrowserToken.presentedShaped (sampleBearer "awt_live_" 22 43) = true ∧
       Concepts.BrowserToken.presentedShaped (sampleBearer "awt_live_" 23 43) = false ∧
       Concepts.BrowserToken.presentedShaped (sampleBearer "awt_live_" 22 42) = false := by
-  refine ⟨rfl, rfl, rfl, rfl, rfl, rfl, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;> decide
+  refine ⟨rfl, rfl, rfl, rfl, rfl, rfl, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;> decide +kernel
 
 /-- "The same anchored fixed-length grammar as `ak_live_` — a 22-character public half and a
 43-character secret half": a browser token's halves have exactly an API key's lengths, and only the
@@ -377,7 +377,7 @@ prefix differs. -/
 theorem browser_token_grammar_is_the_api_key_grammar :
     Concepts.BrowserToken.idLength = Concepts.ApiKey.idLength ∧
       Concepts.BrowserToken.secretLength = Concepts.ApiKey.secretLength ∧
-      Concepts.BrowserToken.prefix_ ≠ Concepts.ApiKey.prefix_ := by decide
+      Concepts.BrowserToken.prefix_ ≠ Concepts.ApiKey.prefix_ := by decide +kernel
 
 /-- §3.1.1 "Revocation": a browser token stops authenticating when its `expiresAt` passes, when its
 scoped run reaches `cancelled`, `completed` or `failed`, when its scoped session is archived, or when
@@ -422,7 +422,7 @@ example : browserTokenAdmitted sessionToken (some (.session ⟨"s"⟩ .active)) 
     browserTokenAdmitted { sessionToken with scope := .run ⟨"r"⟩ } (some (.run ⟨"r"⟩ .running))
       (member none) (.membership true) 100 = true ∧
     browserTokenAdmitted { sessionToken with scope := .run ⟨"r"⟩ } (some (.run ⟨"r"⟩ .completed))
-      (member none) (.membership true) 100 = false := by decide
+      (member none) (.membership true) 100 = false := by decide +kernel
 
 /-! ## Admission: the principal half -/
 
@@ -457,7 +457,7 @@ theorem api_key_is_admitted_only_through_its_own_principal (k : ApiKey) (p : Pri
 example : apiKeyAdmitted nKey (nKeyPrincipal none) 100 = true ∧
     apiKeyAdmitted nKey { nKeyPrincipal none with workspace := ⟨"w2"⟩ } 100 = false ∧
     apiKeyAdmitted nKey { nKeyPrincipal none with source := .apiKey ⟨"k2"⟩ } 100 = false :=
-  ⟨by decide, by decide, by decide⟩
+  ⟨by decide +kernel, by decide +kernel, by decide⟩
 
 /-- A browser token whose minter no longer resolves — its principal row revoked, its membership
 gone, or its minting key revoked or expired — is not admitted, whatever the token row and its scope
@@ -477,7 +477,7 @@ example : browserTokenAdmitted nRunToken (some (.run ⟨"r"⟩ .running)) (nKeyP
       (.apiKey (some { nKey with revokedAt := some 20 })) 100 = false ∧
     browserTokenAdmitted nRunToken (some (.run ⟨"r"⟩ .running)) (nKeyPrincipal none)
       (.apiKey (some nKey)) 100 = true :=
-  ⟨browser_token_dies_with_its_minter _ _ _ _ _ (by decide), by decide⟩
+  ⟨browser_token_dies_with_its_minter _ _ _ _ _ (by decide +kernel), by decide⟩
 
 /-- A membership principal whose membership row is gone no longer resolves, and a browser token it
 minted is no longer admitted, whatever the principal row, the token row and the scope say. -/
@@ -511,10 +511,10 @@ theorem api_key_minter_resolves_only_through_its_own_live_key (p : Principal) (k
 example : principalResolves (nKeyPrincipal none) (.apiKey (some nKey)) 100 = true ∧
     principalResolves (nKeyPrincipal none) (.apiKey (some { nKey with id := ⟨"k2"⟩ })) 100 =
       false :=
-  ⟨by decide, by decide⟩
+  ⟨by decide +kernel, by decide⟩
 
 example : (nKeyPrincipal none).source = .apiKey nKey.id :=
-  (api_key_minter_resolves_only_through_its_own_live_key _ _ 100 none (by decide)).1
+  (api_key_minter_resolves_only_through_its_own_live_key _ _ 100 none (by decide +kernel)).1
 
 /-- A membership-minted principal (which acts for no one, `workspace_principals_acts_for_api_key_only`)
 resolves exactly while its principal row is active and its membership row stands. -/
@@ -550,7 +550,7 @@ theorem display_prefix_cannot_authenticate (s : String)
     Concepts.ApiKey.presentedShaped s = false ∧ Concepts.BrowserToken.presentedShaped s = false := by
   simp only [Concepts.ApiKey.displayPrefixShaped, Bool.and_eq_true, beq_iff_eq] at h
   have hl : s.toList.length = 30 := by
-    rw [h.1.1]; decide
+    rw [h.1.1]; decide +kernel
   constructor <;>
     simp [Concepts.ApiKey.presentedShaped, Concepts.BrowserToken.presentedShaped,
       bearerShaped, hl, Concepts.ApiKey.prefix_, Concepts.BrowserToken.prefix_,
@@ -559,7 +559,7 @@ theorem display_prefix_cannot_authenticate (s : String)
 
 example : Concepts.ApiKey.presentedShaped ("ak_live_" ++ String.ofList (List.replicate 22 'A')) =
     false :=
-  (display_prefix_cannot_authenticate _ (by decide)).1
+  (display_prefix_cannot_authenticate _ (by decide +kernel)).1
 
 /-! ## Owner and actor (issue #509, S1-24) -/
 

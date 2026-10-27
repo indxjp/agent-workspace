@@ -4,6 +4,8 @@ import type { AgentVersionDraftInput } from '@indx-workspace/contracts/agent-ver
 
 import { ApiProblemError, ContractViolationError, TransportError } from '../errors.js';
 import { createClient, type AgentWorkspaceClient } from '../index.js';
+import { agentFromVersionBody, defineAgent, toAgentVersionBody } from '../define/index.js';
+import { printAgentProject } from '../portable/index.js';
 import { fetchDouble, fixtures, jsonResponse, type RecordedRequest } from '../testing.js';
 
 /** S1-09 (issue #447; ADR-0101): `agents.versions.*` and `agents.pointers.set`. */
@@ -12,7 +14,7 @@ const version = fixtures.agentVersion();
 const pointer = fixtures.agentVersionPointer();
 const draft: AgentVersionDraftInput = {
   summary: version.summary,
-  via: version.via,
+  via: 'api',
   body: version.body,
 };
 
@@ -54,6 +56,56 @@ describe('AgentVersionsClient.list', () => {
     });
     expect(calls[0]?.method).toBe('GET');
     expect(calls[0]?.url.pathname).toBe(`/api/agents/${version.agentId}/versions`);
+  });
+
+  it('[US-BLD-03][api][sdk] lists a version the Builder saved with source builder', async () => {
+    const saved = fixtures.agentVersion({ via: 'builder' });
+    const { aw } = client(() =>
+      jsonResponse(200, { items: [saved], pointers: [], materialised: 1 }),
+    );
+    expect((await aw.agents.versions.list(saved.agentId)).items.map((i) => i.via)).toEqual([
+      'builder',
+    ]);
+  });
+
+  it('[US-BLD-06][api][sdk] lists the version the Builder saved and writes it out as code', async () => {
+    // A body as the Builder writes one: what defineAgent() makes, saved with via: 'builder'.
+    const body = toAgentVersionBody(
+      defineAgent({ name: 'refunds', instructions: 'Refund politely.' }),
+    );
+    const base = fixtures.agentVersion();
+    const built = fixtures.agentVersion({ number: 2, via: 'builder', body });
+    const { aw } = client(() =>
+      jsonResponse(200, { items: [base, built], pointers: [], materialised: 2 }),
+    );
+    const { items } = await aw.agents.versions.list(built.agentId);
+    const saved = items.find((item) => item.via === 'builder');
+    if (saved === undefined) throw new Error('the listing has no version the Builder saved');
+    const source = { body: saved.body };
+    const printed = printAgentProject(source);
+    const { name } = saved.body.definition.agent;
+    expect(printed.files.map((file) => file.path)).toEqual([
+      `agents/${name}.ts`,
+      `agents/${name}.md`,
+    ]);
+    expect(printed.files[0]?.text).toMatchInlineSnapshot(`
+      "import { defineAgent } from '@indx-workspace/sdk/define';
+
+      export default defineAgent({
+        name: 'refunds',
+        instructions: {
+          file: './refunds.md',
+        },
+        model: 'default',
+        files: [],
+      });
+      "
+    `);
+    expect(printed.files[1]?.text).toBe('Refund politely.');
+    // The body has no field the printer would drop, and what it prints from is this body.
+    const read = agentFromVersionBody(source);
+    expect(read.dropped).toStrictEqual([]);
+    expect(toAgentVersionBody(read.value.agent)).toStrictEqual(saved.body);
   });
 
   it('percent-encodes the agent id as one path segment', async () => {

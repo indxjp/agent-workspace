@@ -1,8 +1,9 @@
+/* global fetch */
 import { spawnSync } from 'node:child_process';
 
 import { CLIENT_BACKENDS_SQL } from './postgres-clients.mjs';
-import { POSTGRES_IMAGE, SEAWEEDFS_IMAGE } from './pins.mjs';
-import { waitForS3Health, waitUntil } from './process.mjs';
+import { AZURITE_IMAGE, FAKE_GCS_SERVER_IMAGE, POSTGRES_IMAGE, SEAWEEDFS_IMAGE } from './pins.mjs';
+import { freePort, waitForS3Health, waitUntil } from './process.mjs';
 
 /** @typedef {ReturnType<typeof import('./cleanup.mjs').createCleanup>} Cleanup */
 
@@ -70,6 +71,12 @@ export async function startDockerPostgres(cleanup, suffix) {
     '-p',
     '127.0.0.1::5432',
     POSTGRES_IMAGE,
+    // Durability buys nothing in a throwaway container; see postgres-native-child.mjs.
+    'postgres',
+    '-c',
+    'fsync=off',
+    '-c',
+    'full_page_writes=off',
   ]);
   await waitUntil('PostgreSQL 17', () => {
     const result = spawnSync('docker', ['exec', name, 'pg_isready', '-U', 'postgres'], {
@@ -131,4 +138,75 @@ export async function startDockerSeaweedfs(cleanup, suffix) {
   const endpoint = `http://127.0.0.1:${hostPort(name, '8333')}`;
   await waitForS3Health(endpoint);
   return { endpoint };
+}
+
+/** @param {string} url */
+async function answers(url) {
+  try {
+    await fetch(url);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Azurite (blob service) and fake-gcs-server on random loopback ports, for the Azure and GCS
+ * contract suites and the load test. See pins.mjs; ci.yml starts the same images.
+ *
+ * @param {Cleanup} cleanup
+ * @param {string} suffix
+ * @returns {Promise<{ azuriteUrl: string; gcsEndpoint: string }>}
+ */
+export async function startDockerStorageEmulators(cleanup, suffix) {
+  const azurite = `aw-test-azurite-${suffix}`;
+  const gcs = `aw-test-gcs-${suffix}`;
+  removeOnCleanup(cleanup, azurite);
+  removeOnCleanup(cleanup, gcs);
+  docker([
+    'run',
+    '--rm',
+    '-d',
+    '--name',
+    azurite,
+    '-p',
+    '127.0.0.1::10000',
+    AZURITE_IMAGE,
+    'azurite-blob',
+    '--blobHost',
+    '0.0.0.0',
+    '--skipApiVersionCheck',
+  ]);
+  // fake-gcs-server writes its own address into upload URLs, so it must know the host port.
+  const gcsPort = String(await freePort());
+  const gcsEndpoint = `http://127.0.0.1:${gcsPort}`;
+  docker([
+    'run',
+    '--rm',
+    '-d',
+    '--name',
+    gcs,
+    '-p',
+    `127.0.0.1:${gcsPort}:4443`,
+    FAKE_GCS_SERVER_IMAGE,
+    '-scheme',
+    'http',
+    '-backend',
+    'memory',
+    '-port',
+    '4443',
+    '-external-url',
+    gcsEndpoint,
+  ]);
+  const azuriteOrigin = `http://127.0.0.1:${hostPort(azurite, '10000')}`;
+  // Azurite answers an unauthenticated request with an HTTP status, so any answer means ready.
+  await waitUntil('Azurite', () => answers(azuriteOrigin));
+  await waitUntil('fake-gcs-server', async () => {
+    try {
+      return (await fetch(`${gcsEndpoint}/storage/v1/b?project=aw`)).ok;
+    } catch {
+      return false;
+    }
+  });
+  return { azuriteUrl: `${azuriteOrigin}/devstoreaccount1`, gcsEndpoint };
 }

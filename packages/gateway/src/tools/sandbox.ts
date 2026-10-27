@@ -5,9 +5,12 @@
  * never reaches the model resolver or the usage recorder. The agent sandbox therefore never holds
  * a tool token and cannot choose where the gateway dials.
  */
-import type { DatabaseRoot } from '@agent-workspace/core/db';
+import type { DatabaseRoot, RunRecord } from '@agent-workspace/core/db';
 import { terminalRunStatuses } from '@agent-workspace/core/db';
-import { TOOL_GATEWAY_PROBLEM_CODES } from '@indx-workspace/contracts/tool-connectors';
+import {
+  TOOL_GATEWAY_PROBLEM_CODES,
+  type ToolGatewayProblemCode,
+} from '@indx-workspace/contracts/tool-connectors';
 
 import { verifyRunToken } from '../auth.js';
 import { endpointSandboxRunId, type EndpointGrantCodec } from '../tokens/endpoint-grant.js';
@@ -62,7 +65,8 @@ const MESSAGES = {
   tool_upstream_timeout: 'The tool sandbox did not answer in time.',
 } as const;
 
-function problem(code: keyof typeof MESSAGES): Response {
+/** A tool route's refusal: the code's status, an error type for it and a fixed message. */
+export function toolProblem(code: ToolGatewayProblemCode, message: string): Response {
   const status = TOOL_GATEWAY_PROBLEM_CODES[code];
   return Response.json(
     {
@@ -75,11 +79,15 @@ function problem(code: keyof typeof MESSAGES): Response {
               ? 'permission_error'
               : 'api_error',
         code,
-        message: MESSAGES[code],
+        message,
       },
     },
     { status },
   );
+}
+
+function problem(code: keyof typeof MESSAGES): Response {
+  return toolProblem(code, MESSAGES[code]);
 }
 
 function tooLarge(): Response {
@@ -92,6 +100,21 @@ function tooLarge(): Response {
   );
 }
 
+/**
+ * The run a verified token names, through its workspace scope, while the token is active and the
+ * run is not over; `null` otherwise. `runs` is that scope's run store.
+ */
+export async function liveRun(database: DatabaseRoot, claims: RunTokenClaims, tokenHash: string) {
+  const scope = await database.scopes.forWorkspaceId(claims.workspaceId);
+  if (scope === null) return null;
+  const tokenActive = await database.runTokens
+    .forScope(scope)
+    .isActive(claims.tokenId, claims.runId, tokenHash);
+  const runs = database.runs.forScope(scope);
+  const run: RunRecord | null = tokenActive ? await runs.get(claims.runId) : null;
+  return run === null || TERMINAL.has(run.status) ? null : { runs, run };
+}
+
 /** C16's shape for the sandbox: the token is live, the run is not over and a sandbox was recorded. */
 export function createDatabaseToolSandboxResolver(database: DatabaseRoot): ToolSandboxResolver {
   return {
@@ -101,13 +124,8 @@ export function createDatabaseToolSandboxResolver(database: DatabaseRoot): ToolS
         status: TOOL_GATEWAY_PROBLEM_CODES[code],
         code,
       });
-      const scope = await database.scopes.forWorkspaceId(claims.workspaceId);
-      if (scope === null) return refuse('tool_run_not_active');
-      const tokenActive = await database.runTokens
-        .forScope(scope)
-        .isActive(claims.tokenId, claims.runId, tokenHash);
-      const run = tokenActive ? await database.runs.forScope(scope).get(claims.runId) : null;
-      if (run === null || TERMINAL.has(run.status)) return refuse('tool_run_not_active');
+      const run = (await liveRun(database, claims, tokenHash))?.run;
+      if (run === undefined) return refuse('tool_run_not_active');
       return run.toolSandboxOrigin === null || run.toolSandboxOrigin === undefined
         ? refuse('tool_not_in_run')
         : { ok: true, origin: run.toolSandboxOrigin };

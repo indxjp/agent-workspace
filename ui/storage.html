@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Storage — Agent Workspace</title>
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<script>window.PAGE = { nav: "storage", crumbs: [["Administration"], ["Storage"]] };</script>
+
+<div class="app">
+  <div class="main">
+    <div class="page">
+
+      <div class="page-head">
+        <div>
+          <h1>Storage</h1>
+          <div class="sub">Buckets and containers agents can be granted folders of. Credentials stay on the server.</div>
+        </div>
+        <div class="actions">
+          <a class="btn primary" href="storage-new.html">+ Connect storage</a>
+        </div>
+      </div>
+
+      <div class="rows">
+        <div class="row">
+          <div class="grow">
+            <div class="title">contracts</div>
+            <div class="meta">Amazon S3 · <span class="mono">s3://meridian-contracts</span> · folders <span class="mono">reports</span>, <span class="mono">signed</span> · read-only</div>
+          </div>
+          <div class="right"><button class="btn sm" data-toast="contracts: connected">Test</button></div>
+        </div>
+        <div class="row">
+          <div class="grow">
+            <div class="title">handbook</div>
+            <div class="meta">Azure Blob Storage · <span class="mono">https://meridian.blob.core.windows.net/handbook</span> · folder <span class="mono">policies</span> · read-only</div>
+          </div>
+          <div class="right"><button class="btn sm" data-toast="handbook: the credential was refused">Test</button></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

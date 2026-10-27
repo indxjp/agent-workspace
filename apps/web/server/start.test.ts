@@ -2,11 +2,14 @@
  * Contract C2 (#441): `startWeb`'s options and posture check, and the build directory seam in
  * `next.config.ts`. Next.js itself is replaced by a spy; nothing here boots a server.
  */
+import { log as webLogger } from './telemetry/logger';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { readNextDistDir } from '../next.config';
 import { closeHeldComposition, holdComposition } from './composition/held-composition';
-import { startWeb, StartWebOptionsError, type StartWebOptions } from './start';
+import { serveRequest, startWeb, StartWebOptionsError, type StartWebOptions } from './start';
 
 const mocks = vi.hoisted(() => ({ createNext: vi.fn() }));
 
@@ -143,6 +146,46 @@ describe('startWeb close', () => {
     const web = await startWeb({ NODE_ENV: 'production', HOST: '127.0.0.1', PORT: '0' });
     await expect(web.close()).rejects.toThrow('next close failed');
     expect(events).toStrictEqual(['composition.close']);
+  });
+});
+
+describe('serveRequest', () => {
+  async function failWith(headersSent: boolean) {
+    const response = { headersSent, statusCode: 200, end: vi.fn(), destroy: vi.fn() };
+    const unhandled: unknown[] = [];
+    const record = (reason: unknown): void => {
+      unhandled.push(reason);
+    };
+    const logged = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
+    process.on('unhandledRejection', record);
+    try {
+      serveRequest(() => Promise.reject(new Error('handler failed')))(
+        {} as IncomingMessage,
+        response as unknown as ServerResponse,
+      );
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(logged).toHaveBeenCalledWith('[web] request handler failed', {
+        error: new Error('handler failed'),
+      });
+      expect(unhandled).toEqual([]);
+    } finally {
+      logged.mockRestore();
+      process.off('unhandledRejection', record);
+    }
+    return response;
+  }
+
+  it('answers 500 when the handler rejects before the headers are sent', async () => {
+    const response = await failWith(false);
+    expect(response.statusCode).toBe(500);
+    expect(response.end).toHaveBeenCalledTimes(1);
+    expect(response.destroy).not.toHaveBeenCalled();
+  });
+
+  it('drops the connection when the handler rejects after the headers are sent', async () => {
+    const response = await failWith(true);
+    expect(response.destroy).toHaveBeenCalledTimes(1);
+    expect(response.end).not.toHaveBeenCalled();
   });
 });
 

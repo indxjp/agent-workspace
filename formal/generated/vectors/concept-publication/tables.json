@@ -13,10 +13,15 @@
    "expected":
    {"uniques":
     [{"partialNullColumns": [],
+      "partialNotNullColumns": [],
       "name": "shares_id_workspace_key",
       "kind": "constraint",
       "columns": ["id", "workspace_id"]},
-     {"partialNullColumns": [], "name": "shares_token_key", "kind": "constraint", "columns": ["token"]}],
+     {"partialNullColumns": [],
+      "partialNotNullColumns": [],
+      "name": "shares_token_key",
+      "kind": "constraint",
+      "columns": ["token"]}],
     "primaryKey": ["id"],
     "foreignKeys":
     [{"refTable": "workspaces",

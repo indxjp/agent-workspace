@@ -12,7 +12,9 @@ import { defineConfig, devices } from '@playwright/test';
  * open and checks its next turn still runs v1; `release.e2e.mjs` (80-08, issue #615), untimed,
  * promotes the demo agent, rolls it back and reads the pointers with `aw versions`;
  * `feedback.e2e.mjs` (80-13, issue #620), untimed, rates an answer down in the widget and turns it
- * into an eval case that `aw eval` fails; `first-hour.e2e.mjs` (FH-13, issue #700), run by
+ * into an eval case that `aw eval` fails; `files.e2e.mjs` (STO-407, issue #1687), untimed, uploads
+ * a file in Files, grants it to the demo agent, runs the agent from the console and finds its output
+ * in Files; `first-hour.e2e.mjs` (FH-13, issue #700), run by
  * `run.mjs --first-hour` in place of the journey, times the first hour. Running it directly fails on the first missing
  * `JOURNEY_*` variable.
  */
@@ -26,6 +28,7 @@ export default defineConfig({
     'pinned.e2e.mjs',
     'release.e2e.mjs',
     'feedback.e2e.mjs',
+    'files.e2e.mjs',
     'first-hour.e2e.mjs',
   ],
   fullyParallel: false,

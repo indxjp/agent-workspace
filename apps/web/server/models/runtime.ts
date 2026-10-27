@@ -53,19 +53,10 @@ export interface ModelsRuntime {
   log(message: string): void;
 }
 
-interface Registry {
-  __agentWorkspaceModelsRuntime__?: ModelsRuntime;
-}
-const registry = globalThis as typeof globalThis & Registry;
-
-export function configureModelsRuntime(runtime: ModelsRuntime): void {
-  registry.__agentWorkspaceModelsRuntime__ = runtime;
-}
-
-export function clearModelsRuntime(): void {
-  delete registry.__agentWorkspaceModelsRuntime__;
-}
-
-export function currentModelsRuntime(): ModelsRuntime | null {
-  return registry.__agentWorkspaceModelsRuntime__ ?? null;
-}
+/**
+ * The models routes as the application context holds them: `unavailable` when the encrypted
+ * secrets service did not start, because provider credentials need it. The routes then answer
+ * `503 models_runtime_not_configured`, as they do with no context installed.
+ */
+export type Models =
+  { readonly kind: 'serving'; readonly runtime: ModelsRuntime } | { readonly kind: 'unavailable' };

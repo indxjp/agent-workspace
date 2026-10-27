@@ -10,6 +10,7 @@ describe('Sidebar', () => {
       createElement(Sidebar, {
         workspace: { name: 'Agent Workspace', detail: 'Self-hosted', slug: null },
         user: null,
+        managers: false,
       }),
     );
     expect(html).toContain('Agent Workspace');
@@ -25,9 +26,24 @@ describe('Sidebar', () => {
       createElement(Sidebar, {
         workspace: { name: 'Acme Corp', detail: 'Self-hosted', slug: 'acme' },
         user: { name: 'Aya Ito', role: 'Owner', initials: 'AI' },
+        managers: true,
       }),
     );
     expect(html).toContain('Acme Corp');
     expect(html).toContain('aria-haspopup="menu"');
+  });
+
+  it('shows the Storage entry to managers and hides it from everyone else', () => {
+    const render = (managers: boolean) =>
+      renderToStaticMarkup(
+        createElement(Sidebar, {
+          workspace: { name: 'Acme Corp', detail: 'Self-hosted', slug: 'acme' },
+          user: { name: 'Bo Li', role: 'Viewer', initials: 'BL' },
+          managers,
+        }),
+      );
+    expect(render(true)).toContain('href="/admin/storage"');
+    expect(render(false)).not.toContain('/admin/storage');
+    expect(render(false)).toContain('href="/admin/models"');
   });
 });

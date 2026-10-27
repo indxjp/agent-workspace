@@ -4,18 +4,19 @@
 # it cannot regress unseen. The tests resolve two workspace packages from dist, so the job builds
 # just those first.
 #
-# A separate workflow, not a ci.yml job: ci.yml is held to ubuntu-latest by
-# scripts/check-workflows.mjs, and a GitHub-hosted Windows VM is the only Windows runner this
-# repository uses (as in install-live.yml). Not required by ci-success on purpose, like
+# A separate workflow, not a ci.yml job: ci.yml is held to Linux labels by
+# scripts/check-workflows.mjs, and a Windows VM is the only Windows runner this repository uses
+# (as in install-live.yml; Blacksmith's while GitHub-hosted billing is blocked, ADR-0053). Not required by ci-success on purpose, like
 # ci-nx-cache.yml: it is path-filtered, and a required check that a diff never triggers would
-# block that diff. Cost: one windows-latest VM, a filtered install and four test files per
+# block that diff. Cost: one Windows VM, a filtered install and four test files per
 # matching pull request (a few minutes); nothing runs for a diff that cannot reach them.
 name: CI Windows unit
 
 on:
-  push:
+  # No push trigger: the merge queue tests the pull request, and a Windows minute costs twice a Linux one.
+  pull_request:
     branches: [main]
-    paths: &paths
+    paths:
       - 'packages/engine/**'
       - 'packages/engine-claude-agent-sdk/**'
       - 'packages/engine-mastra/**'
@@ -26,22 +27,21 @@ on:
       - 'vitest.config.ts'
       - 'pnpm-lock.yaml'
       - '.github/workflows/windows-unit.yml'
-  pull_request:
-    branches: [main]
-    paths: *paths
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: windows-unit-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: windows-unit-${{ github.event.pull_request.number || github.sha }}
+  # Only a pull request supersedes its own earlier run. A push to main has its own group (the SHA), so
+  # pushes never cancel or replace each other and every main commit gets a CI result (audit F-02).
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   skill-script:
     name: skill-script unit tests · windows
-    runs-on: windows-latest
+    runs-on: ${{ github.repository_owner == 'INDXDev' && 'blacksmith-4vcpu-windows-2025' || 'windows-latest' }}
     timeout-minutes: 20
     permissions:
       contents: read
@@ -55,7 +55,7 @@ jobs:
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
 
       - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
           cache: pnpm

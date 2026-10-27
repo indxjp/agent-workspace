@@ -157,7 +157,7 @@ write-only. A free-standing workspace secret would go through `/api/secrets`, wh
 Owner-only, while the local key `aw dev` holds is `admin`; and §23 agent secrets are not wired
 into runs at all (Declared gaps). A name in the file keeps the value out of git.
 
-### SD4 — Slice 2 refuses write operations
+### SD4 — Slice 2 refuses write operations (amended by #1304: writes run only when approved)
 
 SD4 (plan §8, slice 2): slice 2 refuses write operations.
 `allow` names only `GET` and `HEAD`. `postgresTool` has `readOnly: true` as a literal and offers
@@ -179,6 +179,30 @@ and skipping the confirmation, so platform tools refuse writes instead. D30 is d
 recorded in
 [ADR-0108](0108-the-frontend-is-a-four-rung-ladder-and-a-configuration-agent-edits-it.md)'s
 "Slice 2 acceptance".
+
+Amended by #1304 (P6-1), on
+[ADR-0145](0145-a-run-stops-for-approval-or-handoff-and-continues-in-its-session.md) D3: an
+`openapi` connector may expose write operations, and the gateway runs one only for an approved
+call. What changes:
+
+- `allow` accepts `GET`, `HEAD`, `POST`, `PUT`, `PATCH` and `DELETE` rules (upper case, as before);
+  any other method, or a lower-case one, is an invalid rule. An `operationId:<id>` rule that names a
+  write operation is admitted. `connector_write_unsupported` is removed; an operation whose method is
+  not one of the six is `connector_spec_invalid`.
+- The normaliser keeps a write's `application/json` request body as one `body` argument. A write
+  whose only body is another media type, or a parameter named `body` beside a JSON body, is refused.
+- The approval rule is the engine's, read by the gateway as well: `toolApprovalRules` marks each
+  write operation as `mcp__<key>__<operation>`, and `needsApproval` asks for approval of exactly
+  those. The engine's `canUseTool` denies an unapproved call (`approval_required:`); the gateway is
+  the backstop. `callTool` rebuilds the same `canonicalCall` and compares it with the run's
+  `approved_tool_calls`; a write that is not approved is an `approval_required` tool error (403)
+  before the credential is decrypted or the upstream is dialled. A resolution without approval data
+  refuses every write.
+- `postgresTool` is unchanged: `readOnly: true` stays a literal, and `false` is a plain invalid body.
+- The SDK's `openapiTool()` still refuses a write rule until #1305 (P6-2) wires the rest.
+
+Reason: ADR-0145 gave the platform a run that pauses for a person, so Rule 8 of the plan (never
+accept a write and skip the confirmation) is met by a gate, not by refusing every write.
 
 ### SD13 — A tool connector's MCP server key is short
 

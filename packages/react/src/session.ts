@@ -12,8 +12,10 @@ import {
   type RunFeedbackRequest,
 } from '@indx-workspace/contracts/feedback';
 import {
+  SurfaceAttachmentResponseSchema,
   SurfaceSessionRequestSchema,
   SurfaceSessionResponseSchema,
+  type SurfaceAttachmentResponse,
   type SurfaceSessionRequest,
   type SurfaceSessionResponse,
 } from '@indx-workspace/contracts/surfaces';
@@ -47,6 +49,12 @@ export type SurfaceSessionResult =
 
 /** What the feedback route answered. */
 export type RunFeedbackResult = { readonly kind: 'sent' } | SurfaceProblem | SurfaceRequestFailed;
+
+/** What the attachment route answered. */
+export type SurfaceAttachmentResult =
+  | { readonly kind: 'uploaded'; readonly attachment: SurfaceAttachmentResponse }
+  | SurfaceProblem
+  | SurfaceRequestFailed;
 
 /** The bootstrap's path for surface `name`. */
 export function surfaceSessionsPath(name: string): string {
@@ -173,4 +181,42 @@ export async function postRunFeedback(
   if (!(response instanceof Response)) return response;
   if (response.status === 204) return { kind: 'sent' };
   return problemOf(response, await readJson(response), 'feedback');
+}
+
+/**
+ * Hand `file` to session `sessionId` with its browser `token` (ADR-0146 D6, issue #1308): the
+ * body is the file's bytes and `name` its file name. `uploaded` carries the `fileId` that
+ * `runs.start` takes as `attachments: [{ fileId }]`.
+ */
+export async function uploadSurfaceAttachment(
+  sessionId: string,
+  token: string,
+  file: File,
+  fetchImpl: typeof fetch = fetch,
+  baseUrl?: string,
+): Promise<SurfaceAttachmentResult> {
+  const response = await post(
+    fetchImpl,
+    surfaceUrl(
+      baseUrl,
+      `/api/sessions/${encodeURIComponent(sessionId)}/attachments?name=${encodeURIComponent(file.name)}`,
+    ),
+    {
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': file.type === '' ? 'application/octet-stream' : file.type,
+      },
+      body: file,
+    },
+    'attachment',
+  );
+  if (!(response instanceof Response)) return response;
+  const answer = await readJson(response);
+  if (response.status === 201) {
+    const attachment = SurfaceAttachmentResponseSchema.safeParse(answer);
+    return attachment.success
+      ? { kind: 'uploaded', attachment: attachment.data }
+      : { kind: 'failed', message: 'The attachment answer did not match its contract.' };
+  }
+  return problemOf(response, answer, 'attachment');
 }

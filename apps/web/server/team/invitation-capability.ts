@@ -27,10 +27,10 @@
  * ## Why conferral is asked rather than tabulated
  *
  * `POST /api/invitations` routes the requested role through `readConferredRole` → `conferRole`
- * exactly as `PATCH /api/memberships/:id` does (`server/invitations/handlers.ts`). §21 is **not** a
- * privilege ladder, so the set of roles an Admin may invite is `['admin','viewer']` and cannot be
- * derived from any ordering. A role `<select>` built from anything but `conferRole` would offer
- * options the route answers `403` to.
+ * exactly as `PATCH /api/memberships/:id` does (`server/invitations/handlers.ts`). The set of
+ * roles an Admin may invite is `['admin','builder','viewer']` — the roles below it, since ADR-0152
+ * made the table monotonic — but it is still `conferRole`'s answer and not an ordering's, so the
+ * table stays the one place a grant is written.
  *
  * ## Why not a probe
  *

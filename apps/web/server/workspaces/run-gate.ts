@@ -67,12 +67,12 @@ export function createRunGate(repository: Pick<WorkspaceRepositoryPort, 'get'>):
  * creation, never from reading or archiving a session that already exists.
  *
  * Verification round 1, finding 3: `apps/web/server/composition/register.ts` hands
- * `configureProjectsRuntime` (issue #125, `apps/web/server/projects/**`, outside this task's
+ * the projects runtime (issue #125, `apps/web/server/projects/**`, outside this task's
  * `Owns`) a bare `SessionRepository` with no archived check at all, so
  * `POST /api/projects/:id/sessions` created a session in an archived workspace. That route, and
  * `SessionRepository`/`EnsureSessionOutcome` themselves (`packages/core/src/db/repositories/runs.ts`),
  * are both outside this task's `Owns`, so the fix is this wrapper, applied at the one seam inside
- * `register.ts` that *is* owned: the provider `configureProjectsRuntime` is handed.
+ * `register.ts` that *is* owned: the provider `wireProjects` returns.
  *
  * `EnsureSessionOutcome` is a closed union with no "workspace archived" member and this task
  * cannot add one, so the refusal is reported as `{ kind: 'unknown-principal' }`. This keeps the

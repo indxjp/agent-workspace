@@ -28,37 +28,32 @@ private def notAbove (hi lo : Role) : List (Resource × Operation) :=
   (ts := "apps/web/server/rbac/permissions.ts#POLICY")]
 theorem owner_dominates_every_role :
     ∀ r : Role, ∀ res : Resource, ∀ op : Operation,
-      Grant.le (grantFor r res op) (grantFor .owner res op) = true := by decide
+      Grant.le (grantFor r res op) (grantFor .owner res op) = true := by decide +kernel
 
-/-- The table is **not** monotone in the order Admin ⊇ Builder, and the counterexamples are
-exactly these cells: Admin holds nothing over `projects` where Builder does, and no `run` on
-`connectors` (unreachable by any path). ADR-0116 closed the `skills` and `files` cells. -/
-@[aw_spec (tier := T5)
-  (doc := "docs/adr/0116-admin-manages-skills-and-files.md#decision")
-  (ts := "apps/web/server/rbac/roles.ts#ROLES")]
-theorem admin_is_not_above_builder_exactly_at :
-    notAbove .admin .builder =
-      [(.connectors, .run), (.projects, .read), (.projects, .write)] := by decide
+/-- The table is monotone in the `ROLES` order (ADR-0152): Admin holds every grant Builder and
+Viewer hold, and Builder every grant Viewer holds. Before it, Admin was below Builder at
+`(connectors, run)`, `(projects, read)`, `(projects, write)` and `(triggers, run)`, and Builder
+below Viewer at `(agents, run)` (suspicious point 11). -/
+@[aw_spec (tier := T5) (doc := "docs/adr/0152-roles-are-monotonic.md#decision")
+  (ts := "apps/web/server/rbac/roles.ts#ROLES") (ts := "apps/web/server/rbac/permissions.ts#POLICY")]
+theorem roles_are_monotonic :
+    notAbove .admin .builder = [] ∧ notAbove .admin .viewer = [] ∧
+      notAbove .builder .viewer = [] := by decide +kernel
 
-/-- The table is **not** monotone in the order Builder ⊇ Viewer, at exactly one cell: running an
-agent, where Builder holds `own` and Viewer `permitted` (suspicious point 11). Admin is above
-Viewer everywhere. -/
-@[aw_spec (tier := T5) (doc := "docs/formal/domains/d1-runs.md#suspicious-points-noticed-while-reading")
-  (ts := "apps/web/server/rbac/permissions.ts#POLICY")]
-theorem builder_is_not_above_viewer_exactly_at_agent_runs :
-    notAbove .builder .viewer = [(.agents, .run)] ∧ notAbove .admin .viewer = [] := by decide
-
-/-- Suspicious point 11 through `decide()`: a Builder named by an `agent_grants` row is denied
-running that agent while a Viewer with the same grant is allowed, and a Viewer is denied running an
-agent it owns. -/
-@[aw_spec (tier := T5) (doc := "docs/adr/W9-AUTH-117-viewer-permitted-agent-grants.md#decision")
+/-- Suspicious point 11 through `decide()`, closed by ADR-0152: a Builder named by an
+`agent_grants` row runs that agent as a Viewer with the same grant does, either runs an agent it
+owns, and neither runs an agent it neither owns nor was granted. -/
+@[aw_spec (tier := T5) (doc := "docs/adr/0152-roles-are-monotonic.md#decision")
   (ts := "apps/web/server/agents/run-ownership.ts#resolveAgentRunOwnership")
   (ts := "apps/web/server/rbac/decide.ts#applyGrant")]
-theorem granted_builder_cannot_run_the_agent_a_granted_viewer_can :
-    (decideAuth ⟨"builder", "POST", "/api/agents/:id/runs", .permitted, none⟩).effect = .deny ∧
+theorem granted_builder_runs_the_agent_a_granted_viewer_can :
+    (decideAuth ⟨"builder", "POST", "/api/agents/:id/runs", .permitted, none⟩).effect = .allow ∧
       (decideAuth ⟨"viewer", "POST", "/api/agents/:id/runs", .permitted, none⟩).effect = .allow ∧
-      (decideAuth ⟨"viewer", "POST", "/api/agents/:id/runs", .own, none⟩).effect = .deny := by
-  decide
+      (decideAuth ⟨"builder", "POST", "/api/agents/:id/runs", .own, none⟩).effect = .allow ∧
+      (decideAuth ⟨"viewer", "POST", "/api/agents/:id/runs", .own, none⟩).effect = .allow ∧
+      (decideAuth ⟨"builder", "POST", "/api/agents/:id/runs", .other, none⟩).effect = .deny ∧
+      (decideAuth ⟨"viewer", "POST", "/api/agents/:id/runs", .other, none⟩).effect = .deny := by
+  decide +kernel
 
 /-! ## Revoke decision and handler agreement (suspicious point 10) -/
 
@@ -72,7 +67,7 @@ theorem decide_and_the_revoke_gate_agree_for_every_role :
         (revokeTokensRoleGate role,
           (WireEnum.all : List Ownership).all fun o =>
             (decideAuth ⟨role, "POST", path, o, none⟩).effect == .deny)) =
-        [(true, false), (true, false), (false, true), (false, true)] := by decide
+        [(true, false), (true, false), (false, true), (false, true)] := by decide +kernel
 
 /-! ## ADR against ADR (suspicious point 12) -/
 
@@ -88,13 +83,14 @@ theorem admin_run_verbs_adrs_disagree_at_one_cell :
           (r = .admin ∧ res = .runs ∧ op = .run)) ∧
       (grantsForW9Auth165 .admin .runs).run = .none ∧ (grantsFor .admin .runs).run = .any ∧
       (decideAuth ⟨"admin", "POST", "/api/runs/:id/interrupt", .other, none⟩).effect = .allow := by
-  decide
+  decide +kernel
 
 /-! ## Document against code -/
 
-/-- §3.3's table disagrees with `permissions.ts` on a reachable operation at exactly five cells —
-Admin over `projects`, `secrets` and `audit-events`, Builder and Viewer over `audit-events` — and
-is silent on `endpoint-clients`, `me`, `setup` and `tool-bundles`. -/
+/-- §3.3's table disagrees with `permissions.ts` on a reachable operation at exactly four cells —
+Admin over `secrets` and `audit-events`, Builder and Viewer over `audit-events` — and
+is silent on `endpoint-clients`, `me`, `setup`, `storage-connections`, `tool-bundles` and
+`triggers`. -/
 @[aw_spec (tier := T5) (doc := "docs/sdk/04-api-specification.md#33-roles")
   (ts := "apps/web/server/rbac/permissions.ts#POLICY")]
 theorem documented_table_diverges_exactly_at :
@@ -102,10 +98,10 @@ theorem documented_table_diverges_exactly_at :
         (documentedGrants r res).map (fun g => !agreeOnReachable res g (grantsFor r res)) =
           some true).map (·, res)) =
       [(.admin, .auditEvents), (.builder, .auditEvents), (.viewer, .auditEvents),
-        (.admin, .projects), (.admin, .secrets)] ∧
+        (.admin, .secrets)] ∧
       (Resource.all.filter fun res => (docRow res).isNone) =
-        [.endpointClients, .me, .setup, .toolBundles] := by
-  decide
+        [.endpointClients, .me, .setup, .storageConnections, .toolBundles, .triggers] := by
+  decide +kernel
 
 /-- §3.1.1 lists two routes a run scope reaches, but `decide()`'s run-scope cell is by
 `(resource, operation)` with no sub-resource key, so a run scope also passes `decide()` for
@@ -118,7 +114,7 @@ theorem run_scope_passes_every_get_on_its_runs_shapes :
       "/api/runs/r/feedback"].all
       (fun p => ["GET", "HEAD"].all fun m =>
         (decideAuth ⟨"viewer", m, p, .own, some (.run ⟨"r"⟩)⟩).effect == .allow) = true := by
-  decide
+  decide +kernel
 
 /-- The upper-case spelling of the scoped UUID is admitted as the same run. -/
 @[aw_spec (tier := T5) (doc := "docs/formal/domains/d1-runs.md#suspicious-points-noticed-while-reading")
@@ -128,32 +124,40 @@ theorem run_scope_id_accepts_equivalent_uuid_spelling :
         some (.run ⟨"0f8fad5b-d9cb-469f-a165-70867728950e"⟩)⟩ = .allow (some ⟨.runs, .read, .any⟩) ∧
       decideAuth ⟨"owner", "GET", "/api/runs/0F8FAD5B-D9CB-469F-A165-70867728950E", .own,
         some (.run ⟨"0f8fad5b-d9cb-469f-a165-70867728950e"⟩)⟩ = .allow (some ⟨.runs, .read, .any⟩) := by
-  decide
+  decide +kernel
 
 /-- `MAX_DECODE_ROUNDS` is four: a pathname that reveals `/api` only after three decodings is
 protected, and one that needs four stays a page. -/
 @[aw_spec (tier := T5) (ts := "apps/web/server/auth/paths.ts#MAX_DECODE_ROUNDS")]
 theorem path_classifier_reads_four_decodings :
-    classifyPath "/%252561pi" = .api ∧ classifyPath "/%25252561pi" = .page := by decide
+    classifyPath "/%252561pi" = .api ∧ classifyPath "/%25252561pi" = .page := by decide +kernel
 
 /-! ## The route inventory against the classification -/
 
-/-- Of the 155 declared routes, `decide()` refuses exactly the ten `/api/auth/*` routes,
-`GET /api/cron/retention` and the two `/api/a2a/*` routes (an unclassified resource each; the cron
-route authenticates itself with `CRON_SECRET`, ADR-0120 clause 7, and the A2A routes with an API
-key, ADR-0135), `POST /mcp/projects/:name` and the seven OAuth routes under `/.well-known/` and
+/-- Of the 173 declared routes, `decide()` refuses exactly the ten `/api/auth/*` routes,
+the three `/api/cron/*` routes, the readiness probe `GET /api/readyz` and the two `/api/a2a/*` routes
+(an unclassified resource each; the cron routes authenticate themselves with `CRON_SECRET`,
+ADR-0120 clause 7, ADR-0144 D5 and issue #1674, the readiness probe takes no credential, issue #1562, and the
+A2A routes with an API key, ADR-0135), `POST /mcp/projects/:name` and the seven OAuth routes under `/.well-known/` and
 `/oauth/` (paths outside `/api`, which the classifier reads as pages; the endpoint authenticates
 itself with an endpoint API key, ADR-0134, and the OAuth routes are public by protocol or require a
-browser session, ADR-0134 part 3) and `POST /api/invitations/:id/accept` (an unclassified
-sub-resource) — twenty-two of the twenty-three routes the matrix exempts by name; the
-twenty-third, `GET /api/setup/runtime-detect`, parses as a `setup` row and is decided. -/
+browser session, ADR-0134 part 3), `POST /api/triggers/:id/fire/:secret` (a path deeper than
+`/api/<resource>/:id/<sub>`; the secret in the path is the whole authentication, ADR-0144) and
+`POST /api/invitations/:id/accept` (an unclassified sub-resource) and `POST /api/builder/mcp`
+(an unclassified resource; the route verifies a run token itself, issue #1846), `POST /mcp/builder` and
+its protected-resource metadata route (paths outside `/api`, read as pages; the door admits only an OAuth
+token of the `builder` client kind, issue #1846) — twenty-nine of the
+thirty routes the matrix exempts by name; the thirtieth,
+`GET /api/setup/runtime-detect`, parses as a `setup` row and is decided. -/
 @[aw_spec (tier := T5) (ts := "apps/web/server/rbac/authorisation-matrix.test.ts#PUBLIC_ROUTES")
   (ts := "apps/web/server/rbac/authorisation-matrix.test.ts#IDENTITY_ONLY_ROUTES")]
 theorem refused_declared_routes_are_the_auth_routes_and_accept :
     ((declaredRoutes.filter fun r =>
         (decideAuth ⟨"owner", r.method, r.path, .own, none⟩).effect == .refuse).map
         fun r => (r.method, r.path)) =
-      [("GET", "/api/cron/retention"),
+      [("POST", "/api/builder/mcp"), ("POST", "/mcp/builder"),
+        ("GET", "/.well-known/oauth-protected-resource/mcp/builder"), ("GET", "/api/cron/retention"),
+        ("GET", "/api/readyz"),
         ("POST", "/api/a2a/agents/:agentName"),
         ("GET", "/api/a2a/agents/:agentName/.well-known/agent-card.json"),
         ("POST", "/mcp/projects/:name"),
@@ -161,11 +165,11 @@ theorem refused_declared_routes_are_the_auth_routes_and_accept :
         ("GET", "/.well-known/oauth-protected-resource/mcp/projects/:name"),
         ("GET", "/.well-known/oauth-protected-resource/api/a2a/agents/:agentName"),
         ("GET", "/oauth/authorize"), ("POST", "/oauth/authorize"), ("POST", "/oauth/token"),
-        ("POST", "/oauth/revoke"),
-        ("POST", "/api/auth/cli-device"), ("GET", "/api/auth/cli-verify"),
+        ("POST", "/oauth/revoke"), ("POST", "/api/triggers/:id/fire/:secret"),
+        ("GET", "/api/cron/triggers"), ("POST", "/api/auth/cli-device"), ("GET", "/api/auth/cli-verify"),
         ("POST", "/api/auth/cli-verify"), ("POST", "/api/auth/cli-token"),
         ("DELETE", "/api/auth/cli-token"), ("POST", "/api/auth/cli-workspace"),
-        ("GET", "/api/auth/login"), ("POST", "/api/auth/callback"), ("GET", "/api/auth/workspace"),
+        ("GET", "/api/cron/storage-cleanup"), ("GET", "/api/auth/login"), ("POST", "/api/auth/callback"), ("GET", "/api/auth/workspace"),
         ("POST", "/api/auth/workspace"), ("POST", "/api/invitations/:id/accept")] := by
   decide +kernel
 

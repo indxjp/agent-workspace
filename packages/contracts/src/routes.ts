@@ -64,9 +64,14 @@ import {
 } from './platforms.js';
 import { RunFeedbackListResponseSchema, RunFeedbackRequestSchema } from './feedback.js';
 import {
+  CreateDownloadUrlRequestSchema,
+  CreateUploadUrlRequestSchema,
   FileListResponseSchema,
   FileResponseSchema,
+  FileSearchResponseSchema,
+  MoveFileRequestSchema,
   MoveFileResponseSchema,
+  PresignedUrlSchema,
   RemoveFileResponseSchema,
 } from './files.js';
 import {
@@ -94,11 +99,14 @@ import {
   AgentFrameSchema,
   RunFailedFrameDataSchema,
   RunStatusEventDataSchema,
+  RunWarningEventDataSchema,
   StreamResetFrameDataSchema,
 } from './run-events.js';
 import {
   InterruptRunResponseSchema,
   RevokeRunTokensResponseSchema,
+  RunApprovalRequestSchema,
+  RunApprovalResponseSchema,
   RunListResponseSchema,
   RunResponseSchema,
   StartRunRequestSchema,
@@ -112,16 +120,28 @@ import {
 } from './runtimes.js';
 import { SecretListResponseSchema, SecretResourceSchema } from './secrets.js';
 import {
+  CreateStorageConnectionInputSchema,
+  StorageConnectionBrowseResponseSchema,
+  StorageConnectionCredentialSchema,
+  StorageConnectionListResponseSchema,
+  StorageConnectionResourceSchema,
+  StorageConnectionTestOutcomeSchema,
+  UpdateStorageConnectionPatchSchema,
+} from './storage-connections.js';
+import {
   SessionListResponseSchema,
   SessionResponseSchema,
   TranscriptResponseSchema,
   TranscriptSubkeysResponseSchema,
 } from './sessions.js';
 import { ShareListResponseSchema, ShareResourceSchema } from './shares.js';
+import { SurfaceAttachmentResponseSchema } from './surfaces.js';
 import {
+  PublishSkillRevisionRequestSchema,
   SkillExportResponseSchema,
   SkillListResponseSchema,
   SkillResponseSchema,
+  SkillRevisionResponseSchema,
 } from './skills.js';
 import {
   CreatedUserResponseSchema,
@@ -131,6 +151,15 @@ import {
   UserListResponseSchema,
 } from './team.js';
 import { MintTokenRequestSchema, MintTokenResponseSchema } from './tokens.js';
+import {
+  CreateTriggerRequestSchema,
+  CreateTriggerResponseSchema,
+  TriggerListResponseSchema,
+  TriggerResponseSchema,
+  TriggerSecretResponseSchema,
+  UpdateTriggerRequestSchema,
+  ZoomUrlValidationResponseSchema,
+} from './triggers.js';
 import {
   SharingPolicySchema,
   WorkspaceListResponseSchema,
@@ -192,6 +221,8 @@ export const API_SCHEMAS = {
   CreateEndpointClientRequestSchema,
   CreateEvaluationRequestSchema,
   CreateEvaluationRunRequestSchema,
+  CreateTriggerRequestSchema,
+  CreateTriggerResponseSchema,
   CreatedUserResponseSchema,
   DeleteModelConnectionResponseSchema,
   DiscoveredModelsResponseSchema,
@@ -204,8 +235,11 @@ export const API_SCHEMAS = {
   EvaluationResourceSchema,
   EvaluationRunResourceSchema,
   DeviceAuthorizationResponseSchema,
+  CreateDownloadUrlRequestSchema,
+  CreateUploadUrlRequestSchema,
   FileListResponseSchema,
   FileResponseSchema,
+  FileSearchResponseSchema,
   InterruptRunResponseSchema,
   InvitationListResponseSchema,
   InvitationResponseSchema,
@@ -220,7 +254,9 @@ export const API_SCHEMAS = {
   ModelConnectionListResponseSchema,
   ModelConnectionResourceSchema,
   ModelConnectionTestOutcomeSchema,
+  MoveFileRequestSchema,
   MoveFileResponseSchema,
+  PresignedUrlSchema,
   ProjectListResponseSchema,
   ProjectResourceSchema,
   ProjectSessionMoveResponseSchema,
@@ -237,30 +273,47 @@ export const API_SCHEMAS = {
   RunResponseSchema,
   RunStatusEventDataSchema,
   RunTelemetryListResponseSchema,
+  RunWarningEventDataSchema,
   RuntimeConnectionListResponseSchema,
   RuntimeConnectionResourceSchema,
   RuntimeProfileListResponseSchema,
   RuntimeProfileResourceSchema,
   SecretListResponseSchema,
   SecretResourceSchema,
+  StorageConnectionListResponseSchema,
+  StorageConnectionResourceSchema,
+  CreateStorageConnectionInputSchema,
+  StorageConnectionCredentialSchema,
+  UpdateStorageConnectionPatchSchema,
+  StorageConnectionTestOutcomeSchema,
+  StorageConnectionBrowseResponseSchema,
   SessionListResponseSchema,
+  RunApprovalRequestSchema,
+  RunApprovalResponseSchema,
   SessionResponseSchema,
   SetAgentPointerRequestSchema,
   SetAgentPointerResponseSchema,
   ShareListResponseSchema,
   ShareResourceSchema,
   SharingPolicySchema,
+  PublishSkillRevisionRequestSchema,
   SkillExportResponseSchema,
   SkillListResponseSchema,
   SkillResponseSchema,
+  SkillRevisionResponseSchema,
   StartRunRequestSchema,
   StartRunResponseSchema,
   StreamResetFrameDataSchema,
+  SurfaceAttachmentResponseSchema,
   TestConnectionOutcomeSchema,
   ToolBundleResponseSchema,
   TranscriptResponseSchema,
   TranscriptSubkeysResponseSchema,
+  TriggerListResponseSchema,
+  TriggerResponseSchema,
+  TriggerSecretResponseSchema,
   UpdateEndpointClientRequestSchema,
+  UpdateTriggerRequestSchema,
   UploadToolBundleRequestSchema,
   UploadToolBundleResponseSchema,
   UserListResponseSchema,
@@ -269,6 +322,7 @@ export const API_SCHEMAS = {
   WorkspaceResponseSchema,
   WorkspaceSwitchRequestSchema,
   WorkspaceSwitchResponseSchema,
+  ZoomUrlValidationResponseSchema,
 } as const satisfies Readonly<Record<string, z.ZodType>>;
 
 /** The name of a schema in {@link API_SCHEMAS}. */
@@ -345,6 +399,10 @@ export type ApiRouteSecurity =
  * - private runner routes — the transcript writes and the ENG-06 engine-state routes, which only
  *   `apps/runner` calls, with the signed per-run token rather than a workspace credential
  *   (`apps/web/server/sessions/state-api.ts`; 04 §5.11: runtime-only, not exposed by the SDK).
+ *
+ * The platform's own callers sit beside them: the cron jobs (`CRON_SECRET` bearer, ADR-0120) and
+ * the readiness probe a kubelet calls with no credential (issue #1562). The `aw-control` MCP door a
+ * running agent reaches through the gateway (issue #1846) accepts only a run token, as a `run-caller`.
  */
 export const API_ROUTE_EXCLUSIONS: readonly {
   readonly method: ApiRouteMethod;
@@ -373,6 +431,22 @@ export const API_ROUTE_EXCLUSIONS: readonly {
     method: 'GET',
     path: '/api/cron/retention',
     because: 'platform cron job (CRON_SECRET bearer)',
+  },
+  {
+    method: 'GET',
+    path: '/api/cron/triggers',
+    because: 'platform cron job (CRON_SECRET bearer)',
+  },
+  {
+    method: 'GET',
+    path: '/api/cron/storage-cleanup',
+    because: 'platform cron job (CRON_SECRET bearer)',
+  },
+  { method: 'GET', path: '/api/readyz', because: 'platform readiness probe (no credential)' },
+  {
+    method: 'POST',
+    path: '/api/builder/mcp',
+    because: 'run-caller route (per-run token, aw-control tools)',
   },
   { method: 'GET', path: '/p/:token', because: 'a public share page (04 §1)' },
   { method: 'POST', path: '/p/:token/messages', because: 'a public share page (04 §1)' },
@@ -421,6 +495,11 @@ export const API_ROUTE_EXCLUSIONS: readonly {
   },
   {
     method: 'GET',
+    path: '/api/sessions/:engineSessionId/file-search',
+    because: 'private runner route (per-run token)',
+  },
+  {
+    method: 'GET',
     path: '/api/sessions/:engineSessionId/state-streams',
     because: 'private runner route (per-run token)',
   },
@@ -442,6 +521,11 @@ export const API_ROUTE_EXCLUSIONS: readonly {
   {
     method: 'GET',
     path: '/.well-known/oauth-protected-resource/mcp/projects/:name',
+    because: 'OAuth protected resource metadata (RFC 9728), a public discovery document',
+  },
+  {
+    method: 'GET',
+    path: '/.well-known/oauth-protected-resource/mcp/builder',
     because: 'OAuth protected resource metadata (RFC 9728), a public discovery document',
   },
   {
@@ -788,6 +872,77 @@ export const API_ROUTES: readonly ApiRoute[] = [
     success: created(json('RotateEndpointClientSecretResponseSchema')),
   },
 
+  // ADR-0144 — inbound triggers
+  {
+    method: 'GET',
+    path: '/api/triggers',
+    operationId: 'triggers.list',
+    tag: 'triggers',
+    summary: 'List triggers',
+    success: ok(json('TriggerListResponseSchema')),
+  },
+  {
+    method: 'POST',
+    path: '/api/triggers',
+    operationId: 'triggers.create',
+    tag: 'triggers',
+    summary: 'Create a webhook or schedule trigger; a webhook URL secret is returned once',
+    request: json('CreateTriggerRequestSchema'),
+    success: created(json('CreateTriggerResponseSchema')),
+  },
+  {
+    method: 'GET',
+    path: '/api/triggers/:id',
+    operationId: 'triggers.get',
+    tag: 'triggers',
+    summary: 'Read one trigger',
+    success: ok(json('TriggerResponseSchema')),
+  },
+  {
+    method: 'PATCH',
+    path: '/api/triggers/:id',
+    operationId: 'triggers.update',
+    tag: 'triggers',
+    summary: "Change a trigger's name, prompt template, enabled flag or Zoom secret token",
+    request: json('UpdateTriggerRequestSchema'),
+    success: ok(json('TriggerResponseSchema')),
+  },
+  {
+    method: 'DELETE',
+    path: '/api/triggers/:id',
+    operationId: 'triggers.remove',
+    tag: 'triggers',
+    summary: 'Delete a trigger and its delivery records',
+    success: ok(json('TriggerResponseSchema')),
+  },
+  {
+    method: 'POST',
+    path: '/api/triggers/:id/secret',
+    operationId: 'triggers.rotateSecret',
+    tag: 'triggers',
+    summary: "Rotate a webhook trigger's URL secret; the new secret is returned once",
+    success: created(json('TriggerSecretResponseSchema')),
+  },
+  {
+    method: 'POST',
+    path: '/api/triggers/:id/fire/:secret',
+    operationId: 'triggers.fire',
+    tag: 'triggers',
+    summary:
+      'Fire a webhook trigger: the body is the {{body}} of its prompt and a run starts as the ' +
+      'trigger owner in a new session (202). The URL secret is the authentication and travels in ' +
+      'the path, so it can appear in access logs of a proxy or CDN: rotate it if one may have ' +
+      'leaked. Every miss answers one 404 trigger_not_found. A Microsoft Graph validationToken ' +
+      'query parameter is echoed as text/plain, and Zoom endpoint.url_validation is answered with ' +
+      'the token and its HMAC (200); neither starts a run.',
+    request: { kind: 'binary' },
+    success: [
+      { status: 202, body: json('RunResponseSchema') },
+      { status: 200, body: json('ZoomUrlValidationResponseSchema') },
+    ],
+    security: 'none',
+  },
+
   // §5.3 — model connections and models
   {
     method: 'GET',
@@ -939,6 +1094,75 @@ export const API_ROUTES: readonly ApiRoute[] = [
     security: 'none',
   },
 
+  // The storage design §05 — connected buckets and folders
+  {
+    method: 'GET',
+    path: '/api/storage-connections',
+    operationId: 'storage.connections.list',
+    tag: 'storage-connections',
+    summary: 'List the storage connections of the workspace',
+    success: ok(json('StorageConnectionListResponseSchema')),
+  },
+  {
+    method: 'POST',
+    path: '/api/storage-connections',
+    operationId: 'storage.connections.create',
+    tag: 'storage-connections',
+    summary: 'Connect an S3 bucket or an operator folder, read-only by default',
+    request: json('CreateStorageConnectionInputSchema'),
+    success: created(json('StorageConnectionResourceSchema')),
+  },
+  {
+    method: 'GET',
+    path: '/api/storage-connections/:id',
+    operationId: 'storage.connections.get',
+    tag: 'storage-connections',
+    summary: 'Read one storage connection',
+    success: ok(json('StorageConnectionResourceSchema')),
+  },
+  {
+    method: 'PATCH',
+    path: '/api/storage-connections/:id',
+    operationId: 'storage.connections.update',
+    tag: 'storage-connections',
+    summary: 'Rename a storage connection or change its URL, allowed prefixes or write access',
+    request: json('UpdateStorageConnectionPatchSchema'),
+    success: ok(json('StorageConnectionResourceSchema')),
+  },
+  {
+    method: 'PUT',
+    path: '/api/storage-connections/:id/credential',
+    operationId: 'storage.connections.rotate',
+    tag: 'storage-connections',
+    summary: 'Replace the credential of a storage connection (the old value is never returned)',
+    request: json('StorageConnectionCredentialSchema'),
+    success: ok(json('StorageConnectionResourceSchema')),
+  },
+  {
+    method: 'POST',
+    path: '/api/storage-connections/:id/test',
+    operationId: 'storage.connections.test',
+    tag: 'storage-connections',
+    summary: 'Open a storage connection and list one page of an allowed folder',
+    success: ok(json('StorageConnectionTestOutcomeSchema')),
+  },
+  {
+    method: 'GET',
+    path: '/api/storage-connections/:id/browse',
+    operationId: 'storage.connections.browse',
+    tag: 'storage-connections',
+    summary: 'List a folder of a storage connection inside its allowed prefixes (?prefix=&cursor=)',
+    success: ok(json('StorageConnectionBrowseResponseSchema')),
+  },
+  {
+    method: 'DELETE',
+    path: '/api/storage-connections/:id',
+    operationId: 'storage.connections.delete',
+    tag: 'storage-connections',
+    summary: 'Delete a storage connection and its credential',
+    success: NO_CONTENT,
+  },
+
   // §5.5 — secrets
   {
     method: 'GET',
@@ -998,6 +1222,15 @@ export const API_ROUTES: readonly ApiRoute[] = [
   },
   {
     method: 'GET',
+    path: '/api/files/search',
+    operationId: 'files.search',
+    tag: 'files',
+    summary:
+      'Search the text of workspace files (`q`, `limit`): path, page and snippet per hit; `pending` counts files not yet searchable',
+    success: ok(json('FileSearchResponseSchema')),
+  },
+  {
+    method: 'GET',
     path: '/api/files/:id',
     operationId: 'files.download',
     tag: 'files',
@@ -1010,7 +1243,7 @@ export const API_ROUTES: readonly ApiRoute[] = [
     operationId: 'files.move',
     tag: 'files',
     summary: 'Move or rename a file or folder',
-    request: UNDESCRIBED,
+    request: json('MoveFileRequestSchema'),
     success: ok(json('MoveFileResponseSchema')),
   },
   {
@@ -1023,6 +1256,34 @@ export const API_ROUTES: readonly ApiRoute[] = [
       { status: 200, body: json('RemoveFileResponseSchema') },
       { status: 204, body: NONE },
     ],
+  },
+  {
+    method: 'POST',
+    path: '/api/files/:id/upload-urls',
+    operationId: 'files.createUploadUrl',
+    tag: 'files',
+    summary:
+      'Mint a short-lived PUT URL on the object store, so the holder uploads without a relay',
+    request: json('CreateUploadUrlRequestSchema'),
+    success: created(json('PresignedUrlSchema')),
+  },
+  {
+    method: 'POST',
+    path: '/api/files/:id/upload-complete',
+    operationId: 'files.completeUpload',
+    tag: 'files',
+    summary: 'Verify the object a signed PUT wrote and mark the file ready',
+    success: ok(json('FileResponseSchema')),
+  },
+  {
+    method: 'POST',
+    path: '/api/files/:id/download-urls',
+    operationId: 'files.createDownloadUrl',
+    tag: 'files',
+    summary:
+      'Mint a short-lived GET URL on the object store, so the holder downloads without a relay',
+    request: json('CreateDownloadUrlRequestSchema'),
+    success: created(json('PresignedUrlSchema')),
   },
 
   // §5.7 — skills
@@ -1059,6 +1320,15 @@ export const API_ROUTES: readonly ApiRoute[] = [
     summary: 'Update a skill',
     request: UNDESCRIBED,
     success: ok(json('SkillResponseSchema')),
+  },
+  {
+    method: 'POST',
+    path: '/api/skills/:name/revisions',
+    operationId: 'skills.publish',
+    tag: 'skills',
+    summary: 'Publish the skill as the next immutable revision an agent can pin',
+    request: json('PublishSkillRevisionRequestSchema'),
+    success: created(json('SkillRevisionResponseSchema')),
   },
   {
     method: 'DELETE',
@@ -1482,6 +1752,16 @@ export const API_ROUTES: readonly ApiRoute[] = [
     summary: "List a transcript's subkeys",
     success: ok(json('TranscriptSubkeysResponseSchema')),
   },
+  {
+    method: 'POST',
+    path: '/api/sessions/:engineSessionId/attachments',
+    operationId: 'sessions.attachments.upload',
+    tag: 'sessions',
+    summary:
+      "Upload one file (bytes, name in `name`) into a visitor's session, for `runs.start` `attachments`",
+    request: BINARY,
+    success: created(json('SurfaceAttachmentResponseSchema')),
+  },
 
   // §5.12 — runs and the event stream
   {
@@ -1529,6 +1809,7 @@ export const API_ROUTES: readonly ApiRoute[] = [
       kind: 'event-stream',
       frames: [
         'RunStatusEventDataSchema',
+        'RunWarningEventDataSchema',
         'AgentFrameSchema',
         'RunFailedFrameDataSchema',
         'StreamResetFrameDataSchema',
@@ -1542,6 +1823,16 @@ export const API_ROUTES: readonly ApiRoute[] = [
     tag: 'runs',
     summary: 'Interrupt a run',
     success: ok(json('InterruptRunResponseSchema')),
+  },
+  {
+    method: 'POST',
+    path: '/api/runs/:id/approval',
+    operationId: 'runs.approval',
+    tag: 'runs',
+    summary:
+      'Approve or reject the tool call a paused run is waiting on (starts a continuation run; `409` once decided)',
+    request: json('RunApprovalRequestSchema'),
+    success: [{ status: 202, body: json('RunApprovalResponseSchema') }],
   },
   {
     method: 'POST',
@@ -1679,6 +1970,19 @@ export const API_ROUTES: readonly ApiRoute[] = [
       "MCP JSON-RPC to an endpoint client's production code tools (initialize, ping, tools/list, tools/call)",
     request: json('A2aJsonRpcRequestSchema'),
     // The JSON-RPC 2.0 envelope is protocol-neutral; a notification (no `id`) is answered 202.
+    success: ok(json('A2aJsonRpcResponseSchema')),
+    security: 'endpoint-credential',
+  },
+
+  // Builder design §04 (#1846 slice 5b) — the read-only door for an outside MCP client (a `builder` OAuth client)
+  {
+    method: 'POST',
+    path: '/mcp/builder',
+    operationId: 'mcp.builderRpc',
+    tag: 'mcp',
+    summary:
+      "MCP JSON-RPC to the Builder's read tools (initialize, ping, tools/list, tools/call) for an outside client",
+    request: json('A2aJsonRpcRequestSchema'),
     success: ok(json('A2aJsonRpcResponseSchema')),
     security: 'endpoint-credential',
   },

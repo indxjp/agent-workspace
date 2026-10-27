@@ -9,11 +9,12 @@
 export const TOKEN_SCOPE_KINDS = ['run', 'session'] as const;
 
 /**
- * The two shapes an endpoint-scoped API key is bound to (ADR-0134): one agent's A2A endpoint, or
- * one MCP project endpoint. A browser token never carries one of these, so they are not part of
+ * The shapes an endpoint-scoped credential is bound to (ADR-0134): one agent's A2A endpoint, one
+ * MCP project endpoint, or the Builder's (issue #1846, no row of its own: `id` is the client). A
+ * browser token never carries one of these, so they are not part of
  * {@link TOKEN_SCOPE_KINDS}, which mirrors the `browser_tokens` column.
  */
-export const ENDPOINT_SCOPE_KINDS = ['a2a-agent', 'mcp-project'] as const;
+export const ENDPOINT_SCOPE_KINDS = ['a2a-agent', 'mcp-project', 'builder'] as const;
 
 /** One of {@link TOKEN_SCOPE_KINDS} or {@link ENDPOINT_SCOPE_KINDS}. */
 export type TokenScopeKind =
@@ -27,7 +28,7 @@ export interface BrowserTokenScope {
 
 /** Whether `kind` is one an endpoint-scoped API key carries. */
 export function isEndpointScope(kind: TokenScopeKind): boolean {
-  return kind === 'a2a-agent' || kind === 'mcp-project';
+  return kind === 'a2a-agent' || kind === 'mcp-project' || kind === 'builder';
 }
 
 /**

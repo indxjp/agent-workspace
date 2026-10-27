@@ -178,6 +178,18 @@ describe('a browser-token principal is its minter, attenuated by a scope (issue 
     expect(Principal.isPrincipal(principal)).toBe(false);
   });
 
+  it('isPrincipal refuses an API key carrying a builder scope: it rides on an OAuth token only', () => {
+    const principal = Principal.fromApiKey({
+      principalId: 'c58a0886-0011-4d53-bdfd-e5acd233b341',
+      apiKeyId: '45ce8116-ab8f-4815-a972-a74c8473f989',
+      workspaceId: '3f4f9b90-dda6-4da9-874c-daa5b578bdf0',
+      role: 'builder',
+      label: 'CI key',
+      scope: { kind: 'builder', id: 'f1d2d2f9-24c8-4ed3-9f7c-3a5f4b1f6d10' },
+    });
+    expect(Principal.isPrincipal(principal)).toBe(false);
+  });
+
   it('an endpoint-scoped API key carries its scope and the member it acts for (ADR-0134)', () => {
     const MEMBER = '5730530e-4f41-4d62-88c7-0696f4995dca';
     const agent = '0b9ad1fc-9a3a-4f0b-9a37-1d6d1a7c5b11';
@@ -245,6 +257,16 @@ describe('an OAuth-token principal is the consenting member, narrowed to one end
     });
     expect(principal.scope).toEqual({ kind: 'mcp-project', id: grant.clientId });
     expect(principal.oauth).toEqual(grant);
+    expect(Principal.isPrincipal(principal)).toBe(true);
+  });
+
+  it('accepts a builder scope on an OAuth token', async () => {
+    const principal = Principal.fromOAuthToken(
+      await member(),
+      { kind: 'builder', id: grant.clientId },
+      { ...grant, audience: 'https://aw.example/mcp/builder' },
+    );
+    expect(principal.scope).toEqual({ kind: 'builder', id: grant.clientId });
     expect(Principal.isPrincipal(principal)).toBe(true);
   });
 

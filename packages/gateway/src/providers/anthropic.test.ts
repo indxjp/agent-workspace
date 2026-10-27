@@ -226,6 +226,45 @@ describe('Anthropic provider', () => {
     expect(upstreamHeaders.get('authorization')).toBeNull();
   });
 
+  it('keeps the run trace headers inside the platform (F-04)', async () => {
+    let upstreamHeaders = new Headers();
+    const provider = createAnthropicProvider({
+      baseUrl: 'http://localhost:9999',
+      fetch: (_input, init) => {
+        upstreamHeaders = new Headers(init?.headers);
+        return Promise.resolve(
+          Response.json({
+            id: 'msg_trace',
+            type: 'message',
+            role: 'assistant',
+            model: 'claude-opus-5',
+            content: [{ type: 'text', text: 'ok' }],
+            stop_reason: 'end_turn',
+            stop_sequence: null,
+            usage: { input_tokens: 1, output_tokens: 1 },
+          }),
+        );
+      },
+    });
+
+    const response = await createRouter([provider]).fetch(
+      new Request('http://gateway/v1/messages', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          traceparent: '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01',
+          tracestate: 'aw=1',
+        },
+        body: JSON.stringify({ model: 'claude-opus-5', messages: [] }),
+      }),
+      context(),
+    );
+
+    expect(response.status).toBe(200);
+    expect(upstreamHeaders.get('traceparent')).toBeNull();
+    expect(upstreamHeaders.get('tracestate')).toBeNull();
+  });
+
   it('forwards context-management beta headers to token counting', async () => {
     let upstreamHeaders = new Headers();
     const provider = createAnthropicProvider({

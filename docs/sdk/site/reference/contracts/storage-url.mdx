@@ -1,0 +1,66 @@
+---
+title: "storage-url"
+description: "The @indx-workspace/contracts/storage-url exports, sorted alphabetically."
+---
+
+<Note>This page is generated from `packages/contracts/src/storage-url.ts`, `packages/contracts/src/url-credential.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## AZURE_CONTAINER_NAME_PATTERN
+
+Azure container names: `[a-z0-9-]`, 3–63 characters, no hyphen at either end, never `--`.
+
+Value: `'(?!.*--)[a-z0-9][a-z0-9-]{1,61}[a-z0-9]'`
+
+## BUCKET_NAME_PATTERN
+
+S3 and GCS bucket names: `[a-z0-9.-]`, 3–63 characters, no separator at either end. An
+unanchored pattern fragment: the deployment profile's JSON Schema concatenates it, and JSON
+Schema patterns carry no flags.
+
+Value: `'[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]'`
+
+## formatStorageUrl
+
+The URL `parseStorageUrl` reads back to the same location. For warnings and doctor output.
+
+```ts
+formatStorageUrl(location: StorageLocation): string
+```
+
+## isHttpEndpoint
+
+Whether `value` is an http(s) URL with no credential, query or fragment: a bare endpoint.
+
+```ts
+isHttpEndpoint(value: string): boolean
+```
+
+## parseStorageUrl
+
+Parses `AW_STORAGE_URL`. Never throws; a refusal's reason never contains the input.
+
+```ts
+parseStorageUrl(raw: string): StorageUrlResult
+```
+
+## StorageLocation
+
+- `{ kind: "file"; root: string; }`
+- `{ kind: "s3"; bucket: string; prefix: string; endpoint?: string; publicEndpoint?: string; region?: string; forcePathStyle: boolean; }`
+- `{ kind: "gcs"; bucket: string; prefix: string; projectId?: string; }`
+- `{ kind: "azblob"; account: string; serviceUrl: string; container: string; prefix: string; }`
+
+## StorageUrlRefusal
+
+`secret` is set when the URL was refused for carrying a credential or an unknown query parameter.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `ok` | `false` | Yes |  |
+| `reason` | `string` | Yes |  |
+| `secret` | `undefined \| true` | No |  |
+
+## StorageUrlResult
+
+- `StorageUrlRefusal`
+- `{ ok: true; location: StorageLocation; }`

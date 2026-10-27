@@ -103,6 +103,7 @@ const LoadedToolSchema = z.discriminatedUnion('kind', [
             ])
             .optional(),
           baseUrl: ToolStringSchema.optional(),
+          identity: SecretReferenceWireSchema.optional(),
         })
         .strict()
         .readonly(),

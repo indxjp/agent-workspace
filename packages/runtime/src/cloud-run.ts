@@ -21,6 +21,9 @@ import type {
 import { assertDigestPinnedEngineImages, requireEngineImage } from './engine-images.js';
 import type { EngineImageMap } from './engine-images.js';
 
+/** The subpath `@agent-workspace/runtime/driver/cloud-run` carries its credential helpers too. */
+export * from './gcp-auth.js';
+
 export type CloudRunRuntimeCapabilities = RuntimeCapabilities &
   Readonly<{ managedByProvider: true }>;
 
@@ -42,6 +45,7 @@ export const CLOUD_RUN_RUNTIME_CAPABILITIES: CloudRunRuntimeCapabilities = {
   gpu: false,
   managedByProvider: true,
   typicalStartMs: 3_000,
+  fileTransfer: 'push-archive',
 };
 
 export type CloudRunServiceSpec = Readonly<{

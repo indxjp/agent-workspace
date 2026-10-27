@@ -14,7 +14,8 @@ import {
   reservedKeyNameRefusal,
 } from '../../../server/cli-auth/local-runtime-key-guard';
 import { createApiKey, listApiKeys } from '../../../server/rbac/handlers';
-import { authorise, readJsonBody, toResponse } from '../../../server/rbac/http';
+import { readJsonBody } from '../../../server/http/result';
+import { authorise, toResponse } from '../../../server/rbac/http';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';

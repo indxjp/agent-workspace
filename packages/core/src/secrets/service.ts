@@ -16,8 +16,9 @@
  * ## The public shape: write, and one clearly separate way to read
  *
  * {@link SecretsService.list}, `.create` and `.replace` are what `apps/web/server/secrets/**`
- * calls; none of the three can produce a value. {@link SecretsService.resolveByName} can, and it
- * is the one method this interface has that `apps/web/app/api/secrets/**` must never call —
+ * calls; none of the three can produce a value. {@link SecretsService.resolveByName} and
+ * {@link SecretsService.resolveById} can, and they are the two methods this interface has that
+ * `apps/web/app/api/secrets/**` must never call —
  * `resolve.ts`'s header explains what actually enforces that. It exists here, on the same object,
  * because the caller the Wave 2 plan names (W2-CP-05) needs exactly this composition —
  * master key loaded, pool open, scope resolved — and building a second composition root next to
@@ -45,7 +46,7 @@ import {
   type ReplaceSecretOutcome,
   type SecretMetadata,
 } from './repository.js';
-import { resolveSecretByName, type ResolvedSecret } from './resolve.js';
+import { resolveSecretById, resolveSecretByName, type ResolvedSecret } from './resolve.js';
 
 /** Everything `POST /api/secrets` supplies: a name and the plaintext value to seal. */
 export interface CreateSecretRequest {
@@ -68,6 +69,11 @@ export interface SecretsService {
    * credential resolution, running server-side, never as the direct response to an HTTP request.
    */
   resolveByName(scope: WorkspaceScope, name: string): Promise<ResolvedSecret | null>;
+  /**
+   * Decrypt and return one secret by id with a single query; `null` for a missing, foreign or
+   * malformed id. **Not for routes** — same constraint as {@link resolveByName}.
+   */
+  resolveById(scope: WorkspaceScope, id: string): Promise<ResolvedSecret | null>;
   /** Release the pool this service opened. Idempotent. */
   close(): Promise<void>;
 }
@@ -142,6 +148,10 @@ export async function createSecretsService(
       );
     },
 
+    resolveById(scope: WorkspaceScope, id: string): Promise<ResolvedSecret | null> {
+      return resolveSecretById(db, requireWorkspaceScope(scope, 'SecretsService'), masterKey, id);
+    },
+
     async close(): Promise<void> {
       if (closed) return;
       closed = true;
@@ -195,6 +205,19 @@ export function createInMemorySecretsService(): SecretsService {
         (candidate) =>
           candidate.metadata.workspaceId === checked.workspaceId &&
           candidate.metadata.name === name,
+      );
+      if (row === undefined) return Promise.resolve(null);
+      return Promise.resolve({
+        name: row.metadata.name,
+        value: openSecret(masterKey, row.envelope),
+      });
+    },
+
+    resolveById(scope: WorkspaceScope, id: string): Promise<ResolvedSecret | null> {
+      const checked = requireWorkspaceScope(scope, 'SecretsService');
+      const row = [...provider._debugEnvelopes.values()].find(
+        (candidate) =>
+          candidate.metadata.workspaceId === checked.workspaceId && candidate.metadata.id === id,
       );
       if (row === undefined) return Promise.resolve(null);
       return Promise.resolve({

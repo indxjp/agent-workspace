@@ -68,12 +68,11 @@
  * is a different conversation.
  */
 import { ENGINE_CATALOGUE, type EngineId } from '@indx-workspace/contracts/engines';
-import type { SessionRecord } from '@agent-workspace/core/db';
 
 import { apiError, isUuid, json, readJsonBody } from '../runs/http';
 import { notConfigured, ready, sessionRepository, type Ready } from './api';
 import { parseProjectKey } from './transcript';
-import type { SessionApiEnvironment } from './environment';
+import type { SessionRecord } from './store';
 import {
   parseBlobKey,
   parseEngineId,
@@ -99,10 +98,6 @@ function notFound(): Response {
   );
 }
 
-function stateStoreOf(env: SessionApiEnvironment): SessionStateStore | null {
-  return env.stateStore ?? null;
-}
-
 /**
  * The blob half of the store has no byte backend in this deployment.
  *
@@ -120,7 +115,7 @@ function blobsUnavailable(reason: string): Response {
  * Order matters and is the same everywhere in this family: resolve, then authorise, then answer.
  * Both failures answer {@link notFound}, so the order cannot be read off the status.
  */
-async function resolveSession(
+export async function resolveSession(
   state: ReadyState,
   pathId: string,
 ): Promise<
@@ -222,8 +217,7 @@ async function streamContext(
   declaredEngine: unknown,
   declaredStreamKey: unknown,
 ): Promise<StreamContext | { readonly ok: false; readonly response: Response }> {
-  const store = stateStoreOf(state.env);
-  if (store === null) return { ok: false, response: notConfigured() };
+  const store = state.env.stateStore;
   const engine = parseEngineId(declaredEngine);
   if (!engine.ok) return { ok: false, response: apiError(400, 'invalid_engine', engine.reason) };
   const streamKey = parseStreamKey(declaredStreamKey);
@@ -252,13 +246,6 @@ async function streamContext(
 /** 204 with no body, for every write on this family. */
 function noContent(): Response {
   return new Response(null, { status: 204, headers: { 'cache-control': 'no-store' } });
-}
-
-/** The JSON body of `POST`/`PUT …/state-entries`. */
-export interface SessionStateEntriesBody {
-  readonly engine: string;
-  readonly streamKey: string;
-  readonly entries: readonly { readonly entryKey?: string; readonly entry: unknown }[];
 }
 
 async function readEntriesBody(
@@ -435,8 +422,7 @@ export async function deleteSessionState(request: Request, pathId: string): Prom
 export async function listSessionStateStreams(request: Request, pathId: string): Promise<Response> {
   const state = await ready(request);
   if (!state.ok) return state.response;
-  const store = stateStoreOf(state.env);
-  if (store === null) return notConfigured();
+  const store = state.env.stateStore;
   const resolved = await resolveSession(state, pathId);
   if (!resolved.ok) return resolved.response;
   const refused = archived(resolved.session);
@@ -521,8 +507,7 @@ async function blobContext(
     }
   | { readonly ok: false; readonly response: Response }
 > {
-  const store = stateStoreOf(state.env);
-  if (store === null) return { ok: false, response: notConfigured() };
+  const store = state.env.stateStore;
   const engine = parseEngineId(query(request, 'engine'));
   if (!engine.ok) return { ok: false, response: apiError(400, 'invalid_engine', engine.reason) };
   const blobKey = parseBlobKey(query(request, 'blobKey'));
@@ -585,6 +570,9 @@ export async function getSessionStateBlob(request: Request, pathId: string): Pro
     status: 200,
     headers: {
       'content-type': 'application/octet-stream',
+      // The bytes are an engine's opaque snapshot: a browser must neither sniff nor render them.
+      'x-content-type-options': 'nosniff',
+      'content-disposition': 'attachment',
       'cache-control': 'no-store',
       // The digest recorded when the bytes were written, so a caller can prove it got what the
       // store recorded rather than whatever is at that object key now.

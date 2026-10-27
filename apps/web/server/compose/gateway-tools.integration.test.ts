@@ -12,6 +12,7 @@ import {
   createGatewayApplication,
   createGatewayServer,
 } from '@agent-workspace/gateway';
+import { signIdentity, verifyIdentity } from '@indx-workspace/contracts/identity-assertion';
 import type { ProjectPolicy } from '@indx-workspace/contracts/policy-ceiling';
 import {
   OpenApiToolConfigSchema,
@@ -22,7 +23,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createInMemoryAgentStoreProvider } from '../agents/memory-store';
 import { createRunTokenIssuer } from '../gateway/issuer';
 import type { LaunchContext } from '../runs/environment';
-import { InMemoryRunStore } from '../runs/store';
+import { InMemoryRunStore } from '../runs/memory-store';
 import { buildRunRequestFor } from './run-request';
 
 const SECRET = 'compose-gateway-tools-secret-at-least-32-bytes';
@@ -31,6 +32,8 @@ const WORKSPACE = '22222222-2222-4222-8222-222222222222';
 const RUN = '11111111-1111-4111-8111-111111111111';
 const OTHER_RUN = '99999999-9999-4999-8999-999999999999';
 const CEILING_RUN = '88888888-8888-4888-8888-888888888888';
+const IDENTITY_RUN = '55555555-5555-4555-8555-555555555551';
+const NO_CALLER_RUN = '55555555-5555-4555-8555-555555555552';
 const SESSION = '44444444-4444-4444-8444-444444444444';
 const USER = '66666666-6666-4666-8666-666666666666';
 const ORDERS = '00000000-0000-4000-8000-00000000000a';
@@ -51,7 +54,14 @@ let upstream: Server;
 let upstreamUrl = '';
 let gateway: Server;
 let gatewayUrl = '';
-const upstreamCalls: { path: string | undefined; authorization: string | undefined }[] = [];
+const upstreamCalls: {
+  path: string | undefined;
+  authorization: string | undefined;
+  identity?: string | undefined;
+}[] = [];
+const IDENTITY_KEY = 'i'.repeat(32);
+/** The runs whose `ORDERS` connector opted in to the identity assertion. */
+const identityRuns = new Set<string>();
 /**
  * What compose's snapshot sink recorded, per run: the gateway authorises against it (C16).
  * `OTHER_RUN` is active with no tool connector.
@@ -60,7 +70,12 @@ const snapshots = new Map<string, readonly string[]>([[OTHER_RUN, []]]);
 
 beforeAll(async () => {
   upstream = createServer((request, response) => {
-    upstreamCalls.push({ path: request.url, authorization: request.headers.authorization });
+    const identity = request.headers['x-aw-identity'];
+    upstreamCalls.push({
+      path: request.url,
+      authorization: request.headers.authorization,
+      ...(identity === undefined ? {} : { identity: String(identity) }),
+    });
     response.setHeader('content-type', 'application/json');
     response.end(JSON.stringify({ id: request.url?.split('/').at(-1), status: 'shipped' }));
   });
@@ -94,6 +109,27 @@ beforeAll(async () => {
             }),
             parameters: { getOrder: [{ name: 'orderId', in: 'path', required: true }] },
             credential: () => Promise.resolve(UPSTREAM_CREDENTIAL),
+            // Stands in for `createDatabaseToolResolver`'s signer; the real one is covered in
+            // packages/gateway/src/tools/authorize.test.ts.
+            ...(identityRuns.has(claims.runId)
+              ? {
+                  identity: () =>
+                    Promise.resolve(
+                      claims.caller === undefined
+                        ? null
+                        : signIdentity(
+                            {
+                              ...claims.caller,
+                              workspace: claims.workspaceId,
+                              runId: claims.runId,
+                              aud: connectorId,
+                              exp: Math.floor(Date.now() / 1000) + 300,
+                            },
+                            IDENTITY_KEY,
+                          ),
+                    ),
+                }
+              : {}),
           },
         });
       },
@@ -107,7 +143,7 @@ afterAll(async () => {
   await Promise.all([close(upstream), close(gateway)]);
 });
 
-async function launchContext(runId: string) {
+async function launchContext(runId: string, principal: Partial<LaunchContext['principal']> = {}) {
   const agents = createInMemoryAgentStoreProvider();
   const created = await agents.forWorkspace(WORKSPACE).create(
     {
@@ -142,6 +178,7 @@ async function launchContext(runId: string) {
       userId: USER,
       workspaceId: WORKSPACE,
       scope: null,
+      ...principal,
     },
     prompt: 'where is order 42?',
   };
@@ -149,7 +186,7 @@ async function launchContext(runId: string) {
     context,
     runAgent: {
       agent: created.agent,
-      assignments: { files: [], skillIds: [], connectorIds: [] },
+      assignments: { files: [], skillIds: [], connectorIds: [], storageGrants: [] },
       toolBundles: [],
       subagents: [],
     },
@@ -160,8 +197,13 @@ const issuer = () =>
   createRunTokenIssuer({ baseUrl: gatewayUrl, signingSecret: SECRET, ttlSeconds: 600 });
 
 /** Compose a run with one `openapi` connector named and keyed `orders`. */
-async function composeOrdersRequest(runId: string, ceiling: ProjectPolicy | null = null) {
-  const { context, runAgent } = await launchContext(runId);
+async function composeOrdersRequest(
+  runId: string,
+  ceiling: ProjectPolicy | null = null,
+  identity: Partial<LaunchContext['principal']> | null = null,
+) {
+  const { context, runAgent } = await launchContext(runId, identity ?? {});
+  if (identity !== null) identityRuns.add(runId);
   return buildRunRequestFor(
     context,
     runAgent,
@@ -177,7 +219,13 @@ async function composeOrdersRequest(runId: string, ceiling: ProjectPolicy | null
           skills: [],
           mcpServers: {},
           toolConnectors: [
-            { key: 'orders', name: 'orders', connectorId: ORDERS, operationNames: ['getOrder'] },
+            {
+              key: 'orders',
+              name: 'orders',
+              connectorId: ORDERS,
+              operationNames: ['getOrder'],
+              ...(identity === null ? {} : { identity: true as const }),
+            },
           ],
         }),
     },
@@ -296,5 +344,55 @@ describe('a composed openapi connector answers through the gateway', () => {
     );
     expect(response.status).toBe(403);
     expect(await response.json()).toMatchObject({ error: { code: 'tool_not_in_run' } });
+  });
+
+  it('tells an opted-in connector who is asking, signed per call, without the key reaching the engine', async () => {
+    const request = await composeOrdersRequest(IDENTITY_RUN, null, {
+      via: 'session',
+      kind: 'membership',
+    });
+    const entry = request.portable.mcpServers['orders'];
+    if (entry?.type !== 'http') throw new Error('compose did not hand over an http entry');
+    expect(JSON.stringify(request)).not.toContain(IDENTITY_KEY);
+    expect(JSON.stringify(request)).not.toContain('x-aw-identity');
+
+    upstreamCalls.length = 0;
+    expect(
+      ((await (await rpc(entry, CALL)).json()) as { result: { isError: boolean } }).result.isError,
+    ).toBe(false);
+    const [first] = upstreamCalls;
+    await expect(
+      verifyIdentity(first?.identity ?? '', IDENTITY_KEY, new Date(), {
+        audience: ORDERS,
+        workspace: WORKSPACE,
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      payload: { sub: USER, principalKind: 'membership', runId: IDENTITY_RUN, aud: ORDERS },
+    });
+  });
+
+  it('does not dial an opted-in connector with a token that carries no caller', async () => {
+    snapshots.set(NO_CALLER_RUN, [ORDERS]);
+    identityRuns.add(NO_CALLER_RUN);
+    const token = await issuer().issue({
+      runId: NO_CALLER_RUN,
+      sessionId: SESSION,
+      workspaceId: WORKSPACE,
+      agentId: '33333333-3333-4333-8333-333333333333',
+      modelConnectionId: '77777777-7777-4777-8777-777777777777',
+    });
+    upstreamCalls.length = 0;
+    const response = await rpc(
+      {
+        url: `${gatewayUrl}${gatewayToolPath(ORDERS)}`,
+        headers: { authorization: `Bearer ${token}` },
+      },
+      CALL,
+    );
+    expect(await response.json()).toMatchObject({
+      result: { isError: true, structuredContent: { error: { code: 'tool_upstream_failed' } } },
+    });
+    expect(upstreamCalls).toEqual([]);
   });
 });

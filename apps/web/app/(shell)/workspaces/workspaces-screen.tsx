@@ -25,17 +25,20 @@
  */
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 
+import type { UpdateWorkspacePatch } from '@indx-workspace/contracts/workspaces';
+
 import {
   canAdministerWorkspace,
-  describeTransportRejection,
-  describeWorkspacesFailure,
-  parseWorkspaceItem,
-  parseWorkspaceList,
-  parseWorkspaceMutation,
   type WorkspaceMembership,
   type WorkspaceResource,
   type WorkspacesProblem,
 } from '../../../components/shell/workspaces-directory';
+import { browserClient } from '../../../lib/browser-client';
+import {
+  createWorkspace,
+  loadWorkspaces,
+  updateWorkspace,
+} from '../../../components/shell/workspaces-requests-model';
 import { recoverWorkspaceSession } from '../../../components/shell/session-recovery';
 import {
   concealTenantDocument,
@@ -65,16 +68,6 @@ const BTN_DANGER = 'border-danger bg-danger text-white';
 const INPUT =
   'w-full rounded-(--radius-sm) border border-border-strong bg-surface px-2.5 py-[7px] text-[13.5px] text-text focus:border-accent focus:outline-2 focus:-outline-offset-1 focus:outline-accent';
 const BADGE = 'inline-flex items-center rounded-[999px] px-2 py-0.5 text-[11px] font-medium';
-
-async function readJsonBody(
-  response: Response,
-): Promise<{ ok: true; value: unknown } | { ok: false }> {
-  try {
-    return { ok: true, value: await response.json() };
-  } catch {
-    return { ok: false };
-  }
-}
 
 /** The failed-request callout every panel on this screen shows the same way, worded from the
  * server's own `detail` — issue #120's "every 403/409 is rendered as the server worded it". */
@@ -180,35 +173,13 @@ export function CreateWorkspaceForm({
     event.preventDefault();
     setSubmitting(true);
     setProblem(null);
-    let response: Response;
-    try {
-      response = await fetch('/api/workspaces', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', accept: 'application/json' },
-        body: JSON.stringify(buildCreatePayload(name, slug)),
-      });
-    } catch (error) {
-      setSubmitting(false);
-      setProblem(describeTransportRejection(error));
-      return;
-    }
-    if (!response.ok) {
-      setSubmitting(false);
-      const nextProblem = await describeWorkspacesFailure(response, () => response.json());
-      if (!onSessionProblem(nextProblem)) setProblem(nextProblem);
-      return;
-    }
-    const body = await readJsonBody(response);
+    const result = await createWorkspace(browserClient(), buildCreatePayload(name, slug));
     setSubmitting(false);
-    const created = body.ok ? parseWorkspaceItem(body.value) : null;
-    if (created === null) {
-      setProblem({
-        kind: 'transport',
-        reason: 'The server answered without the usual workspace body.',
-      });
+    if (!result.ok) {
+      if (!onSessionProblem(result.problem)) setProblem(result.problem);
       return;
     }
-    onCreated(created);
+    onCreated(result.value);
     setOpen(false);
     setName('');
     setSlug('');
@@ -299,35 +270,15 @@ export function WorkspaceSettingsPanel({
   }, [workspace.id, workspace.name]);
 
   async function patch(
-    body: unknown,
+    body: UpdateWorkspacePatch,
     onFail: (problem: WorkspacesProblem) => void,
   ): Promise<WorkspaceResource | null> {
-    let response: Response;
-    try {
-      response = await fetch(`/api/workspaces/${workspace.id}`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json', accept: 'application/json' },
-        body: JSON.stringify(body),
-      });
-    } catch (error) {
-      onFail(describeTransportRejection(error));
+    const result = await updateWorkspace(browserClient(), workspace.id, body);
+    if (!result.ok) {
+      if (!onSessionProblem(result.problem)) onFail(result.problem);
       return null;
     }
-    if (!response.ok) {
-      const problem = await describeWorkspacesFailure(response, () => response.json());
-      if (!onSessionProblem(problem)) onFail(problem);
-      return null;
-    }
-    const parsedBody = await readJsonBody(response);
-    const updated = parsedBody.ok ? parseWorkspaceMutation(parsedBody.value) : null;
-    if (updated === null) {
-      onFail({
-        kind: 'transport',
-        reason: 'The server answered without the usual workspace body.',
-      });
-      return null;
-    }
-    return updated;
+    return result.value;
   }
 
   async function saveName(event: FormEvent<HTMLFormElement>) {
@@ -493,32 +444,15 @@ export function WorkspacesScreen() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/workspaces', { headers: { accept: 'application/json' } })
-      .then(async (response) => {
-        if (cancelled) return;
-        if (!response.ok) {
-          const problem = await describeWorkspacesFailure(response, () => response.json());
-          if (!recoverSession(problem)) setState({ kind: 'problem', problem });
-          return;
-        }
-        const body = await readJsonBody(response);
-        const parsed = body.ok ? parseWorkspaceList(body.value) : null;
-        if (parsed === null) {
-          setState({
-            kind: 'problem',
-            problem: {
-              kind: 'transport',
-              reason: 'The server answered without the usual workspaces list.',
-            },
-          });
-          return;
-        }
-        setState({ kind: 'loaded', items: parsed });
-        setSelectedId((current) => current ?? parsed[0]?.id ?? null);
-      })
-      .catch((error: unknown) => {
-        if (!cancelled) setState({ kind: 'problem', problem: describeTransportRejection(error) });
-      });
+    void loadWorkspaces(browserClient()).then((result) => {
+      if (cancelled) return;
+      if (!result.ok) {
+        if (!recoverSession(result.problem)) setState({ kind: 'problem', problem: result.problem });
+        return;
+      }
+      setState({ kind: 'loaded', items: result.value });
+      setSelectedId((current) => current ?? result.value[0]?.id ?? null);
+    });
     return () => {
       cancelled = true;
     };

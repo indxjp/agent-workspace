@@ -16,7 +16,8 @@ This module states the concept's fields as the database knows them, the row inva
 `files_*` CHECK constraints enforce (as predicates over the typed row), the path grammar
 (`files_path_shape`, `files_path_no_dot_segments`), the prefix boundary the catalog repository
 uses for subtree moves (`pathUnderPrefix`), and the catalog upsert that never transfers
-ownership (`putFile`). Files have no lifecycle states: a row exists or it does not.
+ownership (`putFile`). The `status` column (`pending` or `ready`) is not a field here: every
+write this concept models (`putFile`, `renameFile`) stores `ready`.
 -/
 
 namespace AgentWorkspace.Concepts.File
@@ -139,7 +140,8 @@ end File
 /-- The columns of `files`, in declaration order, as this concept maps them. -/
 def dbColumns : List String :=
   ["id", "workspace_id", "path", "kind", "storage_key", "size_bytes", "content_type",
-    "created_by", "owner_principal_id", "created_at", "updated_at"]
+    "created_by", "status", "object_id", "target_path", "area", "sha256", "upload_mode", "owner_principal_id", "created_at",
+    "updated_at"]
 
 /-- The keys of `FileResourceSchema`, in declaration order: no owner, no creator, and a
 modification time the table does not have (it comes from the object store). -/

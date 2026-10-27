@@ -65,6 +65,9 @@ export const PROJECTS = [
 
 /** @typedef {import('./run.mjs').Row} Row */
 
+/** A stand-in for a company's HTTP API behind an `openapiTool()`, as opposed to an MCP server. */
+export const STAND_IN = /(?:^|\/)fake-[^/]+\.mjs$/u;
+
 const ASSIGNMENT = /^([A-Z][A-Z0-9_]*)=(\S*)\s*/u;
 const PLACEHOLDER = /^(?:\.\.\.|…)$/u;
 
@@ -74,10 +77,13 @@ const PLACEHOLDER = /^(?:\.\.\.|…)$/u;
  * @param {string} projectYaml
  */
 const commentCommands = (projectYaml) =>
-  projectYaml.split('\n').flatMap((line) => {
-    const command = /^#\s{3,}(\S.*)$/u.exec(line)?.[1];
-    return command === undefined ? [] : [command];
-  });
+  projectYaml
+    .replace(/ \\\n#\s+/gu, ' ')
+    .split('\n')
+    .flatMap((line) => {
+      const command = /^#\s{3,}(\S.*)$/u.exec(line)?.[1];
+      return command === undefined ? [] : [command];
+    });
 
 /**
  * @param {string} line a command line that may start with `NAME=value` words
@@ -253,9 +259,11 @@ export function fileSetupCommands(dir) {
   return [...folders].flatMap((folder) => {
     const data = path.join(dir, 'data', folder);
     const uploads = existsSync(data)
-      ? readdirSync(data, { withFileTypes: true })
+      ? readdirSync(data, { recursive: true, withFileTypes: true })
           .filter((entry) => entry.isFile())
-          .map((entry) => entry.name)
+          .map((entry) =>
+            path.relative(data, path.join(entry.parentPath, entry.name)).replaceAll(path.sep, '/'),
+          )
           .sort()
           .map(
             (name) =>
@@ -264,27 +272,6 @@ export function fileSetupCommands(dir) {
       : [];
     return [`aw files mkdir ${quoted(folder)}`, ...uploads];
   });
-}
-
-/**
- * The `skill('<name>')` an agent of the project names that is not under its `skills/` but is a
- * shared skill (`../shared/skills/<name>`): a skill is imported from the project's own `skills/`,
- * so the user copies it there.
- *
- * @param {string} dir a project directory
- * @returns {string[]}
- */
-export function sharedSkills(dir) {
-  const names = new Set(
-    agentSources(dir).flatMap((source) =>
-      [...source.matchAll(/\bskill\(\s*['"]([^'"]+)['"]/gu)].map((match) => match[1] ?? ''),
-    ),
-  );
-  return [...names].filter(
-    (name) =>
-      !existsSync(path.join(dir, 'skills', name)) &&
-      existsSync(path.join(dir, '..', 'shared', 'skills', name)),
-  );
 }
 
 /**
@@ -456,7 +443,7 @@ async function projectRows(machine, id, dir, logs, how) {
         ...devEnv,
       })) {
         stops.push(await startServer(dir, server));
-        if (server.script.endsWith('fake-erp.mjs')) pointApisAtLoopback(dir, server.port);
+        if (STAND_IN.test(server.script)) pointApisAtLoopback(dir, server.port);
       }
       return '';
     });
@@ -627,13 +614,6 @@ async function main() {
       });
     }
     for (const id of PROJECTS) {
-      for (const name of sharedSkills(path.join(gallery, id))) {
-        cpSync(
-          path.join(gallery, 'shared', 'skills', name),
-          path.join(gallery, id, 'skills', name),
-          { recursive: true },
-        );
-      }
       writeFileSync(
         path.join(gallery, id, 'package.json'),
         `${JSON.stringify({ name: `use-case-${id}`, private: true, scripts: { dev: 'aw dev' } })}\n`,

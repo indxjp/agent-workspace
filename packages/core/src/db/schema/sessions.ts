@@ -20,6 +20,7 @@
  * when the row is inserted, and never updated, so a later `aw push` cannot change what an open
  * conversation runs. NULL means a legacy, unversioned agent, which runs from the `agents` row.
  */
+import { SESSION_STATUSES } from '@indx-workspace/contracts/sessions';
 import { foreignKey, index, pgTable, text, unique, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 
 import { agentVersions } from './agent-versions.js';
@@ -33,7 +34,7 @@ import { workspaces } from './workspaces.js';
 import { workspacePrincipals } from './workspace-principals.js';
 
 /** §20's four supported operations reduce to two states: a session is either live or archived. */
-export const sessionStatuses = ['active', 'archived'] as const;
+export const sessionStatuses = SESSION_STATUSES;
 export type SessionStatus = (typeof sessionStatuses)[number];
 
 export const sessions = pgTable(

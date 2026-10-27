@@ -14,6 +14,11 @@ import {
   type SecretReference,
 } from '@indx-workspace/contracts/secret-reference';
 import {
+  BUILTIN_SKILL_NAMES,
+  SkillRevisionNumberSchema,
+  type BuiltinSkillName,
+} from '@indx-workspace/contracts/skills';
+import {
   CreateOpenApiConnectorRequestSchema,
   CreatePostgresConnectorRequestSchema,
   OpenApiAllowSchema,
@@ -49,11 +54,24 @@ export interface McpTool extends Branded<'mcp'> {
 
 /**
  * A skill the agent may use, by name. Made by {@link skill}; it lands in the version's
- * `resources.skills` and in the policy's skill allowlist.
+ * `resources.skills` and in the policy's skill allowlist, and a pinned `revision` in its
+ * `resources.skillRevisions`.
  */
 export interface SkillReference extends Branded<'skill'> {
   readonly name: string;
+  readonly revision?: number | undefined;
 }
+
+/** What {@link skill} accepts beyond the name. */
+export interface SkillOptions {
+  /**
+   * Pins the skill to this published revision (`aw skills publish` numbers them from 1) instead of
+   * following its current files.
+   */
+  readonly revision?: number | undefined;
+}
+
+const SkillOptionsSchema = z.object({ revision: SkillRevisionNumberSchema.optional() }).strict();
 
 /**
  * A workspace file the agent may read, or read and write. Made by {@link files}; it lands in the
@@ -82,12 +100,41 @@ export function mcp(connector: string): McpTool {
 
 /**
  * Assigns a skill to the agent, by name: lower-case letters, digits and inner hyphens, at most 64
- * characters, as the workspace's skill names are written.
+ * characters, as the workspace's skill names are written. Without `options.revision` the agent
+ * follows the skill's current files; with it, the version pins that immutable revision, which must
+ * be published before the version is saved.
  *
- * @throws {DefinitionError} when the name is not a skill name.
+ * @throws {DefinitionError} when the name is not a skill name, or `options.revision` is not an
+ *   integer of at least 1 (or `options` has another key).
  */
-export function skill(name: string): SkillReference {
-  return brand({ name: parsed('skill()', SkillNameSchema.safeParse(name)) }, 'skill');
+export function skill(name: string, options: SkillOptions = {}): SkillReference {
+  const { revision } = parsed('skill()', SkillOptionsSchema.safeParse(options));
+  return brand(
+    {
+      name: parsed('skill()', SkillNameSchema.safeParse(name)),
+      ...(revision === undefined ? {} : { revision }),
+    },
+    'skill',
+  );
+}
+
+/**
+ * Assigns a skill the platform ships with every workspace (`'office-reader'`: xlsx, docx, PDF and
+ * ASCII DXF to text). It is the same reference as {@link skill}; the control plane installs the
+ * skill's files into the workspace when a version naming it is saved, so no code or import is
+ * needed.
+ *
+ * @throws {DefinitionError} when the name is not a built-in skill.
+ */
+export function builtinSkill(name: BuiltinSkillName): SkillReference {
+  if (!BUILTIN_SKILL_NAMES.includes(name))
+    throw new DefinitionError('builtinSkill()', [
+      {
+        path: '(root)',
+        message: `${JSON.stringify(name)} is not a built-in skill; use one of ${BUILTIN_SKILL_NAMES.join(', ')}`,
+      },
+    ]);
+  return skill(name);
 }
 
 /**
@@ -106,7 +153,10 @@ export function files(path: string, access: FileAccess = 'read'): FileGrant {
  * again into a plain copy (see `defineAgent`).
  */
 export const McpToolSchema = z.object({ connector: ConnectorNameSchema }).strict().readonly();
-export const SkillReferenceSchema = z.object({ name: SkillNameSchema }).strict().readonly();
+export const SkillReferenceSchema = z
+  .object({ name: SkillNameSchema, revision: SkillRevisionNumberSchema.optional() })
+  .strict()
+  .readonly();
 
 /** Whether `value` was made by {@link mcp}. */
 export function isMcpTool(value: unknown): value is McpTool {
@@ -158,12 +208,21 @@ export interface OpenApiToolInput {
    * never here.
    */
   readonly spec: string;
-  /** The `GET <glob>`, `HEAD <glob>` or `operationId:<id>` rules that pick the operations. */
+  /**
+   * The `<METHOD> <glob>` or `operationId:<id>` rules that pick the operations. A rule that picks a
+   * write (`POST`, `PUT`, `PATCH`, `DELETE`) is admitted; the operation is then implicitly
+   * `requireApproval`, and the gateway runs it only for an approved call.
+   */
   readonly allow: readonly string[];
   /** The credential, by secret reference. Left out, the API is called with no credential. */
   readonly auth?: OpenApiToolAuth | undefined;
   /** The base URL to call; left out, the document's first server. */
   readonly baseUrl?: string | undefined;
+  /**
+   * Opt in to the signed identity assertion (ADR-0142 D1): the secret that signs it. The API
+   * verifies the `x-aw-identity` header on each call with `verifyIdentity`.
+   */
+  readonly identity?: SecretReference | undefined;
 }
 
 /** What {@link openapiTool} returns: the input as written, frozen and branded. */
@@ -300,6 +359,7 @@ export const OpenApiToolInputSchema = z
     allow: OpenApiAllowSchema,
     auth: OpenApiToolAuthSchema.optional(),
     baseUrl: OPENAPI_REQUEST_SHAPE.baseUrl,
+    identity: SecretReferenceSchema.optional(),
   })
   .strict()
   .readonly() satisfies z.ZodType<OpenApiToolInput>;
@@ -317,9 +377,11 @@ export const PostgresToolInputSchema = z
   .readonly() satisfies z.ZodType<PostgresToolInput>;
 
 /**
- * Gives the agent a read-only HTTP API as a tool, described by an OpenAPI document (contract
- * C15). It becomes a catalog connector of `name` when the project is pushed, and the agent's
- * version names it in `resources.connectors`. Only `GET` and `HEAD` operations can be allowed.
+ * Gives the agent an HTTP API as a tool, described by an OpenAPI document (contract C15). It
+ * becomes a catalog connector of `name` when the project is pushed, and the agent's version names
+ * it in `resources.connectors`. Reads (`GET`, `HEAD`) run freely; every write operation
+ * (`POST`, `PUT`, `PATCH`, `DELETE`) is implicitly `requireApproval` and runs only for a call a
+ * person approved.
  *
  * ```ts
  * openapiTool({
@@ -331,7 +393,7 @@ export const PostgresToolInputSchema = z
  * ```
  *
  * @throws {DefinitionError} with every reason the input was refused, each at its key: a `spec`
- *   that is neither an https URL nor a project-relative path, an `allow` rule for a write, a
+ *   that is neither an https URL nor a project-relative path, a malformed `allow` rule, a
  *   string where a secret reference belongs, or an unknown key.
  */
 export function openapiTool(input: OpenApiToolInput): OpenApiTool {

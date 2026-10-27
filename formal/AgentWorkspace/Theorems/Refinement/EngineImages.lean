@@ -35,10 +35,10 @@ theorem shipped_registry_is_installed_through_the_map (images : EngineImageMap)
     (catalogue (Sdk.Engines.shippedRegistry.map fun d => { id := d.id }) images).map
         (fun row => (row.id, row.installed)) =
       Sdk.Engines.shippedRegistry.map fun d => (d.id, d.installed) := by
-  have hid : Contracts.Engines.EngineId.toWire .claudeAgentSdk = "claude-agent-sdk" := by decide
-  have hid' : Contracts.Engines.EngineId.toWire .openaiAgents = "openai-agents" := by decide
-  have hid'' : Contracts.Engines.EngineId.toWire .pi = "pi" := by decide
-  have hid''' : Contracts.Engines.EngineId.toWire .mastra = "mastra" := by decide
+  have hid : Contracts.Engines.EngineId.toWire .claudeAgentSdk = "claude-agent-sdk" := by decide +kernel
+  have hid' : Contracts.Engines.EngineId.toWire .openaiAgents = "openai-agents" := by decide +kernel
+  have hid'' : Contracts.Engines.EngineId.toWire .pi = "pi" := by decide +kernel
+  have hid''' : Contracts.Engines.EngineId.toWire .mastra = "mastra" := by decide +kernel
   simp [catalogue, Sdk.Engines.shippedRegistry, hid, hid', hid'', hid''', h, hOpenAi, hPi, hMastra]
 
 /-- Under any map that configures `claude-agent-sdk`, the derived catalogue's Claude row agrees with
@@ -52,7 +52,7 @@ theorem shipped_claude_row_is_installed_through_the_map (images : EngineImageMap
         (fun row => (row.id, row.installed))).find? (·.1 = "claude-agent-sdk") =
       (Sdk.Engines.shippedRegistry.map fun d => (d.id, d.installed)).find?
         (·.1 = "claude-agent-sdk") := by
-  have hid : Contracts.Engines.EngineId.toWire .claudeAgentSdk = "claude-agent-sdk" := by decide
+  have hid : Contracts.Engines.EngineId.toWire .claudeAgentSdk = "claude-agent-sdk" := by decide +kernel
   simp [catalogue, Sdk.Engines.shippedRegistry, hid, h]
 
 /-- Under **every** map — the development default, and a production map that also configures
@@ -74,18 +74,18 @@ example :
     (catalogue (Sdk.Engines.shippedRegistry.map fun d => { id := d.id })
         [("claude-agent-sdk", "r@sha256:a"), ("openai-agents", "r@sha256:b"),
          ("pi", "r@sha256:c"), ("mastra", "r@sha256:d")]).map
-        (·.installed) = [true, true, true, true] := by decide
+        (·.installed) = [true, true, true, true] := by decide +kernel
 
 /-- Witness: the development default does not configure `mastra`. -/
-example : installed developmentImages "mastra" = false := by decide
+example : installed developmentImages "mastra" = false := by decide +kernel
 
 /-- Witness: the development default does not configure `pi`. -/
-example : installed developmentImages "pi" = false := by decide
+example : installed developmentImages "pi" = false := by decide +kernel
 
 /-- Witness: the development default configures `claude-agent-sdk` and not `openai-agents`. -/
-example : installed developmentImages "openai-agents" = false := by decide
+example : installed developmentImages "openai-agents" = false := by decide +kernel
 
 /-- Witness: the development default configures `claude-agent-sdk`. -/
-example : installed developmentImages "claude-agent-sdk" = true := by decide
+example : installed developmentImages "claude-agent-sdk" = true := by decide +kernel
 
 end AgentWorkspace.Theorems.Refinement.EngineImages

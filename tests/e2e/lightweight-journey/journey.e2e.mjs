@@ -70,6 +70,25 @@ const SURFACE = 'main';
 /** The promotion bar `aw deploy` writes as `AW_DEPLOYMENT_POLICY`; the profile-path deploy does not, so the journey sets it. */
 export const JOURNEY_DEPLOYMENT_POLICY = '{"promotion":{"minEvalScore":1}}';
 
+/** One R2 bucket per lane, reused across runs. */
+const laneBucket = (/** @type {string} */ laneKey) => `awlj-${laneKey}-files`;
+
+/**
+ * A lane's object-store entries for `.env`: its R2 key pair and the `AW_STORAGE_URL` of its bucket,
+ * `awlj-<lane key>-files`, reused across runs (the rendered per-run name would leak one each run).
+ * The URL names R2's endpoint, so neither target derives another or creates a per-run bucket.
+ *
+ * @param {string} laneKey @param {Readonly<Record<string, string | undefined>>} env
+ */
+export function storageEntries(laneKey, env) {
+  const account = env['CLOUDFLARE_ACCOUNT_ID'] ?? '';
+  return {
+    OBJECT_STORAGE_ACCESS_KEY_ID: env['R2_ACCESS_KEY_ID'] ?? '',
+    OBJECT_STORAGE_SECRET_ACCESS_KEY: env['R2_SECRET_ACCESS_KEY'] ?? '',
+    AW_STORAGE_URL: `s3://${laneBucket(laneKey)}?endpoint=https://${account}.r2.cloudflarestorage.com&region=auto`,
+  };
+}
+
 /**
  * `text` with each `KEY=value` set: an existing line is replaced, a missing one appended.
  *
@@ -805,37 +824,30 @@ async function main() {
         entries['AW_DEPLOYMENT_POLICY'] = `'${JOURNEY_DEPLOYMENT_POLICY}'`;
       }
       // Without an R2 key pair the control plane installs no skills, files or session-state API.
-      Object.assign(entries, {
-        OBJECT_STORAGE_ACCESS_KEY_ID: process.env['R2_ACCESS_KEY_ID'] ?? '',
-        OBJECT_STORAGE_SECRET_ACCESS_KEY: process.env['R2_SECRET_ACCESS_KEY'] ?? '',
-        // One bucket per lane, reused across runs: the rendered per-run name would leak one each run.
-        OBJECT_STORAGE_BUCKET: `awlj-${lane.key}-files`,
-      });
+      Object.assign(entries, storageEntries(lane.key, process.env));
       secrets.push(
         entries['OBJECT_STORAGE_ACCESS_KEY_ID'] ?? '',
         entries['OBJECT_STORAGE_SECRET_ACCESS_KEY'] ?? '',
       );
       if (lane.host === 'vercel') {
         // `aw deploy --target vercel` reaches the bucket through R2's S3 endpoint and, unlike
-        // `--target cloudflare`, neither derives that endpoint nor creates the bucket.
+        // `--target cloudflare`, does not create the bucket.
         const account = process.env['CLOUDFLARE_ACCOUNT_ID'] ?? '';
-        Object.assign(entries, {
-          OBJECT_STORAGE_ENDPOINT: `https://${account}.r2.cloudflarestorage.com`,
-          AWS_REGION: 'auto',
-        });
+        const bucket = laneBucket(lane.key);
+        entries['AWS_REGION'] = 'auto';
         const created = await ask(
           `${CLOUDFLARE}/accounts/${encodeURIComponent(account)}/r2/buckets`,
           {
             method: 'POST',
             token: process.env['CLOUDFLARE_API_TOKEN'] ?? '',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ name: entries['OBJECT_STORAGE_BUCKET'] }),
+            body: JSON.stringify({ name: bucket }),
           },
         );
         // 409 is a bucket that exists (a lane reuses its bucket across runs).
         check(
           created.status === 200 || created.status === 409,
-          `the R2 bucket ${entries['OBJECT_STORAGE_BUCKET']} exists (HTTP ${String(created.status)})`,
+          `the R2 bucket ${bucket} exists (HTTP ${String(created.status)})`,
         );
       }
       if (s['bridgeUrl'] !== undefined) {

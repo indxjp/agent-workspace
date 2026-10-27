@@ -29,7 +29,7 @@
 # this file is built only with an explicit `web` or `runner` target. The gateway is the explicit
 # `gateway` target in gateway.Dockerfile and the sandbox is `runtime` in runtime.Dockerfile.
 # infra/release/build-and-push.sh publishes all four for amd64/arm64 with SBOM and provenance.
-ARG NODE_IMAGE=node:24.21.0-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
+ARG NODE_IMAGE=node:24.22.1-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205
 
 # ── base ────────────────────────────────────────────────────────────────────────────────────────
 # Debian `bookworm-slim`, not Alpine, and the reason is glibc. The Agent SDK resolves a
@@ -43,7 +43,7 @@ FROM ${NODE_IMAGE} AS base
 ENV PNPM_HOME=/pnpm \
     PATH=/pnpm:$PATH \
     CI=1
-RUN corepack enable && corepack prepare pnpm@11.28.2 --activate
+RUN corepack enable && corepack prepare pnpm@11.28.8 --activate
 WORKDIR /srv
 
 # ── runtime-base ────────────────────────────────────────────────────────────────────────────────
@@ -85,6 +85,7 @@ COPY packages/engine/package.json      packages/engine/package.json
 COPY packages/engine-claude-agent-sdk/package.json packages/engine-claude-agent-sdk/package.json
 COPY packages/gateway/package.json     packages/gateway/package.json
 COPY packages/platforms/package.json   packages/platforms/package.json
+COPY packages/run-protocol/package.json packages/run-protocol/package.json
 COPY packages/runtime/package.json     packages/runtime/package.json
 COPY packages/sdk/package.json         packages/sdk/package.json
 COPY packages/aw/package.json          packages/aw/package.json
@@ -119,7 +120,7 @@ RUN find . -path '*/.next' -prune -o -name node_modules -type d -prune -exec rm 
 FROM runtime-base AS web
 ARG VCS_REF=unknown
 LABEL org.opencontainers.image.title="Agent Workspace web" \
-      org.opencontainers.image.source="https://github.com/indxdev/agent-workspace" \
+      org.opencontainers.image.source="https://github.com/indxjp/agent-workspace" \
       org.opencontainers.image.revision="$VCS_REF"
 ENV NODE_ENV=production \
     PORT=3000 \
@@ -159,7 +160,7 @@ CMD ["sh", "-c", "node /srv/packages/core/dist/db/migrate.js && node /srv/packag
 FROM runtime-base AS runner
 ARG VCS_REF=unknown
 LABEL org.opencontainers.image.title="Agent Workspace runner manager" \
-      org.opencontainers.image.source="https://github.com/indxdev/agent-workspace" \
+      org.opencontainers.image.source="https://github.com/indxjp/agent-workspace" \
       org.opencontainers.image.revision="$VCS_REF"
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
@@ -171,9 +172,9 @@ ENV NODE_ENV=production \
 # package also brought the daemon, containerd and runc, built with a Go toolchain long out of
 # support, and the runner runs none of them. Bump the version and both checksums together, from
 # https://download.docker.com/linux/static/stable/<x86_64|aarch64>/docker-<version>.tgz.
-ARG DOCKER_CLI_VERSION=29.9.0
-ARG DOCKER_CLI_SHA256_AMD64=33e1ab8b63d14bca449f7a3d30d7f6aa669daa544e60a86b17fec87f61afe2b4
-ARG DOCKER_CLI_SHA256_ARM64=811f6eee271678fc98dbe5c4d896c00fc5fe2daa4f7a37069c17abc036eab85b
+ARG DOCKER_CLI_VERSION=29.9.2
+ARG DOCKER_CLI_SHA256_AMD64=9ac225999fd5e863f7694c728ef23d480616b1e5639328fa309befd4243d69eb
+ARG DOCKER_CLI_SHA256_ARM64=873b3e0207857c3b2f28392fb922f3ea6efe37620c16d4d4aaf2fef409c90b73
 ARG TARGETARCH
 ADD --checksum=sha256:${DOCKER_CLI_SHA256_AMD64} \
     https://download.docker.com/linux/static/stable/x86_64/docker-${DOCKER_CLI_VERSION}.tgz /tmp/docker-amd64.tgz
@@ -192,8 +193,8 @@ RUN tar -xzf "/tmp/docker-${TARGETARCH}.tgz" -C /usr/local/bin --strip-component
 # root filesystem. So the wrappers name Node by absolute path, the shim needs no variable (it
 # defaults PNPM_CLI and puts pnpm's directories under /tmp), and `npx` is also linked into
 # /usr/bin, which is where a spawn with no PATH looks (libuv's default is /usr/bin:/bin).
-ARG PNPM_VERSION=11.28.2
-ARG PNPM_TARBALL_SHA256=30d4099fa03b9ba1124d81527808b1e4d8e719aeb0ddfe169426df3c4a038a5f
+ARG PNPM_VERSION=11.28.8
+ARG PNPM_TARBALL_SHA256=02bf6cec47fe28f30a224204f924175c2d8750c60e84e315a25cba57ce84da6a
 ADD --checksum=sha256:${PNPM_TARBALL_SHA256} \
     https://registry.npmjs.org/pnpm/-/pnpm-${PNPM_VERSION}.tgz /tmp/pnpm.tgz
 COPY infra/images/npx.mjs infra/images/npx-run-bin.mjs /opt/npx/

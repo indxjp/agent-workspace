@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { IsoDateTimeSchema } from './identifiers.js';
+import { ConnectorIdentitySchema, type ConnectorIdentity } from './identity-assertion.js';
 import {
   OPENAPI_DOCUMENT_MAX_BYTES,
   OpenApiToolConfigSchema,
@@ -27,6 +28,19 @@ export type ConnectorTransport = (typeof CONNECTOR_TRANSPORTS)[number];
 /** How a credential is presented to the server. `none` carries no credential at all. */
 export const CONNECTOR_AUTH_TYPES = ['none', 'api-key', 'bearer', 'oauth'] as const;
 export type ConnectorAuthType = (typeof CONNECTOR_AUTH_TYPES)[number];
+
+/** The transports that connect to a URL: {@link CONNECTOR_TRANSPORTS} without `stdio`. */
+export const REMOTE_CONNECTOR_TRANSPORTS = [
+  'http',
+  'sse',
+] as const satisfies readonly ConnectorTransport[];
+
+/** The auth types that carry a credential: {@link CONNECTOR_AUTH_TYPES} without `none`. */
+export const CREDENTIALED_CONNECTOR_AUTH_TYPES = [
+  'api-key',
+  'bearer',
+  'oauth',
+] as const satisfies readonly ConnectorAuthType[];
 
 /**
  * A connector's name is 1–200 code points with no line terminator (the route matches it against
@@ -112,6 +126,11 @@ export const ConnectorResourceSchema = z
     openapi: OpenApiToolConfigSchema.optional(),
     /** A `postgres` connector's tables, `readOnly` and `maxRows`. */
     postgres: PostgresToolConfigSchema.optional(),
+    /**
+     * Opt-in to the signed identity assertion (ADR-0142 D1): the reference to the signing secret,
+     * never its value. Present only on an `http`/`sse` MCP connector or an `openapi` connector.
+     */
+    identity: ConnectorIdentitySchema.optional(),
   })
   .strict()
   .superRefine((resource, context) => {
@@ -261,6 +280,11 @@ export type TestConnectionOutcome = z.infer<typeof TestConnectionOutcomeSchema>;
 export interface ConnectorCredentialInput {
   readonly authType?: ConnectorAuthType;
   readonly credential?: string;
+  /**
+   * Opt in to the signed identity assertion (ADR-0142 D1). `422 connector_identity_unsupported`
+   * on a `stdio` connector, which cannot set a request header.
+   */
+  readonly identity?: ConnectorIdentity;
 }
 
 /** A `stdio` connector: a non-blank command and, optionally, its arguments. Never a `url`. */
@@ -274,7 +298,7 @@ export interface CreateStdioConnectorInput extends ConnectorCredentialInput {
 /** An `http` or `sse` connector: an absolute `http(s)` URL. Never a `command` or `args`. */
 export interface CreateRemoteConnectorInput extends ConnectorCredentialInput {
   readonly name: string;
-  readonly transport: 'http' | 'sse';
+  readonly transport: (typeof REMOTE_CONNECTOR_TRANSPORTS)[number];
   readonly url: string;
 }
 
@@ -355,6 +379,8 @@ export const ConnectorUpdateRequestSchema = z
     args: z.array(z.string()).readonly().nullable().optional(),
     authType: z.enum(CONNECTOR_AUTH_TYPES).optional(),
     credential: z.string().refine(NON_BLANK).optional(),
+    /** `null` removes the opt-in (ADR-0142 D1). */
+    identity: ConnectorIdentitySchema.nullable().optional(),
   })
   .strict()
   .refine((patch) => Object.keys(patch).length > 0, { message: 'at least one field is required' })
@@ -364,8 +390,8 @@ export type UpdateConnectorInput = z.infer<typeof ConnectorUpdateRequestSchema>;
 
 /**
  * Problem codes the connector routes own, with the status each one travels under. The tool
- * connector codes (`connector_spec_invalid`, `connector_write_unsupported`,
- * `connector_tool_name_collision`, `connector_kind_unsupported`) come from
+ * connector codes (`connector_spec_invalid`, `connector_tool_name_collision`,
+ * `connector_kind_unsupported`) come from
  * `TOOL_CONNECTOR_PROBLEM_CODES` (ADR-0113 SD4, C15, C17).
  */
 export const CONNECTORS_PROBLEM_CODES = {
@@ -377,6 +403,12 @@ export const CONNECTORS_PROBLEM_CODES = {
   credential_not_configured: 409,
   credential_required_on_retarget: 409,
   connectors_runtime_not_configured: 503,
+  /**
+   * The connector declares `identity` but cannot carry it (ADR-0142 D1): a `stdio` connector sets
+   * no request header. Refused at the connector write; and at run compose when a connector that
+   * opted in has no caller to assert or no resolvable signing secret. Never ignored.
+   */
+  connector_identity_unsupported: 422,
 } as const;
 
 export type ConnectorsProblemCode = keyof typeof CONNECTORS_PROBLEM_CODES;

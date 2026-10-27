@@ -4,14 +4,12 @@
  *
  * Kept separate from `RbacRuntime` rather than added to it: that file's own header states its
  * scope as "who the caller is" and "where users, memberships and API keys are stored", and neither
- * an audit sink nor a mail-sending seam is either of those. The same module-global-plus-accessors
- * shape as `apps/web/server/rbac/runtime.ts` and `apps/web/server/audit/runtime.ts`, for the
- * reason both of those give: Next.js compiles `instrumentation.ts` and the route handlers into
- * separate module graphs, so the registry has to live on `globalThis`.
+ * an audit sink nor a mail-sending seam is either of those. The composition root builds it once
+ * and installs it as `ApplicationContext.invitations`.
  *
- * Unconfigured fails, the same way: until `configureInvitationsRuntime` runs, every route under
- * `/api/invitations` answers `503 invitations_runtime_not_configured` rather than silently
- * skipping the audit write §36 and this task's own card require.
+ * Unconfigured fails: with no context installed, every route under `/api/invitations` answers
+ * `503 invitations_runtime_not_configured` rather than silently skipping the audit write §36 and
+ * this task's own card require.
  */
 import type { SendInvitation } from './send-invitation';
 
@@ -31,25 +29,4 @@ export interface InvitationAuditEvent {
 export interface InvitationsRuntime {
   recordAuditEvent(event: InvitationAuditEvent): Promise<void>;
   sendInvitation: SendInvitation;
-}
-
-interface InvitationsRuntimeRegistry {
-  __agentWorkspaceInvitationsRuntime__?: InvitationsRuntime;
-}
-
-const registry = globalThis as typeof globalThis & InvitationsRuntimeRegistry;
-
-/** Install the runtime. Called from application wiring, never from a request handler. */
-export function configureInvitationsRuntime(runtime: InvitationsRuntime): void {
-  registry.__agentWorkspaceInvitationsRuntime__ = runtime;
-}
-
-/** Remove it. Exists so a test can assert that the unconfigured path really fails. */
-export function clearInvitationsRuntime(): void {
-  delete registry.__agentWorkspaceInvitationsRuntime__;
-}
-
-/** The installed runtime, or `null` when nothing has been wired yet. Never throws. */
-export function currentInvitationsRuntime(): InvitationsRuntime | null {
-  return registry.__agentWorkspaceInvitationsRuntime__ ?? null;
 }

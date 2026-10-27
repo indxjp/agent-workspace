@@ -10,23 +10,32 @@
  * `apps/web/app/api/skills/[name]/route.ts`'s own header for why export is a query flag on the
  * detail route rather than a sibling `/export` route.
  */
+import { clearApplicationContext } from '../application-context';
+import { installTestDomains } from '../application-context-fixtures';
 import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GET as listRoute, POST as importRoute } from '../../app/api/skills/route';
 import { GET as detailRoute, PATCH as patchRoute } from '../../app/api/skills/[name]/route';
-import { createLocalFilesystemObjectStoreProvider } from './object-store-bridge';
-import { skillFileKey, skillMetaKey } from './keys';
-import { clearSkillsRuntime, configureSkillsRuntime, type WorkspaceResolution } from './runtime';
-import { createRepositorySkillsStoreProvider } from './store';
+import { POST as publishRoute } from '../../app/api/skills/[name]/revisions/route';
+import {
+  createInMemoryObjectStore,
+  createLocalFilesystemObjectStoreProvider,
+} from '@agent-workspace/core/storage';
+import { SkillResponseSchema, SkillRevisionResponseSchema } from '@indx-workspace/contracts/skills';
+import { skillFileKey, skillMetaKey, skillRevisionRowFolder, skillRowFolder } from './keys';
+import type { WorkspaceResolution } from './runtime';
+import { createRepositorySkillsStoreProvider } from '../storage/store';
 import {
   createResourceCatalogStoreProvider,
   type ResourceCatalogStoreProvider,
 } from '../resources/catalog-store';
+import { createStorageService, type StorageService } from '../storage/service';
+import { createInMemoryCatalogStore } from '../resources/catalog-store.memory';
 import {
   createInMemoryWorkspaceScopeResolver,
   openDatabaseRoot,
@@ -44,73 +53,33 @@ import {
 import { createMemoryDirectory } from '../rbac/memory-directory';
 import { createPostgresDirectory } from '../rbac/postgres-directory';
 import { Principal } from '../rbac/principal';
-import { clearRbacRuntime, configureRbacRuntime } from '../rbac/runtime';
 
 const WORKSPACE_A = '33333333-3333-4333-8333-333333333333';
 const WORKSPACE_B = '44444444-4444-4444-8444-444444444444';
 const WORKSPACE_HEADER = 'x-test-workspace';
 /** issue #117: which seeded member a request authenticates as, in the DB-backed suite below. */
 const ACTOR_HEADER = 'x-test-actor';
+const noLog = { info() {}, warn() {}, error() {}, child: () => noLog };
 const hasDatabase = Boolean(process.env['TEST_DATABASE_URL']?.trim());
 
 let rootDir: string;
+/** The skills' rows service of the in-memory suite's runtime. */
+let skillsService: StorageService;
 
-/**
- * K-4 (issue #234): a route with no catalog wired now answers `503 skills_runtime_not_configured`
- * rather than a body without the id every `SkillDetail` requires — see `apps/web/app/api/
- * skills/route.ts`. The composed control plane always wires a real, PostgreSQL-backed one
- * (`apps/web/server/composition/register.ts`); this in-memory stand-in gives the tests below the
- * same "a catalog is always configured" premise without a database, exactly the way
- * `createInMemoryAgentStoreProvider` stands in for `apps/web/server/agents/store.ts`'s PostgreSQL
- * half. Only `listSkills`/`putSkill` are real — the file operations are unused by these routes.
- */
-interface CatalogRow {
-  readonly id: string;
-  readonly name: string;
-  readonly skillMd: string;
-  readonly enabled: boolean;
+/** The service a skill's rows are saved through, over the catalogs the runtime holds. */
+function skillsStorage(catalogs: ResourceCatalogStoreProvider): StorageService {
+  return createStorageService({
+    catalog: (workspaceId) => catalogs.forWorkspace(workspaceId),
+    objects: createInMemoryObjectStore(),
+    log: noLog,
+  });
 }
 
-function createInMemoryCatalog(): ResourceCatalogStoreProvider {
-  const byWorkspace = new Map<string, Map<string, CatalogRow>>();
-  let nextId = 0;
-  return {
-    forWorkspace(workspaceId: string) {
-      const rows = byWorkspace.get(workspaceId) ?? new Map<string, CatalogRow>();
-      byWorkspace.set(workspaceId, rows);
-      const repository = {
-        listFiles: () => Promise.reject(new Error('unused')),
-        putFile: () => Promise.reject(new Error('unused')),
-        renameFile: () => Promise.reject(new Error('unused')),
-        deleteFile: () => Promise.reject(new Error('unused')),
-        listSkills: () =>
-          Promise.resolve(
-            [...rows.values()].map((row) => ({
-              ...row,
-              createdBy: null,
-              ownerPrincipalId: 'test-owner',
-            })),
-          ),
-        putSkill: (input: { name: string; skillMd: string; enabled: boolean }) => {
-          const existing = rows.get(input.name);
-          const id = existing?.id ?? `catalog-${String((nextId += 1))}`;
-          const row = { id, name: input.name, skillMd: input.skillMd, enabled: input.enabled };
-          rows.set(input.name, row);
-          return Promise.resolve({ ...row, createdBy: null, ownerPrincipalId: 'test-owner' });
-        },
-        deleteSkill: (name: string) => {
-          rows.delete(name);
-          return Promise.resolve();
-        },
-      };
-      return Promise.resolve(
-        repository as unknown as Awaited<ReturnType<ResourceCatalogStoreProvider['forWorkspace']>>,
-      );
-    },
-  };
-}
+let catalogs: ReturnType<typeof createInMemoryCatalogStore>;
 
 beforeEach(async () => {
+  catalogs = createInMemoryCatalogStore();
+  skillsService = skillsStorage(catalogs);
   rootDir = await mkdtemp(path.join(os.tmpdir(), 'w2-cp-04-routes-'));
   const scopes = createInMemoryWorkspaceScopeResolver([
     { id: WORKSPACE_A, slug: 'acme' },
@@ -120,57 +89,64 @@ beforeEach(async () => {
     store: createLocalFilesystemObjectStoreProvider(rootDir),
     scopes,
   });
-  configureSkillsRuntime({
-    store,
-    catalog: createInMemoryCatalog(),
-    resolveWorkspace(request: Request): Promise<WorkspaceResolution> {
-      const workspaceId = request.headers.get(WORKSPACE_HEADER);
-      if (workspaceId === null) {
-        return Promise.resolve({ kind: 'unauthenticated', reason: 'no test workspace header' });
-      }
-      return Promise.resolve({ kind: 'workspace', workspaceId });
+  installTestDomains({
+    skills: {
+      kind: 'serving',
+      runtime: {
+        store,
+        catalog: catalogs,
+        storage: skillsService,
+        resolveWorkspace(request: Request): Promise<WorkspaceResolution> {
+          const workspaceId = request.headers.get(WORKSPACE_HEADER);
+          if (workspaceId === null) {
+            return Promise.resolve({ kind: 'unauthenticated', reason: 'no test workspace header' });
+          }
+          return Promise.resolve({ kind: 'workspace', workspaceId });
+        },
+      },
     },
   });
-  configureRbacRuntime({
-    // Issue #117: every create/sync path resolves `created_by`, falling back to the workspace's
-    // oldest Owner when the caller cannot be matched by email (true of every request here, which
-    // authenticates as an API key) — so each fixture workspace needs at least one seeded member.
-    directory: createMemoryDirectory({
-      users: [
-        {
-          email: 'owner-a@example.test',
-          name: 'Owner A',
-          workspaceId: WORKSPACE_A,
-          role: 'owner',
-        },
-        {
-          email: 'owner-b@example.test',
-          name: 'Owner B',
-          workspaceId: WORKSPACE_B,
-          role: 'owner',
-        },
-      ],
-    }),
-    identify(request: Request) {
-      const workspaceId = request.headers.get(WORKSPACE_HEADER);
-      return Promise.resolve(
-        workspaceId === null
-          ? null
-          : Principal.fromApiKey({
-              principalId: 'ab152b86-785a-4b7d-9e6a-6c329ca7e085',
-              apiKeyId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-              workspaceId,
-              role: 'owner',
-              label: 'Skills route test key',
-            }),
-      );
+  installTestDomains({
+    rbac: {
+      // Issue #117: every create/sync path resolves `created_by`, falling back to the workspace's
+      // oldest Owner when the caller cannot be matched by email (true of every request here, which
+      // authenticates as an API key) — so each fixture workspace needs at least one seeded member.
+      directory: createMemoryDirectory({
+        users: [
+          {
+            email: 'owner-a@example.test',
+            name: 'Owner A',
+            workspaceId: WORKSPACE_A,
+            role: 'owner',
+          },
+          {
+            email: 'owner-b@example.test',
+            name: 'Owner B',
+            workspaceId: WORKSPACE_B,
+            role: 'owner',
+          },
+        ],
+      }),
+      identify(request: Request) {
+        const workspaceId = request.headers.get(WORKSPACE_HEADER);
+        return Promise.resolve(
+          workspaceId === null
+            ? null
+            : Principal.fromApiKey({
+                principalId: 'ab152b86-785a-4b7d-9e6a-6c329ca7e085',
+                apiKeyId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+                workspaceId,
+                role: 'owner',
+                label: 'Skills route test key',
+              }),
+        );
+      },
     },
   });
 });
 
 afterEach(async () => {
-  clearSkillsRuntime();
-  clearRbacRuntime();
+  clearApplicationContext();
   await rm(rootDir, { recursive: true, force: true });
 });
 
@@ -210,12 +186,85 @@ function postJson(workspace: string, body: unknown): Request {
 
 describe('skills routes, unconfigured', () => {
   it('answers 503, not 401 and not an empty 200, while nothing is wired', async () => {
-    clearSkillsRuntime(); // this suite's beforeEach already configured one — undo it for this case
+    // The role gate lives in the same context, so with none installed it answers first; the skills
+    // runtime's own answer is the `unavailable` case below.
+    clearApplicationContext(); // this suite's beforeEach already configured one — undo it for this case
+    const response = await listRoute(req('GET', '/api/skills', { workspace: WORKSPACE_A }));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      error: { code: 'rbac_runtime_not_configured' },
+    });
+  });
+
+  it('answers the same 503 when the skills storage is unavailable', async () => {
+    installTestDomains({ skills: { kind: 'unavailable' } });
     const response = await listRoute(req('GET', '/api/skills', { workspace: WORKSPACE_A }));
     expect(response.status).toBe(503);
     expect(await response.json()).toMatchObject({
       error: { code: 'skills_runtime_not_configured' },
     });
+  });
+});
+
+/**
+ * Issue #1698: a skill is written as `skills` rows or not at all. A runtime without the files
+ * catalog service (`storage`) must refuse the write, not fall back to the old bare object prefix.
+ */
+describe('skills write route and the rows service', () => {
+  const importBody = {
+    name: 'demo',
+    files: [
+      { path: 'SKILL.md', contentBase64: Buffer.from('---\nname: demo\n---\n').toString('base64') },
+    ],
+  };
+
+  // @story US-STO-08
+  it('[US-STO-08][api][sdk] POST /api/skills with the rows service answers 201 and saves a skills row', async () => {
+    const response = await importRoute(postJson(WORKSPACE_A, importBody));
+
+    expect(response.status, await response.clone().text()).toBe(201);
+    const listed = await skillsService.list(
+      { workspaceId: WORKSPACE_A },
+      'skills',
+      skillRowFolder('demo'),
+    );
+    expect(listed.rows.map((row) => row.path)).toEqual([`${skillRowFolder('demo')}/SKILL.md`]);
+    expect(
+      await createLocalFilesystemObjectStoreProvider(rootDir)
+        .forWorkspace(WORKSPACE_A)
+        .get(skillFileKey('demo', 'SKILL.md')),
+    ).toBeNull();
+  });
+
+  // @story US-STO-08
+  it('[US-STO-08][api][sdk] POST /api/skills without the rows service answers 503 and writes nothing', async () => {
+    installTestDomains({
+      skills: {
+        kind: 'serving',
+        runtime: {
+          store: createRepositorySkillsStoreProvider({
+            store: createLocalFilesystemObjectStoreProvider(rootDir),
+            scopes: createInMemoryWorkspaceScopeResolver([{ id: WORKSPACE_A, slug: 'acme' }]),
+          }),
+          catalog: catalogs,
+          // No `storage` — the one difference from the suite's own `beforeEach`.
+          resolveWorkspace: () => Promise.resolve({ kind: 'workspace', workspaceId: WORKSPACE_A }),
+        },
+      },
+    });
+
+    const response = await importRoute(postJson(WORKSPACE_A, importBody));
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      error: { code: 'skills_runtime_not_configured' },
+    });
+    expect(
+      await createLocalFilesystemObjectStoreProvider(rootDir)
+        .forWorkspace(WORKSPACE_A)
+        .get(skillFileKey('demo', 'SKILL.md')),
+    ).toBeNull();
+    expect(await catalogs.forWorkspaceSync(WORKSPACE_A).listSkills()).toEqual([]);
   });
 });
 
@@ -232,10 +281,15 @@ describe('K-4: a store with no catalog wired', () => {
       store: createLocalFilesystemObjectStoreProvider(rootDir),
       scopes,
     });
-    configureSkillsRuntime({
-      store,
-      // No `catalog` — this is the one difference from the suite's own `beforeEach`.
-      resolveWorkspace: () => Promise.resolve({ kind: 'workspace', workspaceId: WORKSPACE_A }),
+    installTestDomains({
+      skills: {
+        kind: 'serving',
+        runtime: {
+          store,
+          // No `catalog` — this is the one difference from the suite's own `beforeEach`.
+          resolveWorkspace: () => Promise.resolve({ kind: 'workspace', workspaceId: WORKSPACE_A }),
+        },
+      },
     });
   }
 
@@ -506,29 +560,9 @@ describe('POST /api/skills then GET /api/skills', () => {
 
 describe('POST /api/skills when the catalog write fails', () => {
   it('leaves no trace of an import whose catalog write fails', async () => {
-    const real = createInMemoryCatalog();
-    let failNext = true;
-    const catalog: ResourceCatalogStoreProvider = {
-      forWorkspace: async (workspaceId) => {
-        const repository = await real.forWorkspace(workspaceId);
-        return {
-          ...repository,
-          putSkill: (input: Parameters<typeof repository.putSkill>[0]) => {
-            if (!failNext) return repository.putSkill(input);
-            failNext = false;
-            return Promise.reject(new Error('database blip'));
-          },
-        };
-      },
-    };
-    configureSkillsRuntime({
-      store: createRepositorySkillsStoreProvider({
-        store: createLocalFilesystemObjectStoreProvider(rootDir),
-        scopes: createInMemoryWorkspaceScopeResolver([{ id: WORKSPACE_A, slug: 'acme' }]),
-      }),
-      catalog,
-      resolveWorkspace: () => Promise.resolve({ kind: 'workspace', workspaceId: WORKSPACE_A }),
-    });
+    vi.spyOn(catalogs.forWorkspaceSync(WORKSPACE_A), 'putSkill').mockRejectedValueOnce(
+      new Error('database blip'),
+    );
     const importBody = {
       name: 'demo',
       files: [
@@ -626,6 +660,218 @@ describe('GET/PATCH /api/skills/:name', () => {
     expect(patch.status).toBe(200);
     const body = (await patch.json()) as { skill: { enabled: boolean } };
     expect(body.skill.enabled).toBe(false);
+  });
+});
+
+describe('POST /api/skills/:name/revisions (SDK-19, N-1)', () => {
+  const b64 = (text: string): string => Buffer.from(text, 'utf8').toString('base64');
+  const skillMd = (body: string): string => b64(`---\nname: demo\n---\n${body}\n`);
+
+  function publish(files: unknown, name = 'demo', workspace = WORKSPACE_A): Promise<Response> {
+    return publishRoute(
+      req('POST', `/api/skills/${name}/revisions`, {
+        workspace,
+        body: JSON.stringify({ files }),
+        contentType: 'application/json',
+      }),
+      nameContext(name),
+    );
+  }
+
+  /** The text of every file row of one published revision, by catalog path. */
+  async function revisionRows(revision: number): Promise<Record<string, string>> {
+    const ctx = { workspaceId: WORKSPACE_A };
+    const listed = await skillsService.list(
+      ctx,
+      'skills',
+      skillRevisionRowFolder('demo', revision),
+    );
+    const out: Record<string, string> = {};
+    for (const row of listed.rows) {
+      const opened = await skillsService.open(ctx, row);
+      if (opened === null) throw new Error(`${row.path} has no bytes`);
+      out[row.path] = await new Response(opened.body).text();
+    }
+    return out;
+  }
+
+  async function revisionBytes(revision: number): Promise<string | null> {
+    const rows = await revisionRows(revision);
+    return rows[`${skillRevisionRowFolder('demo', revision)}/SKILL.md`] ?? null;
+  }
+
+  async function importDemo(): Promise<void> {
+    const response = await importRoute(
+      postJson(WORKSPACE_A, {
+        name: 'demo',
+        files: [{ path: 'SKILL.md', contentBase64: skillMd('v0') }],
+      }),
+    );
+    expect(response.status).toBe(201);
+  }
+
+  it('numbers revisions 1, 2 and lists them newest first on GET', async () => {
+    await importDemo();
+    const first = await publish([{ path: 'SKILL.md', contentBase64: skillMd('v1') }]);
+    expect(first.status, await first.clone().text()).toBe(201);
+    const published = SkillRevisionResponseSchema.safeParse(await first.json());
+    expect(published.success, JSON.stringify(published)).toBe(true);
+    expect(published.data?.revision).toMatchObject({ number: 1, fileCount: 1 });
+    const second = await publish([
+      { path: 'SKILL.md', contentBase64: skillMd('v2') },
+      { path: 'notes.txt', contentBase64: b64('n') },
+    ]);
+    expect(((await second.json()) as { revision: { number: number } }).revision.number).toBe(2);
+
+    const detail = await detailRoute(
+      req('GET', '/api/skills/demo', { workspace: WORKSPACE_A }),
+      nameContext('demo'),
+    );
+    const parsed = SkillResponseSchema.safeParse(await detail.json());
+    expect(parsed.success, JSON.stringify(parsed)).toBe(true);
+    const skill = parsed.data?.skill;
+    expect(skill?.revisions?.map((r) => [r.number, r.fileCount])).toEqual([
+      [2, 2],
+      [1, 1],
+    ]);
+    expect(skill?.files.map((f) => f.path)).toEqual(['SKILL.md', 'notes.txt']);
+  });
+
+  it('leaves a published revision unchanged by a later publish, PATCH or disable', async () => {
+    await importDemo();
+    await publish([{ path: 'SKILL.md', contentBase64: skillMd('v1') }]);
+    await publish([{ path: 'SKILL.md', contentBase64: skillMd('v2') }]);
+    const patch = await patchRoute(
+      req('PATCH', '/api/skills/demo', {
+        workspace: WORKSPACE_A,
+        body: JSON.stringify({
+          files: [{ path: 'SKILL.md', contentBase64: skillMd('patched') }],
+          enabled: false,
+        }),
+        contentType: 'application/json',
+      }),
+      nameContext('demo'),
+    );
+    expect(patch.status, await patch.clone().text()).toBe(200);
+
+    expect(await revisionBytes(1)).toContain('v1');
+    expect(await revisionBytes(2)).toContain('v2');
+    expect(await revisionBytes(3)).toBeNull();
+  });
+
+  it('cannot be written through import, PATCH or a re-publish: every route leaves the published bytes alone', async () => {
+    await importDemo();
+    await publish([{ path: 'SKILL.md', contentBase64: skillMd('v1') }]);
+    const reimport = await importRoute(
+      postJson(WORKSPACE_A, {
+        name: 'demo',
+        files: [{ path: 'SKILL.md', contentBase64: skillMd('reimported') }],
+      }),
+    );
+    expect(reimport.status).toBe(409);
+
+    // A skill file spelled like a revision key lands inside the skill's own prefix, not the revision's.
+    const aimed = await patchRoute(
+      req('PATCH', '/api/skills/demo', {
+        workspace: WORKSPACE_A,
+        body: JSON.stringify({
+          files: [{ path: 'skill-revisions/demo/1/SKILL.md', contentBase64: skillMd('aimed') }],
+        }),
+        contentType: 'application/json',
+      }),
+      nameContext('demo'),
+    );
+    expect(aimed.status, await aimed.clone().text()).toBe(200);
+    const nested = await patchRoute(
+      req('PATCH', '/api/skills/demo', {
+        workspace: WORKSPACE_A,
+        body: JSON.stringify({
+          files: [{ path: '1/SKILL.md', contentBase64: skillMd('nested') }],
+        }),
+        contentType: 'application/json',
+      }),
+      nameContext('demo'),
+    );
+    expect(nested.status, await nested.clone().text()).toBe(200);
+
+    const second = await publish([{ path: 'SKILL.md', contentBase64: skillMd('v2') }]);
+    expect(second.status).toBe(201);
+    expect(await revisionBytes(1)).toContain('v1');
+    expect(await revisionBytes(2)).toContain('v2');
+    // Each revision holds its SKILL.md alone: the files PATCHed in did not land in a revision.
+    expect(Object.keys(await revisionRows(1))).toEqual([
+      `${skillRevisionRowFolder('demo', 1)}/SKILL.md`,
+    ]);
+    expect(Object.keys(await revisionRows(2))).toEqual([
+      `${skillRevisionRowFolder('demo', 2)}/SKILL.md`,
+    ]);
+    expect(await revisionRows(3)).toEqual({});
+  });
+
+  it('replaces the current content, dropping files the published set does not name', async () => {
+    await importRoute(
+      postJson(WORKSPACE_A, {
+        name: 'demo',
+        files: [
+          { path: 'SKILL.md', contentBase64: skillMd('v0') },
+          { path: 'old.txt', contentBase64: b64('old') },
+        ],
+      }),
+    );
+    await publish([{ path: 'SKILL.md', contentBase64: skillMd('v1') }]);
+    const detail = await detailRoute(
+      req('GET', '/api/skills/demo', { workspace: WORKSPACE_A }),
+      nameContext('demo'),
+    );
+    const body = (await detail.json()) as { skill: { files: { path: string }[] } };
+    expect(body.skill.files.map((f) => f.path)).toEqual(['SKILL.md']);
+  });
+
+  it('404s an unknown skill and refuses a body with no SKILL.md or bad base64 with 400', async () => {
+    expect(
+      (await publish([{ path: 'SKILL.md', contentBase64: skillMd('x') }], 'nope')).status,
+    ).toBe(404);
+    await importDemo();
+    expect((await publish([{ path: 'a.txt', contentBase64: b64('a') }])).status).toBe(400);
+    expect((await publish([{ path: 'SKILL.md', contentBase64: '***' }])).status).toBe(400);
+    expect((await publish('not-an-array')).status).toBe(400);
+    const detail = await detailRoute(
+      req('GET', '/api/skills/demo', { workspace: WORKSPACE_A }),
+      nameContext('demo'),
+    );
+    const body = (await detail.json()) as { skill: { revisions: unknown[] } };
+    expect(body.skill.revisions).toEqual([]);
+  });
+
+  it('refuses a body with a key other than files with 400 malformed_body', async () => {
+    await importDemo();
+    for (const body of [
+      { files: [{ path: 'SKILL.md', contentBase64: skillMd('x') }], name: 'other' },
+      { files: [{ path: 'SKILL.md', contentBase64: skillMd('x') }], typo: 1 },
+      [],
+    ]) {
+      const response = await publishRoute(
+        req('POST', '/api/skills/demo/revisions', {
+          workspace: WORKSPACE_A,
+          body: JSON.stringify(body),
+          contentType: 'application/json',
+        }),
+        nameContext('demo'),
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({ error: { code: 'malformed_body' } });
+    }
+    expect(await revisionBytes(1)).toBeNull();
+  });
+
+  it("does not publish another workspace's skill", async () => {
+    await importDemo();
+    const response = await publish(
+      [{ path: 'SKILL.md', contentBase64: skillMd('x') }],
+      'demo',
+      WORKSPACE_B,
+    );
+    expect(response.status).toBe(404);
   });
 });
 
@@ -853,47 +1099,55 @@ describe.skipIf(!hasDatabase)(
 
     beforeEach(async () => {
       dbRootDir = await mkdtemp(path.join(os.tmpdir(), 'w9-auth-117-skills-ownership-'));
-      configureSkillsRuntime({
-        store: createRepositorySkillsStoreProvider({
-          store: createLocalFilesystemObjectStoreProvider(dbRootDir),
-          scopes: root.scopes,
-        }),
-        catalog: createResourceCatalogStoreProvider({
-          repositories: root.resourceCatalogs,
-          scopes: root.scopes,
-        }),
-        resolveWorkspace(request: Request): Promise<WorkspaceResolution> {
-          const workspaceId = request.headers.get(WORKSPACE_HEADER);
-          return Promise.resolve(
-            workspaceId === null
-              ? { kind: 'unauthenticated', reason: 'no test workspace header' }
-              : { kind: 'workspace', workspaceId },
-          );
+      const dbCatalogs = createResourceCatalogStoreProvider({
+        repositories: root.resourceCatalogs,
+        scopes: root.scopes,
+      });
+      installTestDomains({
+        skills: {
+          kind: 'serving',
+          runtime: {
+            store: createRepositorySkillsStoreProvider({
+              store: createLocalFilesystemObjectStoreProvider(dbRootDir),
+              scopes: root.scopes,
+            }),
+            catalog: dbCatalogs,
+            storage: skillsStorage(dbCatalogs),
+            resolveWorkspace(request: Request): Promise<WorkspaceResolution> {
+              const workspaceId = request.headers.get(WORKSPACE_HEADER);
+              return Promise.resolve(
+                workspaceId === null
+                  ? { kind: 'unauthenticated', reason: 'no test workspace header' }
+                  : { kind: 'workspace', workspaceId },
+              );
+            },
+          },
         },
       });
-      configureRbacRuntime({
-        directory: createPostgresDirectory(root.directory),
-        identify(request: Request) {
-          const workspaceId = request.headers.get(WORKSPACE_HEADER);
-          const actor = request.headers.get(ACTOR_HEADER);
-          return Promise.resolve(
-            workspaceId === null || actor === null
-              ? null
-              : Principal.fromApiKey({
-                  principalId: actor === builderA.email ? principalAId : principalBId,
-                  apiKeyId: actor === builderA.email ? apiKeyAId : apiKeyBId,
-                  workspaceId,
-                  role: 'builder',
-                  label: actor === builderA.email ? 'Builder A skill key' : 'Builder B skill key',
-                }),
-          );
+      installTestDomains({
+        rbac: {
+          directory: createPostgresDirectory(root.directory),
+          identify(request: Request) {
+            const workspaceId = request.headers.get(WORKSPACE_HEADER);
+            const actor = request.headers.get(ACTOR_HEADER);
+            return Promise.resolve(
+              workspaceId === null || actor === null
+                ? null
+                : Principal.fromApiKey({
+                    principalId: actor === builderA.email ? principalAId : principalBId,
+                    apiKeyId: actor === builderA.email ? apiKeyAId : apiKeyBId,
+                    workspaceId,
+                    role: 'builder',
+                    label: actor === builderA.email ? 'Builder A skill key' : 'Builder B skill key',
+                  }),
+            );
+          },
         },
       });
     });
 
     afterEach(async () => {
-      clearSkillsRuntime();
-      clearRbacRuntime();
+      clearApplicationContext();
       await rm(dbRootDir, { recursive: true, force: true });
     });
 

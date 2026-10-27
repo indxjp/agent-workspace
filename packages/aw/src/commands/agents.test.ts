@@ -20,13 +20,45 @@ describe('aw agents', () => {
       route: () => json(200, { agents: [FIXTURES.agent] }),
     });
     expect(human.stdout.split('\n')[0]).toMatch(
-      /^id\s+name\s+model\s+modelConnectionId\s+runtimeProfileId\s+updatedAt$/u,
+      /^id\s+name\s+model\s+modelConnectionId\s+runtimeProfileId\s+updatedAt\s+builtin$/u,
     );
     expect(human.stdout).toContain('Summariser  claude-x');
     const jsonl = await runCli(['agents', 'list', '--jsonl'], {
       route: () => json(200, { agents: [FIXTURES.agent] }),
     });
     expect(jsonl.stdout).toBe(`${JSON.stringify(FIXTURES.agent)}\n`);
+  });
+
+  it('list shows a built-in as "Built-in", last, and keeps `builtin` in --json (#1848)', async () => {
+    const builder = { ...FIXTURES.agent, id: IDS.run, name: 'builder', builtin: 'builder' };
+    const route = () => json(200, { agents: [FIXTURES.agent, builder] });
+    const human = await runCli(['agents', 'list'], { route });
+    const rows = human.stdout.trimEnd().split('\n');
+    expect(rows).toHaveLength(4);
+    expect(rows[2]).not.toContain('Built-in');
+    expect(rows[3]).toMatch(/builder\s.*\sBuilt-in$/u);
+    const structured = await runCli(['agents', 'list', '--json'], { route });
+    expect(stdoutJson(structured)).toEqual([FIXTURES.agent, builder]);
+  });
+
+  it('get shows who made the agent and when it was archived, and nothing for a person-made one (#1851)', async () => {
+    const made = {
+      ...FIXTURES.agent,
+      createdByAgent: { agentId: IDS.agent, version: 2, runId: 'run_abc' },
+      archivedAt: '2026-09-22T10:00:00.000Z',
+    };
+    const route = () => json(200, made);
+    const human = await runCli(['agents', 'get', IDS.agent], { route });
+    expect(human.stdout).toMatch(/createdByAgent\s.*run_abc/u);
+    expect(human.stdout).toMatch(/archivedAt\s+2026-09-22T10:00:00\.000Z/u);
+    const structured = await runCli(['agents', 'get', IDS.agent, '--json'], { route });
+    expect(AgentResourceSchema.parse(stdoutJson(structured))).toEqual(made);
+
+    const person = await runCli(['agents', 'get', IDS.agent], {
+      route: () => json(200, FIXTURES.agent),
+    });
+    expect(person.stdout).not.toContain('createdByAgent');
+    expect(person.stdout).not.toContain('archivedAt');
   });
 
   it('get, create from stdin, update from a runtime switch, and remove', async () => {

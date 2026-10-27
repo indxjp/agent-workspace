@@ -7,6 +7,13 @@
  * `Fake Anthropic reply to <nonce>: <result>`. Every other request gets the slice-1 reply, byte
  * for byte, so the slice-1 journey sees no change.
  *
+ * Files turns (STO-407): when the user message carries `e2e-files-<id>` the fake cannot read the
+ * sandbox, so it asks the CLI to: a `Read` of `in/<token>.txt` (the granted file), then a `Write` of
+ * `outputs/out/<token>.md` holding the first line of that `tool_result`, then a final text turn.
+ * Only `<cwd>/outputs/` is collected, so the file shows as `out/<token>.md` under the run's outputs.
+ * Paths are absolute when the CLI's system prompt names its `Working directory:` (or `Primary working directory:`), else relative.
+ * A Read that fails (`is_error`) ends in a text turn naming the failure, with no Write.
+ *
  * Each `POST /v1/messages` also records what the Claude CLI offered (`toolNames`): a tool the
  * run's permissions deny is not offered, which is how the journey reads "Bash denied at compose".
  *
@@ -35,6 +42,8 @@ export function orderNote(orderNumber) {
 }
 
 const NONCE = /e2e-nonce-[a-z0-9]+/gu;
+const FILES_NONCE = /e2e-files-[a-z0-9]+/gu;
+const WORKING_DIRECTORY = /working directory: ([^\\"]+)/iu;
 const TOOL_SUFFIX = `__${ORDER_OPERATION_ID}`;
 
 function readRaw(request) {
@@ -77,6 +86,21 @@ function lastNonce(value) {
       .match(NONCE)
       ?.at(-1) ?? null
   );
+}
+
+/** The text of the first line of a Read result, without the CLI's `cat -n` line-number prefix. */
+function firstLine(text) {
+  return (text.split(/\r?\n/u)[0] ?? '').replace(/^\s*\d+[\t→]/u, '');
+}
+
+/** The name of the `tool_use` block that `id` answers, searched through the assistant turns. */
+function toolNameOf(messages, id) {
+  for (const message of messages) {
+    if (message?.role !== 'assistant') continue;
+    const use = blocksOf(message).find((block) => block?.type === 'tool_use' && block.id === id);
+    if (use !== undefined) return use.name;
+  }
+  return null;
 }
 
 /** The tool input: every required string property of the tool's `input_schema` set to `nonce`. */
@@ -179,6 +203,67 @@ export function createAnthropicToolsHandler(requests, toolRequests, bodies = [])
     const record = { nonce, toolNames, toolUse: null, toolResult: null };
     toolRequests.push(record);
 
+    const files = JSON.stringify(messages).match(FILES_NONCE)?.at(-1) ?? null;
+    if (files !== null) {
+      const readTool = tools.some((candidate) => candidate?.name === 'Read');
+      const resultOf = result === undefined ? null : toolNameOf(messages, result.tool_use_id);
+      const cwd = JSON.stringify(body?.system ?? '')
+        .match(WORKING_DIRECTORY)?.[1]
+        ?.trim();
+      const at = (path) => (cwd === undefined ? path : `${cwd.replace(/[/]$/u, '')}/${path}`);
+      const outPath = `outputs/out/${files}.md`;
+      let toolUse = null;
+      let text = null;
+      if (result === undefined && readTool) {
+        toolUse = { name: 'Read', input: { file_path: at(`in/${files}.txt`) } };
+      } else if (resultOf === 'Read') {
+        record.toolResult = resultText(result);
+        if (result.is_error === true) {
+          text = `Fake Anthropic could not read in/${files}.txt: ${record.toolResult}`;
+        } else {
+          toolUse = {
+            name: 'Write',
+            input: {
+              file_path: at(outPath),
+              content: `${firstLine(record.toolResult)}\n`,
+            },
+          };
+        }
+      } else if (resultOf === 'Write') {
+        text = `Fake Anthropic wrote ${outPath}`;
+      }
+      if (toolUse !== null || text !== null) {
+        sequence += 1;
+        const id = `msg_fake_tools_${String(sequence).padStart(6, '0')}`;
+        if (toolUse !== null) {
+          record.toolUse = { name: toolUse.name, input: toolUse.input };
+          toolUse.id = `toolu_fake_${String(sequence)}`;
+          send(
+            response,
+            stream,
+            toolUseResponse(id, model, toolUse),
+            toolUseEvents(id, model, toolUse),
+          );
+          return;
+        }
+        requests.push({
+          at: new Date().toISOString(),
+          method: 'POST',
+          path: url.pathname,
+          model,
+          stream,
+          reply: text,
+          apiKey: request.headers['x-api-key'] ?? null,
+        });
+        send(
+          response,
+          stream,
+          messageResponse(id, model, text),
+          messageStreamEvents(id, model, text),
+        );
+        return;
+      }
+    }
     if (nonce !== null && result !== undefined) {
       record.toolResult = resultText(result);
       const text = `Fake Anthropic reply to ${nonce}: ${record.toolResult}`;

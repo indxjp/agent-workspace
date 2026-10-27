@@ -10,7 +10,7 @@ Scope: `apps/web/components/run/history.ts`, `apps/web/components/run/history-sc
 The task card: _"The `user` filter control is shown only when the server accepts it (an
 `invalid`/`403 user_filter_forbidden` answer hides it, never a client-side role table)."_
 `GET /api/runs`'s own grant-to-filter mapping
-(`apps/web/server/runs/api.ts`'s `parseRunListQuery`) is: the `user` parameter is honoured only for
+(`apps/web/server/runs/list-query.ts`'s `parseRunListQuery`) is: the `user` parameter is honoured only for
 a caller whose `runs` grant is `any` — today, Owner alone
 (`docs/adr/W9-PLAN-the-run-list-card-assumed-an-admin-grant-the-policy-does-not-give.md`) — and any
 other grant answers `403 user_filter_forbidden` for `?user=` naming _any_ id, including the

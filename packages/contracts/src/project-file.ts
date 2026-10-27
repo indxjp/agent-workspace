@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { EngineIdSchema } from './engines.js';
+import { ConnectorIdentitySchema } from './identity-assertion.js';
 import { MODEL_CONNECTION_CONFIG_FIELDS, MODEL_PROVIDER_CONFIG_RULES } from './models.js';
 import { ProjectPolicySchema } from './policy-ceiling.js';
 import { ProjectPlatformsSchema } from './project-platforms.js';
@@ -415,6 +416,8 @@ export const ProjectConnectorSchema = z
       .strict()
       .readonly()
       .optional(),
+    /** Opt in to the signed identity assertion (ADR-0142 D1); the server reads the named secret at run compose. */
+    identity: ConnectorIdentitySchema.optional(),
   })
   .strict()
   .readonly();

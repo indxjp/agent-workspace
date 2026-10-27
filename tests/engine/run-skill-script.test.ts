@@ -21,7 +21,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { nodeSkillScriptHost } from '@agent-workspace/engine-claude-agent-sdk';
+import { nodeSkillScriptHost } from '@agent-workspace/engine-claude-agent-sdk/testing';
 import {
   SKILL_SCRIPT_LIMITS,
   runSkillScript,

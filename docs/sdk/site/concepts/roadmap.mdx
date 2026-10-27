@@ -63,9 +63,9 @@ refactoring programme's rule for a dangerous change: add → backfill → switch
   </Step>
   <Step title="Envelope regularity and lifecycle completeness">
     S-18 for the envelopes (S-16 and S-17 are done); S-4, S-9, S-19 for runtimes; S-11 for the
-    missing operations (S-5, S-10, S-12 and S-20 are done). The refactoring units they depend on (RF-102, RF-201, RF-204,
+    missing operations (S-5, S-10, S-12 and S-20 are done). The refactoring units they depend on (RF-201, RF-204,
     RF-301, RF-304, RF-103, RF-202, RF-203) proceed on the programme's own schedule; a route waits
-    for its unit rather than encoding a shape the unit will change.
+    for its unit rather than encoding a shape the unit will change. RF-102 is done.
   </Step>
   <Step title="The control plane consumes the SDK">
     A-1 one family at a time in the fixed order, A-2 as each family's last importer moves, A-3
@@ -86,7 +86,7 @@ refactoring programme's rule for a dangerous change: add → backfill → switch
     other item configures ([The deployment profile](/concepts/data-plane#the-deployment-profile)).
     Then D-2 and D-3 (native object storage and secret backends) and D-4 (a verified sandbox driver)
     one cloud at a time — a cell of the [data-plane table](/concepts/data-plane#the-contract) is
-    filled only by a live proof. N-1 to N-4 land as ordinary contract-first routes once the
+    filled only by a live proof. N-2 and N-3 land as ordinary contract-first routes once the
     specification takes them.
   </Step>
 </Steps>
@@ -104,7 +104,7 @@ data-layer decision of the refactoring programme) calls for them.
 
 ### P-6 A published release with signed images and the installer
 
-**Today:** the `@indx-workspace/{contracts,sdk,aw,cli,embedded,create,react}` packages are on npm and the platform images (`ghcr.io/indxdev/agent-workspace/*`) are published, and the
+**Today:** the `@indx-workspace/{contracts,sdk,aw,cli,embedded,create,react}` packages are on npm and the platform images are published (`ghcr.io/indxjp/agent-workspace/*` for every release after 0.6.10, `ghcr.io/indxdev/agent-workspace/*` up to it), and the
 `create-agent-workspace` generator (published as `@indx-workspace/cli`, run by
 `npm create @indx-workspace@latest`) pins those images by digest and refuses to write a project
 whose images it cannot resolve to a verified digest ([Self-host Agent
@@ -218,11 +218,11 @@ shipped an adapter ahead of a contracts release can be asked for it and the serv
 
 ### RF-102 Per-row connector authorization
 
-**Today:** the Builder own/other rule the [roles table](/concepts/workspaces-and-principals)
-states for connectors is not enforced by the connector item routes.
-
-**Target:** connectors go through the same `requireResourceAccess` path files and skills use,
-with closed-world route declarations and concealment tests.
+**Done:** the connector item routes enforce the Builder own/other rule the
+[roles table](/concepts/workspaces-and-principals) states, through the same
+`requireResourceAccess` path files and skills use (#237). It governs who may manage a connector,
+not what a connector sees: no connector learns which person a run is for, which is
+[N-8](#n-8-tools-learn-who-is-asking). The entry stays so links to it keep resolving.
 
 ### RF-201 Agent archive instead of delete
 
@@ -234,13 +234,11 @@ and usage records.
 
 ### N-1 Skill revisions
 
-**Today:** a skill is one mutable directory addressed by `name`; `update` patches it in place,
-every agent that assigns it sees the change on its next run, and there is no way to keep an
-older revision addressable except a second name ([Author a skill](/building/skills)).
-
-**Target:** `skills.publish(name, { files })` creates an immutable revision; an assignment pins
-a revision or `latest`; `skills.get` lists revisions; `agents.export`/`import`
-carry the pinned revision by name and number.
+**Done:** `skills.publish(name, { files })` replaces the skill's current files and freezes them as
+the next numbered revision, which never changes; `skills.get` lists the revisions; an agent's
+assignment pins a revision number (`skillRevisions`) or, with no pin, runs the current files
+(`latest`); `agents.export`/`import` carry the pin by skill name and number
+([Author a skill](/building/skills#revisions)). The entry stays so links to it keep resolving.
 
 ### N-2 An organisation catalog above workspaces
 
@@ -267,15 +265,32 @@ deployment runs, and an agent whose configuration its engine cannot honour is re
 `422 engine_capability_unsupported`. The entry stays so links to it keep resolving. What each
 engine supports is on [Runtime neutrality](/concepts/runtime-neutrality); tracked as #301.
 
+### N-8 Tools learn who is asking
+
+**Today:** credentials and file grants belong to the agent, so a connector or an `openapiTool()` call
+cannot tell which person a run is for; only the code-tool host receives run headers. A team that
+needs per-person scope runs one agent per department, or puts an identity token in the prompt, where
+the model can alter it.
+
+**Target:** a run sends a signed `x-aw-identity` assertion (`sub`, `principalKind`, `workspace`,
+`runId`, `aud`, `exp`, HMAC-SHA256, five minutes) to a connector that opts in with
+`identity: { secret }`.
+`StartRunRequest.subject` lets an API-key caller name the person it acts for; a signed-in user's run
+uses their own principal, and a browser token cannot set it. A later step lets a file grant follow
+the caller's team (`files('deals/{team}')`). Decided in ADR-0142, tracked as #1277 to #1281.
+OAuth per end user is not part of it.
+
 ## Runs and sessions
 
 ### S-6 Idempotency keys
 
-**Today:** a retried `runs.start` after a lost response may start a second run;
-[Retries and idempotency](/guides/retries-and-idempotency) explains how to detect it by listing.
+**Today:** `runs.start` takes an `idempotencyKey`, sent as the `Idempotency-Key` header: a retry
+with the same key and input returns the run the first start queued
+([Retries and idempotency](/guides/retries-and-idempotency)). The input is compared in a canonical
+form, so a retry that reorders the keys of a JSON object in it (such as `outputSchema`) still
+replays.
 
-**Target:** an `Idempotency-Key` request header on run start, honoured with the run leases of
-[RF-301](#rf-301-run-leases-and-attempts).
+**Target:** the key honoured with the run leases of [RF-301](#rf-301-run-leases-and-attempts).
 
 ### N-3 Webhooks for run outcomes
 
@@ -338,16 +353,6 @@ and a client-side hint for `422 network_policy_not_enforceable` before a profile
 **Today:** `files.list` carries each entry's size and kind, but there is no metadata-only read of a single file: `files.download` is the only per-file read.
 
 **Target:** `HEAD` or `?metadata=true` on `GET /api/files/:id`, and `aw.files.stat`.
-
-### N-4 Presigned file transfer for browsers
-
-**Today:** a file's bytes always pass through the control plane, and a customer frontend
-uploads or downloads only through its own backend
-([Embed an agent in your product](/building/embedding)).
-
-**Target:** `files.createUploadUrl` and `files.createDownloadUrl` return short-lived URLs on
-the object store (whichever backend [D-2](#d-2-object-storage-on-every-cloud-natively) selects), so a browser holding a
-[browser token](/getting-started/authentication) moves bytes without a relay.
 
 ### RF-204 Typed credential ownership
 

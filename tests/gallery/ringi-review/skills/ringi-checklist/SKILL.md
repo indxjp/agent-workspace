@@ -34,5 +34,5 @@ description: 稟議レビューシートの書式。見出し・指摘の書き�
 
 - 決裁者が確認すべき点を2〜3文でまとめる。承認・否決の推奨は書かない。
 
-出典は、`read_rule` / `check_authority` / `get_ringi` が返した citation だけを使う。
+出典は、`check_authority` が返した citation と、`Read` で読んだ規程の条・稟議の「出典」の行だけを使う。
 読んでいない条文や稟議を出典にしない。

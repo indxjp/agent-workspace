@@ -5,6 +5,8 @@ import {
   MAX_PROMPT_CHARS,
   MODEL_PROVIDERS,
   RevokeRunTokensResponseSchema,
+  RunApprovalRequestSchema,
+  RunApprovalResponseSchema,
   RUN_LIST_DEFAULT_LIMIT,
   RUN_LIST_MAX_LIMIT,
   RUN_STATUSES,
@@ -38,6 +40,8 @@ const schemas = {
   RunResponseSchema,
   InterruptRunResponseSchema,
   RevokeRunTokensResponseSchema,
+  RunApprovalRequestSchema,
+  RunApprovalResponseSchema,
   RunListResponseSchema,
   SessionResourceSchema,
   SessionResponseSchema,
@@ -64,9 +68,16 @@ describe('contracts-runs: real Zod exports', () => {
   });
 
   it('pins the enumerations, terminal subset and pagination limits', () => {
-    expect(RUN_STATUSES).toEqual(['queued', 'running', 'completed', 'failed', 'cancelled']);
+    expect(RUN_STATUSES).toEqual([
+      'queued',
+      'running',
+      'awaiting_approval',
+      'completed',
+      'failed',
+      'cancelled',
+    ]);
     expect(TERMINAL_RUN_STATUSES).toEqual(['completed', 'failed', 'cancelled']);
-    expect(RUN_STATUSES.map(isTerminalRunStatus)).toEqual([false, false, true, true, true]);
+    expect(RUN_STATUSES.map(isTerminalRunStatus)).toEqual([false, false, false, true, true, true]);
     expect(MODEL_PROVIDERS).toEqual([
       'anthropic',
       'anthropic-compatible',

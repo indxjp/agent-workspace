@@ -25,14 +25,18 @@ Throws `ApiProblemError`. Three of its codes are `409`s and mean different thing
 
 The `422`s of `RUN_START_PROBLEM_CODES` (issue #393) name the configuration a run is missing,
 and none of them creates a run either: `agent_runtime_profile_missing`,
-`model_connection_unresolved`, `model_connection_failed`, `model_unavailable` and
-`model_credential_rejected`. Five more `RUN_START_PROBLEM_CODES` are judged only when the run
-launches, so the start answers `202` and the run fails with the code, read through
-`runFailure`: `network_policy_unenforceable`, `run_deadline_exceeds_host`,
-`runtime_connection_missing`, `runtime_connection_credential_unavailable` and
-`runtime_not_verified`. A run that fails
-one of the first five checks after it was queued reports its code through `runFailure`
-too.
+`model_connection_unresolved`, `model_connection_failed`, `model_unavailable`,
+`model_credential_rejected` and `run_files_too_large` (the run's granted files, skill files and
+attachments total more than 128 MiB; the message names the total and the limit). Seven more
+`RUN_START_PROBLEM_CODES` are judged only when the run launches, so the start answers `202` and
+the run fails with the code, read through `runFailure`: `network_policy_unenforceable`,
+`run_deadline_exceeds_host`, `runtime_connection_missing`,
+`runtime_connection_credential_unavailable`, `runtime_not_verified`,
+`run_file_scope_not_granted` and `run_storage_grant_unavailable` (a granted storage
+connection's folder cannot be delivered). A run whose granted file's stored bytes do not match their
+checksum fails with `run_file_corrupt` the same way. A run that fails one of the first six
+checks after it was queued (its configuration changed in between) reports its code through
+`runFailure` too.
 
 ```ts
 async start(agentId: string, input: StartRunInput, options?: RequestOptions): Promise<StartRunResponse>
@@ -82,6 +86,45 @@ async interrupt(runId: string, options?: RequestOptions): Promise<RunResource>
 
 **Route:** `POST /api/runs/:runId/interrupt`
 
+## approve
+
+Approve the tool call a run paused on (`POST /api/runs/:id/approval`, ADR-0145). The decision
+starts a continuation run in the same session, which may make exactly that call; follow it
+with `client.runs.follow(response.run.id)`. `comment` reaches the continuation's prompt.
+
+Throws `ApiProblemError`: `409 run_not_awaiting_approval`, `409 approval_already_decided`,
+`409 approval_expired` (the pause is older than 24 hours), `404 run_not_found`.
+
+```ts
+async approve(runId: string, input?: { readonly comment?: string }, options?: RequestOptions): Promise<RunApprovalResponse>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `runId` | `string` | Yes |
+| `input` | `{ readonly comment?: string }` | No |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<RunApprovalResponse>`
+
+## reject
+
+Reject the tool call a run paused on (`POST /api/runs/:id/approval`, ADR-0145). The
+continuation run starts without permission to make the call and is told it was refused.
+Refuses like `approve`.
+
+```ts
+async reject(runId: string, input?: { readonly comment?: string }, options?: RequestOptions): Promise<RunApprovalResponse>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `runId` | `string` | Yes |
+| `input` | `{ readonly comment?: string }` | No |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<RunApprovalResponse>`
+
 ## revokeTokens
 
 Revoke this run's gateway tokens (issue #235, S-15): one, or every active token when
@@ -123,6 +166,29 @@ async rate(runId: string, input: RunFeedbackRequest, options?: RequestOptions): 
 **Returns:** `Promise<void>`
 
 **Route:** `POST /api/runs/:runId/feedback`
+
+## outputs
+
+The files a run wrote, found under the run's outputs in the workspace files (the `files` list,
+no route of its own): every file below `outputs/`, folders walked, each with its `name`
+relative to that directory and the `path` `files.download` takes.
+
+A run has outputs only once it is `completed` and its agent has `writeFiles` on; any other run
+answers with an empty list. Throws `ApiProblemError` and `ContractViolationError`
+like the files list does.
+
+```ts
+async outputs(runId: string, options?: RequestOptions): Promise<readonly RunOutputFile[]>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `runId` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<readonly RunOutputFile[]>`
+
+**Route:** `GET /api/files`
 
 ## list
 
@@ -197,6 +263,51 @@ async waitForOutcome(runId: string, options?: FollowRunOptions): Promise<RunReso
 
 **Returns:** `Promise<RunResource>`
 
+## result
+
+Wait for the run to end, then read its answer (ADR-0143): `text` is the prose and `output` the
+structured value. With `schema`, `output` is that schema's parse of the value and a mismatch
+is a `ContractViolationError`: the run asked for this shape and the platform handed
+back another. A run that did not `completed` — failed, cancelled — has no answer: `text` and
+`output` are `null`, and the reason is `run.error`, read with `runFailure`.
+
+```ts
+async result(runId: string, options: RunResultOptions<Schema> & { readonly schema: Schema }): Promise<RunResult<z.output<Schema>>>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `runId` | `string` | Yes |
+| `options` | `RunResultOptions<Schema> & { readonly schema: Schema }` | Yes |
+
+**Returns:** `Promise<RunResult<z.output<Schema>>>`
+
+## result
+
+```ts
+async result(runId: string, options?: RunResultOptions<undefined>): Promise<RunResult<unknown>>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `runId` | `string` | Yes |
+| `options` | `RunResultOptions<undefined>` | No |
+
+**Returns:** `Promise<RunResult<unknown>>`
+
+## result
+
+```ts
+async result(runId: string, options?: RunResultOptions<z.ZodType | undefined>): Promise<RunResult<unknown>>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `runId` | `string` | Yes |
+| `options` | `RunResultOptions<z.ZodType \| undefined>` | No |
+
+**Returns:** `Promise<RunResult<unknown>>`
+
 ## FollowRunOptions
 
 | Name | Type | Required | Description |
@@ -210,6 +321,32 @@ async waitForOutcome(runId: string, options?: FollowRunOptions): Promise<RunReso
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
+| `after` | `undefined \| null \| string` | No | Resume after this event id (`Last-Event-ID`); omit to replay from the beginning. |
+| `signal` | `undefined \| AbortSignal` | No |  |
+
+## RunOutputFile
+
+A file a run left behind: the files resource, plus its name relative to the run's outputs.
+
+`RunOutputFile`
+
+## RunResult
+
+What `RunsClient.result` returns: the settled run, its prose and its structured answer.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `run` | `Readonly<{ id: string; workspaceId: string; agentId: string; projectId: string \| null; initiatingUserId: string \| null; sessionId: string; agentVersion: number \| null; status: "completed" \| "failed" \| "cancelled" \| "queued" \| "running" \| "awaiting_approval"; createdAt: string; startedAt: string \| null; endedAt: string \| null; durationMs: number \| null; model: string \| null; provider: "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible" \| null; modelConnectionId: string \| null; engine: "claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra" \| null; engineVersion: string \| null; usage: Readonly<{ inputTokens: number; outputTokens: number; cacheReadInputTokens: number; cacheCreationInputTokens: number; totalTokens: number; toolCalls: number; }>; cost: Readonly<{ amount: string; currency: string; priceTableVersion: string \| null; }>; error: string \| null; output: Readonly<{ text: string; structured: unknown; }> \| null; pendingApproval: Readonly<{ toolName: string; canonicalCall: string; }> \| null; accountingState: "failed" \| "pending" \| "complete" \| "partial" \| "unavailable"; accountingError: string \| null; }>` | Yes |  |
+| `text` | `null \| string` | Yes | The run's answer as text; `null` unless the run `completed`. |
+| `output` | `null \| Output` | Yes | The structured answer; `null` unless the run `completed` with one. |
+
+## RunResultOptions
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `schema` | `undefined \| Schema` | No | Validate the structured answer against this and return it typed. |
+| `maxReconnects` | `undefined \| number` | No | How many reconnects in a row may fail to deliver a new event before `follow` gives up; a connection that delivers one resets the count. Default 5. |
+| `reconnectDelayMs` | `undefined \| number` | No | Pause between reconnects, in milliseconds. Default 3000, the server's own `retry:` value. |
 | `after` | `undefined \| null \| string` | No | Resume after this event id (`Last-Event-ID`); omit to replay from the beginning. |
 | `signal` | `undefined \| AbortSignal` | No |  |
 
@@ -231,3 +368,8 @@ What a caller supplies to start a run; the wire body is derived from it.
 | `sessionId` | `undefined \| null \| string` | No | Continue an existing session, or omit to start one. |
 | `modelOverride` | `undefined \| null \| { readonly connectionId: string; readonly model: string; }` | No | Override the agent's model for this run only. A connection and a model, together. |
 | `version` | `undefined \| number` | No | Run a new session on this numbered version of the agent instead of the one `local` points at. An unknown number is `404 agent_version_not_found`; with `sessionId` it is refused. |
+| `attachments` | `undefined \| readonly { readonly fileId: string; }[]` | No | Workspace files the run receives read-only, by the `id` `files.list` returns: one to ten, no repeats. An id the caller cannot read, another workspace's, or one that does not exist is `404 file_not_found`, the same answer for each; an agent without the `readFiles` permission is `422 run_attachments_unreadable`; over 10 MiB a file, more than 20 attachments (a folder counts as one) or 50 MiB in total (the session's earlier uploads count) is `422 run_attachments_too_large`. A read grant removes the shell from the run. An audio file (flac, mp3, mp4, mpeg, mpga, m4a, ogg, wav, webm) is transcribed into the run's first turn when the run's model connection is an `openai` one, and is `422 run_attachments_untranscribable` on any other provider. |
+| `outputSchema` | `undefined \| Readonly<Record<string, unknown>> \| z.ZodType<unknown, unknown, z.core.$ZodTypeInternals<unknown, unknown>>` | No | Ask for an answer that matches this schema (ADR-0143): a Zod schema, sent as JSON Schema 2020-12, or a JSON Schema object as is. Its root must be an object. Refused `400 invalid_body` when it is over a limit, and `422 engine_capability_unsupported` when the agent's engine cannot produce structured output; neither creates a run. Read the answer with `RunsClient.result`. |
+| `subject` | `undefined \| string` | No | The person this run acts for (ADR-0142 D2): it becomes the `sub` of the identity assertion every opted-in connector receives. Only an API-key caller may set it; any other caller is `403 run_subject_forbidden`. A connector verifies the assertion with `verifyIdentity`. |
+| `fileScope` | `undefined \| readonly string[]` | No | Narrow the run's file grants (ADR-0147): workspace paths, files or folders, one to 100, each inside what the agent is granted. Built-in `search_files` and the files the sandbox receives cover only these. A path the agent is not granted, a parent of a granted file, or any path when the agent has no files fails the run with `403 run_file_scope_not_granted`, read through `runFailure`. Omit it to keep all the agent's grants; a continuation after an approval keeps the scope of the run it continues. |
+| `idempotencyKey` | `undefined \| string` | No | Sent as the `Idempotency-Key` header (ADR-0151): a start sent again with the same key and the same input answers `202` with the run the first one started, whatever its status, instead of starting another. Use one key per logical start and reuse it when you retry that start. The same key with a different input is `409 run_idempotency_conflict`; a blank key or one over 255 characters is `400 invalid_idempotency_key`. A key is scoped to the caller and never freed. |

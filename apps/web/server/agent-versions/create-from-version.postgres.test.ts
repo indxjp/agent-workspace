@@ -31,16 +31,12 @@ import { POST } from '../../app/api/agents/route';
 import { GET as listVersions } from '../../app/api/agents/[id]/versions/route';
 import { createRepositoryAgentResourceStoreProvider } from '../agents/resource-store';
 import { createRepositoryAgentStoreProvider } from '../agents/store';
-import {
-  clearAgentsRuntime,
-  configureAgentsRuntime,
-  type WorkspaceResolution,
-} from '../agents/runtime';
+import { type WorkspaceResolution } from '../agents/runtime';
 import { createMemoryDirectory } from '../rbac/memory-directory';
 import { Principal } from '../rbac/principal';
-import { clearRbacRuntime, configureRbacRuntime } from '../rbac/runtime';
 import { FIXTURE_PERMISSIONS, fixtureSurface, fromVersionRequest } from './fixtures';
-import { clearAgentVersionsRuntime, configureAgentVersionsRuntime } from './runtime';
+import { clearApplicationContext } from '../application-context';
+import { installTestDomains } from '../application-context-fixtures';
 import { createRepositoryAgentVersionStoreProvider } from './store';
 
 const rawUrl = process.env['TEST_DATABASE_URL'];
@@ -81,44 +77,48 @@ describe.skipIf(!hasDatabase)('POST /api/agents {version} on PostgreSQL', () => 
     });
 
     const scopes = createDatabaseWorkspaceScopeResolver(isolated.db);
-    configureAgentsRuntime({
-      agents: createRepositoryAgentStoreProvider({
-        repositories: createDatabaseAgentRepositoryProvider(isolated.db),
-        scopes,
-      }),
-      agentResources: createRepositoryAgentResourceStoreProvider({
-        repositories: createDatabaseAgentResourceRepositoryProvider(isolated.db),
-        scopes,
-      }),
-      resolveWorkspace: (): Promise<WorkspaceResolution> =>
-        Promise.resolve({ kind: 'workspace', workspaceId }),
+    installTestDomains({
+      agents: {
+        agents: createRepositoryAgentStoreProvider({
+          repositories: createDatabaseAgentRepositoryProvider(isolated.db),
+          scopes,
+        }),
+        agentResources: createRepositoryAgentResourceStoreProvider({
+          repositories: createDatabaseAgentResourceRepositoryProvider(isolated.db),
+          scopes,
+        }),
+        resolveWorkspace: (): Promise<WorkspaceResolution> =>
+          Promise.resolve({ kind: 'workspace', workspaceId }),
+      },
     });
-    configureAgentVersionsRuntime({
-      versions: createRepositoryAgentVersionStoreProvider({
-        repositories: createDatabaseAgentVersionRepositoryProvider(isolated.db),
-        evaluations: createDatabaseAgentVersionEvaluationRepositoryProvider(isolated.db),
-        scopes,
-      }),
+    installTestDomains({
+      agentVersions: {
+        versions: createRepositoryAgentVersionStoreProvider({
+          repositories: createDatabaseAgentVersionRepositoryProvider(isolated.db),
+          evaluations: createDatabaseAgentVersionEvaluationRepositoryProvider(isolated.db),
+          scopes,
+        }),
+      },
     });
-    configureRbacRuntime({
-      directory: createMemoryDirectory({ users: [] }),
-      identify: () =>
-        Promise.resolve(
-          Principal.fromApiKey({
-            principalId: ownerPrincipalId,
-            apiKeyId: crypto.randomUUID(),
-            workspaceId,
-            role: 'owner',
-            label: 'create owner key',
-          }),
-        ),
+    installTestDomains({
+      rbac: {
+        directory: createMemoryDirectory({ users: [] }),
+        identify: () =>
+          Promise.resolve(
+            Principal.fromApiKey({
+              principalId: ownerPrincipalId,
+              apiKeyId: crypto.randomUUID(),
+              workspaceId,
+              role: 'owner',
+              label: 'create owner key',
+            }),
+          ),
+      },
     });
   }, 180_000);
 
   afterAll(async () => {
-    clearAgentsRuntime();
-    clearAgentVersionsRuntime();
-    clearRbacRuntime();
+    clearApplicationContext();
     await isolated.close();
   });
 

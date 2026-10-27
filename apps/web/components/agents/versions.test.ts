@@ -362,7 +362,14 @@ describe('versionsStrings', () => {
     const en = versionsStrings('en');
     const ja = versionsStrings('ja');
     // The environment names, and `aw push` / `API`, are the product's own words in both.
-    const shared = new Set(['badgeLocal', 'badgeProduction', 'viaAwPush', 'viaApi', 'noScore']);
+    const shared = new Set([
+      'badgeLocal',
+      'badgeProduction',
+      'viaAwPush',
+      'viaApi',
+      'viaBuilder',
+      'noScore',
+    ]);
     for (const key of Object.keys(en) as (keyof typeof en)[]) {
       if (shared.has(key)) continue;
       const [a, b] = [en[key], ja[key]];
@@ -451,6 +458,21 @@ describe('VersionList', () => {
     expect(rows[1]).toContain('checked');
     expect(rows[1]).toContain('Summary 1');
     expect(rows[1]).toContain('principal-1');
+  });
+
+  it("labels a version saved by the Builder 'Builder' (#1847)", () => {
+    const html = renderToStaticMarkup(
+      createElement(VersionList, {
+        items: [{ ...V1, via: 'builder' }],
+        pointers: POINTERS,
+        evaluations: EVALUATIONS,
+        selected: [],
+        onToggle: noop,
+        strings: EN,
+        locale: 'en',
+      }),
+    );
+    expect(html).toContain('>Builder<');
   });
 
   it("shows each version's latest score, and a dash for one never evaluated (#714)", () => {

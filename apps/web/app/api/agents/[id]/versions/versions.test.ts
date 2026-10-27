@@ -1,5 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { mkdtemp, rm } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import {
+  createInMemoryObjectStore,
+  createLocalFilesystemObjectStoreProvider,
+} from '@agent-workspace/core/storage';
 import {
   AgentVersionListResponseSchema,
   AgentVersionResourceSchema,
@@ -7,11 +15,7 @@ import {
 
 import { GET, POST } from './route';
 import { createInMemoryAgentStoreProvider } from '../../../../../server/agents/memory-store';
-import {
-  clearAgentsRuntime,
-  configureAgentsRuntime,
-  type WorkspaceResolution,
-} from '../../../../../server/agents/runtime';
+import { type WorkspaceResolution } from '../../../../../server/agents/runtime';
 import {
   FIXTURE_PERMISSIONS,
   FIXTURE_POLICY,
@@ -20,14 +24,14 @@ import {
 import {
   createInMemoryAgentVersionStoreProvider,
   type InMemoryAgentVersionStoreProvider,
+  type SeededReference,
 } from '../../../../../server/agent-versions/memory-store';
-import {
-  clearAgentVersionsRuntime,
-  configureAgentVersionsRuntime,
-} from '../../../../../server/agent-versions/runtime';
+import { clearApplicationContext } from '../../../../../server/application-context';
+import { installTestDomains } from '../../../../../server/application-context-fixtures';
 import { createMemoryDirectory } from '../../../../../server/rbac/memory-directory';
 import { Principal } from '../../../../../server/rbac/principal';
-import { clearRbacRuntime, configureRbacRuntime } from '../../../../../server/rbac/runtime';
+import { createSkillRowsWorld } from '../../../../../server/skills/rows-fixture';
+import { createInMemoryCatalogStore } from '../../../../../server/resources/catalog-store.memory';
 
 /**
  * `GET`/`POST /api/agents/:id/versions` (S1-05, issue #443) on the memory stores, driven with
@@ -50,12 +54,14 @@ type Actor = keyof typeof ACTORS;
 
 let versions: InMemoryAgentVersionStoreProvider;
 let agentOfBuilderA: string;
+let skillRows: SeededReference[];
 
 function isActor(value: string): value is Actor {
   return Object.hasOwn(ACTORS, value);
 }
 
 beforeEach(async () => {
+  skillRows = [];
   const agents = createInMemoryAgentStoreProvider();
   const created = await agents.forWorkspace(WORKSPACE).create(
     {
@@ -71,43 +77,47 @@ beforeEach(async () => {
   agentOfBuilderA = created.agent.id;
   versions = createInMemoryAgentVersionStoreProvider({
     agents,
-    references: { [WORKSPACE]: { connector: [{ id: 'c1', name: 'tickets' }] } },
-  });
-
-  configureAgentsRuntime({
-    agents,
-    resolveWorkspace(request: Request): Promise<WorkspaceResolution> {
-      const workspaceId = request.headers.get(WORKSPACE_HEADER);
-      return Promise.resolve(
-        workspaceId === null
-          ? { kind: 'unauthenticated', reason: 'no test workspace header' }
-          : { kind: 'workspace', workspaceId },
-      );
+    references: {
+      [WORKSPACE]: { connector: [{ id: 'c1', name: 'tickets' }], skill: skillRows },
     },
   });
-  configureAgentVersionsRuntime({ versions });
-  configureRbacRuntime({
-    directory: createMemoryDirectory({ users: [] }),
-    identify: (request) => {
-      const workspaceId = request.headers.get(WORKSPACE_HEADER);
-      const actor = request.headers.get(ACTOR_HEADER);
-      if (workspaceId === null || actor === null || !isActor(actor)) return Promise.resolve(null);
-      return Promise.resolve(
-        Principal.fromApiKey({
-          ...ACTORS[actor],
-          apiKeyId: ACTORS[actor].principalId.replace(/^a/u, 'b'),
-          workspaceId,
-          label: `${actor} versions key`,
-        }),
-      );
+
+  installTestDomains({
+    agents: {
+      agents,
+      resolveWorkspace(request: Request): Promise<WorkspaceResolution> {
+        const workspaceId = request.headers.get(WORKSPACE_HEADER);
+        return Promise.resolve(
+          workspaceId === null
+            ? { kind: 'unauthenticated', reason: 'no test workspace header' }
+            : { kind: 'workspace', workspaceId },
+        );
+      },
+    },
+  });
+  installTestDomains({ agentVersions: { versions } });
+  installTestDomains({
+    rbac: {
+      directory: createMemoryDirectory({ users: [] }),
+      identify: (request) => {
+        const workspaceId = request.headers.get(WORKSPACE_HEADER);
+        const actor = request.headers.get(ACTOR_HEADER);
+        if (workspaceId === null || actor === null || !isActor(actor)) return Promise.resolve(null);
+        return Promise.resolve(
+          Principal.fromApiKey({
+            ...ACTORS[actor],
+            apiKeyId: ACTORS[actor].principalId.replace(/^a/u, 'b'),
+            workspaceId,
+            label: `${actor} versions key`,
+          }),
+        );
+      },
     },
   });
 });
 
 afterEach(() => {
-  clearAgentsRuntime();
-  clearAgentVersionsRuntime();
-  clearRbacRuntime();
+  clearApplicationContext();
 });
 
 function call(
@@ -160,6 +170,16 @@ describe('POST /api/agents/:id/versions', () => {
       expect(response.status).toBe(400);
       expect(await errorCode(response)).toMatchObject({ code: 'invalid_agent_id' });
     }
+  });
+
+  it("refuses via 'builder' from a client with 400 invalid_agent_version, saving nothing", async () => {
+    const response = await call(POST, {
+      actor: 'builderA',
+      body: { ...versionRequest(), via: 'builder' },
+    });
+    expect(response.status).toBe(400);
+    expect(await errorCode(response)).toMatchObject({ code: 'invalid_agent_version' });
+    expect(versions.versionCount()).toBe(0);
   });
 
   it('answers 404 agent_not_found for a foreign id before RBAC decides', async () => {
@@ -224,11 +244,87 @@ describe('POST /api/agents/:id/versions', () => {
     expect(versions.versionCount()).toBe(0);
   });
 
-  it('answers 503 agent_policy_not_configured when no version store is wired', async () => {
-    clearAgentVersionsRuntime();
+  it('saves a version naming a built-in skill on a workspace that has never imported it', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'versions-builtin-'));
+    try {
+      const objects = createLocalFilesystemObjectStoreProvider(root);
+      const memory = createInMemoryCatalogStore();
+      const catalog = memory.forWorkspaceSync(WORKSPACE);
+      const put = catalog.putSkill.bind(catalog);
+      // Stands in for the `agent_skills` join: a skill the installer creates must resolve as a reference.
+      vi.spyOn(catalog, 'putSkill').mockImplementation(async (input) => {
+        const skill = await put(input);
+        if (!skillRows.some((row) => row.id === skill.id)) {
+          skillRows.push({ id: skill.id, name: skill.name });
+        }
+        return skill;
+      });
+      installTestDomains({
+        skills: {
+          kind: 'serving',
+          runtime: {
+            resolveWorkspace: () => Promise.resolve({ kind: 'workspace', workspaceId: WORKSPACE }),
+            store: objects,
+            catalog: memory,
+            storage: createSkillRowsWorld(createInMemoryObjectStore(), WORKSPACE, catalog).storage,
+          },
+        },
+      });
+      const body = versionRequest({ resources: { skills: ['office-reader'] } });
+
+      const saved = await call(POST, { actor: 'builderA', body });
+
+      expect(saved.status).toBe(201);
+      expect((await catalog.listSkills()).map((skill) => skill.name)).toEqual(['office-reader']);
+      expect((await catalog.listFiles()).map((file) => file.path)).toContainEqual(
+        expect.stringMatching(/office-reader\/scripts\/pdf\.mjs$/),
+      );
+
+      const again = await call(POST, { actor: 'builderA', body });
+      expect(again.status).toBe(201);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('does not install a built-in skill for a dry run: a dry run has no side effects', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'versions-builtin-dry-'));
+    try {
+      const objects = createLocalFilesystemObjectStoreProvider(root);
+      const memory = createInMemoryCatalogStore();
+      const catalog = memory.forWorkspaceSync(WORKSPACE);
+      const putSkill = vi.spyOn(catalog, 'putSkill');
+      installTestDomains({
+        skills: {
+          kind: 'serving',
+          runtime: {
+            resolveWorkspace: () => Promise.resolve({ kind: 'workspace', workspaceId: WORKSPACE }),
+            store: objects,
+            catalog: memory,
+            storage: createSkillRowsWorld(createInMemoryObjectStore(), WORKSPACE, catalog).storage,
+          },
+        },
+      });
+      const body = versionRequest({ resources: { skills: ['office-reader'] } });
+
+      const dry = await call(POST, { actor: 'builderA', body: { ...body, dryRun: true } });
+
+      expect(dry.status).toBe(422);
+      expect(putSkill).not.toHaveBeenCalled();
+      expect(await catalog.listSkills()).toEqual([]);
+      expect(await catalog.listFiles()).toEqual([]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('answers 503 rbac_runtime_not_configured with no application context installed', async () => {
+    // The RBAC runtime lives in the context, so the gate refuses first (fail closed) before any
+    // version store is read.
+    clearApplicationContext();
     const response = await call(POST, { actor: 'builderA', body: versionRequest() });
     expect(response.status).toBe(503);
-    expect(await errorCode(response)).toMatchObject({ code: 'agent_policy_not_configured' });
+    expect(await errorCode(response)).toMatchObject({ code: 'rbac_runtime_not_configured' });
   });
 });
 

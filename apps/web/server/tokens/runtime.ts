@@ -4,6 +4,10 @@
  * `apps/web/server/runs/environment.ts` use, for the same reason: this route needs the database
  * layer, and `apps/web/server/rbac/**` is deliberately narrow (a `WorkspaceDirectory` of users,
  * memberships, and API keys, no runs or sessions).
+ *
+ * The composition root installs it as `ApplicationContext.tokens`. It is `disabled` until the run
+ * runtime is wired, and stays `disabled` on a deployment with no runtime at all; the route then
+ * answers its `503`, as it does with no context installed.
  */
 import type { Principal } from '../rbac/principal';
 import type { BrowserTokenScope } from '../rbac/token-scope';
@@ -36,19 +40,6 @@ export interface TokensRuntime {
   ): Promise<MintedBrowserTokenResult | null>;
 }
 
-interface Registry {
-  __agentWorkspaceTokensRuntime__?: TokensRuntime;
-}
-const registry = globalThis as typeof globalThis & Registry;
-
-export function configureTokensRuntime(runtime: TokensRuntime): void {
-  registry.__agentWorkspaceTokensRuntime__ = runtime;
-}
-
-export function clearTokensRuntime(): void {
-  delete registry.__agentWorkspaceTokensRuntime__;
-}
-
-export function currentTokensRuntime(): TokensRuntime | null {
-  return registry.__agentWorkspaceTokensRuntime__ ?? null;
-}
+/** `POST /api/tokens` as the application context holds it. */
+export type Tokens =
+  { readonly kind: 'serving'; readonly runtime: TokensRuntime } | { readonly kind: 'disabled' };

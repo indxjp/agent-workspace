@@ -1,3 +1,5 @@
+import { createInterface } from 'node:readline/promises';
+
 import type { MenuSpec } from '@indx-workspace/sdk/project';
 
 export { isInteractive } from '@indx-workspace/sdk/project';
@@ -47,6 +49,11 @@ export interface CliIo {
    * terminal is attached; a command that needs a confirmation then refuses and names `--yes`.
    */
   readonly prompt?: (question: string, signal?: AbortSignal) => Promise<string>;
+  /**
+   * Drop what was typed ahead on the terminal, so a keystroke typed while a run streamed cannot
+   * answer the next {@link prompt}. Absent where no terminal is attached.
+   */
+  readonly discardInput?: () => Promise<void>;
   /**
    * Show one setup question as an arrow-key menu and answer the chosen value(s). Absent where no
    * terminal is attached, and in suites that type their answers; the typed prompt is used then.
@@ -211,4 +218,35 @@ export function stdinOnce(io: CliIo): (flag?: string) => Promise<string> {
     }
     return io.stdin();
   };
+}
+
+/** One line read from `input`; the interface is opened and closed per question. */
+export async function promptLine(
+  input: NodeJS.ReadableStream,
+  output: NodeJS.WritableStream,
+  question: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  const terminal = createInterface({ input, output });
+  // question() never settles once the input ends (Ctrl-D, a closed pipe): the close is the answer.
+  let onClose = (): void => undefined;
+  const closed = new Promise<never>((_resolve, reject) => {
+    onClose = () => {
+      reject(new InterruptedError());
+    };
+    terminal.once('close', onClose);
+  });
+  try {
+    return await Promise.race([
+      terminal.question(question, signal === undefined ? {} : { signal }),
+      closed,
+    ]);
+  } catch (error) {
+    // Ctrl-C and Ctrl-D, like `signal` (SIGINT/SIGTERM), are an interrupt, as for `promptSecret`.
+    if (error instanceof Error && error.name === 'AbortError') throw new InterruptedError();
+    throw error;
+  } finally {
+    terminal.off('close', onClose);
+    terminal.close();
+  }
 }

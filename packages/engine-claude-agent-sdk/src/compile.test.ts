@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { RunRequest } from '@agent-workspace/core';
+import { RunRequest } from '@agent-workspace/run-protocol';
+import { AGENT_TOOL_PERMISSION_MODES } from '@indx-workspace/contracts/agents';
 
 import {
   A11_IDENTITY_ENV_VARS,
@@ -234,6 +235,7 @@ describe('the session scope reaches the subprocess as env, and only from one pla
   it('derives both scope variables and both A.11 identity variables from the request', () => {
     const options = compileRunRequest(request);
     expect(options.env).toEqual({
+      ENABLE_TOOL_SEARCH: 'false',
       PATH: '/usr/bin',
       HOME: '/home/agent',
       CLAUDE_CONFIG_DIR: '/run/claude/.claude',
@@ -457,5 +459,90 @@ describe('subagents', () => {
       SubagentToolRemovedError,
     );
     expect(() => compileRunRequest(withSubagents(canonicalPolicy, []))).not.toThrow();
+  });
+});
+
+describe('handoff (ADR-0145 D4)', () => {
+  const compileWith = (handoff: boolean): ReturnType<typeof compileRunRequest> =>
+    compileRunRequest(
+      RunRequest.parse({ ...canonicalRunRequest, policy: { tools: null, handoff } }),
+    );
+
+  it('auto-approves handoff_to_person and carries the flag only when on', () => {
+    const on = compileWith(true);
+    expect(on.allowedTools).toContain('mcp__agent-workspace__handoff_to_person');
+    expect(on.handoff).toBe(true);
+    const off = compileWith(false);
+    expect(off.allowedTools).not.toContain('mcp__agent-workspace__handoff_to_person');
+    expect('handoff' in off).toBe(false);
+  });
+});
+
+describe('requireApproval (ADR-0145)', () => {
+  const withTools = (
+    tools: Record<string, unknown>,
+    policy: Record<string, unknown>,
+  ): ReturnType<typeof compileRunRequest> =>
+    compileRunRequest(RunRequest.parse({ ...canonicalRunRequest, policy: { tools, ...policy } }));
+  const defaultTools = {
+    base: ['Read', 'mcp__gh__push'],
+    autoApprove: ['Read', 'mcp__gh__*'],
+    deny: [],
+    permissionMode: 'default',
+    allowDangerouslySkipPermissions: false,
+  };
+
+  it('carries no gate without requireApproval, so existing compiles are unchanged', () => {
+    const compiled = withTools(defaultTools, {});
+    expect('approval' in compiled).toBe(false);
+    expect(compiled.allowedTools).toEqual(['Read', 'mcp__gh__*', 'mcp__jira__*', 'mcp__search__*']);
+  });
+
+  it('moves rules that could approve a gated tool out of allowedTools and into the gate', () => {
+    const compiled = withTools(defaultTools, {
+      requireApproval: ['mcp__gh__push'],
+      approvedToolCalls: ['{"input":{},"name":"mcp__gh__push"}'],
+    });
+    expect(compiled.allowedTools).toEqual(['Read', 'mcp__jira__*', 'mcp__search__*']);
+    expect(compiled.approval).toEqual({
+      requireApproval: ['mcp__gh__push'],
+      deferred: ['mcp__gh__*'],
+      approvedToolCalls: ['{"input":{},"name":"mcp__gh__push"}'],
+    });
+  });
+
+  it.each(AGENT_TOOL_PERMISSION_MODES.filter((mode) => mode !== 'default'))(
+    'refuses permissionMode %s, which would not ask',
+    (permissionMode) => {
+      const allowDangerouslySkipPermissions = permissionMode === 'bypassPermissions';
+      expect(() =>
+        withTools(
+          { ...defaultTools, permissionMode, allowDangerouslySkipPermissions },
+          { requireApproval: ['Write'] },
+        ),
+      ).toThrow("permissionMode 'default'");
+    },
+  );
+
+  it.each(['Read', 'Glob', 'Grep', 'Agent', 'TodoWrite'])(
+    'refuses gating %s, which canUseTool is never asked about',
+    (tool) => {
+      expect(() => withTools(defaultTools, { requireApproval: [tool] })).toThrow(
+        `requireApproval cannot gate ${JSON.stringify(tool)}`,
+      );
+    },
+  );
+
+  it.each(['Bash', 'WebFetch', 'mcp__jira__*', 'mcp__gh__push'])(
+    'compiles a gate on %s',
+    (tool) => {
+      expect(
+        withTools(defaultTools, { requireApproval: [tool] }).approval?.requireApproval,
+      ).toEqual([tool]);
+    },
+  );
+
+  it('allows any permissionMode when nothing requires approval', () => {
+    expect(() => compileRunRequest(request)).not.toThrow();
   });
 });

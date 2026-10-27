@@ -19,7 +19,7 @@
  *
  * ## Why not a probe
  *
- * The `classifyUserFilterProbe` pattern (`components/run/history.ts`) reads a real server answer
+ * The `probeUserFilter` pattern (`components/run/run-requests-model.ts`) reads a real server answer
  * instead of guessing, and it is the right shape for a *read*. There is no read here: the only
  * probe available for these routes is the idempotent no-op transition — `restore` on an active
  * project, `archive` on an archived one — and that is a **write** that loses a race. If another
@@ -39,7 +39,7 @@ import { getSession } from '../auth';
 import { decide } from '../rbac/decide';
 import type { DirectoryRoot } from '../rbac/directory';
 import { parseRole } from '../rbac/roles';
-import { currentRbacRuntime } from '../rbac/runtime';
+import { applicationContext } from '../application-context';
 
 /** The answer for a caller nothing could be established about. Every field denies. */
 export const NO_ARCHIVE_CAPABILITY: ProjectArchiveCapability = {
@@ -116,7 +116,7 @@ export async function archiveCapabilityFor(
  * having a request to read.
  */
 export async function resolveProjectArchiveCapability(): Promise<ProjectArchiveCapability> {
-  const runtime = currentRbacRuntime();
+  const runtime = applicationContext()?.rbac ?? null;
   if (runtime === null) return NO_ARCHIVE_CAPABILITY;
   const session = await getSession();
   if (session === null) return NO_ARCHIVE_CAPABILITY;

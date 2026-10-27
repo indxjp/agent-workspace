@@ -1,3 +1,4 @@
+import { ShareTranscriptSelectionSchema } from '@indx-workspace/contracts/shares';
 import { z } from 'zod';
 import { DomainError } from '../../errors';
 
@@ -40,7 +41,8 @@ export const PublishShareRequestSchema = z
     expiry: z.enum(['24 h', '7 days', '30 days', 'never']).optional(),
     passphrase: z.string().min(1).max(1_024).optional(),
     budgetCapUsd: z.number().positive().finite().optional(),
-    transcript: z.array(z.unknown()).optional(),
+    /** Run ids of the shared session; the server copies their text (ADR-0158). */
+    transcript: ShareTranscriptSelectionSchema.optional(),
     definition: AgentDefinitionInputSchema.optional(),
   })
   .strict()

@@ -131,6 +131,21 @@ describe('createMastraFrameMapper', () => {
     ).toEqual([expect.objectContaining({ frame: 'agent.result', stopReason: 'cancelled' })]);
   });
 
+  it('carries the answer onto agent.result when run_completed has one, and no key when it has none', () => {
+    const completed = {
+      kind: 'run_completed',
+      stopReason: 'end_turn',
+      steps: 1,
+      usage: null,
+      finish: null,
+    } as const;
+    const output = { text: '{"a":1}', structured: { a: 1 } };
+    expect(createMastraFrameMapper().map({ ...completed, output })).toEqual([
+      expect.objectContaining({ frame: 'agent.result', output }),
+    ]);
+    expect(createMastraFrameMapper().map(completed)[0]).not.toHaveProperty('output');
+  });
+
   it.each([
     ['a non-object chunk', { kind: 'mastra', chunk: 7 }],
     ['a chunk without a type', { kind: 'mastra', chunk: { payload: {} } }],

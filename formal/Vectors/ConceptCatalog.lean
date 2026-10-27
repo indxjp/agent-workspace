@@ -2,7 +2,7 @@ import AgentWorkspace.Er.Current.Catalog
 import Vectors.Common
 
 /-!
-Vectors for the `concept-catalog` family: the catalog cluster's twelve tables as the model knows
+Vectors for the `concept-catalog` family: the catalog cluster's sixteen tables as the model knows
 them (columns, keys, references with their cardinality, the checks and the SQL of every modelled
 check), the concept enumerations and wire field lists, the skill-name and file-path grammars, the
 grants body schema, and the connector create parser.
@@ -72,7 +72,9 @@ def tableVector (t : TableName) : Vector :=
         wf ++ "cluster_constraints_are_satisfiable", nm ++ "optional_references_of_the_catalog"] ++
       s.foreignKeys.map (fun k => inv ++ s!"{k.name}_joins_one_workspace") ++
       s.foreignKeys.map (cardinalityWitness t) ++
-      s.uniques.map (fun u => inv ++ s!"{u.name}_identifies_one_row") ++
+      (s.uniques.filter fun u =>
+          u.partialNullColumns.isEmpty && u.partialNotNullColumns.isEmpty).map
+        (fun u => inv ++ s!"{u.name}_identifies_one_row") ++
       (if s.primaryKey != ["id"] then [inv ++ s!"{sql}_pkey_identifies_one_row"] else []) }
 
 /-- The column list each concept maps, against the table. -/
@@ -121,7 +123,8 @@ def wireVectors : List Vector :=
     { id := s!"wire/{id}", input := Json.mkObj [("module", module), ("schema", schema)],
       expected := Json.mkObj [("fields", strs fields), ("optional", strs optional)],
       witnesses := ws }
-  [one "agent" "agents" "AgentResourceSchema" Agent.wireFields []
+  [one "agent" "agents" "AgentResourceSchema" Agent.wireFields
+      ["builtin", "createdByAgent", "archivedAt"]
       [nm ++ "owner_is_required_and_creator_is_legacy"],
     one "connector" "connectors" "ConnectorResourceSchema" Connector.wireFields
       Connector.wireOptionalFields
@@ -129,7 +132,7 @@ def wireVectors : List Vector :=
         nm ++ "owner_is_required_and_creator_is_legacy"],
     one "file" "files" "FileResourceSchema" File.wireFields []
       [mt ++ "file_and_skill_bodies_carry_no_owner"],
-    one "skill" "skills" "SkillDetailSchema" Skill.wireFields []
+    one "skill" "skills" "SkillDetailSchema" Skill.wireFields Skill.wireOptionalFields
       [mt ++ "file_and_skill_bodies_carry_no_owner"]]
 
 /-! ## Contract constants -/
@@ -416,30 +419,50 @@ def rawAssignmentsJson (b : Grant.RawAssignments) : Json :=
   Json.mkObj ([("files", Json.arr (b.files.map fun e =>
       Json.mkObj [("fileId", e.fileId), ("access", e.access)]).toArray),
     ("skillIds", strs b.skillIds), ("connectorIds", strs b.connectorIds)] ++
+    (if b.storageGrants.isEmpty then [] else
+      [("storageGrants", Json.arr (b.storageGrants.map fun g =>
+        Json.mkObj [("connectionId", g.connectionId), ("prefix", g.pathPrefix),
+          ("access", g.access)]).toArray)]) ++
     b.extra.map fun k => (k, Json.bool true))
 
+def storageGrantJson (g : Grant.StorageGrant) : Json :=
+  Json.mkObj [("connectionId", g.connection), ("prefix", g.pathPrefix),
+    ("access", WireEnum.toWire g.access)]
+
+/-- The parsed body: the assignment and its storage grants (`[]` when the key is left out). -/
+def assignmentsBodyJson (a : Grant.Assignments) (gs : List Grant.StorageGrant) : Json :=
+  Json.mkObj [("files", Json.arr (a.files.map fileEntryJson).toArray),
+    ("skillIds", strs a.skills), ("connectorIds", strs a.connectors),
+    ("storageGrants", Json.arr (gs.map storageGrantJson).toArray)]
+
 def rawBodies : List Grant.RawAssignments :=
-  [⟨[], [], [], []⟩,
-   ⟨[⟨"f1", "read"⟩, ⟨"f2", "read-write"⟩], ["k1"], ["c1"], []⟩,
-   ⟨[⟨"f1", "read"⟩, ⟨"f1", "read-write"⟩], ["k1", "k1"], ["c1", "c1"], []⟩,
-   ⟨[⟨"", "read"⟩], [], [], []⟩,
-   ⟨[⟨"f1", "write"⟩], [], [], []⟩,
-   ⟨[⟨"f1", "READ"⟩], [], [], []⟩,
-   ⟨[⟨"f1", "readWrite"⟩], [], [], []⟩,
-   ⟨[⟨"f1", ""⟩], [], [], []⟩,
-   ⟨[], [""], [], []⟩,
-   ⟨[], [], [""], []⟩,
-   ⟨[], ["k1"], ["c1"], ["policy"]⟩,
-   ⟨[], [], [], ["grants"]⟩,
-   ⟨[⟨" ", "read"⟩], [" "], [" "], []⟩]
+  [⟨[], [], [], [], []⟩,
+   ⟨[⟨"f1", "read"⟩, ⟨"f2", "read-write"⟩], ["k1"], ["c1"], [], []⟩,
+   ⟨[⟨"f1", "read"⟩, ⟨"f1", "read-write"⟩], ["k1", "k1"], ["c1", "c1"], [], []⟩,
+   ⟨[⟨"", "read"⟩], [], [], [], []⟩,
+   ⟨[⟨"f1", "write"⟩], [], [], [], []⟩,
+   ⟨[⟨"f1", "READ"⟩], [], [], [], []⟩,
+   ⟨[⟨"f1", "readWrite"⟩], [], [], [], []⟩,
+   ⟨[⟨"f1", ""⟩], [], [], [], []⟩,
+   ⟨[], [""], [], [], []⟩,
+   ⟨[], [], [""], [], []⟩,
+   ⟨[], ["k1"], ["c1"], ["policy"], []⟩,
+   ⟨[], [], [], ["grants"], []⟩,
+   ⟨[⟨" ", "read"⟩], [" "], [" "], [], []⟩,
+   ⟨[], [], [], [], [⟨"0b9f1c7e-2d4a-4c1e-9a3b-5e6f7a8b9c0d", "reports/", "read"⟩,
+     ⟨"0B9F1C7E-2D4A-4C1E-9A3B-5E6F7A8B9C0D", "a", "read-write"⟩]⟩,
+   ⟨[], [], [], [], [⟨"sc1", "reports/", "read"⟩]⟩,
+   ⟨[], [], [], [], [⟨"0b9f1c7e-2d4a-4c1e-9a3b-5e6f7a8b9c0d", "", "read"⟩]⟩,
+   ⟨[], [], [], [], [⟨"0b9f1c7e-2d4a-4c1e-9a3b-5e6f7a8b9c0d", "reports/", "write"⟩]⟩,
+   ⟨[], [], [], [], [⟨"0b9f1c7e-2d4a-4c1e-9a3b-5e6f7a8b9c0d", "reports/", "READ"⟩]⟩]
 
 def assignmentBodyVectors : List Vector :=
   rawBodies.map fun b =>
     { id := s!"assignments-body/{(rawAssignmentsJson b).compress}",
       input := Json.mkObj [("body", rawAssignmentsJson b)],
-      expected := match Grant.assignmentsBody b with
-        | some a => Json.mkObj [("valid", true), ("value", assignmentsJson a)]
-        | none => Json.mkObj [("valid", false)],
+      expected := match Grant.assignmentsBody b, Grant.storageGrantsBody b with
+        | some a, some gs => Json.mkObj [("valid", true), ("value", assignmentsBodyJson a gs)]
+        | _, _ => Json.mkObj [("valid", false)],
       witnesses := [inv ++ "accepted_assignment_body_keeps_every_id"] }
 
 /-! ## The agent field parsers -/

@@ -79,7 +79,7 @@ example :
       [{ key := some "u-1", payload := "redelivered" },
        { key := some "u-2", payload := "second" },
        { key := none, payload := "summary" }] := by
-  decide
+  decide +kernel
 
 /-- The same log, through the migration's own `SELECT`. The two agree, which is the theorem above
 exercised on the case it exists for rather than only stated. -/
@@ -95,8 +95,8 @@ example :
   -- `mergeSort` is defined by well-founded recursion, so it does not reduce under `decide`; the
   -- sort is discharged by the lemma above and the fold itself is then evaluated.
   unfold migrated
-  rw [mergeSort_of_nonDecreasing _ (by decide)]
-  decide
+  rw [mergeSort_of_nonDecreasing _ (by decide +kernel)]
+  decide +kernel
 
 /-- **A migrated stream is resumable**: reading the stream the migration wrote answers exactly the
 history the old `load()` answered, rather than `none`.
@@ -124,7 +124,7 @@ theorem the_main_transcript_lands_under_the_project_key (projectKey : String) :
   simp [claudeStreamKey]
 
 /-- A subagent transcript lands under its own key, distinct from the main one. -/
-example : claudeStreamKey "w1" "subagents/agent-1" ≠ claudeStreamKey "w1" "" := by decide
+example : claudeStreamKey "w1" "subagents/agent-1" ≠ claudeStreamKey "w1" "" := by decide +kernel
 
 /-! ## The public transcript read (Owner decision on #305, ADR-0071) -/
 

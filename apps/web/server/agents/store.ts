@@ -48,11 +48,15 @@
  * workspace is reported as absent, not as forbidden — a 403 would confirm that the id exists,
  * which is an existence oracle across a tenant boundary and is the same leak in a quieter form.
  */
-import type {
-  AgentRepository as CoreAgentRepository,
-  AgentRepositoryProvider as CoreAgentRepositoryProvider,
-  AgentStoredPolicy as CoreAgentStoredPolicy,
-  WorkspaceScopeResolver as CoreWorkspaceScopeResolver,
+import {
+  UnknownWorkspaceError,
+  type AgentResourceAssignments,
+  type AgentResourceAssignmentsInput,
+  type ReplaceAgentResourcesOutcome,
+  type AgentRepository as CoreAgentRepository,
+  type AgentRepositoryProvider as CoreAgentRepositoryProvider,
+  type AgentStoredPolicy as CoreAgentStoredPolicy,
+  type WorkspaceScopeResolver as CoreWorkspaceScopeResolver,
 } from '@agent-workspace/core/db';
 
 import type { AgentPolicy, CreateAgentInput, UpdateAgentPatch } from '../../contracts/agents';
@@ -71,6 +75,21 @@ export type CreateAgentOutcome =
   | { readonly kind: 'name-conflict'; readonly name: string }
   | { readonly kind: 'unknown-model-connection'; readonly modelConnectionId: string }
   | { readonly kind: 'unknown-runtime-profile'; readonly runtimeProfileId: string };
+
+export type { AgentResourceAssignments, AgentResourceAssignmentsInput };
+
+/**
+ * What creating an agent with its resource assignments can produce (W2-3): the create's refusals,
+ * then the assignment's. Every refusal leaves no row — the two writes are one transaction.
+ */
+export type CreateAgentWithAssignmentsOutcome =
+  | {
+      readonly kind: 'created';
+      readonly agent: AgentRecord;
+      readonly assignments: AgentResourceAssignments;
+    }
+  | Exclude<CreateAgentOutcome, { readonly kind: 'created' }>
+  | Exclude<ReplaceAgentResourcesOutcome, { readonly kind: 'updated' | 'not-found' }>;
 
 /** What updating an agent can produce. `not-found` covers "another workspace's id", by design. */
 export type UpdateAgentOutcome =
@@ -106,6 +125,12 @@ export interface WorkspaceAgentStore {
     input: CreateAgentInput,
     owner: { readonly principalId: string; readonly userId: string | null },
   ): Promise<CreateAgentOutcome>;
+  /** {@link create} and an assignment replace as one write: a refused assignment leaves no row. */
+  createWithAssignments(
+    input: CreateAgentInput,
+    owner: { readonly principalId: string; readonly userId: string | null },
+    assignments: AgentResourceAssignmentsInput,
+  ): Promise<CreateAgentWithAssignmentsOutcome>;
   update(id: string, patch: UpdateAgentPatch): Promise<UpdateAgentOutcome>;
   delete(id: string): Promise<DeleteAgentOutcome>;
   /** `null` writes back to "compiled" — a `PUT` may not partially replace a stored policy. */
@@ -120,38 +145,6 @@ export interface AgentStoreProvider {
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 // The PostgreSQL implementation of the port above, as an adapter onto the repository layer.
 // ─────────────────────────────────────────────────────────────────────────────────────────────
-
-/**
- * Thrown when a store is asked for a workspace no `workspaces` row names.
- *
- * Declared here rather than imported from `@agent-workspace/core/db` for a reason that is
- * mechanical and not stylistic: **every reference to core in this file is a type**, and `import
- * type` is erased before any bundler sees it. `apps/web/instrumentation.ts` is compiled for the
- * edge runtime as well as for Node — its own header records the failure this caused once, where a
- * top-level core import dragged `pg` and `node:fs` into an edge bundle and turned every `/api/**`
- * route into a 500. A value import here would reach the edge through
- * `instrumentation.ts → memory-store.ts → store.ts`. So the one value this adapter needs is
- * defined in this file, and core stays type-only.
- *
- * It is a throw and not an outcome because it is not a request the caller can correct. The
- * workspace id reaching {@link AgentStoreProvider.forWorkspace} has already been checked against a
- * membership row by the composition root, so its workspace not existing means the row was deleted
- * underneath a live session — a 500 with a name, rather than an empty list that reads as "you have
- * no agents" (ADR-0015: a check that cannot run fails; it does not fall through to the answer that
- * looks like success).
- */
-export class UnknownWorkspaceError extends Error {
-  public readonly workspaceId: string;
-
-  public constructor(workspaceId: string) {
-    super(
-      `no workspace has id ${workspaceId}; an agent store cannot be scoped to a workspace that ` +
-        'does not exist',
-    );
-    this.name = 'UnknownWorkspaceError';
-    this.workspaceId = workspaceId;
-  }
-}
 
 /**
  * What {@link createRepositoryAgentStoreProvider} needs, and the whole of it.
@@ -200,6 +193,12 @@ export function createRepositoryAgentStoreProvider(
       const repository = (): Promise<CoreAgentRepository> => {
         pending ??= (async (): Promise<CoreAgentRepository> => {
           const scope = await dependencies.scopes.forWorkspaceId(workspaceId);
+          // A throw and not an outcome: this is not a request the caller can correct. The workspace
+          // id reaching `forWorkspace` has already been checked against a membership row by the
+          // composition root, so its workspace not existing means the row was deleted underneath a
+          // live session — a 500 with a name, rather than an empty list that reads as "you have no
+          // agents" (ADR-0015: a check that cannot run fails; it does not fall through to the
+          // answer that looks like success).
           if (scope === null) throw new UnknownWorkspaceError(workspaceId);
           return dependencies.repositories.forScope(scope);
         })();
@@ -219,6 +218,16 @@ export function createRepositoryAgentStoreProvider(
             ownerPrincipalId: owner.principalId,
             createdBy: owner.userId,
           });
+        },
+        async createWithAssignments(
+          input,
+          owner,
+          assignments,
+        ): Promise<CreateAgentWithAssignmentsOutcome> {
+          return (await repository()).createWithAssignments(
+            { ...input, ownerPrincipalId: owner.principalId, createdBy: owner.userId },
+            assignments,
+          );
         },
         async update(id: string, patch: UpdateAgentPatch): Promise<UpdateAgentOutcome> {
           return (await repository()).update(id, patch);

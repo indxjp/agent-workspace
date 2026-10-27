@@ -3,7 +3,7 @@
  * release, which a plain `render` never does. The registry lookup (`docker buildx imagetools
  * inspect`) is the one call faked here; everything else runs for real.
  */
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -87,5 +87,42 @@ describe('agent-workspace render --upgrade', () => {
     await runRenderCommand([target], { environment: {}, out: () => undefined });
     const env = parseEnvironment(await readFile(path.join(target, '.env'), 'utf8'));
     expect(env['WEB_IMAGE']).toBe(images.web);
+  });
+});
+
+// @story US-STO-10
+describe('agent-workspace render on a project made before AW_STORAGE_URL', () => {
+  it("[US-STO-10][api][cli] an existing project's .env keeps its legacy storage lines after render", async () => {
+    const target = await localProject();
+    const envPath = path.join(target, '.env');
+    const legacy = [
+      'AW_FILE_STORAGE_ROOT=/var/lib/agent-workspace/files',
+      'AW_SKILL_STORAGE_ROOT=/var/lib/agent-workspace/skills',
+      'AW_SESSION_TRANSCRIPT_ROOT=/var/lib/agent-workspace/sessions',
+      'OBJECT_STORAGE_FORCE_PATH_STYLE=false',
+    ];
+    const rendered = await readFile(envPath, 'utf8');
+    const before = rendered.replace(/^AW_STORAGE_URL=.*$/mu, legacy.join('\n'));
+    expect(before).not.toContain('AW_STORAGE_URL=');
+    await writeFile(envPath, before);
+
+    await runRenderCommand([target], {
+      environment: {},
+      out: () => undefined,
+      err: () => undefined,
+    });
+
+    expect(await readFile(envPath, 'utf8')).toBe(before);
+    const compose = await readFile(path.join(target, 'compose.yaml'), 'utf8');
+    // Each old root is only forwarded, so a leftover value draws the warning and names no place.
+    for (const name of [
+      'AW_FILE_STORAGE_ROOT',
+      'AW_SKILL_STORAGE_ROOT',
+      'AW_SESSION_TRANSCRIPT_ROOT',
+    ]) {
+      expect(compose.match(new RegExp(`^ +${name}: .*$`, 'gmu'))).toEqual([
+        `      ${name}: \${${name}:-}`,
+      ]);
+    }
   });
 });

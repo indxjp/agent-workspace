@@ -3,14 +3,16 @@
 // contract-playbook: split a Japanese contract into 第N条 clauses and run the playbook's
 // deterministic detectors over it. Node alone, no packages, so it runs inside a run's sandbox.
 //
-//   node clauses.mjs split <contract.docx | paragraphs.json | ->                    → { title, preamble, clauses }
-//   node clauses.mjs check <contract.docx | paragraphs.json | -> [--playbook <dir>] → { title, clauses, findings }
+//   node clauses.mjs split <paragraphs.json | ->                    → { title, preamble, clauses }
+//   node clauses.mjs check <paragraphs.json | -> [--playbook <dir>] → { title, clauses, findings }
+//   node clauses.mjs redline <paragraphs.json> --playbook <dir>
+//                                       → the draft plus 【修正案】, printed to stdout only
 //
-// A .docx is read here (a small zip + word/document.xml reader), so the agent runs one command with
-// no pipe (run_skill_script passes no stdin) and the skill needs no sibling directory. The input may
-// also be what office-reader prints for a .docx (`{ paragraphs: [{ style, text }] }`), from a file or stdin:
+// This script opens no Word file: the input is what the built-in office-reader skill prints for a
+// .docx (`{ paragraphs: [{ style, text }] }`), saved to a file, and `redline` prints the same shape,
+// which office-reader's `ooxml.mjs write` turns back into a .docx:
 //
-//   node scripts/clauses.mjs check contracts/契約書.docx --playbook playbook
+//   node scripts/clauses.mjs check drafts/契約書.json --playbook playbook
 //
 // The detectors are deliberately simple: regular expressions and keywords over each clause, each
 // explained beside its code. They are not the review. They are the floor under it: a finding with
@@ -20,7 +22,6 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { inflateRawSync } from 'node:zlib';
 
 // ---------- clauses ----------
 
@@ -489,62 +490,35 @@ export function check(paragraphs, playbook = null) {
   };
 }
 
+// ---------- redline ----------
+
+/**
+ * The draft's paragraphs followed by a 【修正案】 block: one paragraph per finding the playbook says
+ * must be raised (or rates 高), holding the playbook's standard clause. The agent tailors the
+ * parties and amounts in its table; this file is the draft with the standard wording attached.
+ */
+export function redline(paragraphs, result) {
+  const proposals = result.findings.filter(
+    (finding) => finding.standard !== undefined && (finding.mustFlag || finding.severity === '高'),
+  );
+  if (proposals.length === 0) return paragraphs;
+  return [
+    ...paragraphs,
+    { style: null, text: '【修正案】' },
+    ...proposals.map((finding) => ({
+      style: null,
+      text: `【修正案 ${finding.rule}】${finding.clause ?? '欠落'} ${finding.standard}`,
+    })),
+  ];
+}
+
 // ---------- command line ----------
 
-const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
-
-function decodeXml(value) {
-  return value.replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos);/giu, (_, entity) => {
-    if (entity[0] !== '#') return ENTITIES[entity];
-    return String.fromCodePoint(
-      entity[1] === 'x' ? Number.parseInt(entity.slice(2), 16) : Number(entity.slice(1)),
-    );
-  });
-}
-
-/** `word/document.xml` of a .docx (a zip: stored or deflated entries), as text. */
-function documentXml(buffer) {
-  let end = buffer.length - 22;
-  while (end >= 0 && buffer.readUInt32LE(end) !== 0x06054b50) end -= 1;
-  if (end < 0) throw new Error('not a .docx file (no end of central directory)');
-  let offset = buffer.readUInt32LE(end + 16);
-  for (let index = buffer.readUInt16LE(end + 10); index > 0; index -= 1) {
-    if (buffer.readUInt32LE(offset) !== 0x02014b50) throw new Error('corrupt central directory');
-    const method = buffer.readUInt16LE(offset + 10);
-    const size = buffer.readUInt32LE(offset + 20);
-    const nameLength = buffer.readUInt16LE(offset + 28);
-    const extraLength = buffer.readUInt16LE(offset + 30);
-    const commentLength = buffer.readUInt16LE(offset + 32);
-    const local = buffer.readUInt32LE(offset + 42);
-    const name = buffer.toString('utf8', offset + 46, offset + 46 + nameLength);
-    if (name === 'word/document.xml') {
-      const start = local + 30 + buffer.readUInt16LE(local + 26) + buffer.readUInt16LE(local + 28);
-      const data = buffer.subarray(start, start + size);
-      if (method !== 0 && method !== 8)
-        throw new Error(`${name}: unsupported compression ${method}`);
-      return (method === 0 ? data : inflateRawSync(data)).toString('utf8');
-    }
-    offset += 46 + nameLength + extraLength + commentLength;
-  }
-  throw new Error('not a .docx file (no word/document.xml)');
-}
-
-/** The non-empty body paragraphs of a .docx: `{ style, text }`, as office-reader prints them. */
-function docxParagraphs(buffer) {
-  return [...documentXml(buffer).matchAll(/<w:p\b[^>]*?(?:\/>|>([\s\S]*?)<\/w:p>)/gu)]
-    .map((match) => {
-      const inner = match[1] ?? '';
-      const style = /<w:pStyle\b[^>]*?\sw:val="([^"]*)"/u.exec(inner);
-      const text = [...inner.matchAll(/<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>/gu)]
-        .map((part) => decodeXml(part[1]))
-        .join('');
-      return { style: style ? decodeXml(style[1]) : null, text };
-    })
-    .filter((paragraph) => paragraph.text.trim() !== '');
-}
-
 function readParagraphs(source) {
-  if (source?.endsWith('.docx')) return docxParagraphs(readFileSync(source));
+  if (source?.endsWith('.docx'))
+    throw new Error(
+      `${source} is a Word file: read it with the office-reader skill (ooxml.mjs docx) and pass the JSON it prints`,
+    );
   const text = readFileSync(source === undefined || source === '-' ? 0 : source, 'utf8');
   const parsed = JSON.parse(text);
   if (!Array.isArray(parsed?.paragraphs))
@@ -567,9 +541,16 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
     } else if (command === 'check') {
       const playbook = playbookDir === undefined ? null : loadPlaybook(playbookDir);
       process.stdout.write(`${JSON.stringify(check(readParagraphs(source), playbook), null, 2)}\n`);
+    } else if (command === 'redline') {
+      if (source === undefined || playbookDir === undefined)
+        throw new Error('usage: clauses.mjs redline <paragraphs.json> --playbook <dir>');
+      const paragraphs = readParagraphs(source);
+      const proposed = redline(paragraphs, check(paragraphs, loadPlaybook(playbookDir)));
+      // Printed only: the redline reaches disk through the agent's gated Write, never from here.
+      process.stdout.write(`${JSON.stringify({ paragraphs: proposed }, null, 2)}\n`);
     } else {
       process.stderr.write(
-        'usage: clauses.mjs split <file.docx|paragraphs.json|-> | check <file.docx|paragraphs.json|-> [--playbook <dir>]\n',
+        'usage: clauses.mjs split <paragraphs.json|-> | check <paragraphs.json|-> [--playbook <dir>] | redline <paragraphs.json> --playbook <dir>\n',
       );
       process.exitCode = 2;
     }

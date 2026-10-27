@@ -13,12 +13,15 @@ import {
   createClaudeAgentSdkEngine,
   type ClaudeRun,
   type RunDeps,
-} from '@agent-workspace/engine-claude-agent-sdk';
-import { MASTRA_SKILL_SCRIPT_INPUT, compileMastraRun } from '@agent-workspace/engine-mastra';
+} from '@agent-workspace/engine-claude-agent-sdk/testing';
+import {
+  MASTRA_SKILL_SCRIPT_INPUT,
+  compileMastraRun,
+} from '@agent-workspace/engine-mastra/testing';
 import {
   OPENAI_AGENTS_SKILL_SCRIPT_INPUT,
   compileOpenAiAgentsRun,
-} from '@agent-workspace/engine-openai-agents';
+} from '@agent-workspace/engine-openai-agents/testing';
 import {
   RUN_SKILL_SCRIPT_INPUT_JSON_SCHEMA,
   RUN_SKILL_SCRIPT_TOOL,
@@ -103,6 +106,8 @@ function claudeOffered(candidate: EngineRunRequest): SkillScriptSetup | undefine
   const run: ClaudeRun = {
     events: (async function* () {})(),
     sessionDurability: () => ({ durable: false, reason: 'not run' }),
+    approvalRequest: () => null,
+    handoff: () => null,
     abort: () => undefined,
   };
   createClaudeAgentSdkEngine((_request, deps) => {

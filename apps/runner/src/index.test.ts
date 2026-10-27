@@ -4,11 +4,11 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import type { RunRequest } from '@agent-workspace/core';
 import { createScriptedEngine } from '@agent-workspace/engine/testing';
 
 import { configureEngineModulesForTests, resetEngineModules } from './engines.js';
 import { PACKAGE_NAME, startAgentInThisContainer } from './index.js';
+import type { ResolvedRunRequest } from './resources.js';
 
 describe('@agent-workspace/runner', () => {
   it('is wired into the pnpm workspace', () => {
@@ -34,12 +34,12 @@ describe('startAgentInThisContainer', () => {
       id: registered,
     };
     configureEngineModulesForTests({
-      [registered]: () => Promise.resolve({ CLAUDE_AGENT_SDK_ENGINE_ADAPTER: noSkills }),
+      [registered]: () => Promise.resolve({ createClaudeAgentSdkEngine: () => noSkills }),
     });
     const root = mkdtempSync(path.join(tmpdir(), 'runner-compile-first-'));
     roots.push(root);
     const cwd = path.join(root, 'tenant-a', 'session');
-    const request: RunRequest = {
+    const request: ResolvedRunRequest = {
       runId: '6f1d0d0a-8b0a-4a1f-9b3e-1c2d3e4f5a6b',
       sessionId: '2b0f5f2a-91a4-4a0e-9a1a-9f7a1b2c3d4e',
       cwd,

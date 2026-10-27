@@ -10,6 +10,10 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./src/testing.ts",
+      "default": "./dist/testing.js"
     }
   },
   "scripts": {
@@ -21,15 +25,15 @@
   },
   "dependencies": {
     "@indx-workspace/contracts": "workspace:*",
-    "@agent-workspace/core": "workspace:*",
     "@agent-workspace/engine": "workspace:*",
-    "@anthropic-ai/claude-agent-sdk": "0.3.296",
-    "zod": "4.6.6"
+    "@agent-workspace/run-protocol": "workspace:*",
+    "@anthropic-ai/claude-agent-sdk": "0.3.310",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@typescript/native": "npm:typescript@7.0.2",
     "typescript": "npm:@typescript/typescript6@6.0.2",
-    "vitest": "5.0.3"
+    "vitest": "5.0.5"
   },
   "nx": {
     "targets": {

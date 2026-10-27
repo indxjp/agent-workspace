@@ -45,8 +45,15 @@ export const CAPABILITY_TITLES: Readonly<Record<Capability, string>> = {
 };
 
 /**
- * `ok`: the SDK does it. `work`: it works with code you write (an MCP server, a skill script, a
- * second run). `gap`: not provided. `na`: the use case does not need it.
+ * The rubric every cell is scored by:
+ *
+ * - `ok`: the platform does it; the use case writes no code of its own for this capability.
+ * - `work`: the use case does it with code it ships (an MCP server, a skill script, a backend step,
+ *   a second run) and its offline suite exercises that code; or the platform does most of it and
+ *   the use case covers the missing part itself.
+ * - `gap`: the use case does not do it: the step is left to a person, to a system the gallery does
+ *   not build, or is impossible today.
+ * - `na`: the use case does not need it.
  */
 export type Verdict = 'ok' | 'work' | 'gap' | 'na';
 export type EvidenceKind = 'contract' | 'probe' | 'live' | 'source';

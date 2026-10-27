@@ -105,12 +105,20 @@ export {
   findActiveBrowserTokenByHash,
 } from './browser-tokens.js';
 export { createDatabaseOAuthTokenRepositoryProvider } from './oauth-tokens.js';
+export { createDatabaseFileTextRepositoryProvider } from './file-texts.js';
 export { createDatabaseMcpServerRepositoryProvider } from './mcp-servers.js';
 export { createDatabaseModelConnectionRepositoryProvider } from './model-connections.js';
 export { createDatabaseProjectFileRepositoryProvider } from './project-files.js';
 export { createDatabaseProjectMcpServerRepositoryProvider } from './project-mcp-servers.js';
 export { createDatabaseProjectRepositoryProvider } from './projects.js';
 export { createDatabaseResourceCatalogRepositoryProvider } from './resource-catalogs.js';
+export { createInMemoryCatalog } from './memory-catalog.js';
+export { createDatabaseStorageConnectionRepositoryProvider } from './storage-connections.js';
+export { createInMemoryStorageConnectionRepositoryProvider } from './memory-storage-connections.js';
+export {
+  createDatabaseStorageMigrationRunRepository,
+  createInMemoryStorageMigrationRuns,
+} from './storage-migration-runs.js';
 export {
   createDatabaseShareRepositoryProvider,
   createDatabaseShareViewRepositoryProvider,
@@ -124,12 +132,14 @@ export {
 } from './runs.js';
 export { createDatabaseRunTokenRepositoryProvider } from './run-tokens.js';
 export { createDatabaseRunFeedbackRepositoryProvider } from './run-feedback.js';
+export { createDatabaseBuilderToolCallRepositoryProvider } from './builder-tool-calls.js';
 export { createDatabaseEndpointClientRepositoryProvider } from './endpoint-clients.js';
 export { createDatabaseAgentVersionEvaluationRepositoryProvider } from './agent-version-evaluations.js';
 export { createDatabaseSessionStateRepositoryProvider } from './session-state.js';
 export { createDatabaseSessionTranscriptRepositoryProvider } from './session-transcripts.js';
 export { createDatabaseRuntimeVerificationRepositoryProvider } from './runtime-verifications.js';
 export { createDatabaseSurfaceSessionKeyRepositoryProvider } from './surface-session-keys.js';
+export { createDatabaseTriggerRepositoryProvider } from './triggers.js';
 // Added by W3-CP-06, outside this task's `Owns` cell — declared on its PR. `scope-forgery.test.ts`
 // derives every `forScope`-shaped factory `repositories/index.ts` exports and fails unless it is
 // also reachable here, so `createDatabaseRuntimeProfileRepositoryProvider` has nowhere else to go.

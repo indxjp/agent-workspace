@@ -20,22 +20,19 @@ import {
 } from '@indx-workspace/contracts/endpoint-clients';
 import type { ZodError } from 'zod';
 
+import { applicationContext } from '../application-context';
 import {
   refusingLocalRuntimeKey,
   reservedKeyNameRefusal,
 } from '../cli-auth/local-runtime-key-guard';
 import { decide } from '../rbac/decide';
-import {
-  authorise,
-  problem,
-  readJsonBody,
-  type ApiResult,
-  type OwnershipResolver,
-} from '../rbac/http';
+import { problemWithDetail as problem, readJsonBody } from '../http/result';
+import { authorise, type OwnershipResolver } from '../rbac/http';
+import type { ApiResult } from '../http/result';
 import type { Principal } from '../rbac/principal';
 import { mintClientSecret } from '../oauth/tokens';
 import { closeEndpointToolSandbox } from '../tool-endpoint/close';
-import { currentEndpointClientsRuntime, type EndpointClientsRuntime } from './runtime';
+import type { EndpointClientsRuntime } from './runtime';
 
 const notConfigured = (): ApiResult =>
   problem(
@@ -68,7 +65,7 @@ function invalidField(error: ZodError): ApiResult {
  */
 function ownershipOfClient(id: string): OwnershipResolver {
   return async (principal: Principal) => {
-    const runtime = currentEndpointClientsRuntime();
+    const runtime = applicationContext()?.endpointClients ?? null;
     if (runtime === null) return { kind: 'refuse', result: notConfigured() };
     if (!isUuid(id)) return { kind: 'refuse', result: clientNotFound(id) };
     const client = await runtime.get(principal.workspaceId, id);
@@ -121,7 +118,7 @@ const bodyOf = (client: EndpointClientResource) => ({ endpointClient: client });
 
 export async function list(request: Request): Promise<ApiResult> {
   return authorise(request, 'not-applicable', async ({ principal }) => {
-    const runtime = currentEndpointClientsRuntime();
+    const runtime = applicationContext()?.endpointClients ?? null;
     if (runtime === null) return notConfigured();
     return {
       status: 200,
@@ -132,7 +129,7 @@ export async function list(request: Request): Promise<ApiResult> {
 
 export async function create(request: Request): Promise<ApiResult> {
   return authorise(request, 'not-applicable', async ({ principal }) => {
-    const runtime = currentEndpointClientsRuntime();
+    const runtime = applicationContext()?.endpointClients ?? null;
     if (runtime === null) return notConfigured();
     if (principal.via === 'api-key') return apiKeyRefusal();
     const raw = await readJsonBody(request);
@@ -140,6 +137,11 @@ export async function create(request: Request): Promise<ApiResult> {
     const parsed = CreateEndpointClientRequestSchema.safeParse(raw.value);
     if (!parsed.success) return invalidField(parsed.error);
     const input = parsed.data;
+    // A builder token carries the consenting member's whole role, so only an owner or admin
+    // creates one; otherwise a builder could phish an owner's consent onto their own redirect.
+    if (input.kind === 'builder' && principal.role !== 'owner' && principal.role !== 'admin') {
+      return problem(403, 'forbidden', 'only an owner or admin creates a builder client.');
+    }
 
     const refused = await unrunnableAgent(runtime, principal, input.agentIds);
     if (refused !== null) return agentNotRunnable(refused);
@@ -170,7 +172,7 @@ export async function create(request: Request): Promise<ApiResult> {
 export async function get(request: Request, id: unknown): Promise<ApiResult> {
   const clientId = String(id);
   return authorise(request, ownershipOfClient(clientId), async ({ principal }) => {
-    const runtime = currentEndpointClientsRuntime();
+    const runtime = applicationContext()?.endpointClients ?? null;
     if (runtime === null) return notConfigured();
     const client = await runtime.get(principal.workspaceId, clientId);
     return client === null ? clientNotFound(clientId) : { status: 200, body: bodyOf(client) };
@@ -180,7 +182,7 @@ export async function get(request: Request, id: unknown): Promise<ApiResult> {
 export async function update(request: Request, id: unknown): Promise<ApiResult> {
   const clientId = String(id);
   return authorise(request, ownershipOfClient(clientId), async ({ principal }) => {
-    const runtime = currentEndpointClientsRuntime();
+    const runtime = applicationContext()?.endpointClients ?? null;
     if (runtime === null) return notConfigured();
     const raw = await readJsonBody(request);
     if (!raw.ok) return raw.result;
@@ -194,6 +196,18 @@ export async function update(request: Request, id: unknown): Promise<ApiResult> 
       return domainProblem(
         'endpoint_client_revoked',
         'a revoked endpoint client cannot be changed.',
+      );
+    }
+    if (client.kind === 'builder' && principal.role !== 'owner' && principal.role !== 'admin') {
+      return problem(403, 'forbidden', 'only an owner or admin changes a builder client.');
+    }
+    if (
+      client.kind === 'builder' &&
+      (patch.agentIds !== undefined || (patch.toolNames !== undefined && patch.toolNames !== null))
+    ) {
+      return domainProblem(
+        'endpoint_client_invalid',
+        'a builder client names no agent and no toolNames.',
       );
     }
     if (client.kind === 'a2a-agent') {
@@ -232,7 +246,7 @@ export async function update(request: Request, id: unknown): Promise<ApiResult> 
 export async function revoke(request: Request, id: unknown): Promise<ApiResult> {
   const clientId = String(id);
   return authorise(request, ownershipOfClient(clientId), async ({ principal }) => {
-    const runtime = currentEndpointClientsRuntime();
+    const runtime = applicationContext()?.endpointClients ?? null;
     if (runtime === null) return notConfigured();
     const before = await runtime.get(principal.workspaceId, clientId);
     if (before === null) return clientNotFound(clientId);
@@ -270,7 +284,7 @@ export async function mintKey(request: Request, id: unknown): Promise<ApiResult>
   const clientId = String(id);
   const ownership = refusingLocalRuntimeKey(ownershipOfClient(clientId));
   return authorise(request, ownership, async ({ principal }) => {
-    const runtime = currentEndpointClientsRuntime();
+    const runtime = applicationContext()?.endpointClients ?? null;
     if (runtime === null) return notConfigured();
     const raw = await readJsonBody(request);
     if (!raw.ok) return raw.result;
@@ -278,6 +292,15 @@ export async function mintKey(request: Request, id: unknown): Promise<ApiResult>
     if (reserved !== null) return reserved;
     const parsed = MintEndpointKeyRequestSchema.safeParse(raw.value);
     if (!parsed.success) return invalidField(parsed.error);
+
+    // A builder client is reached by OAuth consent alone; a static key would carry no member.
+    const client = await runtime.get(principal.workspaceId, clientId);
+    if (client?.kind === 'builder') {
+      return domainProblem(
+        'endpoint_client_invalid',
+        'a builder client authorizes through OAuth and cannot mint keys.',
+      );
+    }
 
     const outcome = await runtime.mintKey(principal.workspaceId, clientId, {
       name: parsed.data.name,
@@ -336,7 +359,7 @@ export async function rotateSecret(request: Request, id: unknown): Promise<ApiRe
   const clientId = String(id);
   const ownership = refusingLocalRuntimeKey(ownershipOfClient(clientId));
   return authorise(request, ownership, async ({ principal }) => {
-    const runtime = currentEndpointClientsRuntime();
+    const runtime = applicationContext()?.endpointClients ?? null;
     if (runtime === null) return notConfigured();
     if (principal.via === 'api-key') {
       return problem(
@@ -344,6 +367,12 @@ export async function rotateSecret(request: Request, id: unknown): Promise<ApiRe
         'api_key_not_permitted',
         'An API key cannot rotate an OAuth client secret. Use a session.',
       );
+    }
+    // A rotated secret mints tokens that act as a consenting member, so a builder client's
+    // credentials are an owner's or admin's to change, as its creation is.
+    const existing = await runtime.get(principal.workspaceId, clientId);
+    if (existing?.kind === 'builder' && principal.role !== 'owner' && principal.role !== 'admin') {
+      return problem(403, 'forbidden', 'only an owner or admin changes a builder client.');
     }
     const minted = await mintClientSecret();
     const outcome = await runtime.rotateSecret(principal.workspaceId, clientId, minted.secretHash);

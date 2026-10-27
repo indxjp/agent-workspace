@@ -135,7 +135,7 @@ theorem every_composite_key_is_tenant_paired (t : TableName) (fk : ForeignKey)
     (hfk : fk ∈ (catalogue t).foreignKeys) (hlen : 2 ≤ fk.columns.length) :
     isPaired catalogue t fk = true := by
   have h : (allTables.all fun t => (catalogue t).foreignKeys.all fun fk =>
-      decide (fk.columns.length < 2) || isPaired catalogue t fk) = true := by decide
+      decide (fk.columns.length < 2) || isPaired catalogue t fk) = true := by decide +kernel
   have := List.all_eq_true.mp (List.all_eq_true.mp h t (WireEnum.complete t)) fk hfk
   simpa [Nat.not_lt.mpr hlen] using this
 
@@ -160,7 +160,7 @@ theorem no_cross_workspace_reference (st : State) (hc : Current.consistent st = 
     (htarget : (catalogue fk.refTable).tenantColumn?.isSome = true)
     (href : References catalogue st t fk r r') :
     tenantOf catalogue t r = tenantOf catalogue fk.refTable r' :=
-  no_cross_tenant_reference catalogue (by decide) st (core_of_current hc) htarget href
+  no_cross_tenant_reference catalogue (by decide +kernel) st (core_of_current hc) htarget href
 
 /-- In every consistent state of today's whole schema, every row reached from a row by a chain of
 references through tenant-carrying tables belongs to the starting row's workspace. -/
@@ -169,7 +169,7 @@ references through tenant-carrying tables belongs to the starting row's workspac
 theorem reference_chain_stays_in_workspace (st : State) (hc : Current.consistent st = true)
     {t t' : TableName} {r r' : Row} (hpath : TenantPath catalogue st t r t' r') :
     tenantOf catalogue t r = tenantOf catalogue t' r' :=
-  tenant_path_preserves_tenant catalogue (by decide) st (core_of_current hc) hpath
+  tenant_path_preserves_tenant catalogue (by decide +kernel) st (core_of_current hc) hpath
 
 /-- Every state a database with constraint set `P` reaches from empty, by any sequence of
 committed transactions, satisfies `P`, provided the empty database does. -/
@@ -230,7 +230,7 @@ theorem tenant_row_has_exactly_one_workspace (st : State) (hc : Current.consiste
   have hcore := core_of_current hc
   have hfacts : (allTables.all fun t => (catalogue t).tenancy != .scoped ||
       ((catalogue t).isNotNull "workspace_id" && (catalogue t).foreignKeys.any Current.isRootKey)) =
-      true := by decide
+      true := by decide +kernel
   have := List.all_eq_true.mp hfacts t (WireEnum.complete t)
   simp only [hscoped, bne_self_eq_false, Bool.false_or, Bool.and_eq_true] at this
   obtain ⟨hnn, hany⟩ := this
@@ -262,7 +262,7 @@ theorem owner_reference_names_exactly_one_principal (st : State)
   have hfacts : (allTables.all fun t => match Current.ownerColumn? t with
       | none => true
       | some c => (catalogue t).isNotNull "workspace_id" &&
-          (catalogue t).foreignKeys.any (Current.isOwnerKey c)) = true := by decide
+          (catalogue t).foreignKeys.any (Current.isOwnerKey c)) = true := by decide +kernel
   have := List.all_eq_true.mp hfacts t (WireEnum.complete t)
   simp only [hown, Bool.and_eq_true] at this
   obtain ⟨hnn, hany⟩ := this
@@ -281,7 +281,7 @@ theorem owner_is_mandatory_except_for_audit_actors (t : TableName) (c : String)
     (hown : Current.ownerColumn? t = some c) :
     (catalogue t).isNotNull c = (t != .auditEvents) := by
   cases t <;> simp only [Current.ownerColumn?, reduceCtorEq, Option.some.injEq] at hown <;>
-    subst hown <;> decide
+    subst hown <;> decide +kernel
 
 /-- In every consistent state of today's database, every row of a table whose owner column is
 `NOT NULL` has exactly one owning principal, in its own workspace. -/
@@ -312,7 +312,7 @@ theorem shared_checks_agree (r : Row) :
         Current.Configuration.configCheckHolds "projects_default_model_pair" r := by
   constructor
   · have hs : Current.Identity.semantics? "workspaces_default_model_pair" =
-        some (.nullIff "default_model_connection_id" "default_model") := by decide
+        some (.nullIff "default_model_connection_id" "default_model") := by decide +kernel
     rw [hs]
     simp only [Option.all_some, Current.Identity.CheckExpr.holds, Current.Identity.CheckExpr.eval,
       Current.Configuration.configCheckHolds, Current.Configuration.pairHolds]
@@ -333,14 +333,14 @@ theorem target_has_no_cross_workspace_reference (st : State) (hc : Target.consis
     (htarget : (Target.schema fk.refTable).tenantColumn?.isSome = true)
     (href : References Target.schema st t fk r r') :
     tenantOf Target.schema t r = tenantOf Target.schema fk.refTable r' :=
-  no_cross_tenant_reference Target.schema (by decide) st (core_of_target hc) htarget href
+  no_cross_tenant_reference Target.schema (by decide +kernel) st (core_of_target hc) htarget href
 
 /-- In every consistent state of the target, a share's subject column names exactly one row of its
 subject type's table, and that row is in the share's own workspace: a share can no longer name a
 missing subject or another workspace's. -/
 @[aw_spec (tier := T2)
   (doc := "docs/sdk/site/concepts/ownership-and-sharing.mdx#beyond-one-workspace")
-  (ts := "apps/web/server/composition/register.ts#subjectOwnership")]
+  (ts := "apps/web/server/composition/wiring/projects.ts#subjectOwnership")]
 theorem target_share_subject_stays_in_workspace (st : State) (hc : Target.consistent st = true)
     (ty : Concepts.Share.SubjectType) {r : Row} (hr : r ∈ st .shares)
     (hset : (r.get (Target.subjectColumn ty)).isSome = true) :
@@ -353,7 +353,7 @@ theorem target_share_subject_stays_in_workspace (st : State) (hc : Target.consis
         (Target.schema .shares).foreignKeys.any fun fk =>
           fk.columns == [Target.subjectColumn ty, "workspace_id"] && fk.refTable == ty.table &&
             fk.refColumns == ["id", "workspace_id"] &&
-            (Target.schema ty.table).primaryKey == ["id"]) = true := by decide
+            (Target.schema ty.table).primaryKey == ["id"]) = true := by decide +kernel
   have := List.all_eq_true.mp hfacts ty (WireEnum.complete ty)
   simp only [Bool.and_eq_true] at this
   obtain ⟨hnn, hany⟩ := this
@@ -374,9 +374,9 @@ theorem target_grant_names_one_principal_of_its_workspace (st : State)
       p.get "workspace_id" = r.get "workspace_id" ∧
       ∀ p' ∈ st .workspacePrincipals, p'.get "id" = r.get "principal_id" → p' = p := by
   have hcore := core_of_target hc
-  have hfk : Target.grantPrincipalKey ∈ (Target.schema .agentGrants).foreignKeys := by decide
-  have := paired_id_parent hcore hfk (c := "principal_id") (Or.inr ⟨rfl, rfl⟩) (by decide)
-    (by decide) hr (not_null_get hcore (by decide) hr)
+  have hfk : Target.grantPrincipalKey ∈ (Target.schema .agentGrants).foreignKeys := by decide +kernel
+  have := paired_id_parent hcore hfk (c := "principal_id") (Or.inr ⟨rfl, rfl⟩) (by decide +kernel)
+    (by decide +kernel) hr (not_null_get hcore (by decide +kernel) hr)
   exact this
 
 /-! ## Witnesses -/
@@ -407,7 +407,7 @@ example : tenantOf catalogue .agents Current.Witness.agent =
     tenantOf catalogue .workspacePrincipals (Current.Witness.memberPrincipal "p1" "w1" "m1") :=
   composite_reference_stays_in_workspace Current.Witness.state
     (fk := Target.principalKey "agents_owner_principal_workspace_fk" "owner_principal_id" .noAction)
-    (by unfold References; decide +kernel) (by decide)
+    (by unfold References; decide +kernel) (by decide +kernel)
 
 example : tenantOf catalogue .agents Current.Witness.agent =
     tenantOf catalogue .workspacePrincipals (Current.Witness.memberPrincipal "p1" "w1" "m1") :=
@@ -462,7 +462,7 @@ example : Current.commit Current.consistent Current.Witness.state
     [.insert .agents forgedAgent] = Current.Witness.state :=
   cross_workspace_write_is_rolled_back Current.Witness.state [.insert .agents forgedAgent]
     (t := .agents) (r := forgedAgent) (r' := connection) (fk := connectionKey)
-    rfl (by unfold References; decide +kernel) (by decide)
+    rfl (by unfold References; decide +kernel) (by decide +kernel)
 
 /-- A one-hop chain from the agent to its owner principal stays in the workspace. -/
 example : tenantOf catalogue .agents Current.Witness.agent =
@@ -482,7 +482,7 @@ example : ∃ p ∈ Current.Witness.state .workspacePrincipals,
     p.get "workspace_id" = Current.Witness.share.get "workspace_id" ∧
     ∀ p' ∈ Current.Witness.state .workspacePrincipals,
       p'.get "id" = Current.Witness.share.get "publisher_principal_id" → p' = p :=
-  owned_row_has_exactly_one_owner _ witness_consistent (t := .shares) rfl (by decide)
+  owned_row_has_exactly_one_owner _ witness_consistent (t := .shares) rfl (by decide +kernel)
     (by simp [Current.Witness.state])
 
 /-- The audit event's actor is set in the witness, so the nullable case is exercised too. -/
@@ -494,7 +494,7 @@ example : ∃ p ∈ Current.Witness.state .workspacePrincipals, p.get "id" = som
        ("subject_label", "General"), ("created_at", "1000")] ∈
       Current.Witness.state .auditEvents := by simp [Current.Witness.state]
   exact owner_reference_names_exactly_one_principal _ witness_consistent (t := .auditEvents)
-    rfl hr (by decide)
+    rfl hr (by decide +kernel)
 
 example : tenantOf Target.schema .agentGrants
       (Refinement.mapRow Current.Witness.state .agentGrants Current.Witness.grant) =
@@ -559,7 +559,7 @@ theorem target_witness_is_reachable :
   have h := Current.Reachable.commit (P := Target.consistent) Refinement.TargetCells.load .empty
   unfold Current.commit at h
   rw [target_load_runs_to_base] at h
-  have hc : Target.consistent Refinement.TargetCells.base = true := by decide +kernel
+  have hc : Target.consistent Refinement.TargetCells.base = true := target_witness_consistent
   rw [ite_eq_left_of_eq_true _ _ (eq_true hc)] at h
   exact h
 
@@ -579,7 +579,7 @@ theorem target_reachable_state_has_no_cross_workspace_reference {st : State}
 exactly one row of its subject type's table, in the share's own workspace. -/
 @[aw_spec (tier := T2)
   (doc := "docs/adr/FORMAL-P1-share-subject-is-a-typed-reference.md#decision")
-  (ts := "apps/web/server/composition/register.ts#subjectOwnership")]
+  (ts := "apps/web/server/composition/wiring/projects.ts#subjectOwnership")]
 theorem target_reachable_share_subject_stays_in_workspace {st : State}
     (h : Current.Reachable Target.consistent st) (ty : Concepts.Share.SubjectType) {r : Row}
     (hr : r ∈ st .shares) (hset : (r.get (Target.subjectColumn ty)).isSome = true) :

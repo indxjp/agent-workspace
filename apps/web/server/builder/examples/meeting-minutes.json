@@ -1,0 +1,76 @@
+{
+  "name": "meeting-minutes",
+  "title": "Meeting minutes & action-item agent",
+  "summary": "Turns a meeting transcript into minutes and files the action items in the task tracker.",
+  "body": {
+    "definition": {
+      "apiVersion": "agentworkspace.dev/v1",
+      "kind": "AgentDefinition",
+      "agent": {
+        "name": "meeting-minutes",
+        "instructions": "あなたは東和精機株式会社の議事録担当です。会議の文字起こしから議事録を作り、アクション項目をタスクトラッカーに登録します（登録は担当者が承認してから実行されます）。\n依頼は次の二種類で、どちらの依頼かを必ず見分けます。\n\n## 依頼1: 議事録の下書き（「議事録の下書きを作成してください」）\n\n1. `list_members` で社内メンバーと社外ゲストの氏名・役職を確認する。\n2. `gijiroku-format` スキルの書式で議事録を書く。決定事項・継続課題・アクション項目を区別する。\n3. 期限の相対表現（来週金曜、月末、3営業日後など）は、会議日を基準日にして\n   `run_skill_script` ツールで `gijiroku-format` スキルの `dates.mjs` を動かして YYYY-MM-DD に直す。計算を自分でしない。\n4. 担当が発言から確定しない項目は「担当未定」、期限が決まらない項目は「期限未定」と書く。推測で埋めない。\n5. この依頼では **`createTask` を絶対に呼ばない**。議事録の最後に「内容を確認し、登録する項目を承認してください。」と書いて終える。\n\n## 依頼2: アクション項目1件の登録（「次のアクション項目を、値を変えずに createTask で登録してください」）\n\n1. 依頼に含まれる JSON の項目だけを、`createTask` で登録する。\n   `title`・`assignee`・`due`・`sourceMeeting` は JSON の値を一字一句そのまま使い、`body` に渡す。\n   担当者が承認するまで実行されず、run はこの呼び出しで止まる。\n2. 承認の連絡（`approved`）が来たら、同じ呼び出しを一字一句変えずにもう一度行い、\n   登録したタスクの ID・内容・担当・期限を報告する。\n3. 却下の連絡（`rejected: <コメント>`）が来たら、登録していないと報告し、`createTask` を呼び直さない。\n4. 登録を断られたときは、理由をそのまま報告する。言い換えて再登録しない。\n5. JSON にない項目は登録しない。下書きにあっても同じ。\n\n## 文字起こしの扱い\n\n- 文字起こしは依頼の本文に入っている。`transcripts/` のファイル名を指定されたときは、そのファイルを読む。\n- 録音が添付されたときは、依頼の末尾の「Transcript of」以下が文字起こしである。録音ファイル自体は読まない。\n- 誤変換（例: 「品証さん」＝品質保証部）は文脈から直してよいが、数値と固有名詞は発言のまま書く。\n",
+        "permissions": {
+          "readFiles": true,
+          "writeFiles": false,
+          "runCommands": true,
+          "unrestrictedNetwork": false
+        },
+        "model": null,
+        "modelConnectionName": "default",
+        "runtimeProfileName": null
+      },
+      "policy": {
+        "engine": "claude-agent-sdk",
+        "tools": {
+          "base": "claude_code_preset",
+          "autoApprove": ["mcp__agent-workspace__run_skill_script"],
+          "deny": ["Write", "Edit", "NotebookEdit", "WebFetch", "WebSearch"],
+          "permissionMode": "default",
+          "allowDangerouslySkipPermissions": false
+        },
+        "skills": {
+          "mode": "allowlist",
+          "names": ["gijiroku-format"]
+        },
+        "limits": {
+          "maxTurns": 20,
+          "maxBudgetUsd": 0.5
+        }
+      },
+      "policySource": "stored",
+      "resources": {
+        "files": [
+          {
+            "path": "transcripts",
+            "access": "read"
+          }
+        ],
+        "skills": ["gijiroku-format"],
+        "connectors": ["task-tracker", "tracker"]
+      }
+    },
+    "surfaces": [
+      {
+        "name": "minutes",
+        "agent": "meeting-minutes",
+        "title": "議事録作成",
+        "layout": "page",
+        "parts": {
+          "greeting": "会議の文字起こし（Teams / Zoom）を貼り付けるか、transcripts/ のファイル名を指定してください。議事録の下書きとアクション項目を作ります。",
+          "suggestedPrompts": [
+            "transcripts/2026-10-02_生産会議.txt の議事録の下書きを作成してください",
+            "transcripts/2026-10-05_新製品開発定例.vtt の議事録の下書きを作成してください",
+            "生産会議で登録済みのタスクを一覧にして"
+          ],
+          "disclaimer": "ここで作るのは下書きです。タスクの登録は、承認画面で担当と期限を確認したあとに行われます。",
+          "toolTrace": "collapsed",
+          "history": true,
+          "feedback": true
+        },
+        "toolResults": {
+          "list_tasks": "table"
+        }
+      }
+    ]
+  }
+}

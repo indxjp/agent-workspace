@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { ApiProblemError, ContractViolationError, TransportError } from '../errors.js';
 import { HttpClient } from '../http.js';
@@ -78,20 +78,111 @@ describe('SkillsClient.list', () => {
 });
 
 describe('SkillsClient.import', () => {
-  it('posts exactly { name, files[{ path, contentBase64 }] } and reads the wrapped 201', async () => {
+  // @story US-STO-08
+  it('posts multipart: a name part, SKILL.md first, one file part per file with its path as filename', async () => {
     const { skills, calls } = client(() => json(201, { skill }));
-    // A caller's file object may carry more than the two wire fields; only those two are sent.
-    const skillMd = { path: 'SKILL.md', contentBase64: SKILL_MD_BASE64, sizeBytes: 3 };
-    const imported = await skills.import({ name: 'demo', files: [skillMd] });
+    const imported = await skills.import({
+      name: 'demo',
+      files: [
+        { path: 'data/table.csv', body: new Blob(['a,b\n']) },
+        { path: 'SKILL.md', body: SKILL_MD },
+        { path: 'raw.bin', body: new Uint8Array([0, 255, 7]) },
+      ],
+    });
     expect(imported).toEqual(skill);
     const [call] = calls;
     expect(call?.method).toBe('POST');
     expect(call?.url.href).toBe('https://aw.example.com/api/skills');
-    expect(call?.headers.get('content-type')).toBe('application/json');
-    expect(call?.json).toEqual({
-      name: 'demo',
-      files: [{ path: 'SKILL.md', contentBase64: SKILL_MD_BASE64 }],
-    });
+    // No content-type of its own: fetch writes `multipart/form-data` with the boundary.
+    expect(call?.headers.get('content-type')).toBeNull();
+    expect(call?.headers.get('authorization')).toBe('Bearer ak_live_k');
+    const form = call?.init.body as FormData;
+    expect(form).toBeInstanceOf(FormData);
+    expect([...(form?.keys() ?? [])]).toEqual(['name', 'file', 'file', 'file']);
+    expect(form?.get('name')).toBe('demo');
+    const files = form?.getAll('file') as File[];
+    expect(files.map((file) => file.name)).toEqual(['SKILL.md', 'data/table.csv', 'raw.bin']);
+    expect(await files[0]?.text()).toBe(SKILL_MD);
+    expect(await files[1]?.text()).toBe('a,b\n');
+    expect([...new Uint8Array((await files[2]?.arrayBuffer()) ?? new ArrayBuffer(0))]).toEqual([
+      0, 255, 7,
+    ]);
+  });
+
+  it('still takes contentBase64 and sends its bytes, not the base64 text', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const { skills, calls } = client(() => json(201, { skill }));
+      await skills.import({
+        name: 'demo',
+        files: [{ path: 'SKILL.md', contentBase64: SKILL_MD_BASE64 }],
+      });
+      const form = calls[0]?.init.body as FormData;
+      expect(await (form?.get('file') as File).text()).toBe(SKILL_MD);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  // @story US-STO-08
+  it('[US-STO-08][unit][sdk] a contentBase64 import file warns once, names body, and leaks no value', async () => {
+    vi.resetModules();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const fresh = await import('./skills.js');
+      const marker = `m${String(Date.now())}`;
+      const filePath = `scripts/${marker}.sh`;
+      const contentBase64 = btoa(`secret-${marker}`);
+      const api = fetchDouble(() => json(201, { skill }));
+      const skills = new fresh.SkillsClient(
+        new HttpClient({
+          baseUrl: 'https://aw.example.com',
+          auth: { kind: 'api-key', apiKey: 'ak_live_k' },
+          fetch: api.fetch,
+        }),
+      );
+      const input = {
+        name: `name-${marker}`,
+        files: [
+          { path: 'SKILL.md', contentBase64: SKILL_MD_BASE64 },
+          { path: filePath, contentBase64 },
+        ],
+      };
+      await skills.import(input);
+      await skills.import(input);
+      expect(api.calls).toHaveLength(2);
+      expect(warn).toHaveBeenCalledTimes(1);
+      const message = String(warn.mock.calls[0]?.[0]);
+      expect(message).toContain('`body`');
+      expect(message).toContain('next major');
+      for (const leaked of [marker, filePath, contentBase64, SKILL_MD_BASE64, 'secret']) {
+        expect(message).not.toContain(leaked);
+      }
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  // @story US-STO-08
+  it('[US-STO-08][unit][sdk] a body-only import sends multipart and does not warn', async () => {
+    vi.resetModules();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const fresh = await import('./skills.js');
+      const api = fetchDouble(() => json(201, { skill }));
+      const skills = new fresh.SkillsClient(
+        new HttpClient({
+          baseUrl: 'https://aw.example.com',
+          auth: { kind: 'api-key', apiKey: 'ak_live_k' },
+          fetch: api.fetch,
+        }),
+      );
+      await skills.import({ name: 'demo', files: [{ path: 'SKILL.md', body: SKILL_MD }] });
+      expect(api.calls[0]?.init.body).toBeInstanceOf(FormData);
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('surfaces each documented refusal by status and code', async () => {
@@ -107,7 +198,7 @@ describe('SkillsClient.import', () => {
     for (const [status, code] of refusals) {
       const { skills } = client(() => json(status, { error: { code, message: 'No.' } }));
       const failure = await skills
-        .import({ name: 'demo', files: [{ path: 'SKILL.md', contentBase64: '' }] })
+        .import({ name: 'demo', files: [{ path: 'SKILL.md', body: '' }] })
         .catch((e: unknown) => e);
       expect(failure).toBeInstanceOf(ApiProblemError);
       expect((failure as ApiProblemError).status).toBe(status);
@@ -118,14 +209,14 @@ describe('SkillsClient.import', () => {
   it('refuses a bare 201 and one with an unknown field as contract violations', async () => {
     const bare = client(() => json(201, skill));
     const unwrapped = await bare.skills
-      .import({ name: 'demo', files: [{ path: 'SKILL.md', contentBase64: '' }] })
+      .import({ name: 'demo', files: [{ path: 'SKILL.md', body: '' }] })
       .catch((e: unknown) => e);
     expect(unwrapped).toBeInstanceOf(ContractViolationError);
     expect((unwrapped as ContractViolationError).status).toBe(201);
 
     const drifted = client(() => json(201, { skill: { ...skill, assignedAgents: [] } }));
     const drift = await drifted.skills
-      .import({ name: 'demo', files: [{ path: 'SKILL.md', contentBase64: '' }] })
+      .import({ name: 'demo', files: [{ path: 'SKILL.md', body: '' }] })
       .catch((e: unknown) => e);
     expect(drift).toBeInstanceOf(ContractViolationError);
     expect((drift as ContractViolationError).issues.join('\n')).toContain('assignedAgents');
@@ -140,7 +231,7 @@ describe('SkillsClient.import', () => {
     });
     const failure = await skills
       .import(
-        { name: 'demo', files: [{ path: 'SKILL.md', contentBase64: '' }] },
+        { name: 'demo', files: [{ path: 'SKILL.md', body: '' }] },
         { signal: controller.signal },
       )
       .catch((e: unknown) => e);
@@ -315,6 +406,45 @@ describe('SkillsClient.update', () => {
       .catch((e: unknown) => e);
     expect(failure).toBeInstanceOf(TransportError);
     expect((failure as TransportError).aborted).toBe(true);
+  });
+});
+
+describe('SkillsClient.publish', () => {
+  const revision = { number: 2, fileCount: 1, publishedAt: '2026-09-22T10:00:00.000Z' };
+
+  it('posts exactly { files[{ path, contentBase64 }] } to the revisions path and reads the 201', async () => {
+    const { skills, calls } = client(() => json(201, { revision }));
+    const skillMd = { path: 'SKILL.md', contentBase64: SKILL_MD_BASE64, sizeBytes: 3 };
+    expect(await skills.publish('demo', { files: [skillMd] })).toEqual(revision);
+    const [call] = calls;
+    expect(call?.method).toBe('POST');
+    expect(call?.url.href).toBe('https://aw.example.com/api/skills/demo/revisions');
+    expect(call?.json).toEqual({ files: [{ path: 'SKILL.md', contentBase64: SKILL_MD_BASE64 }] });
+  });
+
+  it('surfaces 404 skill_not_found and a refused directory by status and code', async () => {
+    for (const [status, code] of [
+      [404, 'skill_not_found'],
+      [400, 'missing_skill_md'],
+    ] as const) {
+      const { skills } = client(() => json(status, { error: { code, message: 'No.' } }));
+      const failure = await skills.publish('demo', { files: [] }).catch((e: unknown) => e);
+      expect(failure).toBeInstanceOf(ApiProblemError);
+      expect((failure as ApiProblemError).status).toBe(status);
+      expect((failure as ApiProblemError).code).toBe(code);
+    }
+  });
+
+  it('reads the revisions a skill lists, newest first', async () => {
+    const listed = [revision, { ...revision, number: 1 }];
+    const { skills } = client(() => json(200, { skill: { ...skill, revisions: listed } }));
+    expect((await skills.get('demo')).revisions).toEqual(listed);
+  });
+
+  it('refuses a revision with a number below 1 as a contract violation', async () => {
+    const { skills } = client(() => json(201, { revision: { ...revision, number: 0 } }));
+    const failure = await skills.publish('demo', { files: [] }).catch((e: unknown) => e);
+    expect(failure).toBeInstanceOf(ContractViolationError);
   });
 });
 

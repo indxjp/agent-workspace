@@ -2,14 +2,18 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import type { ModelConnectionConfigField } from '@indx-workspace/contracts/models';
 import { useState, type FormEvent } from 'react';
 
+import { browserClient } from '../../lib/browser-client';
 import { CREDENTIAL_INPUT_PROPS } from '../shell/credential-input';
 
+import { createConnection } from './connections-model';
 import {
   PROVIDER_CHOICES,
-  createConnectionPayload,
+  editableConfigFields,
   isProviderFormComplete,
+  requiredConfigFields,
   type ProviderFormValues,
   type ProviderId,
 } from './model';
@@ -20,18 +24,22 @@ const BUTTON =
 const CONTROL =
   'w-full rounded-(--radius-sm) border border-border-strong bg-surface px-2.5 py-[7px] text-[13.5px] text-text focus:border-accent focus:outline-2 focus:-outline-offset-1 focus:outline-accent';
 
-const INITIAL_VALUES: ProviderFormValues = {
+const initialValues = (provider: ProviderId): ProviderFormValues => ({
   name: '',
-  provider: 'anthropic',
+  provider,
   apiKey: '',
   baseUrl: '',
   deployment: '',
   apiVersion: '',
-};
+});
 
-export function AddProviderScreen() {
+export function AddProviderScreen({
+  initialProvider = 'anthropic',
+}: {
+  initialProvider?: ProviderId;
+}) {
   const router = useRouter();
-  const [values, setValues] = useState<ProviderFormValues>(INITIAL_VALUES);
+  const [values, setValues] = useState<ProviderFormValues>(() => initialValues(initialProvider));
   const [submitting, setSubmitting] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const canSubmit = isProviderFormComplete(values) && !submitting;
@@ -49,20 +57,8 @@ export function AddProviderScreen() {
     if (!canSubmit) return;
     setSubmitting(true);
     setProblem(null);
-    void fetch('/api/model-connections', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', accept: 'application/json' },
-      body: JSON.stringify(createConnectionPayload(values)),
-    })
-      .then(async (response) => {
-        if (!response.ok) {
-          const body = (await response.json()) as { error?: { message?: unknown } };
-          throw new Error(
-            typeof body.error?.message === 'string'
-              ? body.error.message
-              : `Provider request returned ${response.status}.`,
-          );
-        }
+    void createConnection(browserClient(), values)
+      .then(() => {
         setValues((current) => ({ ...current, apiKey: '' }));
         router.push('/admin/models');
       })
@@ -72,8 +68,10 @@ export function AddProviderScreen() {
       });
   }
 
-  const needsBaseUrl =
-    values.provider === 'azure-openai' || values.provider === 'openai-compatible';
+  const fields = editableConfigFields(values.provider);
+  const required = requiredConfigFields(values.provider);
+  const optional = (field: ModelConnectionConfigField) =>
+    required.includes(field) ? '' : ' (optional)';
 
   return (
     <main className="w-full max-w-[760px] px-8 pt-[26px] pb-[90px]">
@@ -124,9 +122,10 @@ export function AddProviderScreen() {
           {PROVIDER_CHOICES.find((provider) => provider.id === values.provider)?.label}
         </h2>
         <div className={`${CARD} space-y-4 p-4`}>
-          {needsBaseUrl ? (
+          {fields.includes('baseUrl') ? (
             <label className="block text-[13px] font-semibold">
               {values.provider === 'azure-openai' ? 'Endpoint' : 'Base URL'}
+              {optional('baseUrl')}
               <input
                 className={`${CONTROL} mt-1 font-mono`}
                 type="url"
@@ -154,10 +153,10 @@ export function AddProviderScreen() {
               again.
             </span>
           </label>
-          {values.provider === 'azure-openai' ? (
+          {fields.includes('deployment') && fields.includes('apiVersion') ? (
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="block text-[13px] font-semibold">
-                Deployment
+                Deployment{optional('deployment')}
                 <input
                   className={`${CONTROL} mt-1 font-mono`}
                   value={values.deployment}
@@ -165,7 +164,7 @@ export function AddProviderScreen() {
                 />
               </label>
               <label className="block text-[13px] font-semibold">
-                API Version
+                API Version{optional('apiVersion')}
                 <input
                   className={`${CONTROL} mt-1 font-mono`}
                   value={values.apiVersion}

@@ -23,6 +23,8 @@ import {
   claudeOptionsAllowPermission,
   claudeOptionsAllowWrite,
   compileClaudeToolPolicy,
+  splitApprovals,
+  unapprovableRules,
 } from './tools.js';
 import type { CompiledSdkOptions } from './options.js';
 import { CLAUDE_SKILL_SCRIPT_SERVER } from './skill-script.js';
@@ -281,5 +283,69 @@ describe("reading a compiled options object back through this adapter's own gram
       expect(claudeOptionsAllowPermission(options(off.deny), permission), permission).toBe(false);
       expect(claudeOptionsAllowPermission(options(on.deny), permission), permission).toBe(true);
     }
+  });
+});
+
+describe('unapprovableRules (ADR-0145)', () => {
+  it('refuses a partial connector glob, which Claude Code permission rules cannot match', () => {
+    expect(unapprovableRules(['mcp__github__*_issue', 'mcp__gh__a*b', 'mcp__gh__x?y'])).toEqual([
+      'mcp__github__*_issue',
+      'mcp__gh__a*b',
+      'mcp__gh__x?y',
+    ]);
+  });
+
+  it('accepts a whole-server glob and an exact connector tool', () => {
+    expect(unapprovableRules(['mcp__gh__*', 'mcp__gh__create_issue', 'Bash'])).toEqual([]);
+  });
+});
+
+describe('splitApprovals (ADR-0145)', () => {
+  it('leaves autoApprove untouched without requireApproval', () => {
+    expect(splitApprovals(['Read', 'mcp__gh__*'], [])).toEqual({
+      allowedTools: ['Read', 'mcp__gh__*'],
+      deferred: [],
+    });
+  });
+
+  it('moves a rule that covers a gated tool out of allowedTools, keeping the rest', () => {
+    expect(splitApprovals(['Read', 'mcp__gh__*'], ['mcp__gh__push'])).toEqual({
+      allowedTools: ['Read'],
+      deferred: ['mcp__gh__*'],
+    });
+    expect(splitApprovals(['mcp__gh__get_*', 'Read'], ['mcp__gh__*'])).toEqual({
+      allowedTools: ['Read'],
+      deferred: ['mcp__gh__get_*'],
+    });
+  });
+
+  it('moves a rule that names the gated tool itself', () => {
+    expect(splitApprovals(['Write', 'Read'], ['Write'])).toEqual({
+      allowedTools: ['Read'],
+      deferred: ['Write'],
+    });
+  });
+
+  it('moves partial globs whose prefixes are compatible, which conflictingApprovalRules misses', () => {
+    expect(splitApprovals(['mcp__gh__a*'], ['mcp__gh__*b'])).toEqual({
+      allowedTools: [],
+      deferred: ['mcp__gh__a*'],
+    });
+  });
+
+  it('moves an Edit rule out of allowedTools when any file-writing tool is gated', () => {
+    for (const gated of ['Edit', 'Write', 'MultiEdit', 'NotebookEdit']) {
+      expect(splitApprovals(['Edit(//ws/**)', 'Edit', 'Read'], [gated])).toEqual({
+        allowedTools: ['Read'],
+        deferred: ['Edit(//ws/**)', 'Edit'],
+      });
+    }
+  });
+
+  it('keeps a glob on another server in allowedTools', () => {
+    expect(splitApprovals(['mcp__jira__*'], ['mcp__gh__push'])).toEqual({
+      allowedTools: ['mcp__jira__*'],
+      deferred: [],
+    });
   });
 });

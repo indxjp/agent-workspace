@@ -6,6 +6,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { ProjectPolicySchema } from '@indx-workspace/contracts/policy-ceiling';
+import { IGNORED_STORAGE_VARIABLES } from '@indx-workspace/contracts/storage-settings';
+import { parseStorageUrl } from '@indx-workspace/contracts/storage-url';
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
 
 import {
@@ -33,6 +35,7 @@ import {
   responseSecrets,
   setDotEnv,
   setupAnswered,
+  storageEntries,
   vercelLogExcerpt,
   withVercelLogs,
 } from './journey.e2e.mjs';
@@ -467,6 +470,35 @@ describe('the lightweight journey lanes (issue #832)', () => {
       'utf8',
     );
     expect(workflow).not.toMatch(/^\s+E2B_RUNTIME_TEMPLATE:/mu);
+  });
+
+  it('places every lane in its own reused R2 bucket through AW_STORAGE_URL, with no ignored name', () => {
+    const env = {
+      CLOUDFLARE_ACCOUNT_ID: 'acct123',
+      R2_ACCESS_KEY_ID: 'id',
+      R2_SECRET_ACCESS_KEY: 'key',
+    };
+    for (const lane of LANES) {
+      const entries = storageEntries(lane.key, env);
+      for (const name of IGNORED_STORAGE_VARIABLES)
+        expect(entries, lane.id).not.toHaveProperty(name);
+      expect(parseStorageUrl(entries.AW_STORAGE_URL), lane.id).toEqual({
+        ok: true,
+        location: {
+          kind: 's3',
+          bucket: `awlj-${lane.key}-files`,
+          prefix: '',
+          endpoint: 'https://acct123.r2.cloudflarestorage.com',
+          region: 'auto',
+          forcePathStyle: false,
+        },
+      });
+      expect(entries.OBJECT_STORAGE_ACCESS_KEY_ID).toBe('id');
+      expect(entries.OBJECT_STORAGE_SECRET_ACCESS_KEY).toBe('key');
+    }
+    const source = readFileSync(path.join(import.meta.dirname, 'journey.e2e.mjs'), 'utf8');
+    expect(source).toContain('Object.assign(entries, storageEntries(lane.key, process.env));');
+    for (const name of IGNORED_STORAGE_VARIABLES) expect(source, name).not.toContain(name);
   });
 
   describe('killLaneSandboxes (issue #832)', () => {

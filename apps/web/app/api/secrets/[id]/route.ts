@@ -12,9 +12,9 @@ import { requireResourceAccess } from '../../../../server/resources/authorise';
 import {
   readJsonBody,
   readSecretIdParam,
-  toResponse,
   withWorkspaceStore,
 } from '../../../../server/secrets/http';
+import { apiResultResponse } from '../../../../server/http/json-transport';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -40,7 +40,7 @@ export async function PUT(request: Request, context: SecretRouteContext): Promis
     },
     access.principal.workspaceId,
   );
-  return toResponse(result);
+  return apiResultResponse(result);
 }
 
 /**
@@ -58,5 +58,5 @@ export async function DELETE(request: Request, context: SecretRouteContext): Pro
     (store) => deleteSecret(store, id),
     access.principal.workspaceId,
   );
-  return toResponse(result);
+  return apiResultResponse(result);
 }

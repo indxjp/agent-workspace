@@ -28,11 +28,8 @@ import {
 import { GET, PATCH } from './route';
 import { createPostgresDirectory } from '../../../../server/rbac/postgres-directory';
 import { Principal } from '../../../../server/rbac/principal';
-import { clearRbacRuntime, configureRbacRuntime } from '../../../../server/rbac/runtime';
-import {
-  clearProjectsRuntime,
-  configureProjectsRuntime,
-} from '../../../../server/projects/runtime';
+import { clearApplicationContext } from '../../../../server/application-context';
+import { installTestDomains } from '../../../../server/application-context-fixtures';
 
 const WORKSPACE_HEADER = 'x-test-workspace';
 const ACTOR_HEADER = 'x-test-actor';
@@ -148,54 +145,58 @@ describe.skipIf(!hasDatabase)(
     });
 
     beforeEach(async () => {
-      configureProjectsRuntime({
-        resolveActor: (request) => {
-          const workspaceId = request.headers.get(WORKSPACE_HEADER);
-          const actor = request.headers.get(ACTOR_HEADER);
-          return Promise.resolve(
-            workspaceId === null || actor === null
-              ? { kind: 'unauthenticated' as const, reason: 'no test workspace header' }
-              : {
-                  kind: 'workspace' as const,
-                  workspaceId,
-                  principalId: actor === ownerA.id ? OWNER_A_PRINCIPAL_ID : OWNER_B_PRINCIPAL_ID,
-                  ownerPrincipalId:
-                    actor === ownerA.id ? OWNER_A_PRINCIPAL_ID : OWNER_B_PRINCIPAL_ID,
-                  userId: actor,
-                  userLabel: actor,
-                },
-          );
-        },
-        forWorkspace: async (workspaceId) => {
-          const scope = await root.scopes.forWorkspaceId(workspaceId);
-          if (scope === null) throw new Error(`fixture workspace ${workspaceId} did not resolve`);
-          return {
-            projects: root.projects.forScope(scope),
-            files: root.projectFiles.forScope(scope),
-            mcpServers: root.projectMcpServers.forScope(scope),
-            audit: root.auditEventRepository.forScope(scope),
-            agents: root.agents.forScope(scope),
-            sessions: root.sessions.forScope(scope),
-            agentVersions: root.agentVersions.forScope(scope),
-          };
+      installTestDomains({
+        projects: {
+          resolveActor: (request) => {
+            const workspaceId = request.headers.get(WORKSPACE_HEADER);
+            const actor = request.headers.get(ACTOR_HEADER);
+            return Promise.resolve(
+              workspaceId === null || actor === null
+                ? { kind: 'unauthenticated' as const, reason: 'no test workspace header' }
+                : {
+                    kind: 'workspace' as const,
+                    workspaceId,
+                    principalId: actor === ownerA.id ? OWNER_A_PRINCIPAL_ID : OWNER_B_PRINCIPAL_ID,
+                    ownerPrincipalId:
+                      actor === ownerA.id ? OWNER_A_PRINCIPAL_ID : OWNER_B_PRINCIPAL_ID,
+                    userId: actor,
+                    userLabel: actor,
+                  },
+            );
+          },
+          forWorkspace: async (workspaceId) => {
+            const scope = await root.scopes.forWorkspaceId(workspaceId);
+            if (scope === null) throw new Error(`fixture workspace ${workspaceId} did not resolve`);
+            return {
+              projects: root.projects.forScope(scope),
+              files: root.projectFiles.forScope(scope),
+              mcpServers: root.projectMcpServers.forScope(scope),
+              audit: root.auditEventRepository.forScope(scope),
+              agents: root.agents.forScope(scope),
+              sessions: root.sessions.forScope(scope),
+              agentVersions: root.agentVersions.forScope(scope),
+            };
+          },
         },
       });
-      configureRbacRuntime({
-        directory: createPostgresDirectory(root.directory),
-        identify(request: Request) {
-          const workspaceId = request.headers.get(WORKSPACE_HEADER);
-          const actor = request.headers.get(ACTOR_HEADER);
-          return Promise.resolve(
-            workspaceId === null || actor === null
-              ? null
-              : Principal.fromApiKey({
-                  principalId: actor === ownerA.id ? OWNER_A_PRINCIPAL_ID : OWNER_B_PRINCIPAL_ID,
-                  apiKeyId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-                  workspaceId,
-                  role: 'owner',
-                  label: 'Project default model test key',
-                }),
-          );
+      installTestDomains({
+        rbac: {
+          directory: createPostgresDirectory(root.directory),
+          identify(request: Request) {
+            const workspaceId = request.headers.get(WORKSPACE_HEADER);
+            const actor = request.headers.get(ACTOR_HEADER);
+            return Promise.resolve(
+              workspaceId === null || actor === null
+                ? null
+                : Principal.fromApiKey({
+                    principalId: actor === ownerA.id ? OWNER_A_PRINCIPAL_ID : OWNER_B_PRINCIPAL_ID,
+                    apiKeyId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+                    workspaceId,
+                    role: 'owner',
+                    label: 'Project default model test key',
+                  }),
+            );
+          },
         },
       });
 
@@ -211,8 +212,7 @@ describe.skipIf(!hasDatabase)(
     });
 
     afterEach(() => {
-      clearProjectsRuntime();
-      clearRbacRuntime();
+      clearApplicationContext();
     });
 
     /** The row's own two columns, read directly — independent of what any route reports. */

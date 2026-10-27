@@ -158,14 +158,14 @@ def int4Min : Int := -2147483648
 
 /-- `RUNTIME_PROFILE_BOUNDS.cpu`: greater than zero; fractions are allowed. -/
 @[aw_spec (ts := "packages/contracts/src/runtimes.ts#RUNTIME_PROFILE_BOUNDS")
-  (ts := "packages/core/src/schemas.ts#RuntimeProfile")
+  (ts := "packages/run-protocol/src/schemas.ts#RuntimeProfile")
   (doc := "docs/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
 def cpuAccepted (d : Decimal) : Bool := d.isPositive
 
 /-- `RUNTIME_PROFILE_BOUNDS` for `memoryMb`, `diskMb`, `timeoutSeconds` and `idleTimeoutSeconds`:
 a whole number in `[1, MAX_SAFE_INTEGER]`. -/
 @[aw_spec (ts := "packages/contracts/src/runtimes.ts#RUNTIME_PROFILE_BOUNDS")
-  (ts := "packages/core/src/schemas.ts#RuntimeProfile")
+  (ts := "packages/run-protocol/src/schemas.ts#RuntimeProfile")
   (doc := "docs/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
 def sizeAccepted (d : Decimal) : Bool :=
   d.isInteger && decide (1 ≤ d.toInt) && decide (d.toInt ≤ maxSafeInteger)
@@ -208,13 +208,13 @@ def RuntimeProfile.valid (p : RuntimeProfile) : Bool := Secret.sqlNotBlank p.nam
 
 /-- The profile name the contract accepts (`z.string().min(1)`): any non-empty string, blank or
 not. -/
-@[aw_spec (ts := "packages/core/src/schemas.ts#RuntimeProfile")
+@[aw_spec (ts := "packages/run-protocol/src/schemas.ts#RuntimeProfile")
   (ts := "packages/contracts/src/runtimes.ts#RuntimeProfileResourceSchema")]
 def nameAcceptedByContract (s : String) : Bool := !s.isEmpty
 
 /-- The fields `POST /api/runtime-profiles` accepts: every member of spec §15.1's `RuntimeProfile`
 but the server-assigned `id`. -/
-@[aw_spec (ts := "packages/core/src/schemas.ts#CreateRuntimeProfileInput")
+@[aw_spec (ts := "packages/run-protocol/src/schemas.ts#CreateRuntimeProfileInput")
   (doc := "docs/spec.md#151-profile-schema")]
 def createFields : List String :=
   ["name", "driver", "runtimeConnectionId", "cpu", "memoryMb", "diskMb", "networkPolicy",
@@ -222,20 +222,20 @@ def createFields : List String :=
     "driverConfig"]
 
 /-- The fields `POST /api/runtime-profiles` requires (spec §15.1's non-optional members). -/
-@[aw_spec (ts := "packages/core/src/schemas.ts#CreateRuntimeProfileInput")
+@[aw_spec (ts := "packages/run-protocol/src/schemas.ts#CreateRuntimeProfileInput")
   (doc := "docs/spec.md#151-profile-schema")]
 def requiredCreateFields : List String := ["name", "driver", "networkPolicy", "filesystem"]
 
 /-- `CreateRuntimeProfileInput` (a `.strict()` object) over the keys of a body, each present value
 valid: closed, with the four required members. -/
-@[aw_spec (ts := "packages/core/src/schemas.ts#CreateRuntimeProfileInput")
+@[aw_spec (ts := "packages/run-protocol/src/schemas.ts#CreateRuntimeProfileInput")
   (ts := "apps/web/server/runtimes/contract.ts#parseCreateRuntimeProfileInput")]
 def createAccepts (keys : List String) : Bool :=
   Secret.closedBodyAccepts createFields requiredCreateFields keys
 
 /-- The fields `PATCH /api/runtime-profiles/:id` accepts: `UpdateRuntimeProfileInput` is
 `CreateRuntimeProfileInput.partial()`, so every creatable field and nothing else. -/
-@[aw_spec (ts := "packages/core/src/schemas.ts#UpdateRuntimeProfileInput")
+@[aw_spec (ts := "packages/run-protocol/src/schemas.ts#UpdateRuntimeProfileInput")
   (doc := "docs/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
 def updateFields : List String := createFields
 
@@ -251,14 +251,14 @@ inductive PatchValue where
 
 /-- The fields whose `null` is itself a value rather than a clear: a profile reads back
 `allowedDomains: null` for "no domains", so a `PATCH` may send that value back (BH061-080). -/
-@[aw_spec (ts := "packages/core/src/schemas.ts#UpdateRuntimeProfileInput")]
+@[aw_spec (ts := "packages/run-protocol/src/schemas.ts#UpdateRuntimeProfileInput")]
 def nullAsValueFields : List String := ["allowedDomains"]
 
 /-- Today's `PATCH /api/runtime-profiles/:id` (`UpdateRuntimeProfileInput`, whose members are
 `.optional()` and so refuse `null`): every key is an updatable field carrying a value; `null`
 is refused for every field except where `null` is itself a value (`nullAsValueFields`), so a
 nullable field can be changed but not cleared. -/
-@[aw_spec (ts := "packages/core/src/schemas.ts#UpdateRuntimeProfileInput")
+@[aw_spec (ts := "packages/run-protocol/src/schemas.ts#UpdateRuntimeProfileInput")
   (ts := "apps/web/server/runtimes/contract.ts#parseUpdateRuntimeProfilePatch")
   (doc := "docs/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")]
 def patchAcceptsCurrent (body : List (String × PatchValue)) : Bool :=

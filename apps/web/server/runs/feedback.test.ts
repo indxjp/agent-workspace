@@ -11,16 +11,18 @@ import {
   resetSurfaceLimits,
   SURFACE_RATE_LIMITS,
 } from '../surfaces/public/limits';
-import { installRunApi, resetRunApi, type Principal, type RunApiEnvironment } from './environment';
+import type { RunPrincipal, RunApiEnvironment } from './environment';
 import { submitRunFeedback } from './feedback';
-import { InMemoryRunStore, type RunRecord } from './store';
+import { InMemoryRunStore } from './memory-store';
+import type { RunRecord } from './store';
+import { installTestRunApi, resetTestRunApi } from '../application-context-fixtures';
 
 const WORKSPACE = '22222222-2222-4222-8222-222222222222';
 const OTHER_WORKSPACE = '55555555-5555-4555-8555-555555555555';
 const AGENT = '33333333-3333-4333-8333-333333333333';
 const SESSION = '44444444-4444-4444-8444-444444444444';
 const OTHER_SESSION = '88888888-8888-4888-8888-888888888888';
-const OWNER: Principal = {
+const OWNER: RunPrincipal = {
   principalId: '77777777-7777-4777-8777-777777777777',
   ownerPrincipalId: '77777777-7777-4777-8777-777777777777',
   userId: '66666666-6666-4666-8666-666666666666',
@@ -35,7 +37,7 @@ interface Harness {
 }
 
 function install(
-  principal: Principal | null,
+  principal: RunPrincipal | null,
   {
     owns = true,
     record = true,
@@ -58,7 +60,7 @@ function install(
     launch: () => undefined,
     ...(admit === undefined ? {} : { admitVisitorWrite: admit }),
   };
-  installRunApi(
+  installTestRunApi(
     record
       ? {
           ...environment,
@@ -100,10 +102,10 @@ async function codeOf(response: Response): Promise<string> {
   return body.error?.code ?? '(none)';
 }
 
-const SESSION_TOKEN: Principal = { ...OWNER, scope: { kind: 'session', id: SESSION } };
+const SESSION_TOKEN: RunPrincipal = { ...OWNER, scope: { kind: 'session', id: SESSION } };
 
 afterEach(() => {
-  resetRunApi();
+  resetTestRunApi();
   resetSurfaceLimits();
 });
 
@@ -196,7 +198,7 @@ describe('POST /api/runs/:id/feedback (issue #539)', () => {
     expect(harness.recorded).toEqual([]);
   });
 
-  it.each<[string, string, Principal, { owns?: boolean; sessionId?: string }]>([
+  it.each<[string, string, RunPrincipal, { owns?: boolean; sessionId?: string }]>([
     ['a builder on another’s run', 'forbidden', { ...OWNER, role: 'builder' }, { owns: false }],
     [
       'a session token on another session’s run',

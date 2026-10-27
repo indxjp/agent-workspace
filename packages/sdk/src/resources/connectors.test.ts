@@ -602,6 +602,41 @@ describe('ConnectorsClient tool kinds (C15, issue #533)', () => {
   });
 });
 
+describe('ConnectorsClient identity opt-in (ADR-0142 D1)', () => {
+  const identity = { secret: 'CRM_IDENTITY_SECRET' };
+  const DOCUMENT = '{"openapi":"3.1.0","info":{"title":"Orders","version":"1"},"paths":{}}';
+
+  it('forwards identity in the MCP create, dry-run and patch bodies, and null to remove it', async () => {
+    const { connectors, calls } = client((request) =>
+      request.json !== null && typeof request.json === 'object' && 'dryRun' in request.json
+        ? json(200, connected)
+        : json(request.method === 'POST' ? 201 : 200, connector),
+    );
+    const remote = { name: 'CRM', transport: 'http', url: 'https://mcp.example.com/mcp' } as const;
+    await connectors.create({ ...remote, identity });
+    await connectors.testDraft({ ...remote, identity });
+    await connectors.update(CONNECTOR, { identity });
+    await connectors.update(CONNECTOR, { identity: null });
+    await connectors.create(remote);
+    expect(calls.map((call) => call.json)).toStrictEqual([
+      { ...remote, identity },
+      { ...remote, identity, dryRun: true },
+      { identity },
+      { identity: null },
+      remote,
+    ]);
+  });
+
+  it('forwards identity in an openapi create and its dry run, and leaves it out when absent', async () => {
+    const { connectors, calls } = client(() => json(201, fixtures.openApiConnector()));
+    const body = { kind: 'openapi', name: 'erp', document: DOCUMENT, allow: ['GET /**'] } as const;
+    await connectors.create({ ...body, identity });
+    await connectors.create(body);
+    expect(calls[0]?.json).toStrictEqual({ ...body, identity });
+    expect(calls[1]?.json).toStrictEqual(body);
+  });
+});
+
 describe('ConnectorsClient.checkTool (C15, issue #549)', () => {
   const DOCUMENT = '{"openapi":"3.1.0","info":{"title":"Orders","version":"1"},"paths":{}}';
   const body = {

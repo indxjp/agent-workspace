@@ -1,3 +1,4 @@
+import { log } from '../telemetry/logger';
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -120,7 +121,7 @@ export async function loadRuntimeVerificationCache(
           if ((error as NodeJS.ErrnoException).code !== 'EROFS') throw error;
           if (!warnedReadOnly) {
             warnedReadOnly = true;
-            console.warn(
+            log.warn(
               `runtime verifications are kept in memory only: ${path.dirname(file)} is read-only`,
             );
           }

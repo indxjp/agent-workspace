@@ -16,7 +16,7 @@
  *
  *     node infra/release/images.mjs              # one `name dockerfile target engine engine-version` per line
  *     node infra/release/images.mjs --json       # the plan as JSON
- *     node infra/release/images.mjs --registry   # the registry, e.g. ghcr.io/indxdev
+ *     node infra/release/images.mjs --registry   # the registry, e.g. ghcr.io/indxjp
  *     node infra/release/images.mjs --version    # the version the images are tagged with
  *     node infra/release/images.mjs --references # one `<registry>/agent-workspace/<name>:<version>` per line
  *

@@ -76,6 +76,16 @@ export function bootstrapAdminCredentials() {
   return email && password ? { email, password } : null;
 }
 
+/**
+ * The second web server of the two-server project. Never port 3000 (the dev stack), for the same
+ * reason as `E2E_PORT` in `playwright.config.ts`.
+ */
+export function secondBaseURL() {
+  const port = process.env['E2E_PORT_2'] ?? '3211';
+  if (!/^\d{1,5}$/u.test(port)) throw new Error(`E2E_PORT_2 must be a port number, got ${port}`);
+  return process.env['E2E_BASE_URL_2'] ?? `http://127.0.0.1:${port}`;
+}
+
 /** Sign in through the real form, so the spec exercises the same cookie a person would get. */
 export async function signInAsBootstrapAdmin(page, credentials) {
   await page.goto('/signin');

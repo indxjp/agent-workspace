@@ -13,6 +13,12 @@ import type { DeploymentProfile } from '../profile.ts';
 /** The route `apps/web/app/api/cron/retention` serves, authenticated by `CRON_SECRET`. */
 export const VERCEL_RETENTION_CRON_PATH = '/api/cron/retention';
 
+/** The route `apps/web/app/api/cron/triggers` serves: the schedule pass (ADR-0144 D5). */
+export const VERCEL_TRIGGERS_CRON_PATH = '/api/cron/triggers';
+
+/** The route `apps/web/app/api/cron/storage-cleanup` serves: the storage cleanup (#1674). */
+export const VERCEL_STORAGE_CLEANUP_CRON_PATH = '/api/cron/storage-cleanup';
+
 /**
  * pnpm's filter for the control plane: the install and build commands run in its Root Directory,
  * `apps/web`, so `{.}` is that package (a `./apps/web` filter would match nothing there). The
@@ -22,6 +28,13 @@ const CONTROL_PLANE_FILTER = '{.}';
 
 /** Daily, so the schedule is valid on every plan including Hobby (ADR-0120 clause 7). */
 const RETENTION_SCHEDULE = '0 3 * * *';
+
+// ponytail: daily so Hobby accepts it, which fires a missed window once a day; every minute needs Pro.
+const TRIGGERS_SCHEDULE = '0 4 * * *';
+
+// ponytail: daily so Hobby accepts it (it rejects sub-daily crons at deploy time); the storage design
+// §04 runs the cleanup hourly, which a Pro project gets by changing this to '0 * * * *'.
+const STORAGE_CLEANUP_SCHEDULE = '0 5 * * *';
 
 export interface VercelProjectArtefact {
   /** The directory under `deploy/` the settings are written in. */
@@ -39,7 +52,11 @@ export function renderVercelProject(profile: DeploymentProfile): VercelProjectAr
     // `next build`, and only they are installed (`...` is the package and its dependencies).
     installCommand: `pnpm install --frozen-lockfile --filter "${CONTROL_PLANE_FILTER}..."`,
     buildCommand: `pnpm --filter "${CONTROL_PLANE_FILTER}^..." run build && pnpm run build`,
-    crons: [{ path: VERCEL_RETENTION_CRON_PATH, schedule: RETENTION_SCHEDULE }],
+    crons: [
+      { path: VERCEL_RETENTION_CRON_PATH, schedule: RETENTION_SCHEDULE },
+      { path: VERCEL_TRIGGERS_CRON_PATH, schedule: TRIGGERS_SCHEDULE },
+      { path: VERCEL_STORAGE_CLEANUP_CRON_PATH, schedule: STORAGE_CLEANUP_SCHEDULE },
+    ],
   };
   return {
     directory: 'vercel',

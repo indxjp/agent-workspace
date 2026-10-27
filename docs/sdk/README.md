@@ -25,6 +25,14 @@ reference generated from the contracts and the SDK — lives in [`site/`](site/R
 (Mintlify; `npx mint dev` to preview, `pnpm docs:generate` / `pnpm docs:check` to regenerate and
 verify the reference pages). The decision is
 [ADR-0054](../adr/0054-developer-documentation-is-a-mintlify-site-generated-from-the-contracts.md).
+The public API of the four published consumer packages (contracts, sdk, react, aw) is also
+committed as [API Extractor](https://api-extractor.com/) reports, one `.api.md` per `exports`
+subpath, under [`api/`](api/): every exported declaration with its full signature.
+`pnpm docs:check` fails when source and reports differ; when the change is deliberate, run
+`pnpm api:update` and commit the regenerated files (never edit them by hand). The diff is what
+consumers of the package will see, so a breaking change is readable before the package is
+published. The reports are rendered from the declarations of each package's `tsconfig.build.json`,
+so no build is needed first.
 The site also states where a consumer stands — `concepts/public-surface.mdx` (Consume,
 Configure, Extend, Internal), `concepts/target-architecture.mdx` (what the SDK is meant to be
 once finished, restating 03 §3.2/§3.6, 04 §8 and the refactoring programme's target) and

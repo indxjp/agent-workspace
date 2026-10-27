@@ -2,13 +2,11 @@ import { ApiProblemSchema } from '@indx-workspace/contracts';
 import type { SurfaceDefinition } from '@indx-workspace/contracts/surfaces';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import {
-  clearSurfaceSessionsRuntime,
-  configureSurfaceSessionsRuntime,
-  type ResolvedSurface,
-} from '../public/runtime';
+import { type ResolvedSurface } from '../public/runtime';
 import { serveWidgetLoader, type WidgetLookOf } from './handler';
 import type { WidgetLook } from './render';
+import { installTestDomains } from '../../application-context-fixtures';
+import { clearApplicationContext } from '../../application-context';
 
 const LOCAL_ENV = { AW_LOCAL_SURFACE_SESSIONS: '1', HOST: '127.0.0.1' } as const;
 const ORIGIN = 'http://127.0.0.1:4310';
@@ -42,15 +40,20 @@ const LOOK: WidgetLook = {
 
 function install(resolved: ResolvedSurface | null): string[] {
   const asked: string[] = [];
-  configureSurfaceSessionsRuntime({
-    resolve: (name, mode) => {
-      asked.push(mode === 'public' ? name : `${name} (${mode})`);
-      return Promise.resolve(resolved);
+  installTestDomains({
+    surfaces: {
+      kind: 'serving',
+      runtime: {
+        resolve: (name, mode) => {
+          asked.push(mode === 'public' ? name : `${name} (${mode})`);
+          return Promise.resolve(resolved);
+        },
+        open: () => Promise.reject(new Error('the loader never opens a session')),
+        checkModel: () => Promise.reject(new Error('the loader never checks a model')),
+        visitorSurface: () => Promise.reject(new Error('the loader never looks a session up')),
+        servedSurfaces: () => Promise.reject(new Error('the loader never lists surfaces')),
+      },
     },
-    open: () => Promise.reject(new Error('the loader never opens a session')),
-    checkModel: () => Promise.reject(new Error('the loader never checks a model')),
-    visitorSurface: () => Promise.reject(new Error('the loader never looks a session up')),
-    servedSurfaces: () => Promise.reject(new Error('the loader never lists surfaces')),
   });
   return asked;
 }
@@ -67,7 +70,7 @@ async function expectNotFound(response: Response): Promise<void> {
 }
 
 afterEach(() => {
-  clearSurfaceSessionsRuntime();
+  clearApplicationContext();
 });
 
 describe('serveWidgetLoader (GET /p/s/<name>/widget.js; S1-18, #456)', () => {

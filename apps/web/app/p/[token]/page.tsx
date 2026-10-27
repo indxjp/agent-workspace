@@ -1,6 +1,8 @@
+import { log } from '../../../server/telemetry/logger';
 import { ShareService } from '../../../server/shares/core/service';
-import { currentSharesRuntime } from '../../../server/shares/core/runtime';
+import { applicationContext } from '../../../server/application-context';
 import { PublicMessageForm } from '../../../components/shares/public-message-form';
+import { SharedSnapshot } from '../../../components/shares/shared-snapshot';
 import { runnablePublicLinksEnabled } from '../../../server/shares/runnable/feature';
 import { DomainError } from '../../../server/errors';
 export const dynamic = 'force-dynamic';
@@ -12,7 +14,7 @@ export default async function PublicSharePage({
   searchParams: Promise<{ passphrase?: string }>;
 }) {
   const { token } = await params;
-  const runtime = currentSharesRuntime();
+  const runtime = applicationContext()?.shares;
   const resolved = runtime ? await runtime.resolvePublic(token) : null;
   if (!resolved)
     return (
@@ -31,11 +33,7 @@ export default async function PublicSharePage({
           Shared {share.subjectType}
         </div>
         <h1 className="mt-2 text-[26px]">{share.subjectLabel}</h1>
-        <div className="mt-5 rounded-(--radius) border border-border bg-surface p-5">
-          <pre className="overflow-auto whitespace-pre-wrap text-[13px]">
-            {JSON.stringify(share.snapshot, null, 2)}
-          </pre>
-        </div>
+        <SharedSnapshot subjectType={share.subjectType} snapshot={share.snapshot} />
         {share.mode === 'runnable' && runnablePublicLinksEnabled() ? (
           <PublicMessageForm token={token} passphraseRequired={share.passphraseHash !== null} />
         ) : null}
@@ -59,7 +57,7 @@ export default async function PublicSharePage({
       );
     }
     if (!(error instanceof DomainError)) {
-      console.error('[public-shares] render-public-share failed', error);
+      log.error('[public-shares] render-public-share failed', { error });
     }
     return (
       <main className="mx-auto max-w-[760px] p-8">

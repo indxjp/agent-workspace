@@ -1,10 +1,13 @@
 import {
   RUN_STATUS_EVENT,
+  RUN_WARNING_EVENT,
   RunFailedFrameDataSchema,
   RunStatusEventDataSchema,
+  RunWarningEventDataSchema,
   StreamResetFrameDataSchema,
   type RunFailedFrameData,
   type RunStatusEventData,
+  type RunWarningEventData,
   type StreamResetFrameData,
 } from '@indx-workspace/contracts/run-events';
 
@@ -17,6 +20,9 @@ import type { SseFrame } from './sse.js';
  * One frame of a run's event stream, classified.
  *
  *   * `run-status`   — the platform's durable lifecycle event; `id` is a resume cursor.
+ *   * `run-warning`  — a durable platform notice about the run (ADR-0146), such as
+ *                      `attachments_removed_shell`; `id` is a resume cursor. Not an agent frame,
+ *                      and not an outcome: show it and keep reading.
  *   * `runtime`      — a durable event the runtime produced; `id` is a resume cursor. Since ENG-03
  *                      (#302) `name` is one of `@indx-workspace/contracts`' `AGENT_FRAME_NAMES` and
  *                      `data` is that frame — one engine-neutral vocabulary, normalised by the
@@ -26,7 +32,7 @@ import type { SseFrame } from './sse.js';
  *   * `stream-reset` — what follows is not contiguous with what the client already has.
  *   * `done`         — the stream is over. It says nothing about whether the run succeeded.
  *
- * `at` on the two durable variants is when the control plane recorded the event, not when the
+ * `at` on the durable variants is when the control plane recorded the event, not when the
  * engine produced it. It is absent when the server sent none (a server before the `at:` field).
  *
  * `data` is left `unknown` here and validated by the parser rather than by this classifier, so that
@@ -39,6 +45,12 @@ export type RunEventFrame =
       readonly id: string | null;
       readonly at?: string;
       readonly data: RunStatusEventData;
+    }
+  | {
+      readonly kind: 'run-warning';
+      readonly id: string | null;
+      readonly at?: string;
+      readonly data: RunWarningEventData;
     }
   | {
       readonly kind: 'runtime';
@@ -90,6 +102,12 @@ export function classifyRunEventFrame(frame: SseFrame): RunEventFrame {
       const parsed = RunStatusEventDataSchema.safeParse(frame.data);
       return parsed.success
         ? { kind: 'run-status', id: frame.id, ...stampOf(frame), data: parsed.data }
+        : refused(frame, parsed.error.issues);
+    }
+    case RUN_WARNING_EVENT: {
+      const parsed = RunWarningEventDataSchema.safeParse(frame.data);
+      return parsed.success
+        ? { kind: 'run-warning', id: frame.id, ...stampOf(frame), data: parsed.data }
         : refused(frame, parsed.error.issues);
     }
     default:

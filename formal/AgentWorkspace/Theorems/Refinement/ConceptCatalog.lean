@@ -22,16 +22,16 @@ private theorem lookup_cell_same (c : String) (v : Option String)
   cases v <;> simp [cell]
 
 private theorem folder_ne : (File.FileKind.folder == File.FileKind.file) = false := by
-  decide
+  decide +kernel
 
 private theorem file_bne_folder : (File.FileKind.file != File.FileKind.folder) = true := by
-  decide
+  decide +kernel
 
 private theorem http_ne : (Connector.Transport.http == Connector.Transport.stdio) = false := by
-  decide
+  decide +kernel
 
 private theorem sse_ne : (Connector.Transport.sse == Connector.Transport.stdio) = false := by
-  decide
+  decide +kernel
 
 private theorem kind_bne :
     (Connector.Kind.mcp != Connector.Kind.mcp) = false ∧
@@ -40,7 +40,7 @@ private theorem kind_bne :
       (Connector.Kind.mcp != Connector.Kind.postgres) = true ∧
       (Connector.Kind.openapi != Connector.Kind.postgres) = true ∧
       (Connector.Kind.postgres != Connector.Kind.postgres) = false := by
-  decide
+  decide +kernel
 
 /-- The connector concept refines `mcp_servers`: an MCP connector is valid exactly when its row
 passes every non-closed-set check of the table. On a row of kind `mcp` the five per-kind checks
@@ -116,7 +116,7 @@ private theorem nat_repr_head (m : Nat) :
   cases h : Nat.toDigits 10 m with
   | nil => exact absurd h Nat.toDigits_ne_nil
   | cons c cs =>
-    exact ⟨c, cs, rfl, Nat.isDigit_of_mem_toDigits (by decide) (by decide)
+    exact ⟨c, cs, rfl, Nat.isDigit_of_mem_toDigits (by decide +kernel) (by decide +kernel)
       (h ▸ List.mem_cons_self)⟩
 
 /-- `size_bytes >= 0` read on the text of a `bigint`: the rendering starts with `-` exactly when
@@ -128,7 +128,7 @@ private theorem int_toString_nonneg (n : Int) :
   | ofNat m =>
     obtain ⟨c, cs, h, hd⟩ := nat_repr_head m
     rw [int_toString_ofNat, h]
-    have hne : c ≠ '-' := by rintro rfl; exact absurd hd (by decide)
+    have hne : c ≠ '-' := by rintro rfl; exact absurd hd (by decide +kernel)
     simp [hne]
   | negSucc m =>
     rw [int_toString_negSucc]
@@ -145,14 +145,14 @@ private theorem int_toString_eq_zero (n : Int) : (n.repr == "0") = (n == 0) := b
   | ofNat m =>
     rw [int_toString_ofNat]
     by_cases hm : m = 0
-    · subst hm; decide
+    · subst hm; decide +kernel
     · have h1 : (Nat.repr m == "0") = false := by
         rw [beq_eq_false_iff_ne]
         intro h
         have h2 : Nat.toDigits 10 m = ['0'] := by rw [← Nat.toList_repr, h]; rfl
         have := Nat.ofDigitChars_ten_toDigits (n := m)
         rw [h2] at this
-        exact hm (by rw [← this]; decide)
+        exact hm (by rw [← this]; decide +kernel)
       rw [h1]
       symm
       rw [beq_eq_false_iff_ne]
@@ -208,28 +208,28 @@ theorem current_agent_states_embed_in_the_target :
 example : (connectorChecks.all fun n => clusterCheckHolds n
     (connectorRow ⟨⟨"c1"⟩, ⟨"w1"⟩, "GitHub", .http, none, none, some "https://x", .bearer,
       some ⟨"s1"⟩, true, none, ⟨"p1"⟩⟩ "t0")) = true := by
-  rw [connector_invariant_is_the_row_checks]; decide
+  rw [connector_invariant_is_the_row_checks]; decide +kernel
 
 example : (connectorChecks.all fun n => clusterCheckHolds n
     (toolConnectorRow ⟨⟨"c3"⟩, ⟨"w1"⟩, "warehouse", .postgres, "{\"tables\": [\"orders\"]}",
       some ⟨"s2"⟩, true, none, ⟨"p1"⟩⟩ "t0")) = true := by
-  rw [tool_connector_invariant_is_the_row_checks]; decide
+  rw [tool_connector_invariant_is_the_row_checks]; decide +kernel
 
 example : (connectorChecks.all fun n => clusterCheckHolds n
     (toolConnectorRow ⟨⟨"c4"⟩, ⟨"w1"⟩, "petstore", .openapi, "[]", none, true, none, ⟨"p1"⟩⟩
       "t0")) = false := by
-  rw [tool_connector_invariant_is_the_row_checks]; decide
+  rw [tool_connector_invariant_is_the_row_checks]; decide +kernel
 
 private def sampleAgent (name : String) : Agent.Agent :=
   ⟨⟨"a1"⟩, ⟨"w1"⟩, name, "", none, none, none, ⟨true, true, false, false⟩, false, none, ⟨"p1"⟩⟩
 
 example : (agentChecks.all fun n => clusterCheckHolds n (agentRow (sampleAgent "General") "t0")) =
     true := by
-  rw [agent_invariant_is_the_row_checks]; decide
+  rw [agent_invariant_is_the_row_checks]; decide +kernel
 
 example : (agentChecks.all fun n => clusterCheckHolds n (agentRow (sampleAgent "   ") "t0")) =
     false := by
-  rw [agent_invariant_is_the_row_checks]; decide
+  rw [agent_invariant_is_the_row_checks]; decide +kernel
 
 private def sampleFile (kind : File.FileKind) (key : Option String) (size : Int)
     (ct : Option String) : File.File :=
@@ -237,26 +237,26 @@ private def sampleFile (kind : File.FileKind) (key : Option String) (size : Int)
 
 example : (fileChecks.all fun n => clusterCheckHolds n
     (fileRow (sampleFile .file (some "k") 1024 (some "application/pdf")) "t0")) = true := by
-  rw [file_invariant_is_the_row_checks]; decide
+  rw [file_invariant_is_the_row_checks]; decide +kernel
 
 example : (fileChecks.all fun n => clusterCheckHolds n
     (fileRow (sampleFile .folder none 0 none) "t0")) = true := by
-  rw [file_invariant_is_the_row_checks]; decide
+  rw [file_invariant_is_the_row_checks]; decide +kernel
 
 /-- A negative size fails `files_size_non_negative` on the row. -/
 example : clusterCheckHolds "files_size_non_negative"
-    (fileRow (sampleFile .file (some "k") (-1) none) "t0") = false := by decide
+    (fileRow (sampleFile .file (some "k") (-1) none) "t0") = false := by decide +kernel
 
 /-- A folder with a content type fails `files_folder_has_no_content` on the row. -/
 example : clusterCheckHolds "files_folder_has_no_content"
-    (fileRow (sampleFile .folder none 0 (some "text/plain")) "t0") = false := by decide
+    (fileRow (sampleFile .folder none 0 (some "text/plain")) "t0") = false := by decide +kernel
 
 /-- A folder with a non-zero size fails `files_folder_has_no_content` on the row. -/
 example : clusterCheckHolds "files_folder_has_no_content"
-    (fileRow (sampleFile .folder none 5 none) "t0") = false := by decide
+    (fileRow (sampleFile .folder none 5 none) "t0") = false := by decide +kernel
 
 example : (fileChecks.all fun n => clusterCheckHolds n
     (fileRow (sampleFile .file (some "k") (-7) none) "t0")) = false := by
-  rw [file_invariant_is_the_row_checks]; decide
+  rw [file_invariant_is_the_row_checks]; decide +kernel
 
 end AgentWorkspace.Theorems.Refinement.ConceptCatalog

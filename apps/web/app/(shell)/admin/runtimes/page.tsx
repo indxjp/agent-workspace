@@ -1,7 +1,7 @@
 import { RuntimesScreen } from '../../../../components/runtimes/runtimes-screen';
 import { getSession } from '../../../../server/auth';
 import { decide } from '../../../../server/rbac/decide';
-import { currentRbacRuntime } from '../../../../server/rbac/runtime';
+import { applicationContext } from '../../../../server/application-context';
 import { currentWebRuntimeRegistry } from '../../../../server/runtimes/registry';
 import { resolveTeamViewer } from '../../../../server/team/team-viewer';
 
@@ -14,7 +14,7 @@ export const revalidate = 0;
  * listed, as `/admin/users` does. An unwired RBAC runtime or no session fails closed.
  */
 async function callerManagesRuntimes(): Promise<boolean> {
-  const rbac = currentRbacRuntime();
+  const rbac = applicationContext()?.rbac ?? null;
   if (rbac === null) return false;
   const session = await getSession();
   if (session === null) return false;

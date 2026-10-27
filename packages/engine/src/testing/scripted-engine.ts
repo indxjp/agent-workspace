@@ -22,6 +22,7 @@ import type { EngineCapabilities } from '@indx-workspace/contracts/engines';
 import {
   engineFrameBuilder,
   normaliseGrants,
+  outputSchemaRefusal,
   skillsUnderConfigDirectory,
   writeGrantVerdict,
   type AgentEngine,
@@ -247,6 +248,8 @@ export function createScriptedEngine(
           'the scripted engine is handed its gateway connection programmatically and this request carries none.',
       };
     }
+    const noOutputSchema = outputSchemaRefusal(SCRIPTED_ENGINE_ID, false, request.outputSchema);
+    if (noOutputSchema !== null) return noOutputSchema;
     const grants = normaliseGrants(request.resources.files, SCRIPTED_PROTECTED_CONFIG_DIRECTORY);
     if (!grants.ok) {
       return {

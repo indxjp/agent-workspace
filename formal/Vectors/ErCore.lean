@@ -1,3 +1,4 @@
+import ErSnapshot
 import AgentWorkspace.Er.Core
 import Vectors.Common
 
@@ -34,7 +35,8 @@ def fkJson (t : TableName) (fk : ForeignKey) : Json :=
 def uniqueJson (u : UniqueKey) : Json :=
   Json.mkObj [("name", u.name), ("columns", strs u.columns),
     ("kind", match u.kind with | .constraint => "constraint" | .index => "index"),
-    ("partialNullColumns", strs u.partialNullColumns)]
+    ("partialNullColumns", strs u.partialNullColumns),
+    ("partialNotNullColumns", strs u.partialNotNullColumns)]
 
 def checkJson : Check → Json
   | .oneOf n c vs =>

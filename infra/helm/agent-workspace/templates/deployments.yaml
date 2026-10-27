@@ -1,5 +1,7 @@
 {{- $ports := dict "web" 3000 "gateway" 4000 "runner-manager" 8080 }}
 {{- $healthPaths := dict "web" "/" "gateway" "/health" "runner-manager" "/healthz" }}
+{{- /* Web readiness fails for a malformed MASTER_ENCRYPTION_KEY (issue #1562); liveness stays on "/". */}}
+{{- $readinessPaths := dict "web" "/api/readyz" "gateway" "/health" "runner-manager" "/healthz" }}
 {{- $images := dict "web" .Values.images.web "gateway" .Values.images.gateway "runner-manager" .Values.images.runnerManager }}
 {{- range $name, $replicas := dict "web" .Values.replicas.web "gateway" .Values.replicas.gateway "runner-manager" .Values.replicas.runnerManager }}
 apiVersion: apps/v1
@@ -62,6 +64,10 @@ spec:
             - { name: RUNTIME_CLASS_NAME, value: {{ . | quote }} }
             {{- end }}
             {{- end }}
+            {{- if eq $name "gateway" }}
+            # The gateway forwards the Builder's aw-control MCP calls to web's in-cluster Service.
+            - { name: GATEWAY_CONTROL_PLANE_ORIGIN, value: {{ printf "http://agent-workspace-web:%v" (index $ports "web") | quote }} }
+            {{- end }}
             {{- if and (eq $name "web") $.Values.deploymentPolicy }}
             - { name: AW_DEPLOYMENT_POLICY, value: {{ $.Values.deploymentPolicy | quote }} }
             {{- end }}
@@ -79,10 +85,11 @@ spec:
             - { name: {{ printf "AGENT_WORKSPACE_RUNTIME_IMAGE_%s" (upper (replace "-" "_" $engine)) | quote }}, value: {{ $image | quote }} }
             {{- end }}
             {{- end }}
-            # The object-store Secret is built from the generated `.env`, which names the
-            # credential `OBJECT_STORAGE_*`; `apps/web/server/composition/storage.ts` builds its
-            # S3 client from the `AWS_*` names. `packages/cli/templates/compose.yaml` performs
-            # that translation for the Compose project, so the chart has to perform it too — an
+            # The object-store Secret is built from the generated `.env`. Through `envFrom` below
+            # it delivers `AW_STORAGE_URL` (where files, skills and session transcripts live) and
+            # `AW_STORAGE_SIGNED_UPLOAD_MAX_BYTES`, so neither is a chart value. The credential is
+            # named `OBJECT_STORAGE_*` there, but `apps/web/server/composition/storage.ts` builds
+            # its S3 client from the `AWS_*` names, so only the two keys are translated here — an
             # `envFrom` alone would deliver a key nothing reads, and an operator who filled it in
             # exactly as `docs/deploy/kubernetes.md` instructs would get 503 from every
             # /api/files* route. `optional: true` is what keeps an IAM or workload-identity
@@ -112,7 +119,7 @@ spec:
             failureThreshold: {{ $.Values.probes.startup.failureThreshold }}
             periodSeconds: {{ $.Values.probes.startup.periodSeconds }}
           readinessProbe:
-            httpGet: { path: {{ index $healthPaths $name | quote }}, port: http }
+            httpGet: { path: {{ index $readinessPaths $name | quote }}, port: http }
             failureThreshold: {{ $.Values.probes.readiness.failureThreshold }}
             periodSeconds: {{ $.Values.probes.readiness.periodSeconds }}
           livenessProbe:

@@ -74,7 +74,7 @@ instance : WireEnum SubjectType where
 
 /-- The table a subject lives in: the polymorphic target of `shares.subject_id`, which no foreign
 key enforces. -/
-@[aw_spec (ts := "apps/web/server/composition/register.ts#subjectOwnership")
+@[aw_spec (ts := "apps/web/server/composition/wiring/projects.ts#subjectOwnership")
   (doc := "docs/sdk/04-api-specification.md#2-resource-model")]
 def SubjectType.table : SubjectType → TableName
   | .agent => .agents
@@ -179,7 +179,7 @@ def passphraseMaxLength : Nat := 1024
 def tokenPrefix : String := "pub_"
 
 /-- The public link of a share is `/p/<token>` (`toShareResource`). -/
-@[aw_spec (ts := "apps/web/app/api/shares/route.ts#toShareResource")
+@[aw_spec (ts := "apps/web/server/shares/core/resource.ts#toShareResource")
   (ts := "packages/contracts/src/shares.ts#PUBLIC_URL_INVARIANT")]
 def publicUrlPrefix : String := "/p/"
 
@@ -537,7 +537,7 @@ def Share.budgetExhausted (s : Share) : Bool :=
 
 /-- The keys `toShareResource` renders, in its order, for a share with this visibility, with or
 without a view count. -/
-@[aw_spec (ts := "apps/web/app/api/shares/route.ts#toShareResource")
+@[aw_spec (ts := "apps/web/server/shares/core/resource.ts#toShareResource")
   (ts := "packages/contracts/src/shares.ts#ShareResourceSchema")
   (doc := "docs/sdk/04-api-specification.md#513-shares--awshares")]
 def resourceKeys (v : Visibility) (withViewCount : Bool) : List String :=
@@ -547,13 +547,13 @@ def resourceKeys (v : Visibility) (withViewCount : Bool) : List String :=
     (if v == .«public» then ["url"] else [])
 
 /-- The persistence-only columns that must never cross the wire as fields. -/
-@[aw_spec (ts := "apps/web/app/api/shares/route.ts#toShareResource")
+@[aw_spec (ts := "apps/web/server/shares/core/resource.ts#toShareResource")
   (ts := "packages/contracts/src/shares.ts#ShareResourceSchema")]
 def persistenceOnlyKeys : List String :=
   ["token", "passphraseHash", "workspaceId", "createdBy", "publisherPrincipalId"]
 
 /-- The public URL a share carries on the wire: `/p/<token>` for a public share, absent otherwise. -/
-@[aw_spec (ts := "apps/web/app/api/shares/route.ts#toShareResource")
+@[aw_spec (ts := "apps/web/server/shares/core/resource.ts#toShareResource")
   (ts := "packages/contracts/src/shares.ts#PUBLIC_URL_INVARIANT")
   (doc := "docs/sdk/04-api-specification.md#513-shares--awshares")]
 def Share.url? (s : Share) : Option String :=

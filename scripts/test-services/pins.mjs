@@ -13,6 +13,16 @@ export const SEAWEEDFS_VERSION = '4.47';
 export const SEAWEEDFS_IMAGE =
   'chrislusf/seaweedfs@sha256:ce9e796f1fe6f06968f4c04bdaf8f678dad9c8acdfef3d244133d71bfa6bf882';
 
+// The Azure and GCS emulators of the object-store suites (#1650), Docker only: the native fallback
+// has no emulator, so without Docker TEST_AZURITE_URL and TEST_GCS_ENDPOINT stay unset and those
+// suites define no emulator cases. Pinned by multi-arch image index digest: Azurite 3.37.0 and
+// fake-gcs-server 1.56.1. ci.yml's step "Start the Azure and GCS emulators for the object-store
+// suites" pins the same digests; tests/test-services.test.ts fails while they disagree.
+export const AZURITE_IMAGE =
+  'mcr.microsoft.com/azure-storage/azurite@sha256:830430c1da1a2d537e08f3e6764dd1f5ae00cf0346bcaf625b968ec3f0971fd5';
+export const FAKE_GCS_SERVER_IMAGE =
+  'fsouza/fake-gcs-server@sha256:797ce226d62f947c009dc40246b30cfb456b8473d8241407f9d6f2c04e4d69ef';
+
 /**
  * Release archives of https://github.com/seaweedfs/seaweedfs/releases/tag/4.47, keyed by Node's
  * `${process.platform}-${process.arch}`. Each contains the single `weed` binary.

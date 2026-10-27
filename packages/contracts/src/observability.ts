@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { AgentVersionViaSchema } from './agent-versions.js';
 import { IsoDateTimeSchema } from './identifiers.js';
 import { RUN_STATUSES } from './runs.js';
 
@@ -37,13 +38,23 @@ export type RunTelemetryListResponse = z.infer<typeof RunTelemetryListResponseSc
 
 /**
  * The control-plane actions the audit trail records, as the `audit_events.action` column
- * restates them. An action name is a name, not a reference: values for objects a deployment does
- * not hold are still valid, and a row's subject may no longer exist when the row is read.
+ * restates them (its CHECK is derived from this list). An action name is a name, not a
+ * reference: values for objects a deployment does not hold are still valid, and a row's subject
+ * may no longer exist when the row is read.
+ *
+ * Spec §36's list of "important control-plane actions" comes first, verbatim and in §36's order,
+ * each phrase as a slug. Five of them name objects no table in the first wave held (runtime
+ * profiles, projects and shares); they are here because §36 lists them. The `invitation-*`,
+ * `project-archived` and `project-restored` values postdate §36: nothing is deleted by an archive
+ * or a restore, so neither folds into `project-deleted`. The column is a `CHECK`, not a native
+ * `pgEnum`, so adding a value is a one-line `ALTER` rather than a migration with lock implications.
  */
 export const AUDIT_ACTIONS = [
   'user-created',
   'user-deleted',
   'agent-changed',
+  // Issue #1847: a new agent saved by the Builder. Its row names the person, never the Builder.
+  'agent-created',
   'provider-credential-changed',
   'api-key-created',
   'api-key-revoked',
@@ -62,15 +73,48 @@ export const AUDIT_ACTIONS = [
   'invitation-resent',
   'invitation-revoked',
   'invitation-accepted',
+  // ADR-0134: the lifecycle of an endpoint client, and a call made through one.
   'endpoint-client-created',
   'endpoint-client-changed',
   'endpoint-client-revoked',
   'endpoint-tool-called',
+  // ADR-0134 part 3: the OAuth server's client secret and grant lifecycle.
   'oauth-client-secret-rotated',
   'oauth-grant-issued',
   'oauth-grant-revoked',
+  // The storage design, §05: who did what to a file. The URL of a signed link is never a field of a row.
+  'file-uploaded',
+  'file-downloaded',
+  'file-link-created',
+  'file-moved',
+  'file-deleted',
+  // The storage design, §05: a connected bucket's lifecycle, and the grants of an agent onto one.
+  'storage-connection-created',
+  'storage-connection-updated',
+  'storage-connection-deleted',
+  'storage-connection-credential-changed',
+  'storage-connection-tested',
+  'storage-connection-written',
+  'storage-grant-changed',
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
+
+/**
+ * What an `agent-created` row names (issue #1847), stored in `audit_events.details`, which no other
+ * action may carry. `createdByAgentId` is for issue #1851 and is unused here.
+ */
+export const AgentCreatedAuditDetailsSchema = z
+  .object({
+    agentId: z.string().min(1),
+    version: z.number().int().positive(),
+    via: AgentVersionViaSchema,
+    builderRunId: z.string().min(1).optional(),
+    createdByAgentId: z.string().min(1).optional(),
+  })
+  .strict()
+  .readonly();
+
+export type AgentCreatedAuditDetails = z.infer<typeof AgentCreatedAuditDetailsSchema>;
 
 /**
  * One audit row as every item of `GET /api/audit-events` renders it: who, what, to which thing,
@@ -81,6 +125,9 @@ export type AuditAction = (typeof AUDIT_ACTIONS)[number];
  * or the subject is renamed or deleted. `actorPrincipalId` is `null` only for a non-workspace
  * service or system actor; `actorUserId` is the legacy human attribution and goes `null` when the
  * user is deleted. `subjectId` is `null` for an action with no one subject.
+ *
+ * `builderRunId` names the Builder run that created the agent. It is present only on an
+ * `agent-created` row whose stored details carry it, never on any other action.
  */
 export const AuditEventSchema = z
   .object({
@@ -93,6 +140,7 @@ export const AuditEventSchema = z
     subjectId: z.string().nullable(),
     subjectLabel: z.string().min(1),
     createdAt: IsoDateTimeSchema,
+    builderRunId: z.string().min(1).optional(),
   })
   .strict()
   .readonly();
@@ -127,4 +175,9 @@ export const AUDIT_LIST_MAX_LIMIT = 500;
 export interface AuditListQuery {
   readonly limit?: number;
   readonly cursor?: string;
+  /**
+   * Only rows of this one action (single value; a value outside {@link AUDIT_ACTIONS} is refused
+   * as `400 invalid_action`). Paging keeps the same order and cursor with the filter on.
+   */
+  readonly action?: AuditAction;
 }

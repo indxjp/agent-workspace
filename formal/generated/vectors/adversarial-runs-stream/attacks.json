@@ -61,8 +61,7 @@
    "id": "terminal-finish-closes-log",
    "expected":
    {"status": "completed", "queuedStatus": "completed", "queuedAppendRejected": true, "appendRejected": true}},
-  {"witnesses":
-   ["AgentWorkspace.Theorems.Adversarial.AdversarialRunsStream.indeterminate_done_stops_follow_but_live_wait_fails"],
+  {"witnesses": ["AgentWorkspace.Theorems.Refinement.SdkRuns.indeterminate_done_diverges_from_settled_wait"],
    "input": {"runStatus": "running", "reason": "lost"},
    "id": "indeterminate-unknown-then-done",
    "expected": {"waitError": "contract-violation", "frames": ["run-failed", "done"], "failureStatus": "unknown"}}],

@@ -6,6 +6,7 @@
  */
 import { isUuid } from '@indx-workspace/contracts';
 
+import { applicationContext } from '../application-context';
 import { hashesEqual } from '../rbac/api-key';
 import {
   oauthError,
@@ -21,7 +22,7 @@ import {
   recordOAuthAuthFailure,
 } from './limits';
 import { publicOrigin } from './resource';
-import { currentOAuthRuntime, type OAuthClient, type OAuthRuntime } from './runtime';
+import type { OAuthClient, OAuthRuntime } from './runtime';
 import { clientSecretDigest } from './tokens';
 
 export type ClientAuthentication =
@@ -58,7 +59,7 @@ function readBasic(header: string | null): { id: string; secret: string } | null
 
 export async function authenticateClient(request: Request): Promise<ClientAuthentication> {
   if (publicOrigin() === null) return refuse(oauthNotConfigured());
-  const runtime = currentOAuthRuntime();
+  const runtime = applicationContext()?.oauth ?? null;
   if (runtime === null) return refuse(oauthUnavailable());
   const nowMs = Date.now();
   const address = admitOAuthAddress(request.headers, nowMs);

@@ -60,6 +60,8 @@
  *  3. Path and method are compared as sets, not as pairs; the pairing is what the replay below
  *     exercises, one handler at a time.
  */
+import { clearApplicationContext } from '../application-context';
+import { installTestDomains } from '../application-context-fixtures';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -73,7 +75,8 @@ import {
   type SessionRepositoryProvider,
 } from '@agent-workspace/core/db';
 
-import { installSessionApi, resetSessionApi, type SessionPrincipal } from './environment';
+import type { SessionApiPrincipal } from './environment';
+import { createRepositorySessionsStoreProvider } from './store';
 import { InMemoryTranscriptStore } from './memory-store';
 import { InMemorySessionStateStore } from './state-memory-store';
 import {
@@ -106,7 +109,7 @@ const STREAM_KEY = `${WORKSPACE}/`;
  */
 const CONTROL_PLANE_ONLY_PATHS = new Set<string>();
 const CONTROL_PLANE_ONLY_METHODS = new Set<string>();
-const PRINCIPAL: SessionPrincipal = {
+const PRINCIPAL: SessionApiPrincipal = {
   kind: 'user',
   principalId: USER,
   ownerPrincipalId: USER,
@@ -324,6 +327,7 @@ const SESSIONS: SessionRepositoryProvider = {
     update: () => Promise.resolve({ kind: 'no-op', session: SESSION_ROW }),
     archive: () => Promise.resolve({ kind: 'no-op', session: SESSION_ROW }),
     restore: () => Promise.resolve({ kind: 'no-op', session: SESSION_ROW }),
+    discardIfUnused: () => Promise.resolve(false),
   }),
 };
 
@@ -335,19 +339,23 @@ function install(): InMemorySessionStateStore {
   // Which backend is installed is not what this gate is about: the wire is the same over either,
   // and `state-store.test.ts` runs the same contract suite against both.
   const stateStore = new InMemorySessionStateStore();
-  installSessionApi({
-    authenticate: () => Promise.resolve(PRINCIPAL),
-    canAccessSession: () => Promise.resolve(true),
-    store: new InMemoryTranscriptStore(),
-    stateStore,
-    sessions: SESSIONS,
-    scopes: createInMemoryWorkspaceScopeResolver([{ id: WORKSPACE, slug: 'wire-contract' }]),
+  installTestDomains({
+    sessions: {
+      authenticate: () => Promise.resolve(PRINCIPAL),
+      canAccessSession: () => Promise.resolve(true),
+      store: new InMemoryTranscriptStore(),
+      stateStore,
+      sessions: createRepositorySessionsStoreProvider({
+        repositories: SESSIONS,
+        scopes: createInMemoryWorkspaceScopeResolver([{ id: WORKSPACE, slug: 'wire-contract' }]),
+      }),
+    },
   });
   return stateStore;
 }
 
 afterEach(() => {
-  resetSessionApi();
+  clearApplicationContext();
 });
 
 /**

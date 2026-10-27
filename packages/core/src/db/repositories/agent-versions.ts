@@ -60,50 +60,42 @@
  * `movePointer` is the only code that writes `agent_version_pointers`, and it always appends the
  * move to `agent_pointer_moves` beside it, so the newest history row of an environment is its
  * pointer (issue #615). Promote and rollback are `applyAndPoint` calls with their own `reason`.
+ *
+ * ## Where the code lives
+ *
+ * This file holds the public records, the repository interface and the provider. The methods are
+ * split by kind: `./agent-versions-read.ts`, `./agent-versions-query.ts` (reference resolution and
+ * subagent lookups) and `./agent-versions-write.ts` (`movePointer`, `Rollback` and the
+ * transactions); `./agent-versions-shared.ts` holds what more than one of them uses.
  */
-import { and, asc, desc, eq, inArray, sql, type SQL } from 'drizzle-orm';
-import { z } from 'zod';
+import type { AgentCreatedByAgent, BuiltinAgentKey } from '@indx-workspace/contracts/agents';
+import type { AgentCreatedAuditDetails } from '@indx-workspace/contracts/observability';
 
 import type { Database } from '../client.js';
-import { agentFiles } from '../schema/agent-files.js';
-import { agentMcpServers } from '../schema/agent-mcp-servers.js';
-import { agentSkills } from '../schema/agent-skills.js';
-import { agentPointerMoves, type AgentPointerMoveReason } from '../schema/agent-pointer-moves.js';
+import type { AgentPointerMoveReason } from '../schema/agent-pointer-moves.js';
 import {
   agentVersionEnvironments,
-  agentVersionPointers,
   type AgentVersionEnvironment,
 } from '../schema/agent-version-pointers.js';
-import { agentVersions, agentVersionVias, type AgentVersionVia } from '../schema/agent-versions.js';
-import { auditEvents } from '../schema/audit-events.js';
-import {
-  AgentPermissions as AgentPermissionsSchema,
-  AgentStoredPolicy as AgentStoredPolicySchema,
-  agents,
-  parseAgentPermissions,
-  parseAgentPolicy,
-} from '../schema/agents.js';
-import { files } from '../schema/files.js';
-import { mcpServers } from '../schema/mcp-servers.js';
-import { modelConnections } from '../schema/model-connections.js';
-import { runtimeProfiles } from '../schema/runtime-profiles.js';
-import { skills } from '../schema/skills.js';
-import {
-  narrowFileGrants,
-  resolveFromRows,
-  type AgentDefinitionReferenceKind,
-  type DefinitionReferences,
-  type NamedRow,
-  type ResolveDefinitionOutcome,
-  type ResolvedReferences,
+import { agentVersionVias, type AgentVersionVia } from '../schema/agent-versions.js';
+import { agentVersionQueries } from './agent-versions-query.js';
+import { agentVersionReads } from './agent-versions-read.js';
+import type {
+  AgentDefinitionReferenceKind,
+  DefinitionReferences,
+  ResolveDefinitionOutcome,
+  ResolvedReferences,
+  StorageGrantRef,
 } from './agent-versions-resolution.js';
+import { agentVersionWrites } from './agent-versions-write.js';
 import type { AgentPermissions, AgentRecord, AgentStoredPolicy } from './agents.js';
 import { requireWorkspaceScope, type WorkspaceScope } from './scope.js';
-import { postgresViolations } from './violations.js';
 
 export {
   agentDefinitionReferenceKinds,
   narrowFileGrants,
+  narrowStorageGrants,
+  storageGrantChange,
   resolveFromRows,
   type AgentDefinitionReferenceKind,
   type DefinitionReference,
@@ -111,7 +103,14 @@ export {
   type FileGrant,
   type ResolveDefinitionOutcome,
   type ResolvedReferences,
+  type StorageGrantRef,
 } from './agent-versions-resolution.js';
+export {
+  appliedRuntimeProfileId,
+  bodyDeclaresSubagents,
+  bodyHasDescription,
+  bodySubagentNames,
+} from './agent-versions-shared.js';
 export {
   agentVersionEnvironments,
   agentVersionVias,
@@ -162,10 +161,23 @@ export interface CreateAgentVersionInput {
   readonly body: unknown;
   /** Resolved from the authenticated actor, never from a request body. */
   readonly createdByPrincipalId: string;
+  /**
+   * The storage folders the validated pipeline resolved for this version, by connection id; stored
+   * with the version row. Absent means none. A connection that is gone by insert time is skipped,
+   * so the version then fails closed at run time instead of the write failing.
+   */
+  readonly storageGrants?: readonly StorageGrantRef[] | undefined;
+  /**
+   * The number the version must take; when the agent's next number is another, nothing is saved
+   * and the outcome is `number-taken`. Checked under the agent's row lock, so of two concurrent
+   * saves expecting one number exactly one is created. Absent: the next number, whatever it is.
+   */
+  readonly number?: number;
 }
 
 export type CreateAgentVersionOutcome =
   | { readonly kind: 'created'; readonly version: AgentVersionRecord }
+  | { readonly kind: 'number-taken' }
   | { readonly kind: 'not-found' }
   | { readonly kind: 'unknown-principal' };
 
@@ -211,6 +223,16 @@ export interface ApplyAndPointInput {
   readonly reason: AgentPointerMoveReason;
   /** Required: no caller can move a pointer without leaving a record of it. */
   readonly audit: AgentPointerAudit;
+  /**
+   * Compare-and-set: the version number `environment` must point at when the move runs, or `null`
+   * for "must be unset". A different pointer answers `pointer-moved` and moves nothing. Absent
+   * means unconditional. Checked under the same lock that serialises the move, so two moves that
+   * expect one version cannot both apply.
+   *
+   * A refused move leaves any version the caller created for it saved and unpointed. That is safe
+   * by design (builder design §08 Data rule 2): an unpointed version runs nothing.
+   */
+  readonly expectedVersion?: number | null;
 }
 
 /** A reference that resolved a moment ago and is gone now (or never belonged here). */
@@ -230,6 +252,12 @@ export interface SubagentNestingOutcome {
   readonly parents: readonly string[];
 }
 
+/** `expectedVersion` did not match: `current` is the number the environment points at, or `null`. */
+export interface PointerMovedOutcome {
+  readonly kind: 'pointer-moved';
+  readonly current: number | null;
+}
+
 export type ApplyAndPointOutcome =
   | {
       readonly kind: 'applied';
@@ -240,16 +268,41 @@ export type ApplyAndPointOutcome =
   | { readonly kind: 'version-not-found' }
   | { readonly kind: 'name-conflict'; readonly name: string }
   | { readonly kind: 'surface-name-taken'; readonly name: string }
+  | PointerMovedOutcome
   | SubagentNestingOutcome
   | ReferenceGoneOutcome;
+
+/**
+ * The `agent-created` row a create writes inside its transaction. The workspace, action, subject
+ * (the new agent and its name) and the details' `agentId`, `version` and `via` are fixed by the repository.
+ */
+interface AgentCreatedAuditInput {
+  readonly actorPrincipalId: string;
+  readonly actorUserId: string | null;
+  readonly actorLabel: string;
+  readonly details: Omit<AgentCreatedAuditDetails, 'agentId' | 'version' | 'via'>;
+}
 
 export interface CreateAgentWithFirstVersionInput {
   readonly agent: MaterialisedAgent & {
     readonly ownerPrincipalId: string;
     readonly createdBy: string | null;
+    /** Marks the row as this built-in agent in the same insert; absent for an ordinary agent. */
+    readonly builtin?: BuiltinAgentKey;
+    /** Lineage of an agent made by an agent, written in the same insert (issue #1851). */
+    readonly createdByAgent?: AgentCreatedByAgent & { readonly agentId: string };
   };
   readonly version: CreateAgentVersionInput;
   readonly environment: AgentVersionEnvironment;
+  /** Who a `storage-grant-changed` row is attributed to; without it no grant audit is written. */
+  readonly audit?: AgentPointerAudit | undefined;
+  /** Written as an `agent-created` row in the same transaction; a refused row rolls the create back. */
+  readonly agentCreatedAudit?: AgentCreatedAuditInput | undefined;
+  /**
+   * Refuses the create when the workspace already has `limit` agents created since `since`,
+   * counted under the transaction's pointer lock so two concurrent creates cannot both pass.
+   */
+  readonly quota?: { readonly since: Date; readonly limit: number } | undefined;
 }
 
 export type CreateAgentWithFirstVersionOutcome =
@@ -264,6 +317,10 @@ export type CreateAgentWithFirstVersionOutcome =
   | SubagentNestingOutcome
   /** The agent's owner or the version's author is not a principal of this workspace. */
   | { readonly kind: 'unknown-principal' }
+  /** `createdByAgent` names no agent of this workspace. */
+  | { readonly kind: 'unknown-creator-agent' }
+  /** The workspace has already created `quota.limit` agents since `quota.since`. */
+  | { readonly kind: 'quota-exceeded' }
   | ReferenceGoneOutcome;
 
 /** The surface a pointed version serves under a name (C9 makes it at most one). */
@@ -290,56 +347,6 @@ export interface AgentSubagentCandidate {
   readonly hasSubagents: boolean;
   /** The agent's materialised version body has a `description` (a parent's model needs it). */
   readonly hasDescription: boolean;
-}
-
-/** Whether a stored version body (`unknown` here) declares at least one subagent. */
-export function bodyDeclaresSubagents(body: unknown): boolean {
-  if (typeof body !== 'object' || body === null) return false;
-  const subagents: unknown = Reflect.get(body, 'subagents');
-  return Array.isArray(subagents) && subagents.length > 0;
-}
-
-/** Whether a stored version body (`unknown` here) carries a non-empty `description`. */
-export function bodyHasDescription(body: unknown): boolean {
-  if (typeof body !== 'object' || body === null) return false;
-  const description: unknown = Reflect.get(body, 'description');
-  return typeof description === 'string' && description.length > 0;
-}
-
-/**
- * The runtime profile applying a version to `local` leaves on the agent row (issue #832): the
- * profile the version names, as resolved; for a version naming none (`aw push` always sends
- * `null`), the profile the agent already has, and the resolved workspace default only when it has
- * none. A push therefore never detaches a profile the console or setup attached.
- */
-export function appliedRuntimeProfileId(
-  body: unknown,
-  current: string | null,
-  resolved: string | null,
-): string | null {
-  const definition: unknown =
-    typeof body === 'object' && body !== null ? Reflect.get(body, 'definition') : null;
-  const agent: unknown =
-    typeof definition === 'object' && definition !== null ? Reflect.get(definition, 'agent') : null;
-  const named =
-    typeof agent === 'object' && agent !== null
-      ? typeof Reflect.get(agent, 'runtimeProfileName') === 'string'
-      : false;
-  return named ? resolved : (current ?? resolved);
-}
-
-/** The subagent names a stored version body (`unknown` here) declares, in body order. */
-export function bodySubagentNames(body: unknown): readonly string[] {
-  if (typeof body !== 'object' || body === null) return [];
-  const subagents: unknown = Reflect.get(body, 'subagents');
-  if (!Array.isArray(subagents)) return [];
-  const names: string[] = [];
-  for (const entry of subagents as readonly unknown[]) {
-    const name: unknown =
-      typeof entry === 'object' && entry !== null ? Reflect.get(entry, 'name') : undefined;
-    if (typeof name === 'string') names.push(name);
-  }
-  return names;
 }
 
 /** Version persistence for exactly one workspace. No method takes a workspace id. */
@@ -375,6 +382,17 @@ export interface AgentVersionRepository {
    */
   agentsByName(names: readonly string[]): Promise<ReadonlyMap<string, AgentSubagentCandidate>>;
   /**
+   * Whether any agent of this workspace holds a storage grant on the connection. A connection
+   * delete must refuse while it does; the database refuses it too (`NO ACTION` foreign key).
+   */
+  isConnectionGranted(connectionId: string): Promise<boolean>;
+  /**
+   * The storage folders version `versionId` was deployed with (its own rows, never the agent's
+   * current grants), ordered by connection id then prefix. Empty when it has none or this workspace
+   * has no such version.
+   */
+  storageGrantsOf(versionId: string): Promise<readonly StorageGrantRef[]>;
+  /**
    * The names of the other agents of this workspace whose materialised version names `name` as a
    * subagent, sorted. `excludeAgentId` is the agent being saved (`null` for one not yet created).
    */
@@ -389,6 +407,8 @@ export interface AgentVersionRepository {
   createAgentWithFirstVersion(
     input: CreateAgentWithFirstVersionInput,
   ): Promise<CreateAgentWithFirstVersionOutcome>;
+  /** How many agents this workspace created at or after `since`, whoever made them. */
+  agentsCreatedSince(since: Date): Promise<number>;
   /**
    * The last `limit` moves of `agentId`'s pointers, newest first: of one environment, or of every
    * environment when it is `null`. Empty for an agent this workspace does not have.
@@ -410,128 +430,6 @@ export interface AgentVersionRepositoryProvider {
   forScope(scope: WorkspaceScope): AgentVersionRepository;
 }
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
-const UNIQUE_VIOLATION = '23505';
-const FOREIGN_KEY_VIOLATION = '23503';
-
-/** Foreign keys whose violation means "a resolved reference is gone", by reference kind. */
-const REFERENCE_CONSTRAINTS: ReadonlyMap<string, AgentDefinitionReferenceKind> = new Map([
-  ['agent_skills_skill_workspace_fk', 'skill'],
-  ['agent_mcp_servers_server_workspace_fk', 'connector'],
-  ['agent_files_file_workspace_fk', 'file'],
-  ['agents_model_connection_id_model_connections_id_fk', 'model-connection'],
-  ['agents_model_connection_workspace_fk', 'model-connection'],
-  ['agents_runtime_profile_id_runtime_profiles_id_fk', 'runtime-profile'],
-  ['agents_runtime_profile_workspace_fk', 'runtime-profile'],
-]);
-const NAME_CONFLICT_CONSTRAINT = 'agents_workspace_name_key';
-/** Foreign keys whose violation means "this principal is not one of this workspace's". */
-const UNKNOWN_PRINCIPAL_CONSTRAINTS: ReadonlySet<string> = new Set([
-  'agent_versions_created_by_principal_workspace_fk',
-  'agents_owner_principal_workspace_fk',
-]);
-
-type WriteFailure =
-  | { readonly kind: 'name-conflict' }
-  | { readonly kind: 'reference-gone'; readonly referenceKind: AgentDefinitionReferenceKind }
-  | { readonly kind: 'unknown-principal' };
-
-/** Classify a write failure by SQLSTATE and constraint name, or answer `null` (ADR-0015). */
-function classifyWriteFailure(error: unknown): WriteFailure | null {
-  for (const failure of postgresViolations(error)) {
-    if (failure.code === UNIQUE_VIOLATION && failure.constraint === NAME_CONFLICT_CONSTRAINT) {
-      return { kind: 'name-conflict' };
-    }
-    if (failure.code !== FOREIGN_KEY_VIOLATION) continue;
-    const referenceKind = REFERENCE_CONSTRAINTS.get(failure.constraint);
-    if (referenceKind !== undefined) return { kind: 'reference-gone', referenceKind };
-    if (UNKNOWN_PRINCIPAL_CONSTRAINTS.has(failure.constraint)) return { kind: 'unknown-principal' };
-  }
-  return null;
-}
-
-/** The non-applied outcomes raised inside a transaction so that it rolls back. */
-type RollbackOutcome =
-  | { readonly kind: 'not-found' }
-  | { readonly kind: 'version-not-found' }
-  | { readonly kind: 'surface-name-taken'; readonly name: string }
-  | SubagentNestingOutcome;
-
-/** Private: thrown inside a transaction to roll it back, and caught by the method that threw it. */
-class Rollback extends Error {
-  constructor(readonly outcome: RollbackOutcome) {
-    super(`agent version transaction rolled back: ${outcome.kind}`);
-    this.name = 'Rollback';
-  }
-}
-
-type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
-type Executor = Database | Transaction;
-
-const AGENT_COLUMNS = {
-  id: agents.id,
-  workspaceId: agents.workspaceId,
-  name: agents.name,
-  instructions: agents.instructions,
-  modelConnectionId: agents.modelConnectionId,
-  model: agents.model,
-  runtimeProfileId: agents.runtimeProfileId,
-  permissions: agents.permissions,
-  policy: agents.policy,
-  createdBy: agents.createdBy,
-  ownerPrincipalId: agents.ownerPrincipalId,
-  createdAt: agents.createdAt,
-  updatedAt: agents.updatedAt,
-} as const;
-
-function toAgentRecord(row: {
-  id: string;
-  workspaceId: string;
-  name: string;
-  instructions: string;
-  modelConnectionId: string | null;
-  model: string | null;
-  runtimeProfileId: string | null;
-  permissions: unknown;
-  policy: unknown;
-  createdBy: string | null;
-  ownerPrincipalId: string;
-  createdAt: Date;
-  updatedAt: Date;
-}): AgentRecord {
-  return {
-    ...row,
-    permissions: parseAgentPermissions(row.permissions),
-    policy: parseAgentPolicy(row.policy),
-  };
-}
-
-const VERSION_COLUMNS = {
-  id: agentVersions.id,
-  workspaceId: agentVersions.workspaceId,
-  agentId: agentVersions.agentId,
-  number: agentVersions.number,
-  summary: agentVersions.summary,
-  via: agentVersions.via,
-  body: agentVersions.body,
-  createdByPrincipalId: agentVersions.createdByPrincipalId,
-  createdAt: agentVersions.createdAt,
-} as const;
-
-/** `body->'surfaces'` of a version alias, or an empty array when it is not an array. */
-function surfacesOf(alias: string): SQL {
-  const column = sql.raw(`${alias}.body`);
-  return sql`case when jsonb_typeof(${column}->'surfaces') = 'array' then ${column}->'surfaces' else '[]'::jsonb end`;
-}
-
-const ConflictRow = z.object({ name: z.string() });
-const PointedSurfaceRow = z.object({
-  agent_id: z.string(),
-  version_id: z.string(),
-  number: z.number().int(),
-  surface: z.unknown(),
-});
-
 /** The PostgreSQL {@link AgentVersionRepositoryProvider}. */
 export function createDatabaseAgentVersionRepositoryProvider(
   db: Database,
@@ -540,750 +438,10 @@ export function createDatabaseAgentVersionRepositoryProvider(
     forScope(scope: WorkspaceScope): AgentVersionRepository {
       const checked = requireWorkspaceScope(scope, 'AgentVersionRepositoryProvider');
       const workspaceId = checked.workspaceId;
-
-      /** Serialise every pointer write in one workspace and environment (C9). */
-      const lockPointers = async (
-        tx: Transaction,
-        environment: AgentVersionEnvironment,
-      ): Promise<void> => {
-        const key = `agent_version_pointers:${workspaceId}:${environment}`;
-        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${key}, 0))`);
-      };
-
-      /** Replace the agent's three assignment tables, applying the #133 ceiling to files. */
-      const writeAssignments = async (
-        tx: Transaction,
-        agentId: string,
-        permissions: AgentPermissions,
-        references: ResolvedReferences,
-      ): Promise<void> => {
-        await tx
-          .delete(agentFiles)
-          .where(and(eq(agentFiles.workspaceId, workspaceId), eq(agentFiles.agentId, agentId)));
-        await tx
-          .delete(agentSkills)
-          .where(and(eq(agentSkills.workspaceId, workspaceId), eq(agentSkills.agentId, agentId)));
-        await tx
-          .delete(agentMcpServers)
-          .where(
-            and(eq(agentMcpServers.workspaceId, workspaceId), eq(agentMcpServers.agentId, agentId)),
-          );
-        const grants = narrowFileGrants(references.files, permissions);
-        const skillIds = [...new Set(references.skillIds)];
-        const connectorIds = [...new Set(references.connectorIds)];
-        if (grants.length > 0) {
-          await tx
-            .insert(agentFiles)
-            .values(grants.map((grant) => ({ workspaceId, agentId, ...grant })));
-        }
-        if (skillIds.length > 0) {
-          await tx
-            .insert(agentSkills)
-            .values(skillIds.map((skillId) => ({ workspaceId, agentId, skillId })));
-        }
-        if (connectorIds.length > 0) {
-          await tx
-            .insert(agentMcpServers)
-            .values(connectorIds.map((mcpServerId) => ({ workspaceId, agentId, mcpServerId })));
-        }
-      };
-
-      /**
-       * Point `environment` of `agentId` at `version`, inserting or moving the pointer, and append
-       * the move to its history. The only writer of either table; runs under {@link lockPointers}.
-       */
-      const movePointer = async (
-        tx: Transaction,
-        agentId: string,
-        environment: AgentVersionEnvironment,
-        version: { readonly id: string; readonly number: number },
-        move: { readonly reason: AgentPointerMoveReason; readonly movedBy: string },
-      ): Promise<AgentVersionPointerRecord> => {
-        const rows = await tx
-          .insert(agentVersionPointers)
-          .values({ workspaceId, agentId, environment, versionId: version.id })
-          .onConflictDoUpdate({
-            target: [agentVersionPointers.agentId, agentVersionPointers.environment],
-            set: { versionId: version.id, updatedAt: sql`now()` },
-          })
-          .returning({
-            agentId: agentVersionPointers.agentId,
-            environment: agentVersionPointers.environment,
-            versionId: agentVersionPointers.versionId,
-            updatedAt: agentVersionPointers.updatedAt,
-          });
-        const row = rows[0];
-        if (row === undefined) throw new Error('the pointer upsert returned no row');
-        await tx.insert(agentPointerMoves).values({
-          workspaceId,
-          agentId,
-          environment,
-          versionId: version.id,
-          movedBy: move.movedBy,
-          reason: move.reason,
-        });
-        return { ...row, number: version.number };
-      };
-
-      /**
-       * C9: the first surface name of `versionId` that a version pointed by another agent in this
-       * workspace and environment also serves, or `null`. Runs under {@link lockPointers}.
-       */
-      const takenSurfaceName = async (
-        tx: Transaction,
-        agentId: string,
-        versionId: string,
-        environment: AgentVersionEnvironment,
-      ): Promise<string | null> => {
-        const result = await tx.execute(sql`
-          select mine.elem->>'name' as name
-          from agent_versions v
-          cross join lateral jsonb_array_elements(${surfacesOf('v')}) as mine(elem)
-          join agent_version_pointers p
-            on p.workspace_id = ${workspaceId}
-           and p.environment = ${environment}
-           and p.agent_id <> ${agentId}
-          join agent_versions ov
-            on ov.id = p.version_id
-           and ov.workspace_id = ${workspaceId}
-          cross join lateral jsonb_array_elements(${surfacesOf('ov')}) as theirs(elem)
-          where v.workspace_id = ${workspaceId}
-            and v.id = ${versionId}
-            and mine.elem->>'name' is not null
-            and theirs.elem->>'name' = mine.elem->>'name'
-          order by 1
-          limit 1`);
-        const row = result.rows[0];
-        return row === undefined ? null : ConflictRow.parse(row).name;
-      };
-
-      /** The agents named `names`, with whether their materialised version declares subagents and a description. */
-      const candidatesByName = async (
-        executor: Executor,
-        names: readonly string[],
-      ): Promise<ReadonlyMap<string, AgentSubagentCandidate>> => {
-        if (names.length === 0) return new Map();
-        const rows = await executor
-          .select({ id: agents.id, name: agents.name, body: agentVersions.body })
-          .from(agents)
-          .leftJoin(
-            agentVersions,
-            and(
-              eq(agentVersions.workspaceId, agents.workspaceId),
-              eq(agentVersions.id, agents.materialisedVersionId),
-            ),
-          )
-          .where(
-            and(eq(agents.workspaceId, workspaceId), inArray(agents.name, [...new Set(names)])),
-          );
-        return new Map(
-          rows.map((row) => [
-            row.name,
-            {
-              id: row.id,
-              hasSubagents: bodyDeclaresSubagents(row.body),
-              hasDescription: bodyHasDescription(row.body),
-            },
-          ]),
-        );
-      };
-
-      /** The other agents whose materialised version names `name` as a subagent, sorted. */
-      const parentsOf = async (
-        executor: Executor,
-        name: string,
-        excludeAgentId: string | null,
-      ): Promise<readonly string[]> => {
-        const result = await executor.execute(sql`
-          select distinct a.name
-          from agents a
-          join agent_versions v
-            on v.workspace_id = a.workspace_id
-           and v.id = a.materialised_version_id
-          cross join lateral jsonb_array_elements(
-            case when jsonb_typeof(v.body->'subagents') = 'array' then v.body->'subagents' else '[]'::jsonb end
-          ) as s(elem)
-          where a.workspace_id = ${workspaceId}
-            and (${excludeAgentId}::uuid is null or a.id <> ${excludeAgentId}::uuid)
-            and s.elem->>'name' = ${name}`);
-        return result.rows.map((row) => ConflictRow.parse(row).name).sort();
-      };
-
-      /**
-       * One level of subagents, both ways, for the version `agentId` (`null`: not created yet) is
-       * about to materialise under `name`. Takes the workspace's subagent lock first, so it must
-       * run in the materialising transaction. A body without subagents creates no edge: no lock,
-       * no check.
-       */
-      const checkSubagentNesting = async (
-        tx: Transaction,
-        agentId: string | null,
-        name: string,
-        body: unknown,
-      ): Promise<void> => {
-        const subagents = bodySubagentNames(body);
-        if (subagents.length === 0) return;
-        // ponytail: workspace-wide, taken only by bodies that declare subagents; per-name locks if those saves ever contend.
-        const key = `agent_subagents:${workspaceId}`;
-        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${key}, 0))`);
-        const candidates = await candidatesByName(tx, subagents);
-        const unusable = subagents.filter((subagent) => {
-          const candidate = candidates.get(subagent);
-          return candidate === undefined || candidate.hasSubagents || candidate.id === agentId;
-        });
-        const parents = await parentsOf(tx, name, agentId);
-        if (unusable.length > 0 || parents.length > 0) {
-          throw new Rollback({ kind: 'subagent-nesting', unusable, parents });
-        }
-      };
-
-      const readVersions = async (
-        agentId: string,
-        number?: number,
-      ): Promise<readonly AgentVersionRecord[]> => {
-        const predicate = and(
-          eq(agentVersions.workspaceId, workspaceId),
-          eq(agentVersions.agentId, agentId),
-          number === undefined ? undefined : eq(agentVersions.number, number),
-        );
-        return db
-          .select(VERSION_COLUMNS)
-          .from(agentVersions)
-          .where(predicate)
-          .orderBy(asc(agentVersions.number));
-      };
-
-      /**
-       * This workspace's rows of `kind` whose name (a file's path) — or, `by: 'id'`, whose id — is
-       * one of `values`. An id that is not a UUID cannot match a `uuid` column and is never sent.
-       */
-      const referenceRows = async (
-        kind: AgentDefinitionReferenceKind,
-        by: 'id' | 'name',
-        values: readonly string[],
-      ): Promise<readonly NamedRow[]> => {
-        const wanted = [...new Set(values)].filter(
-          (value) => by === 'name' || UUID_PATTERN.test(value),
-        );
-        if (wanted.length === 0) return [];
-        switch (kind) {
-          case 'skill':
-            return db
-              .select({ id: skills.id, name: skills.name })
-              .from(skills)
-              .where(
-                and(
-                  eq(skills.workspaceId, workspaceId),
-                  inArray(by === 'id' ? skills.id : skills.name, wanted),
-                ),
-              );
-          case 'connector':
-            return db
-              .select({ id: mcpServers.id, name: mcpServers.name })
-              .from(mcpServers)
-              .where(
-                and(
-                  // Every kind: a tool connector is referenced by its name (ADR-0113 C15) and
-                  // compose hands it to the engine through the gateway (S2-02f, #531).
-                  eq(mcpServers.workspaceId, workspaceId),
-                  inArray(by === 'id' ? mcpServers.id : mcpServers.name, wanted),
-                ),
-              );
-          case 'file':
-            return db
-              .select({ id: files.id, name: files.path })
-              .from(files)
-              .where(
-                and(
-                  eq(files.workspaceId, workspaceId),
-                  inArray(by === 'id' ? files.id : files.path, wanted),
-                ),
-              );
-          case 'model-connection':
-            return db
-              .select({ id: modelConnections.id, name: modelConnections.name })
-              .from(modelConnections)
-              .where(
-                and(
-                  eq(modelConnections.workspaceId, workspaceId),
-                  inArray(by === 'id' ? modelConnections.id : modelConnections.name, wanted),
-                ),
-              );
-          case 'runtime-profile':
-            return db
-              .select({ id: runtimeProfiles.id, name: runtimeProfiles.name })
-              .from(runtimeProfiles)
-              .where(
-                and(
-                  eq(runtimeProfiles.workspaceId, workspaceId),
-                  inArray(by === 'id' ? runtimeProfiles.id : runtimeProfiles.name, wanted),
-                ),
-              );
-        }
-      };
-      /** This workspace's default runtime profile id (issue #504), or `null` when it has none. */
-      const workspaceDefaultRuntimeProfileId = async (): Promise<string | null> => {
-        const rows = await db
-          .select({ id: runtimeProfiles.id })
-          .from(runtimeProfiles)
-          .where(
-            and(
-              eq(runtimeProfiles.workspaceId, workspaceId),
-              eq(runtimeProfiles.workspaceDefault, true),
-            ),
-          )
-          .limit(1);
-        return rows[0]?.id ?? null;
-      };
-
-      /** Map a failed write to an outcome, or re-throw what this module cannot name. */
-      const referenceGoneOrNameConflict = (
-        error: unknown,
-        name: string,
-      ): { readonly kind: 'name-conflict'; readonly name: string } | ReferenceGoneOutcome => {
-        const failure = classifyWriteFailure(error);
-        if (failure?.kind === 'name-conflict') return { kind: 'name-conflict', name };
-        if (failure?.kind === 'reference-gone') {
-          return { kind: 'reference-gone', referenceKind: failure.referenceKind };
-        }
-        throw error;
-      };
-
       return {
-        async create(agentId, input): Promise<CreateAgentVersionOutcome> {
-          try {
-            return await db.transaction(async (tx) => {
-              const locked = await tx
-                .select({ id: agents.id })
-                .from(agents)
-                .where(and(eq(agents.workspaceId, workspaceId), eq(agents.id, agentId)))
-                .for('update');
-              if (locked[0] === undefined) return { kind: 'not-found' };
-              const next = await tx
-                .select({
-                  number: sql`coalesce(max(${agentVersions.number}), 0) + 1`.mapWith(Number),
-                })
-                .from(agentVersions)
-                .where(
-                  and(
-                    eq(agentVersions.workspaceId, workspaceId),
-                    eq(agentVersions.agentId, agentId),
-                  ),
-                );
-              const rows = await tx
-                .insert(agentVersions)
-                .values({
-                  workspaceId,
-                  agentId,
-                  number: next[0]?.number ?? 1,
-                  summary: input.summary,
-                  via: input.via,
-                  body: input.body,
-                  createdByPrincipalId: input.createdByPrincipalId,
-                })
-                .returning(VERSION_COLUMNS);
-              const version = rows[0];
-              if (version === undefined) throw new Error('the version insert returned no row');
-              return { kind: 'created', version };
-            });
-          } catch (error) {
-            if (classifyWriteFailure(error)?.kind === 'unknown-principal') {
-              return { kind: 'unknown-principal' };
-            }
-            throw error;
-          }
-        },
-
-        async list(agentId): Promise<AgentVersionListing | null> {
-          const agent = await db
-            .select({ materialisedVersionId: agents.materialisedVersionId })
-            .from(agents)
-            .where(and(eq(agents.workspaceId, workspaceId), eq(agents.id, agentId)))
-            .limit(1);
-          if (agent[0] === undefined) return null;
-          const [versions, pointers] = await Promise.all([
-            readVersions(agentId),
-            db
-              .select({
-                agentId: agentVersionPointers.agentId,
-                environment: agentVersionPointers.environment,
-                versionId: agentVersionPointers.versionId,
-                number: agentVersions.number,
-                updatedAt: agentVersionPointers.updatedAt,
-              })
-              .from(agentVersionPointers)
-              .innerJoin(
-                agentVersions,
-                and(
-                  eq(agentVersions.id, agentVersionPointers.versionId),
-                  eq(agentVersions.workspaceId, workspaceId),
-                ),
-              )
-              .where(
-                and(
-                  eq(agentVersionPointers.workspaceId, workspaceId),
-                  eq(agentVersionPointers.agentId, agentId),
-                ),
-              )
-              .orderBy(asc(agentVersionPointers.environment)),
-          ]);
-          return { versions, pointers, materialisedVersionId: agent[0].materialisedVersionId };
-        },
-
-        async find(agentId, number): Promise<AgentVersionRecord | null> {
-          const rows = await readVersions(agentId, number);
-          return rows[0] ?? null;
-        },
-
-        async findById(versionId): Promise<AgentVersionRecord | null> {
-          const rows = await db
-            .select(VERSION_COLUMNS)
-            .from(agentVersions)
-            .where(and(eq(agentVersions.workspaceId, workspaceId), eq(agentVersions.id, versionId)))
-            .limit(1);
-          return rows[0] ?? null;
-        },
-
-        async resolveDefinition(references): Promise<ResolveDefinitionOutcome> {
-          const modelConnectionName = references.modelConnectionName ?? 'default';
-          const [
-            skillRows,
-            connectorRows,
-            fileRows,
-            connectionRows,
-            profileRows,
-            defaultProfileId,
-          ] = await Promise.all([
-            referenceRows('skill', 'name', references.skills),
-            referenceRows('connector', 'name', references.connectors),
-            referenceRows(
-              'file',
-              'name',
-              references.files.map((grant) => grant.path),
-            ),
-            referenceRows('model-connection', 'name', [modelConnectionName]),
-            referenceRows(
-              'runtime-profile',
-              'name',
-              references.runtimeProfileName === null ? [] : [references.runtimeProfileName],
-            ),
-            references.runtimeProfileName === null
-              ? workspaceDefaultRuntimeProfileId()
-              : Promise.resolve(null),
-          ]);
-          return resolveFromRows(
-            references,
-            {
-              skill: skillRows,
-              connector: connectorRows,
-              file: fileRows,
-              'model-connection': connectionRows,
-              'runtime-profile': profileRows,
-            },
-            defaultProfileId,
-          );
-        },
-
-        async namesOf(ids): Promise<ReferenceNames> {
-          const byId = async (kind: AgentDefinitionReferenceKind) =>
-            new Map(
-              (await referenceRows(kind, 'id', ids[kind] ?? [])).map((row) => [row.id, row.name]),
-            );
-          const [skill, connector, file, modelConnection, runtimeProfile] = await Promise.all([
-            byId('skill'),
-            byId('connector'),
-            byId('file'),
-            byId('model-connection'),
-            byId('runtime-profile'),
-          ]);
-          return {
-            skill,
-            connector,
-            file,
-            'model-connection': modelConnection,
-            'runtime-profile': runtimeProfile,
-          };
-        },
-
-        async stdioConnectorNames(names): Promise<readonly string[]> {
-          if (names.length === 0) return [];
-          const rows = await db
-            .select({ name: mcpServers.name })
-            .from(mcpServers)
-            .where(
-              and(
-                eq(mcpServers.workspaceId, workspaceId),
-                eq(mcpServers.kind, 'mcp'),
-                eq(mcpServers.transport, 'stdio'),
-                inArray(mcpServers.name, [...new Set(names)]),
-              ),
-            )
-            .orderBy(asc(mcpServers.name));
-          return rows.map((row) => row.name);
-        },
-
-        async mcpConnectorIdsByName(names): Promise<ReadonlyMap<string, string>> {
-          if (names.length === 0) return new Map();
-          const rows = await db
-            .select({ id: mcpServers.id, name: mcpServers.name })
-            .from(mcpServers)
-            .where(
-              and(
-                eq(mcpServers.workspaceId, workspaceId),
-                eq(mcpServers.kind, 'mcp'),
-                inArray(mcpServers.name, [...new Set(names)]),
-              ),
-            );
-          // `mcp_servers_workspace_name_key`: a name is one connector's.
-          return new Map(rows.map((row) => [row.name, row.id]));
-        },
-
-        agentsByName(names): Promise<ReadonlyMap<string, AgentSubagentCandidate>> {
-          return candidatesByName(db, names);
-        },
-
-        subagentParents(name, excludeAgentId): Promise<readonly string[]> {
-          return parentsOf(db, name, excludeAgentId);
-        },
-
-        async applyAndPoint(agentId, input): Promise<ApplyAndPointOutcome> {
-          const { agent: materialised, environment } = input;
-          const permissions = AgentPermissionsSchema.parse(materialised.permissions);
-          const policy =
-            materialised.policy === null
-              ? null
-              : AgentStoredPolicySchema.parse(materialised.policy);
-          try {
-            return await db.transaction(async (tx) => {
-              await lockPointers(tx, environment);
-              const locked = await tx
-                .select({ id: agents.id, runtimeProfileId: agents.runtimeProfileId })
-                .from(agents)
-                .where(and(eq(agents.workspaceId, workspaceId), eq(agents.id, agentId)))
-                .for('update');
-              const current = locked[0];
-              if (current === undefined) throw new Rollback({ kind: 'not-found' });
-              const versions = await tx
-                .select({
-                  id: agentVersions.id,
-                  number: agentVersions.number,
-                  body: agentVersions.body,
-                })
-                .from(agentVersions)
-                .where(
-                  and(
-                    eq(agentVersions.workspaceId, workspaceId),
-                    eq(agentVersions.agentId, agentId),
-                    eq(agentVersions.number, input.number),
-                  ),
-                );
-              const version = versions[0];
-              if (version === undefined) throw new Rollback({ kind: 'version-not-found' });
-              if (environment === 'local') {
-                await checkSubagentNesting(tx, agentId, materialised.name, version.body);
-              }
-
-              // The agent row is `local`'s working copy (issue #612): another environment's move
-              // rewrites only its pointer, and answers the row as it is.
-              const updated =
-                environment === 'local'
-                  ? await tx
-                      .update(agents)
-                      .set({
-                        name: materialised.name,
-                        instructions: materialised.instructions,
-                        model: materialised.model,
-                        modelConnectionId: materialised.references.modelConnectionId,
-                        runtimeProfileId: appliedRuntimeProfileId(
-                          version.body,
-                          current.runtimeProfileId,
-                          materialised.references.runtimeProfileId,
-                        ),
-                        permissions: { ...permissions },
-                        policy,
-                        materialisedVersionId: version.id,
-                      })
-                      .where(and(eq(agents.workspaceId, workspaceId), eq(agents.id, agentId)))
-                      .returning(AGENT_COLUMNS)
-                  : await tx
-                      .select(AGENT_COLUMNS)
-                      .from(agents)
-                      .where(and(eq(agents.workspaceId, workspaceId), eq(agents.id, agentId)));
-              const row = updated[0];
-              if (row === undefined) throw new Error('the locked agent row was not read back');
-
-              if (environment === 'local') {
-                await writeAssignments(tx, agentId, permissions, materialised.references);
-              }
-              const pointer = await movePointer(tx, agentId, environment, version, {
-                reason: input.reason,
-                movedBy: input.audit.actorPrincipalId,
-              });
-              const taken = await takenSurfaceName(tx, agentId, version.id, environment);
-              if (taken !== null) throw new Rollback({ kind: 'surface-name-taken', name: taken });
-              await tx.insert(auditEvents).values({
-                workspaceId,
-                action: 'agent-changed',
-                subjectId: agentId,
-                subjectLabel: input.audit.subjectLabel,
-                actorPrincipalId: input.audit.actorPrincipalId,
-                actorUserId: input.audit.actorUserId,
-                actorLabel: input.audit.actorLabel,
-              });
-              return { kind: 'applied', agent: toAgentRecord(row), pointer };
-            });
-          } catch (error) {
-            if (error instanceof Rollback) return error.outcome;
-            return referenceGoneOrNameConflict(error, materialised.name);
-          }
-        },
-
-        async createAgentWithFirstVersion(input): Promise<CreateAgentWithFirstVersionOutcome> {
-          const { agent: materialised, environment, version: versionInput } = input;
-          const permissions = AgentPermissionsSchema.parse(materialised.permissions);
-          const policy =
-            materialised.policy === null
-              ? null
-              : AgentStoredPolicySchema.parse(materialised.policy);
-          try {
-            return await db.transaction(async (tx) => {
-              await lockPointers(tx, environment);
-              await checkSubagentNesting(tx, null, materialised.name, versionInput.body);
-              const inserted = await tx
-                .insert(agents)
-                .values({
-                  workspaceId,
-                  name: materialised.name,
-                  instructions: materialised.instructions,
-                  model: materialised.model,
-                  modelConnectionId: materialised.references.modelConnectionId,
-                  runtimeProfileId: materialised.references.runtimeProfileId,
-                  permissions: { ...permissions },
-                  policy,
-                  ownerPrincipalId: materialised.ownerPrincipalId,
-                  createdBy: materialised.createdBy,
-                })
-                .returning(AGENT_COLUMNS);
-              const agentRow = inserted[0];
-              if (agentRow === undefined) throw new Error('the agent insert returned no row');
-
-              await writeAssignments(tx, agentRow.id, permissions, materialised.references);
-              const versions = await tx
-                .insert(agentVersions)
-                .values({
-                  workspaceId,
-                  agentId: agentRow.id,
-                  number: 1,
-                  summary: versionInput.summary,
-                  via: versionInput.via,
-                  body: versionInput.body,
-                  createdByPrincipalId: versionInput.createdByPrincipalId,
-                })
-                .returning(VERSION_COLUMNS);
-              const version = versions[0];
-              if (version === undefined) throw new Error('the version insert returned no row');
-              // The version needs the agent's id, so the row learns its version second.
-              const materialisedRows = await tx
-                .update(agents)
-                .set({ materialisedVersionId: version.id })
-                .where(and(eq(agents.workspaceId, workspaceId), eq(agents.id, agentRow.id)))
-                .returning(AGENT_COLUMNS);
-              const materialisedRow = materialisedRows[0];
-              if (materialisedRow === undefined)
-                throw new Error('the new agent row was not updated');
-              const pointer = await movePointer(tx, agentRow.id, environment, version, {
-                reason: 'set',
-                movedBy: versionInput.createdByPrincipalId,
-              });
-              const taken = await takenSurfaceName(tx, agentRow.id, version.id, environment);
-              if (taken !== null) throw new Rollback({ kind: 'surface-name-taken', name: taken });
-              return { kind: 'created', agent: toAgentRecord(materialisedRow), version, pointer };
-            });
-          } catch (error) {
-            if (error instanceof Rollback) {
-              if (
-                error.outcome.kind === 'surface-name-taken' ||
-                error.outcome.kind === 'subagent-nesting'
-              ) {
-                return error.outcome;
-              }
-              throw error;
-            }
-            if (classifyWriteFailure(error)?.kind === 'unknown-principal') {
-              return { kind: 'unknown-principal' };
-            }
-            return referenceGoneOrNameConflict(error, materialised.name);
-          }
-        },
-
-        async listMoves(agentId, environment, limit): Promise<readonly AgentPointerMoveRecord[]> {
-          return db
-            .select({
-              environment: agentPointerMoves.environment,
-              number: agentVersions.number,
-              reason: agentPointerMoves.reason,
-              movedByPrincipalId: agentPointerMoves.movedBy,
-              movedAt: agentPointerMoves.movedAt,
-            })
-            .from(agentPointerMoves)
-            .innerJoin(
-              agentVersions,
-              and(
-                eq(agentVersions.id, agentPointerMoves.versionId),
-                eq(agentVersions.workspaceId, workspaceId),
-              ),
-            )
-            .where(
-              and(
-                eq(agentPointerMoves.workspaceId, workspaceId),
-                eq(agentPointerMoves.agentId, agentId),
-                environment === null ? undefined : eq(agentPointerMoves.environment, environment),
-              ),
-            )
-            .orderBy(desc(agentPointerMoves.movedAt))
-            .limit(limit);
-        },
-
-        async findPointedSurface(environment, name): Promise<PointedSurface | null> {
-          const result = await db.execute(sql`
-            select p.agent_id, p.version_id, v.number, s.elem as surface
-            from agent_version_pointers p
-            join agent_versions v
-              on v.id = p.version_id
-             and v.workspace_id = ${workspaceId}
-            cross join lateral jsonb_array_elements(${surfacesOf('v')}) as s(elem)
-            where p.workspace_id = ${workspaceId}
-              and p.environment = ${environment}
-              and s.elem->>'name' = ${name}
-            order by p.updated_at, p.agent_id
-            limit 1`);
-          const row = result.rows[0];
-          if (row === undefined) return null;
-          const parsed = PointedSurfaceRow.parse(row);
-          return {
-            agentId: parsed.agent_id,
-            versionId: parsed.version_id,
-            number: parsed.number,
-            surface: parsed.surface,
-          };
-        },
-
-        async listPointedSurfaceNames(): Promise<readonly string[]> {
-          const result = await db.execute(sql`
-            select distinct s.elem->>'name' as name
-            from agent_version_pointers p
-            join agent_versions v
-              on v.id = p.version_id
-             and v.workspace_id = ${workspaceId}
-            cross join lateral jsonb_array_elements(${surfacesOf('v')}) as s(elem)
-            where p.workspace_id = ${workspaceId}
-              and jsonb_typeof(s.elem->'name') = 'string'
-            order by name`);
-          return z
-            .array(z.object({ name: z.string() }))
-            .parse(result.rows)
-            .map((row) => row.name);
-        },
+        ...agentVersionReads(db, workspaceId),
+        ...agentVersionQueries(db, workspaceId),
+        ...agentVersionWrites(db, workspaceId),
       };
     },
   };

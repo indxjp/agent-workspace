@@ -16,10 +16,14 @@ orders lookup tool in `tools/orders.ts` built from your OpenAPI document, whose 
 with `secret('ORDERS_TOKEN')` and never committed. `aw check` passes, and `aw push --yes` saves it
 as a version.
 
+<Frame caption="The finished agent in the console: its instructions, engine, model, skills and tools in one place.">
+  <img src="/images/console/04-agent-detail.png" alt="The agent detail page of the support agent in the Agent Workspace console" />
+</Frame>
+
 ## What an agent is made of
 
 ```mermaid
-flowchart LR
+flowchart TD
   A["agents/assistant.ts"] --> I["Instructions: inline, or a .md file"]
   A --> E["Engine: claude-agent-sdk, openai-agents, pi or mastra"]
   A --> M["Model: a connection and a model id"]
@@ -105,12 +109,10 @@ flowchart TD
 - API tools expose reads only, and tools are not versioned
   ([Tools from code](/guides/tools-from-code#current-limits)).
 - `stdio` MCP connectors are stored but not run ([Connect an MCP server](/building/mcp-servers)).
-- A skill is one mutable directory, with no revisions yet
-  ([N-1](/concepts/roadmap#n-1-skill-revisions)).
 - Creating an agent (`aw agents create`, `POST /api/agents`) and setup reconciliation save no
   version yet; console edits and `aw agents update` do
   ([Agents as code](/guides/agents-as-code#current-limits)).
 
-<Card title="Chapter 3: Test and improve it" href="/path/test">
+<Card title="Next: Chapter 3, Test and improve it" icon="arrow-right" href="/path/test">
   See every run, its tools and its cost, and catch regressions with an eval suite.
 </Card>
